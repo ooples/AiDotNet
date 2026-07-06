@@ -6,173 +6,148 @@ section: "Reference"
 ---
 
 
-
-Complete reference for all 41 loss functions in AiDotNet.
+Reference for the loss functions in AiDotNet. They live in `AiDotNet.LossFunctions`, implement `ILossFunction<T>` (`CalculateLoss` / `CalculateDerivative`), and plug into training via `ConfigureLossFunction(...)`.
 
 ---
 
 ## Classification Losses
 
-### Binary Classification
-
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `BinaryCrossEntropyLoss<T>` | -[y·log(p) + (1-y)·log(1-p)] | Binary classification |
-| `HingeLoss<T>` | max(0, 1 - y·p) | SVM-style binary classification |
-| `SquaredHingeLoss<T>` | (max(0, 1 - y·p))^2 | Smooth differentiable hinge |
-| `ModifiedHuberLoss<T>` | Modified hinge + quadratic | Robust binary |
-
-```csharp
-var loss = new BinaryCrossEntropyLoss<float>();
-var value = loss.CalculateLoss(predictions, targets);
-```
-
-### Multi-Class Classification
-
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `CrossEntropyLoss<T>` | Standard cross entropy | Multi-class |
-| `CategoricalCrossEntropyLoss<T>` | One-hot encoded cross entropy | Multi-class with one-hot |
-| `SparseCategoricalCrossEntropyLoss<T>` | Integer label cross entropy | Multi-class with indices |
-| `WeightedCrossEntropyLoss<T>` | Class-weighted cross entropy | Imbalanced classes |
-
-```csharp
-var loss = new CrossEntropyLoss<float>();
-```
-
-### Focal Loss (Imbalanced Data)
-
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `FocalLoss<T>` | Down-weights easy examples | Class imbalance |
-
-```csharp
-var loss = new FocalLoss<float>();
-```
+| Loss Function | Use Case |
+|:--------------|:---------|
+| `BinaryCrossEntropyLoss<T>` | Binary classification |
+| `HingeLoss<T>` | SVM-style binary classification |
+| `SquaredHingeLoss<T>` | Smooth differentiable hinge |
+| `ModifiedHuberLoss<T>` | Robust binary |
+| `CrossEntropyLoss<T>` | Multi-class |
+| `CategoricalCrossEntropyLoss<T>` | Multi-class with one-hot |
+| `SparseCategoricalCrossEntropyLoss<T>` | Multi-class with integer labels |
+| `WeightedCrossEntropyLoss<T>` | Imbalanced classes |
+| `FocalLoss<T>` | Class imbalance (down-weights easy examples) |
 
 ---
 
 ## Regression Losses
 
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `MeanSquaredErrorLoss<T>` | Mean squared error: (y - p)^2 | General regression |
-| `MeanAbsoluteErrorLoss<T>` | Mean absolute error | Robust to outliers |
-| `RootMeanSquaredErrorLoss<T>` | Square root of MSE | Same scale as target |
-| `MeanBiasErrorLoss<T>` | Mean bias error | Directional bias |
-| `HuberLoss<T>` | Quadratic near 0, linear elsewhere | Balanced robustness |
-| `LogCoshLoss<T>` | log(cosh(y - p)) | Smooth L1 approximation |
-| `CharbonnierLoss<T>` | Differentiable L1 | Image restoration |
-| `PoissonLoss<T>` | Poisson negative log likelihood | Count data |
-| `QuantileLoss<T>` | Quantile regression | Prediction intervals |
+| Loss Function | Use Case |
+|:--------------|:---------|
+| `MeanSquaredErrorLoss<T>` | General regression |
+| `MeanAbsoluteErrorLoss<T>` | Robust to outliers |
+| `RootMeanSquaredErrorLoss<T>` | Same scale as target |
+| `MeanBiasErrorLoss<T>` | Directional bias |
+| `HuberLoss<T>` | Balanced robustness |
+| `LogCoshLoss<T>` | Smooth L1 approximation |
+| `CharbonnierLoss<T>` | Image restoration |
+| `PoissonLoss<T>` | Count data |
+| `QuantileLoss<T>` | Prediction intervals |
+
+---
+
+## Segmentation & Detection
+
+| Loss Function | Use Case |
+|:--------------|:---------|
+| `DiceLoss<T>` | Segmentation |
+| `JaccardLoss<T>` | Object detection (IoU) |
+| `ScaleInvariantDepthLoss<T>` | Depth estimation |
+
+---
+
+## Contrastive / Metric Learning
+
+| Loss Function | Use Case |
+|:--------------|:---------|
+| `ContrastiveLoss<T>` | Similarity learning |
+| `TripletLoss<T>` | Face recognition |
+| `NTXentLoss<T>` | Self-supervised |
+| `InfoNCELoss<T>` | Contrastive learning |
+| `CosineSimilarityLoss<T>` | Embedding alignment |
+
+---
+
+## Reconstruction & GAN
+
+| Loss Function | Use Case |
+|:--------------|:---------|
+| `PerceptualLoss<T>` | Super-resolution |
+| `MAEReconstructionLoss<T>` | Masked autoencoders |
+| `WassersteinLoss<T>` | WGAN |
+| `MarginLoss<T>` | Pairwise ranking |
+
+---
+
+## Sequence & Self-Supervised
+
+| Loss Function | Use Case |
+|:--------------|:---------|
+| `CTCLoss<T>` | Speech recognition |
+| `BYOLLoss<T>` | Self-supervised |
+| `BarlowTwinsLoss<T>` | Self-supervised |
+| `DINOLoss<T>` | Vision transformers |
+
+---
+
+## Creating a Loss Function
 
 ```csharp
-var loss = new HuberLoss<float>();
+using AiDotNet.LossFunctions;
+
+var mse = new MeanSquaredErrorLoss<float>();
+var crossEntropy = new CrossEntropyLoss<float>();
+var focal = new FocalLoss<float>();
+var huber = new HuberLoss<float>();
+var dice = new DiceLoss<float>();
+var triplet = new TripletLoss<float>();
+var wasserstein = new WassersteinLoss<float>();
+var ctc = new CTCLoss<float>();
 ```
 
----
+## Evaluating a Loss
 
-## Segmentation Losses
-
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `DiceLoss<T>` | 1 - Dice coefficient | Segmentation |
-| `JaccardLoss<T>` | 1 - Intersection over Union | Object detection |
-| `ScaleInvariantDepthLoss<T>` | Scale-invariant depth | Depth estimation |
+`CalculateLoss(predicted, actual)` returns the scalar loss; `CalculateDerivative(...)` returns the gradient.
 
 ```csharp
-var loss = new DiceLoss<float>();
+using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var loss = new MeanSquaredErrorLoss<float>();
+
+var predicted = new Vector<float>(new[] { 0.9f, 0.2f, 0.7f });
+var actual = new Vector<float>(new[] { 1.0f, 0.0f, 1.0f });
+
+float value = loss.CalculateLoss(predicted, actual);
+var gradient = loss.CalculateDerivative(predicted, actual);
+Console.WriteLine($"Loss: {value:F4}, gradient length: {gradient.Length}");
 ```
 
----
-
-## Contrastive/Metric Learning
-
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `ContrastiveLoss<T>` | Siamese networks | Similarity learning |
-| `TripletLoss<T>` | Anchor, positive, negative | Face recognition |
-| `NTXentLoss<T>` | Normalized temperature cross-entropy | Self-supervised |
-| `InfoNCELoss<T>` | Information NCE | Contrastive learning |
-| `NoiseContrastiveEstimationLoss<T>` | NCE for large vocabularies | Word embeddings |
-| `CosineSimilarityLoss<T>` | 1 - cosine similarity | Embedding alignment |
+## Using a Loss with AiModelBuilder
 
 ```csharp
-var loss = new TripletLoss<float>();
-```
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
----
+var rng = new Random(0);
+var trainX = new Tensor<float>(new[] { 64, 16 });
+var trainY = new Tensor<float>(new[] { 64, 3 });
+for (int i = 0; i < 64; i++)
+{
+    for (int j = 0; j < 16; j++) trainX[new[] { i, j }] = (float)rng.NextDouble();
+    trainY[new[] { i, i % 3 }] = 1f;
+}
 
-## Reconstruction Losses
+var model = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+    inputFeatures: 16, numClasses: 3, complexity: NetworkComplexity.Simple));
 
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `MAEReconstructionLoss<T>` | MAE for reconstruction | Masked autoencoders |
-| `PerceptualLoss<T>` | Feature space distance | Super-resolution |
-| `RealESRGANLoss<T>` | Combined perceptual + adversarial | Image enhancement |
-| `RotationPredictionLoss<T>` | Rotation prediction | Self-supervised pretext |
-
-```csharp
-var loss = new PerceptualLoss<float>();
-```
-
----
-
-## GAN Losses
-
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `WassersteinLoss<T>` | Wasserstein distance | WGAN |
-| `MarginLoss<T>` | Margin-based loss | Pairwise ranking |
-
-```csharp
-var loss = new WassersteinLoss<float>();
-```
-
----
-
-## Other Losses
-
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `ElasticNetLoss<T>` | L1 + L2 combined | Regularized regression |
-| `ExponentialLoss<T>` | Exponential loss | AdaBoost |
-| `OrdinalRegressionLoss<T>` | Ordered categories | Ordinal prediction |
-| `QuantumLoss<T>` | Quantum-inspired loss | Quantum ML |
-
----
-
-## Sequence Losses
-
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `CTCLoss<T>` | Connectionist Temporal Classification | Speech recognition |
-
-```csharp
-var loss = new CTCLoss<float>();
-```
-
----
-
-## Self-Supervised Learning Losses
-
-| Loss Function | Description | Use Case |
-|:--------------|:------------|:---------|
-| `BYOLLoss<T>` | Bootstrap Your Own Latent | Self-supervised |
-| `BarlowTwinsLoss<T>` | Redundancy reduction | Self-supervised |
-| `DINOLoss<T>` | Self-distillation | Vision transformers |
-
----
-
-## Usage Examples
-
-### With AiModelBuilder
-
-```csharp
-var result = await new AiModelBuilder<float, float[][], float[]>()
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(model)
     .ConfigureLossFunction(new FocalLoss<float>())
-    .BuildAsync(trainData, trainLabels);
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine($"Trained with Focal loss; output [{string.Join(", ", result.Predict(trainX).Shape)}]");
 ```
 
 ---

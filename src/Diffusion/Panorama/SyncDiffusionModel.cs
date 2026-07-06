@@ -112,9 +112,13 @@ public class SyncDiffusionModel<T> : LatentDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new SyncDiffusionModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        // Lazy-preserving Clone (recipe from #1596): delegate to the predictor's and VAE's own Clone()
+        // instead of rebuild-at-default-scale + SetParameters(GetParameters()), which re-randomizes
+        // the clone's unmaterialized lazy weights (and ignores an injected non-default variant).
+        return new SyncDiffusionModel<T>(
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     public override ModelMetadata<T> GetModelMetadata()

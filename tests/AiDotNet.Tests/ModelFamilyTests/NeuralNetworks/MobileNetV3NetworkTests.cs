@@ -7,15 +7,15 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class MobileNetV3NetworkTests : NeuralNetworkModelTestBase
+public class MobileNetV3NetworkTests : NeuralNetworkModelTestBase<float>
 {
     // Per Howard et al. ICCV 2019: MobileNetV3-Large
     protected override int[] InputShape => [1, 3, 32, 32];
     protected override int[] OutputShape => [1000];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var arch = new NeuralNetworkArchitecture<double>(
+        var arch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 32, inputWidth: 32, inputDepth: 3,
@@ -25,7 +25,7 @@ public class MobileNetV3NetworkTests : NeuralNetworkModelTestBase
             inputHeight: 32, inputWidth: 32);
         // MSE loss matches test evaluation (CategoricalCrossEntropy derivative
         // assumes softmax-normalized probabilities, wrong for raw logits)
-        return new MobileNetV3Network<double>(arch, config,
-            lossFunction: new MeanSquaredErrorLoss<double>());
+        return new MobileNetV3Network<float>(arch, config,
+            lossFunction: new MeanSquaredErrorLoss<float>());
     }
 }

@@ -86,19 +86,22 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
     }
 
     [Fact(Timeout = 60000)]
-    public async Task GenerateWithSpeculativeDecoding_WhenModelExists_Returns501()
+    public async Task GenerateWithSpeculativeDecoding_WhenModelNotGenerative_Returns400()
     {
+        // A simple vector-prediction model exists but cannot generate text (no token-to-logits
+        // forward), so the generate endpoint reports a bad request rather than the old 501 stub.
+        // This also exercises the real ITextGenerationService wired into the application DI.
         LoadSimpleModel("spec-decoding-model", enableBatching: true);
 
         var response = await PostAsJsonAsync(
             "/api/inference/generate/spec-decoding-model",
             new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, MaxNewTokens = 1, Temperature = 1.0, NumDraftTokens = 1 });
 
-        Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var payload = await ReadAsJsonAsync<SpeculativeDecodingResponse>(response.Content);
         Assert.NotNull(payload);
-        Assert.Equal("Speculative decoding is not available via the REST API in the current version.", payload!.Error);
+        Assert.Contains("does not support text generation", payload!.Error ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact(Timeout = 60000)]

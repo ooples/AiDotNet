@@ -6,15 +6,15 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class FlashDiffusionModelTests : DiffusionModelTestBase
+public class FlashDiffusionModelTests : DiffusionModelTestBase<float>
 {
     // Per Chadebec et al. 2024: latent diffusion with progressive distillation
     protected override int[] InputShape => [1, 4, 16, 16];
     protected override int[] OutputShape => [1, 4, 16, 16];
 
-    protected override IDiffusionModel<double> CreateModel()
+    protected override IDiffusionModel<float> CreateModel()
     {
-        var unet = new UNetNoisePredictor<double>(
+        var unet = new UNetNoisePredictor<float>(
             inputChannels: 4,
             outputChannels: 4,
             baseChannels: 64,
@@ -26,7 +26,7 @@ public class FlashDiffusionModelTests : DiffusionModelTestBase
             inputHeight: 16,
             seed: 42);
 
-        var vae = new StandardVAE<double>(
+        var vae = new StandardVAE<float>(
             inputChannels: 3,
             latentChannels: 4,
             baseChannels: 32,
@@ -35,7 +35,7 @@ public class FlashDiffusionModelTests : DiffusionModelTestBase
             latentScaleFactor: 0.18215,
             seed: 42);
 
-        return new FlashDiffusionModel<double>(
+        return new FlashDiffusionModel<float>(
             predictor: unet,
             vae: vae,
             seed: 42);

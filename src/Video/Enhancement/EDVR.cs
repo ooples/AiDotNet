@@ -249,7 +249,7 @@ public class EDVR<T> : VideoSuperResolutionBase<T>
         return stacked;
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) => Forward(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

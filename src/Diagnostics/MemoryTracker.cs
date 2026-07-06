@@ -31,16 +31,55 @@ namespace AiDotNet.Diagnostics;
 /// </remarks>
 public static class MemoryTracker
 {
-    private static readonly List<MemorySnapshot> _history = new();
     private static readonly object _lock = new();
-    private static bool _enabled = false;
-    private static DateTime _startTime = DateTime.UtcNow;
+    private static readonly AsyncLocal<TrackingState?> _currentState = new();
+    private static readonly TrackingState _globalState = new();
     private static int _maxHistorySize = 10000; // Prevent unbounded memory growth
+
+    // Tracking state is scoped to the current logical operation so concurrent
+    // diagnostics sessions cannot clear or disable each other's histories.
+    private sealed class TrackingState
+    {
+        public List<MemorySnapshot> History { get; } = new();
+        public bool IsEnabled { get; set; }
+        public DateTime StartTime { get; set; } = DateTime.UtcNow;
+    }
 
     /// <summary>
     /// Gets whether memory tracking is enabled.
     /// </summary>
-    public static bool IsEnabled => _enabled;
+    public static bool IsEnabled
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return CurrentState.IsEnabled;
+            }
+        }
+    }
+
+    private static TrackingState CurrentState => _currentState.Value ?? _globalState;
+
+    private static TrackingState EnsureCurrentOperationStateLocked()
+    {
+        var state = _currentState.Value;
+        if (state is not null)
+        {
+            return state;
+        }
+
+        state = new TrackingState
+        {
+            IsEnabled = _globalState.IsEnabled,
+            StartTime = _globalState.StartTime
+        };
+
+        state.History.AddRange(_globalState.History);
+        _currentState.Value = state;
+
+        return state;
+    }
 
     /// <summary>
     /// Gets or sets the maximum history size (default: 10000).
@@ -64,8 +103,9 @@ public static class MemoryTracker
     {
         lock (_lock)
         {
-            _enabled = true;
-            _startTime = DateTime.UtcNow;
+            var state = EnsureCurrentOperationStateLocked();
+            state.IsEnabled = true;
+            state.StartTime = DateTime.UtcNow;
         }
     }
 
@@ -76,7 +116,7 @@ public static class MemoryTracker
     {
         lock (_lock)
         {
-            _enabled = false;
+            EnsureCurrentOperationStateLocked().IsEnabled = false;
         }
     }
 
@@ -87,8 +127,9 @@ public static class MemoryTracker
     {
         lock (_lock)
         {
-            _history.Clear();
-            _startTime = DateTime.UtcNow;
+            var state = EnsureCurrentOperationStateLocked();
+            state.History.Clear();
+            state.StartTime = DateTime.UtcNow;
         }
     }
 
@@ -120,7 +161,7 @@ public static class MemoryTracker
 
         var snapshot = new MemorySnapshot
         {
-            Label = label ?? $"Snapshot_{_history.Count}",
+            Label = label ?? $"Snapshot_{GetHistoryCount()}",
             Timestamp = DateTime.UtcNow,
             TotalMemory = GC.GetTotalMemory(forceGC),
             WorkingSet = workingSet,
@@ -144,16 +185,17 @@ public static class MemoryTracker
 #endif
         };
 
-        if (_enabled)
+        lock (_lock)
         {
-            lock (_lock)
+            var state = CurrentState;
+            if (state.IsEnabled)
             {
                 // Enforce maximum history size to prevent unbounded memory growth
-                while (_history.Count >= _maxHistorySize)
+                while (state.History.Count >= _maxHistorySize)
                 {
-                    _history.RemoveAt(0);
+                    state.History.RemoveAt(0);
                 }
-                _history.Add(snapshot);
+                state.History.Add(snapshot);
             }
         }
 
@@ -167,7 +209,15 @@ public static class MemoryTracker
     {
         lock (_lock)
         {
-            return _history.ToList();
+            return CurrentState.History.ToList();
+        }
+    }
+
+    private static int GetHistoryCount()
+    {
+        lock (_lock)
+        {
+            return CurrentState.History.Count;
         }
     }
 

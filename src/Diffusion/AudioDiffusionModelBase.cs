@@ -172,7 +172,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var latentShape = new[] { 1, LatentChannels, MelChannels / VAE.DownsampleFactor, latentTimeFrames };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(latentShape, rng);
 
         // Set up scheduler
@@ -257,7 +257,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var latentShape = new[] { 1, LatentChannels, MelChannels / VAE.DownsampleFactor, latentTimeFrames };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(latentShape, rng);
 
         // Set up scheduler
@@ -331,7 +331,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var startTimestep = Scheduler.Timesteps.Skip(startStep).First();
 
         // Add noise to latents at starting timestep
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var noise = DiffusionNoiseHelper<T>.SampleGaussian(latentShape, rng);
         var noisyLatents = Scheduler.AddNoise(latents.ToVector(), noise.ToVector(), startTimestep);
         latents = new Tensor<T>(latentShape, noisyLatents);
@@ -388,7 +388,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var extensionShape = new[] { inputShape[0], inputShape[1], inputShape[2], extensionLatentFrames };
 
         // Generate noise for extension
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var extensionLatents = DiffusionNoiseHelper<T>.SampleGaussian(extensionShape, rng);
 
         // Get conditioning from end of input

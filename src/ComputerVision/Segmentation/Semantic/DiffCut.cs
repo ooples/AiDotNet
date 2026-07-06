@@ -212,7 +212,7 @@ public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// the image into meaningful regions, then classifies each region.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }

@@ -1,7 +1,10 @@
 using AiDotNet;
-using AiDotNet.Classification;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
 using AiDotNet.Serving;
 using AiDotNet.Serving.Configuration;
+using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Options;
@@ -40,10 +43,11 @@ var features = new double[][]
 };
 var labels = new double[] { 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2 };
 
-var modelResult = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+var modelResult = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RandomForestClassifier<double>(
+        new RandomForestClassifierOptions<double> { NEstimators = 100 }))
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, labels))
+    .BuildAsync();
 
 Console.WriteLine("  Model trained successfully!");
 Console.WriteLine($"  Type: Random Forest Classifier");
@@ -52,8 +56,10 @@ Console.WriteLine($"  Classes: 3 (Setosa, Versicolor, Virginica)");
 
 // Test the model locally
 var testSample = new double[] { 5.9, 3.0, 5.1, 1.8 };
-var prediction = modelResult.Model.Predict(testSample);
-Console.WriteLine($"\n  Local prediction for [5.9, 3.0, 5.1, 1.8]: Class {(int)prediction}");
+var testMatrix = new Matrix<double>(1, testSample.Length);
+for (int i = 0; i < testSample.Length; i++) testMatrix[0, i] = testSample[i];
+var prediction = (int)Math.Round(modelResult.Predict(testMatrix)[0]);
+Console.WriteLine($"\n  Local prediction for [5.9, 3.0, 5.1, 1.8]: Class {prediction}");
 
 // ============================================
 // Part 2: Save model for serving
@@ -61,7 +67,7 @@ Console.WriteLine($"\n  Local prediction for [5.9, 3.0, 5.1, 1.8]: Class {(int)p
 Console.WriteLine("\n\nStep 2: Saving model for serving...\n");
 
 var modelPath = Path.Combine(Path.GetTempPath(), "iris-classifier.aidotnet");
-modelResult.SaveToFile(modelPath);
+modelResult.SaveModel(modelPath);
 Console.WriteLine($"  Model saved to: {modelPath}");
 
 // ============================================
@@ -89,7 +95,6 @@ builder.Services.AddControllers()
     .AddApplicationPart(typeof(ServingOptions).Assembly);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
 // Configure Kestrel
 builder.WebHost.ConfigureKestrel(options =>
@@ -100,12 +105,6 @@ builder.WebHost.ConfigureKestrel(options =>
 var app = builder.Build();
 
 // Configure middleware
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
 app.UseAuthorization();
 app.MapControllers();
 
@@ -124,25 +123,21 @@ var servableModel = new ServableModelWrapper<double>(
     outputDimension: 1,
     predictFunc: input =>
     {
-        var inputArray = new double[input.Length];
-        for (int i = 0; i < input.Length; i++)
-            inputArray[i] = input[i];
-
-        var result = modelResult.Model.Predict(inputArray);
-        return new Vector<double>([(double)(int)result]);
+        // Predict through the AiModelResult (the facade pattern).
+        var m = new Matrix<double>(1, input.Length);
+        for (int i = 0; i < input.Length; i++) m[0, i] = input[i];
+        var pred = modelResult.Predict(m);
+        return new Vector<double>([(double)(int)Math.Round(pred[0])]);
     },
     predictBatchFunc: inputs =>
     {
-        var results = new Matrix<double>(inputs.Rows, 1);
+        var m = new Matrix<double>(inputs.Rows, inputs.Columns);
         for (int i = 0; i < inputs.Rows; i++)
-        {
-            var inputArray = new double[inputs.Columns];
             for (int j = 0; j < inputs.Columns; j++)
-                inputArray[j] = inputs[i, j];
-
-            var result = modelResult.Model.Predict(inputArray);
-            results[i, 0] = (double)(int)result;
-        }
+                m[i, j] = inputs[i, j];
+        var preds = modelResult.Predict(m);
+        var results = new Matrix<double>(inputs.Rows, 1);
+        for (int i = 0; i < inputs.Rows; i++) results[i, 0] = (double)(int)Math.Round(preds[i]);
         return results;
     }
 );

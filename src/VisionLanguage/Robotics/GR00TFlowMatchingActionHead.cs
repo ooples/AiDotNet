@@ -47,12 +47,18 @@ public sealed class GR00TFlowMatchingActionHead<T>
     public GR00TFlowMatchingActionHead(
         Func<Tensor<T>, double, Tensor<T>, Tensor<T>> velocityNetwork,
         int numIntegrationSteps = 16,
-        int? seed = null)
+        int? seed = null
+    )
     {
         if (numIntegrationSteps <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numIntegrationSteps), numIntegrationSteps, "numIntegrationSteps must be positive.");
+            throw new ArgumentOutOfRangeException(
+                nameof(numIntegrationSteps),
+                numIntegrationSteps,
+                "numIntegrationSteps must be positive."
+            );
 
-        _velocityNetwork = velocityNetwork ?? throw new ArgumentNullException(nameof(velocityNetwork));
+        _velocityNetwork =
+            velocityNetwork ?? throw new ArgumentNullException(nameof(velocityNetwork));
         _numIntegrationSteps = numIntegrationSteps;
         _noiseSource = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
@@ -67,8 +73,10 @@ public sealed class GR00TFlowMatchingActionHead<T>
     /// </summary>
     public Tensor<T> Generate(int actionDimension, Tensor<T> system2Latent)
     {
-        if (actionDimension <= 0) throw new ArgumentOutOfRangeException(nameof(actionDimension));
-        if (system2Latent is null) throw new ArgumentNullException(nameof(system2Latent));
+        if (actionDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(actionDimension));
+        if (system2Latent is null)
+            throw new ArgumentNullException(nameof(system2Latent));
 
         var x = SampleGaussian(actionDimension);
         double dt = 1.0 / _numIntegrationSteps;
@@ -77,7 +85,9 @@ public sealed class GR00TFlowMatchingActionHead<T>
             double t = (step + 0.5) * dt;
             var velocity = _velocityNetwork(x, t, system2Latent);
             if (velocity.Length != actionDimension)
-                throw new InvalidOperationException($"Velocity network returned length {velocity.Length} but expected {actionDimension}.");
+                throw new InvalidOperationException(
+                    $"Velocity network returned length {velocity.Length} but expected {actionDimension}."
+                );
 
             for (int d = 0; d < actionDimension; d++)
             {
@@ -97,7 +107,8 @@ public sealed class GR00TFlowMatchingActionHead<T>
     /// </summary>
     public Tensor<T> GenerateHorizon(int actionDimension, int horizon, Tensor<T> system2Latent)
     {
-        if (horizon <= 0) throw new ArgumentOutOfRangeException(nameof(horizon));
+        if (horizon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(horizon));
         var flat = new Tensor<T>([actionDimension * horizon]);
         for (int step = 0; step < horizon; step++)
         {

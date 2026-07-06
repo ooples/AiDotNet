@@ -130,4 +130,25 @@ public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions
     /// </para>
     /// </remarks>
     public bool CompressBothMoments { get; set; } = true;
+
+    /// <summary>
+    /// Stores the optimizer moment state (m and v) as BFloat16 (2 bytes/element) instead of the
+    /// default 8-bit block-quantized representation (1 byte/element). Default: false.
+    /// </summary>
+    /// <value>True to store moments as BFloat16; false (default) to use 8-bit block quantization.</value>
+    /// <remarks>
+    /// <para>
+    /// BFloat16 keeps the full float32 exponent (only the mantissa is shortened), so it preserves
+    /// dynamic range without per-block scale factors and changes Adam's convergence far less than the
+    /// 8-bit block quantization does — at the cost of using twice the storage (still half of fp32).
+    /// This is the gentle, proactive rung of the optimizer-memory ladder: fp32 (4B) → BF16 (2B) →
+    /// 8-bit (1B). When true, this overrides <see cref="BlockSize"/>/<see cref="CompressBothMoments"/>
+    /// and the block-quant path for the tape (NN) training step.
+    /// </para>
+    /// <para><b>For Beginners:</b> This halves the memory the optimizer needs to remember each weight's
+    /// momentum and variance, with almost no effect on how well the model learns — a safer way to fit a
+    /// big model in memory than the more aggressive 8-bit mode.
+    /// </para>
+    /// </remarks>
+    public bool UseBFloat16MomentStorage { get; set; } = false;
 }

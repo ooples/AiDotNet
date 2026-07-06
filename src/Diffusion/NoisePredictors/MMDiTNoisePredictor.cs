@@ -261,7 +261,11 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         List<MMDiTSingleBlock>? customSingleBlocks)
     {
         var patchDim = _inputChannels * _patchSize * _patchSize;
-        var timeEmbedDim = _hiddenSize * 4;
+        // Faithful MMDiT/SD3: the timestep MLP outputs hidden_size and every joint/single block's AdaLN
+        // is Linear(hidden_size, k*hidden_size). An earlier 4*hidden_size here inflated each AdaLN
+        // (image + text + single) 4x — the dominant per-block parameter cost and a driver of the
+        // foundation-scale OOM (issue #1672). See DiTNoisePredictor for the same fix.
+        var timeEmbedDim = _hiddenSize;
 
         // Patch embedding: linear projection from flattened patch to hidden dim.
         // Use LazyDense so weight tensors stay unallocated until Forward() — full
@@ -431,15 +435,17 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        using var streaming = BeginWeightStreamingForward();
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
-        return Forward(noisySample, timeEmbed, conditioning);
+        return streaming.Complete(Forward(noisySample, timeEmbed, conditioning));
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
-        return Forward(noisySample, timeEmbedding, conditioning);
+        using var streaming = BeginWeightStreamingForward();
+        return streaming.Complete(Forward(noisySample, timeEmbedding, conditioning));
     }
 
     private Tensor<T> ProjectTimeEmbedding(Tensor<T> timeEmbed)
@@ -463,26 +469,55 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // Add position embeddings to image tokens
         imageTokens = AddPositionEmbedding(imageTokens, numImageTokens);
 
-        // Project conditioning text to hidden dim
-        var textTokens = conditioning != null
-            ? _contextProj.Forward(conditioning)
-            : TensorAllocator.Rent<T>(new[] { batch, 0, _hiddenSize });
+        // Project conditioning text to hidden dim. For an unconditional forward (no conditioning),
+        // use a single zero "null" text token — the classifier-free-guidance null embedding — rather
+        // than an empty (0-token) text stream. A 0-token stream feeds 0-row GEMMs into the joint
+        // attention/MLP blocks, which divide by zero in the packed SGEMM; a single null token keeps
+        // every GEMM well-formed and matches how MMDiT/SD3 represent the unconditional branch.
+        var textConditioning = conditioning ?? new Tensor<T>(new[] { batch, 1, _contextDim });
+        var textTokens = _contextProj.Forward(textConditioning);
 
-        // Process through joint (double-stream) blocks
-        foreach (var block in _jointBlocks)
+        // Process through joint (double-stream) blocks.
+        // G4 (#1624): the joint blocks are DUAL-stream — each threads an (image, text) token PAIR — so
+        // they don't fit the single-residual-stream CheckpointBlocks primitive directly. Pack the two
+        // streams into one tensor along the token axis [B, Ni+Nt, D], checkpoint the packed stack, then
+        // unpack. The per-block wrapper splits the packed tensor back into image/text with the
+        // differentiable TensorNarrow (records NarrowBackward) and re-concatenates with the
+        // differentiable TensorConcatenate, so the wrapper is a pure differentiable function of the
+        // packed residual stream — exactly what the (multi-segment-correct, 0.101.5) primitive needs.
+        // Token counts are invariant across joint blocks, so the split sizes are constant.
+        int numTextTokens = textTokens.Shape[1];
+        var packed = ConcatenateSequences(imageTokens, textTokens); // [B, Ni+Nt, D]
+        var jointForwards = new System.Func<Tensor<T>, Tensor<T>>[_jointBlocks.Count];
+        for (int i = 0; i < _jointBlocks.Count; i++)
         {
-            (imageTokens, textTokens) = ForwardJointBlock(imageTokens, textTokens, timeEmbed, block);
+            var block = _jointBlocks[i];
+            jointForwards[i] = p =>
+            {
+                var img = Engine.TensorNarrow(p, 1, 0, numImageTokens);
+                var txt = Engine.TensorNarrow(p, 1, numImageTokens, numTextTokens);
+                var (imgOut, txtOut) = ForwardJointBlock(img, txt, timeEmbed, block);
+                return Engine.TensorConcatenate<T>(new[] { imgOut, txtOut }, axis: 1);
+            };
         }
+        packed = CheckpointBlocks(jointForwards, packed);
+        imageTokens = Engine.TensorNarrow(packed, 1, 0, numImageTokens);
+        textTokens = Engine.TensorNarrow(packed, 1, numImageTokens, numTextTokens);
 
         // Process through single-stream blocks (FLUX-style)
         if (_singleBlocks.Count > 0)
         {
             // Concatenate text and image tokens for single-stream processing
             var combined = ConcatenateSequences(textTokens, imageTokens);
-            foreach (var block in _singleBlocks)
+            // G4 (#1624): checkpoint the single-stream block stack (recompute activations in backward)
+            // — gradient-equivalent. timeEmbed is captured as a constant in each closure.
+            var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_singleBlocks.Count];
+            for (int i = 0; i < _singleBlocks.Count; i++)
             {
-                combined = ForwardSingleBlock(combined, timeEmbed, block);
+                var block = _singleBlocks[i];
+                blockForwards[i] = h => ForwardSingleBlock(h, timeEmbed, block);
             }
+            combined = CheckpointBlocks(blockForwards, combined);
             // Extract image tokens from the combined sequence
             imageTokens = ExtractImageTokens(combined, textTokens.Shape[1], numImageTokens);
         }
@@ -569,7 +604,12 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> CreateSinusoidalPositionEmbedding(int numPatches)
     {
-        var posEmbed = TensorAllocator.Rent<T>(new[] { 1, numPatches, _hiddenSize });
+        // GC-owned (NOT TensorAllocator.Rent): _posEmbed is cached across forwards (see AddPositionEmbedding)
+        // and must survive the diffusion denoise loop's per-step arena Reset(), which recycles arena-rented
+        // scratch. Renting it here aliased recycled scratch, so the cached posEmbed was corrupted between
+        // steps -> garbage added to every token -> non-deterministic Predict (the StableDiffusion3
+        // Predict_ShouldBeDeterministic / clone failures). A long-lived cache must be plain GC-owned.
+        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
         var span = posEmbed.AsWritableSpan();
 
         for (int pos = 0; pos < numPatches; pos++)
@@ -890,29 +930,35 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         double scale, int batch, int queryLen, int keyLen, int headDim)
     {
-        // Reshape Q, K, V for multi-head: [batch, seq, hidden] -> [batch*heads, seq, headDim]
-        var qReshaped = ReshapeForHeads(q, batch, queryLen, _numHeads, headDim);
-        var kReshaped = ReshapeForHeads(k, batch, keyLen, _numHeads, headDim);
-        var vReshaped = ReshapeForHeads(v, batch, keyLen, _numHeads, headDim);
+        // Route through the engine's fused, FlashAttention-backed SDPA rather than a
+        // hand-rolled matmul → scale → softmax → matmul. The fused kernel never
+        // materializes the O(seq²) scores matrix and fuses the transpose/scale/softmax
+        // passes into one autodiff-aware op — the same primitive measured under PyTorch's
+        // SDPA (AiDotNet.Tensors #476/#479). The previous naive path ran ~7 ops, each a
+        // full pass + fresh allocation, twice per joint block × every layer × every
+        // denoising step — the dominant cost that pushed the dual-stream predictors past
+        // the test budget. DiT's SelfAttentionLayer already uses the fast path; this
+        // brings the MMDiT family (Flux/MMDiTX/EMMDiT/AsymmDiT) to parity.
+        //
+        // The engine SDPA splits heads via the [B, H, S, D] 4-D layout (FusedAttention
+        // does NOT head-split a rank-3 input), so reshape to that before the call and
+        // collapse heads back after.
+        var q4 = ToHeads4D(q, batch, queryLen, _numHeads, headDim);
+        var k4 = ToHeads4D(k, batch, keyLen, _numHeads, headDim);
+        var v4 = ToHeads4D(v, batch, keyLen, _numHeads, headDim);
 
-        // Attention scores: Q * K^T using batched matmul.
-        // Engine.TensorTranspose only handles rank-2; for rank-3
-        // [B*H, keyLen, headDim] use TensorPermute to swap axes 1 and 2,
-        // producing [B*H, headDim, keyLen] which the batched matmul expects.
-        var kTransposed = Engine.TensorPermute<T>(kReshaped, new[] { 0, 2, 1 });
-        var scores = Engine.TensorBatchMatMul<T>(qReshaped, kTransposed);
+        var attn4 = Engine.ScaledDotProductAttention<T>(q4, k4, v4, mask: null, scale: scale, out _);
 
-        // Scale
-        scores = Engine.TensorMultiplyScalar<T>(scores, NumOps.FromDouble(scale));
+        // [B, H, queryLen, D] -> [B, queryLen, H, D] -> [B, queryLen, hidden]
+        var attnBshd = Engine.TensorPermute<T>(attn4, new[] { 0, 2, 1, 3 });
+        return Engine.Reshape(attnBshd, new[] { batch, queryLen, _numHeads * headDim });
+    }
 
-        // Softmax over last axis
-        var attnWeights = Engine.Softmax<T>(scores, axis: -1);
-
-        // Apply attention to values
-        var attnOutput = Engine.TensorBatchMatMul<T>(attnWeights, vReshaped);
-
-        // Reshape back: [batch*heads, seq, headDim] -> [batch, seq, hidden]
-        return ReshapeFromHeads(attnOutput, batch, queryLen, _numHeads, headDim);
+    /// <summary>[B, seq, H·D] → [B, H, seq, D] for the engine's multi-head SDPA.</summary>
+    private Tensor<T> ToHeads4D(Tensor<T> x, int batch, int seq, int numHeads, int headDim)
+    {
+        var split = Engine.Reshape(x, new[] { batch, seq, numHeads, headDim });
+        return Engine.TensorPermute<T>(split, new[] { 0, 2, 1, 3 });
     }
 
     private static Tensor<T> ReshapeForHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
@@ -1011,52 +1057,43 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
+        // Pre-size and write each layer's parameters in place — mirrors DiTNoisePredictor.GetParameters.
+        // The old List<T> + ToArray() + new Vector<T>(IEnumerable) (which calls ToArray AGAIN) held up to
+        // 3× the flat parameter size in transient copies and OOM'd CI test hosts at MMDiT/EMMDiT scale
+        // (#1715: a 12-block × 1024-hidden EMMDiT is ~450 M params ≈ 3.6 GB as doubles, so the triple-copy
+        // peaked near 11 GB and OOM'd the 16 GB runner once two predictors were resident). Iterating
+        // MMDiTLayerSequence — the SAME sequence GetParameterChunks walks — keeps the flat vector and the
+        // chunk concatenation index-identical BY CONSTRUCTION (no parallel hand-maintained layer list to
+        // drift out of order).
+        long count = ParameterCount;
+        if (count > int.MaxValue)
+            throw new InvalidOperationException(
+                $"MMDiTNoisePredictor.GetParameters: {count} parameters overflow a flat Vector<T> " +
+                "(int-indexed). Use GetParameterChunks for foundation-scale (>2.1B-param) predictors.");
 
-        AddLayerParams(allParams, _patchEmbed);
-        AddLayerParams(allParams, _timeEmbed1);
-        AddLayerParams(allParams, _timeEmbed2);
-        AddLayerParams(allParams, _contextProj);
+        var result = new Vector<T>((int)count);
+        int offset = 0;
+        foreach (var layer in MMDiTLayerSequence())
+            WriteLayerParams(result, ref offset, layer);
 
-        foreach (var block in _jointBlocks)
-        {
-            AddLayerParams(allParams, block.ImageNorm1);
-            AddLayerParams(allParams, block.ImageQProj);
-            AddLayerParams(allParams, block.ImageKProj);
-            AddLayerParams(allParams, block.ImageVProj);
-            AddLayerParams(allParams, block.ImageOutProj);
-            AddLayerParams(allParams, block.ImageNorm2);
-            AddLayerParams(allParams, block.ImageMLP1);
-            AddLayerParams(allParams, block.ImageMLP2);
-            AddLayerParams(allParams, block.ImageAdaLN);
-            AddLayerParams(allParams, block.TextNorm1);
-            AddLayerParams(allParams, block.TextQProj);
-            AddLayerParams(allParams, block.TextKProj);
-            AddLayerParams(allParams, block.TextVProj);
-            AddLayerParams(allParams, block.TextOutProj);
-            AddLayerParams(allParams, block.TextNorm2);
-            AddLayerParams(allParams, block.TextMLP1);
-            AddLayerParams(allParams, block.TextMLP2);
-            AddLayerParams(allParams, block.TextAdaLN);
-        }
+        if (offset != (int)count)
+            throw new InvalidOperationException(
+                $"MMDiTNoisePredictor.GetParameters wrote {offset} elements but ParameterCount reported " +
+                $"{count} — a layer's GetParameters().Length disagreed with its ParameterCount (likely a " +
+                "lazy layer that materialized weights between the count and the write).");
+        return result;
+    }
 
-        foreach (var block in _singleBlocks)
-        {
-            AddLayerParams(allParams, block.Norm);
-            AddLayerParams(allParams, block.QProj);
-            AddLayerParams(allParams, block.KProj);
-            AddLayerParams(allParams, block.VProj);
-            AddLayerParams(allParams, block.OutProj);
-            AddLayerParams(allParams, block.MLP1);
-            AddLayerParams(allParams, block.MLP2);
-            AddLayerParams(allParams, block.AdaLN);
-        }
-
-        AddLayerParams(allParams, _finalNorm);
-        AddLayerParams(allParams, _adalnModulation);
-        AddLayerParams(allParams, _outputProj);
-
-        return new Vector<T>(allParams.ToArray());
+    private static void WriteLayerParams(Vector<T> dst, ref int offset, ILayer<T> layer)
+    {
+        var p = layer.GetParameters();
+        if (offset + p.Length > dst.Length)
+            throw new InvalidOperationException(
+                $"WriteLayerParams overflow at layer {layer.GetType().Name}: offset={offset}, " +
+                $"p.Length={p.Length}, buffer.Length={dst.Length}. ParameterCount under-counted this layer.");
+        for (int i = 0; i < p.Length; i++)
+            dst[offset + i] = p[i];
+        offset += p.Length;
     }
 
     /// <inheritdoc />
@@ -1108,13 +1145,122 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         SetLayerParams(_outputProj, parameters, offset);
     }
 
-    private void AddLayerParams(List<T> allParams, ILayer<T> layer)
+    /// <summary>
+    /// The full layer list in the EXACT order GetParameters/SetParameters serialize it. Streaming and the
+    /// flat path share this sequence so the chunk concatenation stays index-identical to GetParameters.
+    /// </summary>
+    private IEnumerable<ILayer<T>> MMDiTLayerSequence()
     {
-        var p = layer.GetParameters();
-        for (int i = 0; i < p.Length; i++)
+        yield return _patchEmbed;
+        yield return _timeEmbed1;
+        yield return _timeEmbed2;
+        yield return _contextProj;
+
+        foreach (var block in _jointBlocks)
         {
-            allParams.Add(p[i]);
+            yield return block.ImageNorm1;
+            yield return block.ImageQProj;
+            yield return block.ImageKProj;
+            yield return block.ImageVProj;
+            yield return block.ImageOutProj;
+            yield return block.ImageNorm2;
+            yield return block.ImageMLP1;
+            yield return block.ImageMLP2;
+            yield return block.ImageAdaLN;
+            yield return block.TextNorm1;
+            yield return block.TextQProj;
+            yield return block.TextKProj;
+            yield return block.TextVProj;
+            yield return block.TextOutProj;
+            yield return block.TextNorm2;
+            yield return block.TextMLP1;
+            yield return block.TextMLP2;
+            yield return block.TextAdaLN;
         }
+
+        foreach (var block in _singleBlocks)
+        {
+            yield return block.Norm;
+            yield return block.QProj;
+            yield return block.KProj;
+            yield return block.VProj;
+            yield return block.OutProj;
+            yield return block.MLP1;
+            yield return block.MLP2;
+            yield return block.AdaLN;
+        }
+
+        yield return _finalNorm;
+        yield return _adalnModulation;
+        yield return _outputProj;
+    }
+
+    /// <summary>
+    /// True once this predictor's lazy weights have been materialized (its patch-embed is initialized,
+    /// which the first forward triggers). A never-materialized foundation-scale model has nothing to copy,
+    /// so internal callers (e.g. a wrapping model's <c>Clone</c>) can skip the multi-GB parameter copy and
+    /// stay lazy. Internal: this is clone/streaming materialization plumbing, not public model behavior.
+    /// </summary>
+    internal bool WeightsMaterialized => _patchEmbed.IsInitialized;
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // Foundation-scale (#1715): engage weight streaming before materializing — at FLUX/MMDiT scale
+        // (billions of params) the per-layer MaterializeParameters below otherwise routes to
+        // TensorAllocator.RentPinned and accumulates the full ~25 GB weight set in the pinned heap → OOM.
+        // Streaming flags the layers so AllocateLazyWeight pre-evicts to disk (bounded resident set).
+        // No-op below the param-count/memory threshold, so smaller MMDiT predictors stay resident.
+        MaybeEngageWeightStreaming();
+
+        // #1624 zero-copy: materialize each layer's lazy weights, then yield its resident trainable
+        // tensors BY REFERENCE — one chunk per tensor, in canonical MMDiTLayerSequence × GetTrainable
+        // order — instead of concatenating each layer's params into a transient multi-GB Vector<T>
+        // (which GC-thrashes/OOMs at >2.1B FLUX/MMDiT scale). Consumers (Clone, LatentDiffusionModelBase)
+        // pair Get/SetParameterChunks and count chunks dynamically, so per-tensor framing is consistent.
+        foreach (var layer in MMDiTLayerSequence())
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            lb.MaterializeParameters();
+            foreach (var t in lb.GetTrainableParameters())
+                if (t.Length > 0) yield return t;
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        // Foundation-scale (#1715): engage streaming before materializing weights — see GetParameterChunks.
+        MaybeEngageWeightStreaming();
+
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in MMDiTLayerSequence())
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            lb.MaterializeParameters();
+            var dst = lb.GetTrainableParameters();
+            // Pull one chunk per non-empty trainable tensor and copy the values IN PLACE
+            // (CopyTrainableParametersFrom: no rebinding — which would alias clone↔source — and no flat
+            // aggregate). Empty slots stay aligned to keep the per-tensor index identical to the getter.
+            bool anyNonEmpty = false;
+            foreach (var t in dst) if (t.Length > 0) { anyNonEmpty = true; break; }
+            if (!anyNonEmpty) continue;
+            var incoming = new Tensor<T>[dst.Count];
+            for (int i = 0; i < dst.Count; i++)
+            {
+                if (dst[i].Length == 0) { incoming[i] = dst[i]; continue; }
+                if (!e.MoveNext())
+                    throw new System.ArgumentException(
+                        "SetParameterChunks received fewer chunks than MMDiT has parameter tensors.",
+                        nameof(chunks));
+                incoming[i] = e.Current;
+            }
+            lb.CopyTrainableParametersFrom(incoming);
+        }
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than MMDiT has parameter tensors.",
+                nameof(chunks));
     }
 
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
@@ -1146,8 +1292,84 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             contextDim: _contextDim,
             mlpRatio: _mlpRatio);
 
-        clone.SetParameters(GetParameters());
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
+    }
+
+    /// <summary>
+    /// Materializes <paramref name="clone"/> through one throwaway probe forward (the same path the
+    /// source's weights resolved on) and then copies this predictor's weights into it.
+    /// </summary>
+    /// <remarks>
+    /// The LazyDense weights resolve+allocate through the FORWARD path (EnsureInitializedFromInput)
+    /// — a different entry than the SetParameters/GetParameters path (EnsureInitialized). Copying
+    /// parameters into a clone whose layers were never forwarded leaves its first real forward to
+    /// re-resolve and RNG-initialize along the forward path, discarding the copied values and
+    /// diverging from the source (the #1706 HiDream/MMDiTX Clone_ShouldProduceIdenticalOutput
+    /// failure). Run one throwaway forward to materialize the clone through the same path the source
+    /// used, THEN copy the source's weights so they persist. Shared by the base <see cref="Clone"/>
+    /// and the <c>MMDiTXNoisePredictor</c> override so both materialize-then-copy rather than copy
+    /// onto unmaterialized layers. Gated on the source having been forwarded (a never-forwarded
+    /// foundation-scale model has nothing materialized to copy and must not pay a full forward here).
+    /// </remarks>
+    protected void ProbeMaterializeAndCopyInto(MMDiTNoisePredictor<T> clone)
+    {
+        if (!_patchEmbed.IsInitialized) return;
+
+        int probeSpatial = _patchSize * 2;
+        var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
+        // A null-conditioned probe only materializes the unconditional (image-stream) path.
+        // When the source ran conditioned forwards its context projection (_contextProj) and
+        // text-stream block layers are materialized, so probe the clone WITH a representative
+        // text-conditioning tensor — otherwise those layers stay lazy on the clone and re-init
+        // with fresh RNG on the first conditioned forward, diverging from the source.
+        Tensor<T>? probeConditioning = _contextProj.IsInitialized
+            ? new Tensor<T>(new[] { 1, 1, _contextDim })
+            : null;
+        clone.PredictNoise(probe, timestep: 0, conditioning: probeConditioning);
+        // Layer-by-layer copy: each layer's GetParameters/SetParameters works on its own small
+        // vector, so cloning never materializes one contiguous foundation-scale parameter vector
+        // (the flat List<T> -> ToArray() path in GetParameters that OOMs at SD3/FLUX scale).
+        clone.CopyParametersFrom(this);
+        // The probe forward traced a compiled plan over the clone's random init; drop it so
+        // the next real forward re-traces against the copied weights.
+        clone.InvalidateCompiledPlans();
+    }
+
+    /// <summary>
+    /// Copies trained weights from <paramref name="source"/> into this predictor layer by layer,
+    /// without ever materializing a single contiguous parameter vector. Both predictors enumerate
+    /// their layers via the same <see cref="EnumerateLayers"/> order, so each source layer is paired
+    /// with its target and copied through that layer's own (small) <c>GetParameters</c>/
+    /// <c>SetParameters</c>. This is the foundation-scale-safe path that <see cref="Clone"/> uses
+    /// instead of <c>SetParameters(GetParameters())</c>, whose flat allocation OOMs at SD3/FLUX scale.
+    /// </summary>
+    private void CopyParametersFrom(MMDiTNoisePredictor<T> source)
+    {
+        Guard.NotNull(source);
+
+        using var src = source.EnumerateLayers().GetEnumerator();
+        using var dst = EnumerateLayers().GetEnumerator();
+
+        while (src.MoveNext())
+        {
+            if (!dst.MoveNext())
+            {
+                throw new InvalidOperationException(
+                    "Clone has fewer layers than the source MMDiT predictor; architectures differ.");
+            }
+
+            // Per-layer copy. A lazy source layer reports an empty vector and the corresponding
+            // SetParameters is a no-op, which is correct: the clone's matching layer was probed to
+            // the same materialization state, so both stay lazy together.
+            dst.Current.SetParameters(src.Current.GetParameters());
+        }
+
+        if (dst.MoveNext())
+        {
+            throw new InvalidOperationException(
+                "Clone has more layers than the source MMDiT predictor; architectures differ.");
+        }
     }
 
     /// <inheritdoc />

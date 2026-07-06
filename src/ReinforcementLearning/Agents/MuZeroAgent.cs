@@ -75,6 +75,14 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
 
+    // #1756: Adam optimizer moment state for the K-step unrolled joint training. The representation,
+    // dynamics and prediction networks are unrolled on ONE gradient tape and share a single step
+    // counter, but each network's flat Adam moments (m, v over its GetParameters() layout) are kept
+    // separately keyed by the network instance. Transient optimizer state, not serialized — the same
+    // role as PyTorch's optimizer.state.
+    private readonly System.Collections.Generic.Dictionary<object, (double[] M, double[] V)> _netAdam = new();
+    private int _adamStep;
+
     /// <summary>
     /// Initializes a new instance with default settings. All hyperparameters
     /// come from <see cref="MuZeroOptions{T}"/>'s field defaults
@@ -391,120 +399,252 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
+        // Validate transition shapes at this public ingestion boundary so a malformed experience
+        // can't reach Train() (which indexes observations/actions per _options) and crash or build
+        // wrong policy/value targets.
+        if (observation.Length != _options.ObservationSize)
+            throw new ArgumentException($"Observation length must be {_options.ObservationSize}, got {observation.Length}.", nameof(observation));
+        if (nextObservation.Length != _options.ObservationSize)
+            throw new ArgumentException($"Next observation length must be {_options.ObservationSize}, got {nextObservation.Length}.", nameof(nextObservation));
+        if (action.Length != _options.ActionSize)
+            throw new ArgumentException($"Action length must be {_options.ActionSize}, got {action.Length}.", nameof(action));
+
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done));
     }
 
     public override T Train()
     {
-        if (_replayBuffer.Count == 0)
+        // Need at least one real transition (o_0, a_0, r_0, o_1) to unroll from. A single Experience
+        // already carries both o_0 and its NextState (o_1), which is enough for a 1-step unroll whose
+        // value target bootstraps off NextState (see NStepValueTarget), so training can start as soon
+        // as the buffer holds one transition.
+        if (_replayBuffer.Count < 1)
         {
             return NumOps.Zero;
         }
 
-        // Paper trains on batches of size BatchSize (Schrittwieser et al.
-        // 2020 §B.2 — 1024 for board games, 256 for Atari). When the buffer
-        // hasn't accumulated a full batch yet, sample whatever is available
-        // rather than skipping the update entirely. The early-exit was a
-        // silent stub that left model parameters frozen until BatchSize
-        // (default 32) experiences had been stored — every short test run
-        // and the canonical warm-up phase of real RL training would
-        // observe "params unchanged after training" until the buffer
-        // filled up. Sampling min(count, BatchSize) keeps the paper's
-        // mini-batch SGD step intact when the buffer is full and
-        // degrades gracefully to single-step updates when it isn't.
-        int effectiveBatchSize = Math.Min(_replayBuffer.Count, _options.BatchSize);
-        var batch = _replayBuffer.Sample(effectiveBatchSize);
-        T totalLoss = NumOps.Zero;
-        int lossCount = 0;
+        // MuZero joint training (Schrittwieser et al. 2020, "Mastering Atari, Go, Chess and Shogi by
+        // Planning with a Learned Model", §Training). The representation (h), dynamics (g) and
+        // prediction (f) networks are trained TOGETHER by unrolling the learned model K = UnrollSteps
+        // steps from a real trajectory window and backpropagating ONE joint loss through the whole
+        // unroll: h_0 = h(o_0); for k: (p_k, v_k) = f(h_k), (h_{k+1}, r_k) = g(h_k, a_k). The dynamics
+        // network is applied K times, so gradients flow through the recurrence h_0 -> ... -> h_K. A
+        // single GradientTape spans all three networks; their parameters are collected after the
+        // forward (lazy layers materialize during it) and updated with one joint Adam step. Value
+        // targets bootstrap n-step (TDSteps) off the current network, computed DETACHED (off-tape).
+        int unroll = Math.Max(1, _options.UnrollSteps);
+        int latent = _options.LatentStateSize;
+        int actionDim = _options.ActionSize;
+        int nStep = Math.Max(1, _options.TDSteps);
+        T gamma = DiscountFactor;
+        int batchSize = Math.Min(_replayBuffer.Count, _options.BatchSize);
 
-        foreach (var experience in batch)
+        var repNet = (NeuralNetworkBase<T>)_representationNetwork;
+        var dynNet = (NeuralNetworkBase<T>)_dynamicsNetwork;
+        var predNet = (NeuralNetworkBase<T>)_predictionNetwork;
+
+        // ForwardForTraining requires training mode for the whole step (its own contract): in eval mode
+        // the forward reads inference-cached weights and does not build the trainable tape graph, so the
+        // joint gradient would be empty. Set on all three networks for the unroll, restore after.
+        repNet.SetTrainingMode(true);
+        dynNet.SetTrainingMode(true);
+        predNet.SetTrainingMode(true);
+        try
         {
-            // Step 1: Representation Network - encode initial observation to hidden state
-            var stateTensor = Tensor<T>.FromVector(experience.State);
-            var representationOutputTensor = _representationNetwork.Predict(stateTensor);
-            var hiddenState = representationOutputTensor.ToVector();
 
-            // Step 2: Prediction Network at initial state - predict policy and value
-            var predictionTensor = Tensor<T>.FromVector(hiddenState);
-            var predictionOutputTensor = _predictionNetwork.Predict(predictionTensor);
-            var prediction = predictionOutputTensor.ToVector();
-            var predictedValue = ExtractValue(prediction);
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
 
-            // Compute value loss for initial state
-            var valueTarget = experience.Done ? experience.Reward :
-                NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, predictedValue));
+        // Collect every tape-tracked (prediction − target) residual across the batch of unrolled
+        // sequences; the joint loss is the mean squared residual (equivalent to summing the per-head
+        // value/reward/policy MSEs, and unroll-length-normalized).
+        var residuals = new System.Collections.Generic.List<Tensor<T>>();
 
-            var valueDiff = NumOps.Subtract(valueTarget, predictedValue);
-            var valueLoss = NumOps.Multiply(valueDiff, valueDiff);
-            totalLoss = NumOps.Add(totalLoss, valueLoss);
-            lossCount++;
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Trajectory window of up to K+1 consecutive transitions (truncated at an episode boundary).
+            var seq = _replayBuffer.SampleSequence(unroll + 1);
+            if (seq.Count < 1) continue;
+            // Train one unroll step per transition in the window (capped at K). On a FULL K+1 window this
+            // is K steps and seq[K] serves only as the final bootstrap state (unchanged). On a window
+            // TRUNCATED at an episode boundary (or a 1-transition buffer) this also trains the last /
+            // terminal transition's heads — its value target bootstraps off seq[last].NextState via
+            // NStepValueTarget, so no transition near an episode end is silently dropped from the loss.
+            int steps = Math.Min(unroll, seq.Count);
 
-            // Backpropagate prediction loss through prediction network
-            var predictionGradient = new Vector<T>(_options.ActionSize + 1);
-            predictionGradient[_options.ActionSize] = NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff);
-            var predictionGradTensor = Tensor<T>.FromVector(predictionGradient);
+            // Cache bootstrap V(s) per unique bootstrap index within THIS sequence: NStepValueTarget is
+            // called once per unrolled step k and each call runs a detached representation+prediction pass
+            // for its bootstrap state. Different k's often resolve to the same bootstrap index (e.g. every
+            // step past the last non-terminal transition bootstraps off the same terminal NextState), so
+            // memoizing avoids repeating that inference batchSize×unrollSteps times.
+            var bootValueCache = new System.Collections.Generic.Dictionary<int, T>();
 
-            // Step 3: Unroll dynamics for K steps
-            for (int k = 0; k < _options.UnrollSteps; k++)
+            // h_0 = f_representation(o_0). Outputs stay rank-1 (FromVector -> [n], Dense preserves rank),
+            // so no Reshape is used in the unroll — Engine.Reshape deliberately does NOT attach an
+            // autodiff GradFn (it's sidestepped for view caching), which would sever the tape.
+            var h = repNet.ForwardForTraining(Tensor<T>.FromVector(seq[0].State));
+
+            for (int k = 0; k < steps; k++)
             {
-                // Dynamics Network: predict next hidden state and reward
-                var actionVec = experience.Action;
-                var dynamicsInput = ConcatenateVectors(hiddenState, actionVec);
-                var dynamicsInputTensor = Tensor<T>.FromVector(dynamicsInput);
-                var dynamicsOutputTensor = _dynamicsNetwork.Predict(dynamicsInputTensor);
-                var dynamicsOutput = dynamicsOutputTensor.ToVector();
+                var exp = seq[k];
 
-                // Extract predicted reward and next hidden state
-                var predictedReward = dynamicsOutput[_options.LatentStateSize];
-                var nextHiddenState = new Vector<T>(_options.LatentStateSize);
-                for (int i = 0; i < _options.LatentStateSize; i++)
-                {
-                    nextHiddenState[i] = dynamicsOutput[i];
-                }
+                // Prediction head at h_k -> [policy (actionDim) | value (1)].
+                var pred = predNet.ForwardForTraining(h);
+                var policyPred = Engine.TensorSlice(pred, new[] { 0 }, new[] { actionDim });
+                var valuePred = Engine.TensorSlice(pred, new[] { actionDim }, new[] { 1 });
+                residuals.Add(Engine.TensorSubtract(valuePred, ScalarTensor(NStepValueTarget(seq, k, nStep, gamma, bootValueCache))));
+                residuals.Add(Engine.TensorSubtract(policyPred, ActionTensor(exp.Action, actionDim)));
 
-                // Compute reward loss
-                var rewardDiff = NumOps.Subtract(experience.Reward, predictedReward);
-                var rewardLoss = NumOps.Multiply(rewardDiff, rewardDiff);
-                totalLoss = NumOps.Add(totalLoss, rewardLoss);
-                lossCount++;
+                // Dynamics: (h_{k+1}, r_k) = g(h_k, a_k).
+                var dynIn = Engine.TensorConcatenate(new[] { h, ActionTensor(exp.Action, actionDim) }, 0);
+                var dynOut = dynNet.ForwardForTraining(dynIn);
+                var hNext = Engine.TensorSlice(dynOut, new[] { 0 }, new[] { latent });
+                var rewardPred = Engine.TensorSlice(dynOut, new[] { latent }, new[] { 1 });
+                residuals.Add(Engine.TensorSubtract(rewardPred, ScalarTensor(exp.Reward)));
 
-                // Backpropagate reward loss through dynamics network
-                var dynamicsGradient = new Vector<T>(_options.LatentStateSize + 1);
-                dynamicsGradient[_options.LatentStateSize] = NumOps.Multiply(NumOps.FromDouble(2.0), rewardDiff);
-                var dynamicsGradTensor = Tensor<T>.FromVector(dynamicsGradient);
-
-                // Prediction Network at next state
-                var nextPredictionTensor = Tensor<T>.FromVector(nextHiddenState);
-                var nextPredictionOutputTensor = _predictionNetwork.Predict(nextPredictionTensor);
-                var nextPrediction = nextPredictionOutputTensor.ToVector();
-                var nextPredictedValue = ExtractValue(nextPrediction);
-
-                // Compute value loss for next state
-                var nextValueTarget = experience.Done ? NumOps.Zero : nextPredictedValue;
-                var nextValueDiff = NumOps.Subtract(nextValueTarget, nextPredictedValue);
-                var nextValueLoss = NumOps.Multiply(nextValueDiff, nextValueDiff);
-                totalLoss = NumOps.Add(totalLoss, nextValueLoss);
-                lossCount++;
-
-                // Backpropagate next state value loss through prediction network
-                var nextPredictionGradient = new Vector<T>(_options.ActionSize + 1);
-                nextPredictionGradient[_options.ActionSize] = NumOps.Multiply(NumOps.FromDouble(2.0), nextValueDiff);
-                var nextPredictionGradTensor = Tensor<T>.FromVector(nextPredictionGradient);
-
-                // Move to next state
-                hiddenState = nextHiddenState;
+                h = hNext;
             }
-
-            // Step 4: Backpropagate through representation network
-            // The representation gradient comes from the prediction network loss
-            var representationGradient = new Vector<T>(_options.LatentStateSize);
-            representationGradient[0] = NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff);
-            var representationGradTensor = Tensor<T>.FromVector(representationGradient);
         }
 
-        _updateCount++;
+        if (residuals.Count == 0)
+        {
+            return NumOps.Zero;
+        }
 
-        return lossCount > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(lossCount)) : NumOps.Zero;
+        var allResiduals = residuals.Count == 1
+            ? residuals[0]
+            : Engine.TensorConcatenate(residuals.ToArray(), 0);
+        var loss = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(allResiduals, allResiduals), null),
+            NumOps.FromDouble(1.0 / allResiduals.Length));
+
+        // Compute grads for ALL tracked leaves (sources: null) — the pattern NeuralNetworkBase's own
+        // tape training uses; passing explicit sources can miss the exact leaf instances recorded.
+        var grads = tape.ComputeGradients(loss, sources: null);
+        // Apply the joint gradient through each network's canonical GetParameters/UpdateParameters
+        // round-trip. The tape's grads are keyed by the tensors the forward used; those are NOT
+        // necessarily the same instances GetParameters exposes, so an in-place write to them would not
+        // be reflected. Mapping the grads into GetParameters' layer-ordered flat layout and writing
+        // back via UpdateParameters is the only path guaranteed to persist.
+        _adamStep++;
+        ApplyNetworkAdam(repNet, grads);
+        ApplyNetworkAdam(dynNet, grads);
+        ApplyNetworkAdam(predNet, grads);
+
+        _updateCount++;
+        return loss[0];
+
+        }
+        finally
+        {
+            repNet.SetTrainingMode(false);
+            dynNet.SetTrainingMode(false);
+            predNet.SetTrainingMode(false);
+        }
+    }
+
+    // ── K-step unroll helpers (#1756, Schrittwieser et al. 2020) ───────────────────────────────
+    private Tensor<T> ScalarTensor(T value) => new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { value }));
+
+    private Tensor<T> ActionTensor(Vector<T> action, int actionDim)
+    {
+        var v = new Vector<T>(actionDim);
+        for (int i = 0; i < actionDim; i++) v[i] = i < action.Length ? action[i] : NumOps.Zero;
+        return Tensor<T>.FromVector(v);
+    }
+
+    /// <summary>
+    /// n-step bootstrapped value target for trajectory position <paramref name="k"/>:
+    /// Σ_{j=0}^{n-1} γ^j·r_{k+j} + γ^n·V(s_{k+n}), truncated at a terminal. Computed DETACHED (via
+    /// Predict, off-tape) — MuZero value targets carry no gradient into the online networks.
+    /// </summary>
+    private T NStepValueTarget(System.Collections.Generic.List<Experience<T, Vector<T>, Vector<T>>> seq, int k, int nStep, T gamma,
+        System.Collections.Generic.Dictionary<int, T> bootValueCache)
+    {
+        T ret = NumOps.Zero;
+        T disc = NumOps.One;
+        int j = 0;
+        for (; j < nStep && k + j < seq.Count; j++)
+        {
+            ret = NumOps.Add(ret, NumOps.Multiply(disc, seq[k + j].Reward));
+            disc = NumOps.Multiply(disc, gamma);
+            if (seq[k + j].Done) return ret; // terminal: no bootstrap beyond the episode end
+        }
+
+        // Resolve the bootstrap index; index seq.Count is the sentinel for the tail NextState (window ran
+        // off the end without a terminal). Memoize V(s) per resolved index so repeated bootstrap targets
+        // within this sequence reuse a single detached representation+prediction pass.
+        bool withinSeq = k + j < seq.Count;
+        int bootIndex = withinSeq ? k + j : seq.Count;
+        if (!bootValueCache.TryGetValue(bootIndex, out var bootValue))
+        {
+            var bootstrapState = withinSeq ? seq[k + j].State : seq[seq.Count - 1].NextState;
+            var hB = _representationNetwork.Predict(Tensor<T>.FromVector(bootstrapState)).ToVector();
+            var predB = _predictionNetwork.Predict(Tensor<T>.FromVector(hB)).ToVector();
+            bootValue = ExtractValue(predB);
+            bootValueCache[bootIndex] = bootValue;
+        }
+        return NumOps.Add(ret, NumOps.Multiply(disc, bootValue));
+    }
+
+    /// <summary>
+    /// Applies one Adam step (β1=0.9, β2=0.999, ε=1e-8, lr = the agent's resolved <see cref="LearningRate"/>
+    /// — the base-class value with its non-zero fallback, NOT the nullable <c>Options.LearningRate</c>) to a single network,
+    /// mapping the joint tape gradients into the network's canonical <c>GetParameters()</c> flat layout
+    /// (layer order, the same order <see cref="TapeTrainingStep{T}.CollectParameters"/> walks) and
+    /// writing back via <c>UpdateParameters</c> — the only path guaranteed to persist and be read back
+    /// by <c>GetParameters</c>. Per-network Adam moment state persists in <see cref="_netAdam"/>.
+    /// </summary>
+    private void ApplyNetworkAdam(NeuralNetworkBase<T> net, System.Collections.Generic.Dictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        var current = net.GetParameters();
+        int total = current.Length;
+        if (total == 0) return;
+
+        // Build the flat gradient aligned to GetParameters' layout by concatenating each collected
+        // parameter tensor's gradient in layer order (advancing the offset for every tensor, so a
+        // parameter with no gradient leaves a zero block and is simply not updated).
+        var flatGrad = new double[total];
+        int offset = 0;
+        foreach (var t in Training.TapeTrainingStep<T>.CollectParameters(net.Layers))
+        {
+            if (grads.TryGetValue(t, out var g) && g is not null)
+            {
+                var gs = g.AsSpan();
+                // Bound by the gradient length too: g is not guaranteed to match t.Length (a partial
+                // gradient would otherwise read past gs and throw IndexOutOfRange). Copy the overlapping
+                // prefix; any remaining slots in this tensor's block stay zero (unaffected by the update).
+                int limit = Math.Min(Math.Min(t.Length, gs.Length), total - offset);
+                for (int i = 0; i < limit; i++) flatGrad[offset + i] = Convert.ToDouble(gs[i]);
+            }
+            offset += t.Length;
+        }
+
+        if (!_netAdam.TryGetValue(net, out var mom) || mom.M.Length != total)
+        {
+            mom = (new double[total], new double[total]);
+            _netAdam[net] = mom;
+        }
+        var (m, v) = mom;
+
+        const double beta1 = 0.9, beta2 = 0.999, eps = 1e-8;
+        double bc1 = 1.0 - Math.Pow(beta1, _adamStep);
+        double bc2 = 1.0 - Math.Pow(beta2, _adamStep);
+        // Use the agent's RESOLVED learning rate (base class, with the non-zero fallback), NOT
+        // _options.LearningRate — the latter is a nullable T that defaults to null/zero, which would
+        // make every Adam step zero and leave the parameters frozen.
+        double lr = Convert.ToDouble(LearningRate);
+        var updated = new Vector<T>(total);
+        for (int i = 0; i < total; i++)
+        {
+            double g = flatGrad[i];
+            double mi = beta1 * m[i] + (1.0 - beta1) * g;
+            double vi = beta2 * v[i] + (1.0 - beta2) * g * g;
+            m[i] = mi;
+            v[i] = vi;
+            double step = lr * (mi / bc1) / (Math.Sqrt(vi / bc2) + eps);
+            updated[i] = NumOps.Subtract(current[i], NumOps.FromDouble(step));
+        }
+        net.UpdateParameters(updated);
     }
 
 

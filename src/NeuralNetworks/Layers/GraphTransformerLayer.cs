@@ -498,7 +498,8 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
             processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
 
-        _lastInput = processInput;
+        bool cacheBwd = ShouldCacheForBackward; // #1668: gate backward-only caches (arena safety)
+        _lastInput = cacheBwd ? processInput : null;
         int numNodes = processInput.Shape[1];
 
         // Multi-head attention block with residual connection
@@ -527,21 +528,27 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
 
         var normed1 = Engine.TensorAdd(attended, residualInput);
-        _lastNormed1 = normed1;
+        _lastNormed1 = cacheBwd ? normed1 : null;
 
         // Feed-forward network with residual
         var ffnOutput = FeedForwardNetwork(normed1, batchSize, numNodes);
-        _lastFFNOutput = ffnOutput;
+        _lastFFNOutput = cacheBwd ? ffnOutput : null;
 
         // Final residual and layer norm
         var output = Engine.TensorAdd(normed1, ffnOutput);
 
         var result = ApplyActivation(output);
 
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
+        // Only store for backward pass when an eager Backward will read it (#1668). Clear any
+        // prior cached output otherwise, so an arena-owned tensor from a previous step is not
+        // retained across the next denoise-loop Reset().
+        if (cacheBwd)
         {
             _lastOutput = result;
+        }
+        else
+        {
+            _lastOutput = null;
         }
 
         // Restore original shape for any-rank tensor support
@@ -934,14 +941,16 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
     private Tensor<T> MultiHeadAttention(Tensor<T> input, int batchSize, int numNodes)
     {
-        // Rent attention tensors — all fully overwritten in forward pass
+        // Rent attention tensors. headOutputs is forward scratch (consumed below); the _last*
+        // fields are manual-backward caches only (the forward uses per-head locals), so rent +
+        // populate them only when an eager Backward will read them (#1668) — leaving nothing for
+        // an arena Reset to alias in inference.
+        bool cacheBwd = ShouldCacheForBackward;
         var headOutputs = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
-        _lastAttentionWeights = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, numNodes]);
-
-        // Q, K, V are fully overwritten per head — safe to rent
-        _lastQueries = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
-        _lastKeys = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
-        _lastValues = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
+        _lastAttentionWeights = cacheBwd ? TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, numNodes]) : null;
+        _lastQueries = cacheBwd ? TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]) : null;
+        _lastKeys = cacheBwd ? TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]) : null;
+        _lastValues = cacheBwd ? TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]) : null;
 
         // Attention scale factor: 1/sqrt(d_k). Compute as a scalar Multiply factor
         // so we can use Engine.TensorMultiplyScalar instead of per-element Divide.
@@ -1009,19 +1018,26 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
             // there's no dest-slice-write Engine op — but this is bounded to
             // O(B·N·D) per head, vs the O(B·N²·D) attention compute that just
             // collapsed to two Engine ops above.
-            ScatterHeadSlice(_lastQueries, queries, h, batchSize, numNodes, _headDim);
-            ScatterHeadSlice(_lastKeys, keys, h, batchSize, numNodes, _headDim);
-            ScatterHeadSlice(_lastValues, values, h, batchSize, numNodes, _headDim);
             ScatterHeadSlice(headOutputs, headOut, h, batchSize, numNodes, _headDim);
 
-            // Attention weights are [B, N, N] not [B, N, D]; separate scatter.
-            for (int b = 0; b < batchSize; b++)
-                for (int i = 0; i < numNodes; i++)
-                    for (int j = 0; j < numNodes; j++)
-                        _lastAttentionWeights[b, h, i, j] = attnWeights[b, i, j];
+            // #1668: Q/K/V/attn-weight scatters populate backward-only caches; skip them when
+            // no eager Backward will read them. The combined null-check both expresses that
+            // (the fields are null in inference) and narrows them to non-null for the compiler.
+            if (_lastQueries != null && _lastKeys != null && _lastValues != null && _lastAttentionWeights != null)
+            {
+                ScatterHeadSlice(_lastQueries, queries, h, batchSize, numNodes, _headDim);
+                ScatterHeadSlice(_lastKeys, keys, h, batchSize, numNodes, _headDim);
+                ScatterHeadSlice(_lastValues, values, h, batchSize, numNodes, _headDim);
+
+                // Attention weights are [B, N, N] not [B, N, D]; separate scatter.
+                for (int b = 0; b < batchSize; b++)
+                    for (int i = 0; i < numNodes; i++)
+                        for (int j = 0; j < numNodes; j++)
+                            _lastAttentionWeights[b, h, i, j] = attnWeights[b, i, j];
+            }
         }
 
-        _lastHeadOutputs = headOutputs;
+        _lastHeadOutputs = cacheBwd ? headOutputs : null;
 
         // Concatenate heads: [batch, numNodes, numHeads * headDim]
         var concatenated = TensorAllocator.Rent<T>([batchSize, numNodes, _numHeads * _headDim]);
@@ -1040,7 +1056,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
             }
         }
 
-        _lastConcatenated = concatenated;
+        _lastConcatenated = cacheBwd ? concatenated : null;
 
         // Project concatenated output: [batch, numNodes, numHeads*headDim] @ [numHeads*headDim, outputFeatures]
         var output = BatchedMatMul3Dx2D(concatenated, _outputWeights, batchSize, numNodes, _numHeads * _headDim, _outputFeatures);
@@ -1049,7 +1065,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         var biasBroadcast = BroadcastBias(_outputBias, batchSize, numNodes);
         output = Engine.TensorAdd(output, biasBroadcast);
 
-        _lastAttnOutput = output;
+        _lastAttnOutput = cacheBwd ? output : null;
         return output;
     }
 
@@ -1099,6 +1115,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
     private Tensor<T> FeedForwardNetwork(Tensor<T> input, int batchSize, int numNodes)
     {
+        bool cacheBwd = ShouldCacheForBackward; // #1668: gate the backward-only FFN-hidden cache
         // First layer: [batch, numNodes, outputFeatures] @ [outputFeatures, ffnHiddenDim]
         var hidden = BatchedMatMul3Dx2D(input, _ffnWeights1, batchSize, numNodes, _outputFeatures, _ffnHiddenDim);
 
@@ -1108,7 +1125,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         // Apply FFN activation (configurable: GELU by default, but user can choose any activation)
         hidden = ApplyFFNActivation(hidden);
-        _lastFFNHidden = hidden;
+        _lastFFNHidden = cacheBwd ? hidden : null;
 
         // Second layer: [batch, numNodes, ffnHiddenDim] @ [ffnHiddenDim, outputFeatures]
         var output = BatchedMatMul3Dx2D(hidden, _ffnWeights2, batchSize, numNodes, _ffnHiddenDim, _outputFeatures);

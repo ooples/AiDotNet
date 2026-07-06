@@ -168,17 +168,8 @@ public class EmuVideoModel<T> : VideoDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: 2048,
-            numLayers: 28,
-            numHeads: 16,
-            patchSize: 2,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        return new EmuVideoModel<T>(
-            predictor: clonedPredictor,
+                return new EmuVideoModel<T>(
+            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

@@ -204,6 +204,7 @@ public enum InstanceSegmentationArchitecture
 /// <para><b>For Beginners:</b> This base class provides the common functionality for all instance segmentation models, which detect and mask individual objects in images.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("InstanceSegmenter")]
 public abstract class InstanceSegmenterBase<T>
 {
     protected readonly INumericOperations<T> NumOps;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -95,6 +96,152 @@ public class FusedOptimizerIntegrationTests
         }
     }
 
+    [Fact]
+    public void CudaAllocationOom_IsClassifiedAsStreamingOom()
+    {
+        var ex = new InvalidOperationException("cuMemAllocAsync failed: Out of memory");
+
+        // The OOM string matches BOTH classifiers, which is exactly why recovery routing must consult
+        // IsGpuOutOfMemoryFailure FIRST (streaming-OOM recovery) before IsGpuTransientFailure (plain
+        // retry) — this test pins that both predicates fire; TryTrainWithFusedOptimizer's ordering is
+        // what turns that into streaming-OOM recovery rather than a transient retry.
+        Assert.True(FusedTrainingTestNetwork.IsGpuOutOfMemoryForTest(ex));
+        Assert.True(FusedTrainingTestNetwork.IsGpuTransientForTest(ex));
+    }
+
+    /// <summary>
+    /// #1662 lever #1 (§5a) bit-identical gate: single-pass full-precision fused
+    /// optimizer-in-backward (<see cref="StreamingTrainingMode.ForceOn"/>, unclipped, Adam) must
+    /// track the classic collect-then-step eager path to floating-point precision. Both networks
+    /// start from identical parameters and train on identical data; the fused path consumes each
+    /// gradient and applies the Adam update the moment it's produced (O(largest-grad) peak memory,
+    /// hot-in-cache) while classic materializes the full gradient set and steps once. Adam is
+    /// element-wise independent given a shared step t, so the trajectories must coincide.
+    ///
+    /// <para>The fused optimizer accumulates moments in <c>double</c> while classic Adam runs in
+    /// <c>float</c>, so agreement is to float precision (the fused path is marginally MORE accurate),
+    /// not literally bit-identical. The 1e-3 tolerance cleanly separates "tracks classic" (~1e-6
+    /// drift) from a broken update (orders-of-magnitude divergence).</para>
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FusedInBackward_Unclipped_MatchesClassicAdam_ToFloatPrecision()
+    {
+        await Task.CompletedTask;
+
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        var classic = BuildMlp();
+        var fused = BuildMlp();
+        // Materialize layer weights, then force IDENTICAL initial parameters on both.
+        classic.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.UpdateParameters(classic.GetParameters());
+
+        // Classic eager collect-then-step (compilation off by default) vs full-precision fused
+        // optimizer-in-backward. Explicitly UNCLIPPED (MaxGradNorm defaults to 1.0) so this
+        // exercises the single-pass fused path, not the two-pass clipped one.
+        classic.SetMaxGradNormForTest(0.0);
+        fused.SetMaxGradNormForTest(0.0);
+        classic.StreamingTraining = StreamingTrainingMode.ForceOff;
+        fused.StreamingTraining = StreamingTrainingMode.ForceOn;
+
+        var classicOpt = BuildAdam(classic, learningRate: 0.01);
+        var fusedOpt = BuildAdam(fused, learningRate: 0.01);
+
+        for (int step = 0; step < 20; step++)
+        {
+            classic.TrainPublic(input, target, classicOpt);
+            fused.TrainPublic(input, target, fusedOpt);
+            Assert.Equal((double)classic.LastLossPublic, (double)fused.LastLossPublic, 3);
+        }
+
+        var pc = SnapshotParameters(classic);
+        var pf = SnapshotParameters(fused);
+        Assert.False(AnyParameterDiffers(pc, pf, 1e-3f),
+            "full-precision fused optimizer-in-backward diverged from classic Adam beyond float precision");
+    }
+
+    /// <summary>
+    /// #1662 lever #1 clipped gate (the COMMON case — MaxGradNorm defaults to 1.0): the
+    /// full-precision two-pass clipped fused optimizer-in-backward must track the classic
+    /// clip-then-step eager path to float precision. The fused path streams once to accumulate
+    /// the global grad norm (activations kept resident — the persistent-tape fix), then streams
+    /// again folding the same clip scale before the Adam update. PyTorch's
+    /// apply_optimizer_in_backward does NOT support gradient clipping at all, so this is a
+    /// capability they lack, not just a perf delta.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FusedInBackward_Clipped_MatchesClassicAdam_ToFloatPrecision()
+    {
+        await Task.CompletedTask;
+
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        var classic = BuildMlp();
+        var fused = BuildMlp();
+        classic.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.UpdateParameters(classic.GetParameters());
+
+        // CLIPPED (MaxGradNorm = 1.0, the default) — exercises the two-pass clipped fused path.
+        classic.SetMaxGradNormForTest(1.0);
+        fused.SetMaxGradNormForTest(1.0);
+        classic.StreamingTraining = StreamingTrainingMode.ForceOff;
+        fused.StreamingTraining = StreamingTrainingMode.ForceOn;
+
+        var classicOpt = BuildAdam(classic, learningRate: 0.01);
+        var fusedOpt = BuildAdam(fused, learningRate: 0.01);
+
+        for (int step = 0; step < 20; step++)
+        {
+            classic.TrainPublic(input, target, classicOpt);
+            fused.TrainPublic(input, target, fusedOpt);
+            Assert.Equal((double)classic.LastLossPublic, (double)fused.LastLossPublic, 3);
+        }
+
+        var pc = SnapshotParameters(classic);
+        var pf = SnapshotParameters(fused);
+        Assert.False(AnyParameterDiffers(pc, pf, 1e-3f),
+            "clipped two-pass fused optimizer-in-backward diverged from classic clipped Adam beyond float precision");
+    }
+
+    /// <summary>
+    /// #1662 lever #1 (§5c) fast-clip convergence: the opt-in single-pass approximate clip
+    /// (EMA of the prior step's grad-norm) must train stably — loss decreases and stays finite —
+    /// even though it is NOT bit-identical to exact clipping. This is the path that lets clipped
+    /// training run in one backward pass (a capability PyTorch's apply_optimizer_in_backward lacks
+    /// entirely). It need not match the exact-clip trajectory, only converge.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FastClip_SinglePass_ReducesLoss_AndStaysFinite()
+    {
+        await Task.CompletedTask;
+
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        var net = BuildMlp();
+        net.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        net.SetMaxGradNormForTest(1.0);            // clipping ON
+        net.FastApproxGradClip = true;             // single-pass approximate
+        net.StreamingTraining = StreamingTrainingMode.ForceOn;
+
+        var optimizer = BuildAdam(net, learningRate: 0.01);
+
+        double first = double.NaN, last = 0.0;
+        for (int step = 0; step < 30; step++)
+        {
+            net.TrainPublic(input, target, optimizer);
+            last = net.LastLossPublic;
+            Assert.False(double.IsNaN(last) || double.IsInfinity(last),
+                $"fast-clip produced non-finite loss at step {step}");
+            if (step == 0) first = last;
+        }
+        Assert.True(last < first, $"fast-clip did not reduce loss: {first} -> {last}");
+    }
+
     /// <summary>
     /// End-to-end validation of the FP16-activation training path for a NON-Adam fused
     /// optimizer (Tensors #574 + AiDotNet #1543). With <c>AIDOTNET_FP16_ACTIVATIONS=1</c>,
@@ -156,6 +303,71 @@ public class FusedOptimizerIntegrationTests
             // FP16-computed grads applied by RMSprop's own master update must still train.
             Assert.True(losses[losses.Count - 1] < losses[0],
                 $"FP16 RMSprop training did not descend: first {losses[0]}, last {losses[losses.Count - 1]}");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS", originalEnv);
+            TensorCodecOptions.SetCurrent(originalOptions);
+            CompiledTapeTrainingStep<float>.Invalidate();
+        }
+    }
+
+    /// <summary>
+    /// End-to-end behavioral contract for FP16-activation training through the high-level
+    /// <see cref="NeuralNetworkBase{T}"/> path on a model that uses the between-matmul ops the
+    /// resident-memory win depends on — LayerNorm + GELU (Tensors #558). A transformer block separates
+    /// matmuls with LayerNorm/GELU, so those ops (not just the GEMM the matmul-only tests cover) must
+    /// keep their activations Half. Dense → LayerNorm → GELU → Dense, Adam, <c>AIDOTNET_FP16_ACTIVATIONS=1</c>.
+    /// <para>On Tensors 0.96.0 (PR #606) the FP16-native LayerNorm/GELU ops keep the activation chain Half,
+    /// so this Adam-trained Dense → LayerNorm → GELU → Dense model routes through the fused FP16 plan. The
+    /// test asserts both that the fused path actually engaged (<c>GetFusedStepCount() &gt; 0</c>) and that
+    /// FP16 activations through LayerNorm + GELU train the FP32 master weights (finite loss every step,
+    /// loss descends) — the end-to-end resident-memory win Tensors #558 / #606 targets.</para>
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Fp16Activations_LayerNormGeluBlock_EngagesFusedFp16Path_AndTrains()
+    {
+        await Task.CompletedTask;
+
+        var network = BuildLayerNormGeluNet();
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        // Warmup forward so layer weight tensors are materialized before training.
+        network.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+
+        var optimizer = BuildAdam(network, learningRate: 0.01);
+        var originalOptions = TensorCodecOptions.Current;
+        string? originalEnv = Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS");
+        try
+        {
+            Environment.SetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS", "1");
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+
+            var losses = new List<float>();
+            for (int step = 0; step < 15; step++)
+            {
+                network.TrainPublic(input, target, optimizer);
+                float loss = network.LastLossPublic;
+                losses.Add(loss);
+                Assert.False(float.IsNaN(loss) || float.IsInfinity(loss),
+                    $"FP16 LayerNorm/GELU path produced non-finite loss at step {step}");
+            }
+
+            // The fused FP16 plan must have actually engaged. On 0.96.0 (Tensors PR #606) both the matmul
+            // and the LayerNorm/GELU activations stay Half, so this Adam-trained model routes through the
+            // fused FP16 ComputeGradients/StepAdam path rather than the eager FP32 fallback. (Engagement
+            // required the MixedPrecisionReflection.StepAdam float-arg fix in this PR: 0.96.0 made StepAdam
+            // public with float hyperparams, and the reflection bridge was still passing doubles — which
+            // threw on invoke and silently dropped every Adam FP16 step to eager.)
+            Assert.True(CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
+                "FP16 fused path never engaged for the LayerNorm/GELU model — silent eager fallback.");
+
+            // FP16 activations through LayerNorm + GELU must still train the FP32 master weights.
+            Assert.True(losses[losses.Count - 1] < losses[0],
+                $"FP16 LayerNorm/GELU training did not descend: first {losses[0]}, last {losses[losses.Count - 1]}");
         }
         finally
         {
@@ -431,6 +643,29 @@ public class FusedOptimizerIntegrationTests
         return network;
     }
 
+    /// <summary>
+    /// A transformer-style block exercising the FP16-NATIVE between-matmul ops (#558): a Dense projection,
+    /// a LayerNorm, a GELU activation, then a Dense output. This is the op mix the resident-memory win
+    /// depends on (matmuls separated by LayerNorm/GELU), as opposed to <see cref="BuildMlp"/>'s matmul-only
+    /// stack.
+    /// </summary>
+    private static FusedTrainingTestNetwork BuildLayerNormGeluNet()
+    {
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 4,
+            outputSize: 2);
+
+        var network = new FusedTrainingTestNetwork(architecture);
+        network.AddLayer(new DenseLayer<float>(8));
+        network.AddLayer(new LayerNormalizationLayer<float>(8));
+        network.AddLayer(new ActivationLayer<float>((IActivationFunction<float>)new GELUActivation<float>()));
+        network.AddLayer(new DenseLayer<float>(2));
+        return network;
+    }
+
     private static FusedTrainingTestNetworkDouble BuildMlpDouble()
     {
         var architecture = new NeuralNetworkArchitecture<double>(
@@ -538,6 +773,9 @@ public class FusedOptimizerIntegrationTests
 
         public void AddLayer(ILayer<float> layer) => AddLayerToCollection(layer);
 
+        /// <summary>Test-only: set the global grad-norm clip threshold (0 disables clipping).</summary>
+        public void SetMaxGradNormForTest(double value) => MaxGradNorm = NumOps.FromDouble(value);
+
         public void TrainPublic(
             Tensor<float> input, Tensor<float> target,
             IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> optimizer)
@@ -546,6 +784,12 @@ public class FusedOptimizerIntegrationTests
         }
 
         public float LastLossPublic => Convert.ToSingle(LastLoss);
+
+        public static bool IsGpuOutOfMemoryForTest(Exception? exception)
+            => IsGpuOutOfMemoryFailure(exception);
+
+        public static bool IsGpuTransientForTest(Exception? exception)
+            => IsGpuTransientFailure(exception);
 
         protected override void InitializeLayers() { }
 

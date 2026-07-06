@@ -145,7 +145,22 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     [MemberNotNull(nameof(_predictor), nameof(_vae))]
     private void InitializeLayers(FlagDiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
-        _predictor = predictor ?? new FlagDiTPredictor<T>(seed: seed);
+        // Default-construct a TEST-SCALE Flag-DiT (small hidden/layers) — the architecture is the
+        // faithful Flag-DiT (patchify + RoPE grouped-query attention + sandwich RMSNorm + zero-init
+        // adaLN + unpatchify), just sized so the default model is runnable, mirroring the test-scale
+        // UNet defaults the other diffusion models use (AudioLDM/MusicGen base-64). The predictor's
+        // inputChannels MUST equal the model's LatentChannels (T2X_LATENT_CHANNELS) and latentSize
+        // fixes the patch-sequence length; the foundation-scale config is available by passing an
+        // explicitly-sized FlagDiTPredictor.
+        _predictor = predictor ?? new FlagDiTPredictor<T>(
+            inputChannels: T2X_LATENT_CHANNELS,
+            hiddenSize: 256,
+            numLayers: 4,
+            numHeads: 4,
+            numKVHeads: 2,
+            contextDim: T2X_CONTEXT_DIM,
+            latentSize: 32,
+            seed: seed);
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3, latentChannels: T2X_LATENT_CHANNELS, baseChannels: 128,
             channelMultipliers: [1, 2, 4, 4], numResBlocksPerLevel: 2, seed: seed);
@@ -218,12 +233,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var cp = new FlagDiTPredictor<T>();
-        cp.SetParameters(_predictor.GetParameters());
-        var cv = new StandardVAE<T>(inputChannels: 3, latentChannels: T2X_LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4], numResBlocksPerLevel: 2);
-        cv.SetParameters(_vae.GetParameters());
-        return new LuminaT2XModel<T>(predictor: cp, vae: cv, conditioner: _conditioner);
+                        return new LuminaT2XModel<T>(predictor: (FlagDiTPredictor<T>)_predictor.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
     }
 
     #endregion

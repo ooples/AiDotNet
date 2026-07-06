@@ -180,7 +180,7 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// <summary>
     /// Runs a forward pass to produce segmentation logits.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
         => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <summary>

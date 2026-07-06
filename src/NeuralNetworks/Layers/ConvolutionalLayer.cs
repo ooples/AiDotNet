@@ -149,6 +149,24 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     public int Padding { get; private set; }
 
     /// <summary>
+    /// Number of convolution groups. 1 = standard (dense) convolution. When
+    /// <c>Groups == InputDepth</c> (and OutputDepth == InputDepth) the layer is a
+    /// DEPTHWISE convolution: each input channel is convolved by its own kernel and
+    /// the kernel shape collapses from [OutputDepth, InputDepth, K, K] to
+    /// [OutputDepth, 1, K, K]. This is the MobileNet/EfficientNet inverted-residual
+    /// depthwise stage — running it as a dense conv (the old default) did InputDepth×
+    /// more FLOPs than necessary (#639). Only 1 and InputDepth are supported; other
+    /// group counts throw (general grouped conv is not wired to a kernel yet).
+    /// </summary>
+    public int Groups { get; private set; } = 1;
+
+    /// <summary>True when this layer is configured as a depthwise convolution.</summary>
+    private bool IsDepthwise => Groups > 1 && Groups == InputDepth && OutputDepth == InputDepth;
+
+    /// <summary>Per-group input-channel count = kernel's second dimension.</summary>
+    private int KernelInChannels => InputDepth / Groups;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
     /// </summary>
     /// <value>
@@ -416,18 +434,21 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     public ConvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0,
                               IActivationFunction<T>? activationFunction = null,
                               IInitializationStrategy<T>? initializationStrategy = null,
-                              IActivationFunction<T>? nonlinearityForInit = null)
+                              IActivationFunction<T>? nonlinearityForInit = null,
+                              int groups = 1)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new ReLUActivation<T>())
     {
         if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
         if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "padding cannot be negative.");
+        if (groups <= 0) throw new ArgumentOutOfRangeException(nameof(groups), "groups must be positive.");
 
         OutputDepth = outputDepth;
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
+        Groups = groups;
         InputDepth = -1; // resolved in OnFirstForward from input.Shape
 
         // Store the initialization strategy (defaults to LazyInitializationStrategy semantics
@@ -659,6 +680,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         writer.Write(KernelSize);
         writer.Write(Stride);
         writer.Write(Padding);
+        writer.Write(Groups); // #639: depthwise marker — needed to size the kernel on Deserialize
 
         // Serialize _kernels — flat span iteration replaces 4-nested indexing loops
         var kernelSpan = _kernels.Data.Span;
@@ -704,9 +726,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         KernelSize = reader.ReadInt32();
         Stride = reader.ReadInt32();
         Padding = reader.ReadInt32();
+        Groups = reader.ReadInt32(); // #639
 
-        // Deserialize _kernels — flat span iteration replaces 4-nested indexing loops
-        _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        // Deserialize _kernels — flat span iteration replaces 4-nested indexing loops.
+        // #1643: kernels are long-lived trainable weights; pin them so a Deserialize that
+        // happens to run inside an active TensorArena can't have them recycled by Reset()
+        // (RentPinned degrades to a heap Tensor<T> when no arena is active; the loop below
+        // overwrites every element, so the one-time zero-fill is free).
+        // #639: depthwise collapses the kernel in-channel dim to InputDepth/Groups.
+        _kernels = TensorAllocator.RentPinned<T>([OutputDepth, KernelInChannels, KernelSize, KernelSize]);
         var kernelSpan = _kernels.Data.Span;
         for (int i = 0; i < kernelSpan.Length; i++)
             kernelSpan[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -880,12 +908,25 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             // largely conv kernels). When the parent network has engaged
             // streaming, route through AllocateLazyWeight so the pool
             // pre-evicts before the new GC byte[] lands. The non-streaming
-            // fallback preserves the existing arena fast-path
-            // (TensorAllocator.RentUninitialized) for kernels and the
-            // plain Tensor ctor for the small biases tensor.
-            int[] kShape = [OutputDepth, InputDepth, KernelSize, KernelSize];
+            // path allocates kernels from the arena's PINNED tier (#1643):
+            // lazy materialization can run inside a training step's active
+            // TensorArena (first forward), and the old RentUninitialized
+            // scratch path was reissued as transient activations by the next
+            // Reset() — corrupting the kernels (eval Predict non-deterministic,
+            // weights drifted). RentPinned survives Reset and degrades to a
+            // plain heap Tensor<T> with no active arena; the one-time zero-fill
+            // is overwritten by InitializeWeights() below.
+            // Only standard (Groups==1) and depthwise (Groups==InputDepth) are wired.
+            if (Groups != 1 && Groups != InputDepth)
+                throw new NotSupportedException(
+                    $"ConvolutionalLayer supports Groups=1 (dense) or Groups=InputDepth (depthwise), " +
+                    $"got Groups={Groups} with InputDepth={InputDepth}. General grouped convolution is not implemented.");
+            if (InputDepth % Groups != 0)
+                throw new ArgumentException($"InputDepth ({InputDepth}) must be divisible by Groups ({Groups}).");
+            // Depthwise collapses the kernel's in-channel dim to InputDepth/Groups (== 1 for depthwise).
+            int[] kShape = [OutputDepth, KernelInChannels, KernelSize, KernelSize];
             int[] bShape = [OutputDepth];
-            _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentUninitialized<T>(kShape));
+            _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentPinned<T>(kShape));
             _biases = AllocateLazyWeight(bShape);
 
             // Initialize weights (fills _kernels and _biases with He-uniform values)
@@ -919,7 +960,20 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         //      eventual downstream nonlinearity is something else — Conv→BN→
         //      LeakyReLU is the canonical case).
         //   2. The layer's own ScalarActivation (when no override).
-        int fanIn = InputDepth * KernelSize * KernelSize;
+        // Per PyTorch nn.init: fan_in/fan_out divide channel counts by groups
+        // (depthwise → fan_in = 1·K·K, not InputDepth·K·K).
+        int fanIn = KernelInChannels * KernelSize * KernelSize;
+        int fanOut = (OutputDepth / Groups) * KernelSize * KernelSize;
+        if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
+        {
+            var strategy = RandomSeed.HasValue && InitializationStrategy is InitializationStrategyBase<T> strategyBase
+                ? strategyBase.WithSeededRandom(RandomHelper.CreateSeededRandom(RandomSeed.Value))
+                : InitializationStrategy;
+            strategy.InitializeWeights(_kernels, fanIn, fanOut);
+            strategy.InitializeBiases(_biases);
+            return;
+        }
+
         var gainActivation = _nonlinearityForInit ?? ScalarActivation;
         double bound = KaimingInitHelper.UniformBoundFor(fanIn, gainActivation);
 
@@ -1017,6 +1071,11 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Shape-inference mode: resolve dims from the input and return a correctly-shaped
+        // placeholder WITHOUT allocating the kernel or computing. Lets a model resolve all
+        // layer shapes via its real forward topology as the single source of truth.
+        if (IsInferringShapes) return ShapeInferenceOutput(input);
+
         // Resolve deferred shape (PyTorch LazyConv2d-style) and allocate weights on first call.
         EnsureInitializedFromInput(input);
 
@@ -1079,19 +1138,22 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // (Conv1a output at VGG paper-scale is 25.7 MB at fp64) and inflate
         // peak retained memory across the L-layer chain. Skip the assignment
         // in tape mode; use the local input4D directly for the conv ops.
-        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
-        if (!tapeActive)
+        // Retain the backward-activation caches (_lastInput / _lastOutput) only when an
+        // eager manual Backward will read them. The old `!tapeActive` test still cached
+        // during inference (no tape), pinning the activation set and — inside the
+        // denoise-loop arena — aliasing scratch recycled by the per-step Reset (#1668).
+        // ShouldCacheForBackward is additionally false in eval mode and inside an
+        // InferenceMode scope.
+        bool cacheBwd = ShouldCacheForBackward;
+        if (cacheBwd)
         {
             _lastInput = input4D;
         }
         else
         {
-            // Clear the cache when tape is active so prior non-tape steps
-            // can't keep an old activation rooted alongside the tape's
-            // intermediates. Empty-shape sentinel matches the ctor's
-            // initial state and lets ParameterCount / Serialize logic that
-            // reads _lastInput.Shape continue to work without an NRE.
+            // Empty-shape sentinel matches the ctor's initial state and lets
+            // ParameterCount / Serialize logic that reads _lastInput.Shape continue
+            // to work without an NRE.
             _lastInput = new Tensor<T>([0, 0, 0, 0]);
         }
 
@@ -1106,7 +1168,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         int batchSize_conv = input4D.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
 
+        // Cross-forward output-buffer reuse is unsafe only when a TensorArena is actually
+        // active: _preAllocatedOutput is arena scratch, and reusing the same slot across the
+        // per-step Reset() would alias whatever the next step Rents into that slot (#1668).
+        // Key this off TensorArena.Current (not InferenceMode) so the escape hatch
+        // (AIDOTNET_INFERENCE_ARENA_DIFFUSION=0, which leaves InferenceMode on but disables
+        // the arena) keeps the manual zero-allocation reuse — otherwise we'd rent a fresh
+        // buffer every forward with no arena to pool it. With the arena on, re-renting per
+        // forward stays zero-allocation after warmup (the arena recycles in cursor order).
+        bool arenaActive = AiDotNet.Tensors.Helpers.TensorArena.Current is not null;
         if (_preAllocatedOutput is null ||
+            arenaActive ||
             _preAllocatedOutput.Shape[0] != batchSize_conv ||
             _preAllocatedOutput.Shape[2] != outputHeight ||
             _preAllocatedOutput.Shape[3] != outputWidth)
@@ -1118,7 +1190,20 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // Eliminates 2 intermediate allocations and enables kernel-level optimization
         var fusedActivation = GetFusedActivationType();
         Tensor<T> result;
-        if (fusedActivation != FusedActivationType.None)
+        if (IsDepthwise)
+        {
+            // #639: REAL depthwise convolution — each input channel convolved by its
+            // own [1,K,K] kernel (kernel shape [C,1,K,K]), which is InputDepth× fewer
+            // FLOPs than running it as a dense conv (the old behaviour — the dominant
+            // cost in MobileNet/EfficientNet inverted-residual blocks). DepthwiseConv2D
+            // is tape- AND GraphMode-differentiable, so bias-add + activation go through
+            // the tape-tracked Engine ops and the backward (DepthwiseConv2DBackward)
+            // flows automatically in both eager and compiled-plan training.
+            var dw = Engine.DepthwiseConv2D(input4D, _kernels, new[] { Stride, Stride }, new[] { Padding, Padding });
+            var biasReshapedDw = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
+            result = ApplyActivation(Engine.TensorBroadcastAdd(dw, biasReshapedDw));
+        }
+        else if (fusedActivation != FusedActivationType.None)
         {
             // Pass _biases as the rank-1 [C] vector — Engine.FusedConv2D auto-reshapes
             // to [1, C, 1, 1] internally when needed (under tape) and otherwise feeds
@@ -1200,7 +1285,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // for the entire inference branch). When the tape IS active, clear
         // the cache so a prior non-tape step's output can't keep its tensor
         // rooted in parallel with the tape's intermediates.
-        if (!tapeActive)
+        if (cacheBwd)
         {
             _lastOutput = result;
         }
@@ -1608,6 +1693,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         if (!IsShapeResolved)
         {
             if (parameters.Length == 0) return;
+            // #639: depthwise (Groups>1) has a [OutputDepth, 1, K, K] kernel and
+            // InputDepth == Groups by definition, so resolve directly — the full-conv
+            // inference below (which assumes a [outC, inC, K, K] kernel) would pick the
+            // wrong InputDepth from the smaller depthwise parameter count.
+            if (Groups > 1)
+            {
+                // InputDepth == Groups for depthwise; fall through to EnsureInitialized below.
+                ResolveFromShape(new[] { Groups, KernelSize, KernelSize });
+            }
+            else
+            {
             int kernelArea = OutputDepth * KernelSize * KernelSize;
             if (OutputDepth <= 0 || kernelArea <= 0)
                 throw new InvalidOperationException(
@@ -1626,6 +1722,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             // dims used here are immaterial for SetParameters. Using 1×1
             // would fail the guard for any kernelSize>1.
             ResolveFromShape(new[] { candidateInputDepth, KernelSize, KernelSize });
+            }
         }
 
         EnsureInitialized();
@@ -1703,6 +1800,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         metadata["FilterSize"] = KernelSize.ToString();
         metadata["Stride"] = Stride.ToString();
         metadata["Padding"] = Padding.ToString();
+        metadata["Groups"] = Groups.ToString(); // #639: depthwise marker — Clone/Deserialize must restore it
+
         // Serialize activation type so deserialization restores it correctly
         // (default is ReLU, but MobileNetV3 uses Identity)
         if (ScalarActivation is not null)

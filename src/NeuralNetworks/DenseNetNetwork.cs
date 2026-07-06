@@ -310,20 +310,43 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
+        // Add the batch dim if caller passed unbatched [C, H, W]. The
+        // convolutional / BatchNorm stack consistently treats axis 0 as
+        // the batch axis (channel index lives at axis 1), so a rank-3
+        // input would be misread as [B=channelsExpanded, H, W] after
+        // the first conv promoted channels — that's the
+        // "[64, 32, 32] vs [1, 64, 1]" broadcast mismatch the
+        // DenseNetNetwork_Predict_ProducesOutput test caught.
+        bool addedBatch = false;
+        if (input.Rank == 3)
+        {
+            input = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+            addedBatch = true;
+        }
 
         Tensor<T> output = input;
         foreach (var layer in Layers)
         {
             output = layer.Forward(output);
         }
+
+        // Strip the added unit-batch on the way out so the caller's
+        // single-sample input contract is preserved.
+        if (addedBatch && output.Rank >= 1 && output.Shape[0] == 1)
+        {
+            var squeezed = new int[output.Rank - 1];
+            for (int d = 0; d < squeezed.Length; d++) squeezed[d] = output.Shape[d + 1];
+            output = Engine.Reshape(output, squeezed);
+        }
         return output;
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
-        return Forward(input);
+        // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () => Forward(input));
     }
 
     /// <inheritdoc />

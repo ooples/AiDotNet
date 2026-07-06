@@ -48,6 +48,13 @@
     <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!-- Shared-compile the generator's Roslyn-free floatify helper so its (#1679) logic can be
+       unit-tested directly. The generator above is referenced only as an analyzer, so its
+       compiled assembly is not callable from tests; this pulls in just the pure-string helper. -->
+  <ItemGroup>
+    <Compile Include="..\..\src\AiDotNet.Generators\GeneratedTestFloatify.cs" Link="Generators\GeneratedTestFloatify.cs" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <ProjectReference Include="..\..\tools\AiDotNet.ProgramSynthesis.Tooling\AiDotNet.ProgramSynthesis.Tooling.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Serving\AiDotNet.Serving.csproj" />

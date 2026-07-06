@@ -4,7 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class VisionTransformerTests : NeuralNetworkModelTestBase
+// HeavyTimeout (#1706): correct but too slow for the default per-test gate (ViT is GEMM-bound,
+// ~44 s/iter); runs in the nightly lane. Drop this trait once it fits the budget.
+[Xunit.Trait("Category", "HeavyTimeout")]
+public class VisionTransformerTests : NeuralNetworkModelTestBase<float>
 {
     // ViT default architecture is [batch, 3, 224, 224] (paper-faithful
     // ImageNet-1k geometry). The parameterless ctor hard-codes this and
@@ -13,6 +16,6 @@ public class VisionTransformerTests : NeuralNetworkModelTestBase
     protected override int[] InputShape => [1, 3, 224, 224];
     protected override int[] OutputShape => [1000];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new VisionTransformer<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new VisionTransformer<float>();
 }

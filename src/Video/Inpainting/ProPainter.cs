@@ -250,7 +250,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // For single-frame prediction, use zero mask (no inpainting)
         var mask = new Tensor<T>(input._shape);

@@ -14,9 +14,9 @@ namespace AiDotNet.Tests.IntegrationTests.Document;
 /// </summary>
 public class LayoutAwareDocumentTests
 {
-    private static NeuralNetworkArchitecture<double> CreateArchitecture(int imageSize = 64)
+    private static NeuralNetworkArchitecture<float> CreateArchitecture(int imageSize = 64)
     {
-        return new NeuralNetworkArchitecture<double>(
+        return new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: imageSize,
@@ -25,13 +25,13 @@ public class LayoutAwareDocumentTests
             outputSize: 7);
     }
 
-    private static Tensor<double> CreateSmallImage(int size = 64)
+    private static Tensor<float> CreateSmallImage(int size = 64)
     {
         int totalSize = 1 * 3 * size * size;
-        var data = new Vector<double>(totalSize);
+        var data = new Vector<float>(totalSize);
         for (int i = 0; i < totalSize; i++)
-            data[i] = 0.5;
-        return new Tensor<double>(new[] { 1, 3, size, size }, data);
+            data[i] = 0.5f;
+        return new Tensor<float>(new[] { 1, 3, size, size }, data);
     }
 
     #region LayoutLM Tests
@@ -40,7 +40,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLM_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLM<double>(arch);
+        var model = new LayoutLM<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -48,7 +48,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLM_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLM<double>(arch);
+        var model = new LayoutLM<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -60,7 +60,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLM_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLM<double>(arch);
+        var model = new LayoutLM<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutLM", meta.Name);
     }
@@ -73,7 +73,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv2_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv2<double>(arch);
+        var model = new LayoutLMv2<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -81,7 +81,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv2_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv2<double>(arch);
+        var model = new LayoutLMv2<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -93,7 +93,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv2_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv2<double>(arch);
+        var model = new LayoutLMv2<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutLMv2", meta.Name);
     }
@@ -106,7 +106,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv3_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv3<double>(arch);
+        var model = new LayoutLMv3<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -114,7 +114,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv3_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv3<double>(arch);
+        var model = new LayoutLMv3<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -126,7 +126,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv3_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv3<double>(arch);
+        var model = new LayoutLMv3<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutLMv3", meta.Name);
     }
@@ -139,7 +139,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutXLM_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutXLM<double>(arch);
+        var model = new LayoutXLM<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -147,7 +147,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutXLM_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutXLM<double>(arch);
+        var model = new LayoutXLM<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -159,7 +159,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutXLM_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutXLM<double>(arch);
+        var model = new LayoutXLM<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutXLM", meta.Name);
     }
@@ -172,7 +172,7 @@ public class LayoutAwareDocumentTests
     public async Task DocFormer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocFormer<double>(arch);
+        var model = new DocFormer<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -180,7 +180,7 @@ public class LayoutAwareDocumentTests
     public async Task DocFormer_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DocFormer<double>(arch);
+        var model = new DocFormer<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -192,7 +192,7 @@ public class LayoutAwareDocumentTests
     public async Task DocFormer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocFormer<double>(arch);
+        var model = new DocFormer<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocFormer", meta.Name);
     }
@@ -205,7 +205,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<double>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -213,7 +213,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<double>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -225,7 +225,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<double>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("DiT", meta.Name);
     }
@@ -238,7 +238,7 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LiLT<double>(arch);
+        var model = new LiLT<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -246,7 +246,7 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LiLT<double>(arch);
+        var model = new LiLT<float>(arch);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
@@ -258,7 +258,7 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LiLT<double>(arch);
+        var model = new LiLT<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LiLT", meta.Name);
     }
@@ -271,14 +271,14 @@ public class LayoutAwareDocumentTests
     public async Task AllLayoutAwareModels_RequiresOCR_IsTrue()
     {
         var arch = CreateArchitecture();
-        var models = new DocumentNeuralNetworkBase<double>[]
+        var models = new DocumentNeuralNetworkBase<float>[]
         {
-            new LayoutLM<double>(arch),
-            new LayoutLMv2<double>(arch),
-            new LayoutLMv3<double>(arch),
-            new LayoutXLM<double>(arch),
-            new DocFormer<double>(arch),
-            new LiLT<double>(arch),
+            new LayoutLM<float>(arch),
+            new LayoutLMv2<float>(arch),
+            new LayoutLMv3<float>(arch),
+            new LayoutXLM<float>(arch),
+            new DocFormer<float>(arch),
+            new LiLT<float>(arch),
         };
 
         foreach (var model in models)
@@ -292,7 +292,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<double>(arch, imageSize: 64);
+        var model = new DiT<float>(arch, imageSize: 64);
         // DiT is vision-only, does not require OCR
         Assert.False(model.RequiresOCR);
     }

@@ -960,7 +960,7 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Makes a prediction using the model.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (_useNativeMode)
         {

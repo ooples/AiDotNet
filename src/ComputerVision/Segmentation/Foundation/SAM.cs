@@ -208,7 +208,7 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// <summary>
     /// Runs a forward pass through SAM to produce segmentation mask logits.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
         => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <summary>

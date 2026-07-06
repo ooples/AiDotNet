@@ -16,6 +16,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tests.ModelFamilyTests.Base;
+using System;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
@@ -24,19 +26,35 @@ namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 /// Tests training robustness: multi-step training, predict-after-train consistency,
 /// backward pass gradient flow, and training with unbatched inputs.
 /// </summary>
-public class SegmentationTrainingRobustnessTests
+// #1754/#1706: this class constructs and TRAINS 70 foundation-scale SAM/ViT/Swin-family segmentation
+// models (one per test); committed memory accumulates across the class until the runner OOMs and the
+// "Integration C - ComputerVision" shard dies with a shutdown signal. Genuine foundation-scale training
+// cost, not a per-test bug (retention sources detailed in the class docstring below), so route the class
+// to the HeavyTimeout nightly lane; the default PR gate excludes HeavyTimeout and completes on the fast
+// forward/shape CV tests. Durable fix: AiDotNet.Tensors #714 (weak-refs / pressure-evict).
+[Trait("Category", "HeavyTimeout")]
+public class SegmentationTrainingRobustnessTests : IDisposable
 {
-    private static NeuralNetworkArchitecture<double> Arch(int h = 32, int w = 32, int d = 3)
+    // These tests construct and TRAIN heavy SAM/ViT-family segmentation models one per test. Two
+    // process-global retention sources let committed memory accumulate across the class's tests until
+    // a later one OOMs even though each model is otherwise collectable: InferenceWeightCache pins
+    // disposed models' derived weight packs (keyed by array identity), and a plain GC.Collect() does
+    // not compact the LOH (committed-but-free LOH counts against the heap limit). Reclaim between
+    // every test via the shared model-family gate — pure memory hygiene, changes no assertion, scale,
+    // iteration count, or timeout (same teardown the NeuralNetworks/Diffusion model-family bases use).
+    public void Dispose() => ModelFamilyTestGcGate.ReclaimBetweenTests();
+
+    private static NeuralNetworkArchitecture<float> Arch(int h = 32, int w = 32, int d = 3)
         => new(InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
                NetworkComplexity.Deep, 0, h, w, d, 0);
 
-    private static Tensor<double> Rand(int seed, params int[] shape)
+    private static Tensor<float> Rand(int seed, params int[] shape)
     {
         int total = 1; foreach (int s in shape) total *= s;
-        var data = new double[total];
+        var data = new float[total];
         var rng = RandomHelper.CreateSeededRandom(seed);
-        for (int i = 0; i < total; i++) data[i] = rng.NextDouble();
-        return new Tensor<double>(shape, new Vector<double>(data));
+        for (int i = 0; i < total; i++) data[i] = (float)rng.NextDouble();
+        return new Tensor<float>(shape, new Vector<float>(data));
     }
 
     #region Multi-Step Training — Semantic Models
@@ -44,7 +62,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SegFormer_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<float>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -58,7 +76,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SegNeXt_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SegNeXt<double>(Arch(), numClasses: 5, modelSize: SegNeXtModelSize.Tiny);
+        var model = new SegNeXt<float>(Arch(), numClasses: 5, modelSize: SegNeXtModelSize.Tiny);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -72,7 +90,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task InternImage_MultiStepTrain_DoesNotThrow()
     {
-        var model = new InternImage<double>(Arch(), numClasses: 5, modelSize: InternImageModelSize.Tiny);
+        var model = new InternImage<float>(Arch(), numClasses: 5, modelSize: InternImageModelSize.Tiny);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -86,7 +104,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task ViTAdapter_MultiStepTrain_DoesNotThrow()
     {
-        var model = new ViTAdapter<double>(Arch(), numClasses: 5, modelSize: ViTAdapterModelSize.Small);
+        var model = new ViTAdapter<float>(Arch(), numClasses: 5, modelSize: ViTAdapterModelSize.Small);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -100,7 +118,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task ViTCoMer_MultiStepTrain_DoesNotThrow()
     {
-        var model = new ViTCoMer<double>(Arch(), numClasses: 5, modelSize: ViTCoMerModelSize.Small);
+        var model = new ViTCoMer<float>(Arch(), numClasses: 5, modelSize: ViTCoMerModelSize.Small);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -114,7 +132,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task DiffCut_MultiStepTrain_DoesNotThrow()
     {
-        var model = new DiffCut<double>(Arch(), numClasses: 5);
+        var model = new DiffCut<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -128,7 +146,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task DiffSeg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new DiffSeg<double>(Arch(), numClasses: 5);
+        var model = new DiffSeg<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -146,7 +164,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_MultiStepTrain_DoesNotThrow()
     {
-        var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -160,7 +178,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task OneFormer_MultiStepTrain_DoesNotThrow()
     {
-        var model = new OneFormer<double>(Arch(), numClasses: 5, modelSize: OneFormerModelSize.SwinLarge);
+        var model = new OneFormer<float>(Arch(), numClasses: 5, modelSize: OneFormerModelSize.SwinLarge);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -174,7 +192,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task MaskDINO_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MaskDINO<double>(Arch(), numClasses: 5, modelSize: MaskDINOModelSize.R50);
+        var model = new MaskDINO<float>(Arch(), numClasses: 5, modelSize: MaskDINOModelSize.R50);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -188,7 +206,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -202,7 +220,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SAM21_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SAM21<double>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.BasePlus);
+        var model = new SAM21<float>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.BasePlus);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -216,7 +234,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SAMHQ_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SAMHQ<double>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
+        var model = new SAMHQ<float>(Arch(), numClasses: 1, modelSize: SAMHQModelSize.ViTBase);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -230,7 +248,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task EoMT_MultiStepTrain_DoesNotThrow()
     {
-        var model = new EoMT<double>(Arch(), numClasses: 5, modelSize: EoMTModelSize.Small);
+        var model = new EoMT<float>(Arch(), numClasses: 5, modelSize: EoMTModelSize.Small);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -244,7 +262,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task OMGSeg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new OMGSeg<double>(Arch(), numClasses: 5, modelSize: OMGSegModelSize.Base);
+        var model = new OMGSeg<float>(Arch(), numClasses: 5, modelSize: OMGSegModelSize.Base);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -258,7 +276,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task QueryMeldNet_MultiStepTrain_DoesNotThrow()
     {
-        var model = new QueryMeldNet<double>(Arch(), numClasses: 5, modelSize: QueryMeldNetModelSize.R50);
+        var model = new QueryMeldNet<float>(Arch(), numClasses: 5, modelSize: QueryMeldNetModelSize.R50);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -272,7 +290,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task UNINEXT_MultiStepTrain_DoesNotThrow()
     {
-        var model = new UNINEXT<double>(Arch(), numClasses: 5, modelSize: UNINEXTModelSize.R50);
+        var model = new UNINEXT<float>(Arch(), numClasses: 5, modelSize: UNINEXTModelSize.R50);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -286,7 +304,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task U2Seg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new U2Seg<double>(Arch(), numClasses: 5);
+        var model = new U2Seg<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -300,7 +318,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task XDecoder_MultiStepTrain_DoesNotThrow()
     {
-        var model = new XDecoder<double>(Arch(), numClasses: 5, modelSize: XDecoderModelSize.Tiny);
+        var model = new XDecoder<float>(Arch(), numClasses: 5, modelSize: XDecoderModelSize.Tiny);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -318,7 +336,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task NnUNet_MultiStepTrain_DoesNotThrow()
     {
-        var model = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
+        var model = new NnUNet<float>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -332,7 +350,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task TransUNet_MultiStepTrain_DoesNotThrow()
     {
-        var model = new TransUNet<double>(Arch(), numClasses: 5, modelSize: TransUNetModelSize.Base);
+        var model = new TransUNet<float>(Arch(), numClasses: 5, modelSize: TransUNetModelSize.Base);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -346,7 +364,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SwinUNETR_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SwinUNETR<double>(Arch(), numClasses: 5, modelSize: SwinUNETRModelSize.Base);
+        var model = new SwinUNETR<float>(Arch(), numClasses: 5, modelSize: SwinUNETRModelSize.Base);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -360,7 +378,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task MedSAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MedSAM<double>(Arch(), numClasses: 5, modelSize: MedSAMModelSize.ViTBase);
+        var model = new MedSAM<float>(Arch(), numClasses: 5, modelSize: MedSAMModelSize.ViTBase);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -374,7 +392,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task MedNeXt_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MedNeXt<double>(Arch(), numClasses: 5, modelSize: MedNeXtModelSize.Small);
+        var model = new MedNeXt<float>(Arch(), numClasses: 5, modelSize: MedNeXtModelSize.Small);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -388,7 +406,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task MedSAM2_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MedSAM2<double>(Arch(), numClasses: 5, modelSize: MedSAM2ModelSize.Base);
+        var model = new MedSAM2<float>(Arch(), numClasses: 5, modelSize: MedSAM2ModelSize.Base);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -402,7 +420,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task VisionMamba_MultiStepTrain_DoesNotThrow()
     {
-        var model = new VisionMamba<double>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
+        var model = new VisionMamba<float>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -416,7 +434,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task VMamba_MultiStepTrain_DoesNotThrow()
     {
-        var model = new VMamba<double>(Arch(), numClasses: 5, modelSize: VMambaModelSize.Tiny);
+        var model = new VMamba<float>(Arch(), numClasses: 5, modelSize: VMambaModelSize.Tiny);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -430,7 +448,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task PIDNet_MultiStepTrain_DoesNotThrow()
     {
-        var model = new PIDNet<double>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
+        var model = new PIDNet<float>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -444,7 +462,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task DEVA_MultiStepTrain_DoesNotThrow()
     {
-        var model = new DEVA<double>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
+        var model = new DEVA<float>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -458,7 +476,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task EfficientTAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new EfficientTAM<double>(Arch(), numClasses: 5, modelSize: EfficientTAMModelSize.Small);
+        var model = new EfficientTAM<float>(Arch(), numClasses: 5, modelSize: EfficientTAMModelSize.Small);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -472,7 +490,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SAN_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SAN<double>(Arch(), numClasses: 5);
+        var model = new SAN<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -486,7 +504,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task LISA_MultiStepTrain_DoesNotThrow()
     {
-        var model = new LISA<double>(Arch(), numClasses: 5);
+        var model = new LISA<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -500,7 +518,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task DiffCutSegmentation_MultiStepTrain_DoesNotThrow()
     {
-        var model = new DiffCutSegmentation<double>(Arch(), numClasses: 5);
+        var model = new DiffCutSegmentation<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -514,7 +532,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task PointTransformerV3_MultiStepTrain_DoesNotThrow()
     {
-        var model = new PointTransformerV3<double>(Arch(), numClasses: 5, modelSize: PointTransformerV3ModelSize.Base);
+        var model = new PointTransformerV3<float>(Arch(), numClasses: 5, modelSize: PointTransformerV3ModelSize.Base);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -528,7 +546,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task Sonata_MultiStepTrain_DoesNotThrow()
     {
-        var model = new Sonata<double>(Arch(), numClasses: 5, modelSize: SonataModelSize.Base);
+        var model = new Sonata<float>(Arch(), numClasses: 5, modelSize: SonataModelSize.Base);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -546,7 +564,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SegFormer_PredictAfterTrain_ProducesDifferentOutput()
     {
-        var model = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<float>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
         var input = Rand(42, 1, 3, 32, 32);
 
         var outputBefore = model.Predict(input);
@@ -565,7 +583,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_PredictAfterTrain_ProducesDifferentOutput()
     {
-        var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
         var input = Rand(42, 1, 3, 32, 32);
 
         var outputBefore = model.Predict(input);
@@ -580,7 +598,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task NnUNet_PredictAfterTrain_ProducesDifferentOutput()
     {
-        var model = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
+        var model = new NnUNet<float>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
         var input = Rand(42, 1, 3, 32, 32);
 
         var outputBefore = model.Predict(input);
@@ -599,7 +617,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SegFormer_Train_Unbatched3DInput_DoesNotThrow()
     {
-        var model = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<float>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
         var input = Rand(42, 3, 32, 32); // 3D unbatched
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());
@@ -609,7 +627,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task Mask2Former_Train_Unbatched3DInput_DoesNotThrow()
     {
-        var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
+        var model = new Mask2Former<float>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());
@@ -619,7 +637,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SAM_Train_Unbatched3DInput_DoesNotThrow()
     {
-        var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
+        var model = new SAM<float>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());
@@ -629,7 +647,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task NnUNet_Train_Unbatched3DInput_DoesNotThrow()
     {
-        var model = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
+        var model = new NnUNet<float>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());
@@ -639,7 +657,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task PIDNet_Train_Unbatched3DInput_DoesNotThrow()
     {
-        var model = new PIDNet<double>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
+        var model = new PIDNet<float>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());
@@ -649,7 +667,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task VisionMamba_Train_Unbatched3DInput_DoesNotThrow()
     {
-        var model = new VisionMamba<double>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
+        var model = new VisionMamba<float>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());
@@ -659,7 +677,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task DEVA_Train_Unbatched3DInput_DoesNotThrow()
     {
-        var model = new DEVA<double>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
+        var model = new DEVA<float>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());
@@ -669,7 +687,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task LISA_Train_Unbatched3DInput_DoesNotThrow()
     {
-        var model = new LISA<double>(Arch(), numClasses: 5);
+        var model = new LISA<float>(Arch(), numClasses: 5);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());
@@ -683,7 +701,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv8Seg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new YOLOv8Seg<double>(Arch(), modelSize: YOLOv8SegModelSize.N);
+        var model = new YOLOv8Seg<float>(Arch(), modelSize: YOLOv8SegModelSize.N);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -697,7 +715,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv9Seg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new YOLOv9Seg<double>(Arch(), modelSize: YOLOv9SegModelSize.C);
+        var model = new YOLOv9Seg<float>(Arch(), modelSize: YOLOv9SegModelSize.C);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -711,7 +729,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task YOLO11Seg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new YOLO11Seg<double>(Arch(), modelSize: YOLO11SegModelSize.N);
+        var model = new YOLO11Seg<float>(Arch(), modelSize: YOLO11SegModelSize.N);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -725,7 +743,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task YOLOv12Seg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new YOLOv12Seg<double>(Arch(), modelSize: YOLOv12SegModelSize.N);
+        var model = new YOLOv12Seg<float>(Arch(), modelSize: YOLOv12SegModelSize.N);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -739,7 +757,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task YOLO26Seg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new YOLO26Seg<double>(Arch(), modelSize: YOLO26SegModelSize.N);
+        var model = new YOLO26Seg<float>(Arch(), modelSize: YOLO26SegModelSize.N);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -757,7 +775,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task UniVS_MultiStepTrain_DoesNotThrow()
     {
-        var model = new UniVS<double>(Arch(), numClasses: 5, modelSize: UniVSModelSize.R50);
+        var model = new UniVS<float>(Arch(), numClasses: 5, modelSize: UniVSModelSize.R50);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -771,7 +789,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task CATSeg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new CATSeg<double>(Arch(), numClasses: 5);
+        var model = new CATSeg<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -785,7 +803,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SED_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SED<double>(Arch(), numClasses: 5);
+        var model = new SED<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -799,7 +817,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task GroundedSAM2_MultiStepTrain_DoesNotThrow()
     {
-        var model = new GroundedSAM2<double>(Arch(), numClasses: 5);
+        var model = new GroundedSAM2<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -813,7 +831,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task MaskAdapter_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MaskAdapter<double>(Arch(), numClasses: 5);
+        var model = new MaskAdapter<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -827,7 +845,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task OpenVocabSAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new OpenVocabSAM<double>(Arch(), numClasses: 5);
+        var model = new OpenVocabSAM<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -841,7 +859,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task VideoLISA_MultiStepTrain_DoesNotThrow()
     {
-        var model = new VideoLISA<double>(Arch(), numClasses: 5);
+        var model = new VideoLISA<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -855,7 +873,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task GLaMM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new GLaMM<double>(Arch(), numClasses: 5);
+        var model = new GLaMM<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -869,7 +887,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task OMGLLaVA_MultiStepTrain_DoesNotThrow()
     {
-        var model = new OMGLLaVA<double>(Arch(), numClasses: 5);
+        var model = new OMGLLaVA<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -883,7 +901,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task PixelLM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new PixelLM<double>(Arch(), numClasses: 5);
+        var model = new PixelLM<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -897,7 +915,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task ODISESegmentation_MultiStepTrain_DoesNotThrow()
     {
-        var model = new ODISESegmentation<double>(Arch(), numClasses: 5);
+        var model = new ODISESegmentation<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -911,7 +929,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task MedSegDiffV2Segmentation_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MedSegDiffV2Segmentation<double>(Arch(), numClasses: 5);
+        var model = new MedSegDiffV2Segmentation<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -925,7 +943,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task Concerto_MultiStepTrain_DoesNotThrow()
     {
-        var model = new Concerto<double>(Arch(), numClasses: 5, modelSize: ConcertoModelSize.Base);
+        var model = new Concerto<float>(Arch(), numClasses: 5, modelSize: ConcertoModelSize.Base);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -939,7 +957,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task ViMUNet_MultiStepTrain_DoesNotThrow()
     {
-        var model = new ViMUNet<double>(Arch(), numClasses: 5);
+        var model = new ViMUNet<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -953,7 +971,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task BiomedParse_MultiStepTrain_DoesNotThrow()
     {
-        var model = new BiomedParse<double>(Arch(), numClasses: 5);
+        var model = new BiomedParse<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -967,7 +985,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task UniverSeg_MultiStepTrain_DoesNotThrow()
     {
-        var model = new UniverSeg<double>(Arch(), numClasses: 5);
+        var model = new UniverSeg<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -981,7 +999,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task MedSegDiffV2_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MedSegDiffV2<double>(Arch(), numClasses: 5);
+        var model = new MedSegDiffV2<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -995,7 +1013,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task UMamba_MultiStepTrain_DoesNotThrow()
     {
-        var model = new UMamba<double>(Arch(), numClasses: 5);
+        var model = new UMamba<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1009,7 +1027,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SegMamba_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SegMamba<double>(Arch(), numClasses: 5);
+        var model = new SegMamba<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1027,7 +1045,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task FastSAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new FastSAM<double>(Arch(), numClasses: 1);
+        var model = new FastSAM<float>(Arch(), numClasses: 1);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1041,7 +1059,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task MobileSAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MobileSAM<double>(Arch(), numClasses: 1);
+        var model = new MobileSAM<float>(Arch(), numClasses: 1);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1055,7 +1073,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task EdgeSAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new EdgeSAM<double>(Arch(), numClasses: 1);
+        var model = new EdgeSAM<float>(Arch(), numClasses: 1);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1069,7 +1087,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SlimSAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SlimSAM<double>(Arch(), numClasses: 1);
+        var model = new SlimSAM<float>(Arch(), numClasses: 1);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1083,7 +1101,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task EfficientSAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new EfficientSAM<double>(Arch(), numClasses: 1);
+        var model = new EfficientSAM<float>(Arch(), numClasses: 1);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1097,7 +1115,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task RepViTSAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new RepViTSAM<double>(Arch(), numClasses: 1);
+        var model = new RepViTSAM<float>(Arch(), numClasses: 1);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1111,7 +1129,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SegGPT_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SegGPT<double>(Arch(), numClasses: 5, modelSize: SegGPTModelSize.ViTLarge);
+        var model = new SegGPT<float>(Arch(), numClasses: 5, modelSize: SegGPTModelSize.ViTLarge);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1125,7 +1143,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task SEEM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new SEEM<double>(Arch(), numClasses: 5, modelSize: SEEMModelSize.Tiny);
+        var model = new SEEM<float>(Arch(), numClasses: 5, modelSize: SEEMModelSize.Tiny);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1139,7 +1157,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task KMaXDeepLab_MultiStepTrain_DoesNotThrow()
     {
-        var model = new KMaXDeepLab<double>(Arch(), numClasses: 5, modelSize: KMaXDeepLabModelSize.R50);
+        var model = new KMaXDeepLab<float>(Arch(), numClasses: 5, modelSize: KMaXDeepLabModelSize.R50);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1153,7 +1171,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task ODISE_MultiStepTrain_DoesNotThrow()
     {
-        var model = new ODISE<double>(Arch(), numClasses: 5, modelSize: ODISEModelSize.Base);
+        var model = new ODISE<float>(Arch(), numClasses: 5, modelSize: ODISEModelSize.Base);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1167,7 +1185,7 @@ public class SegmentationTrainingRobustnessTests
     [Fact(Timeout = 120000)]
     public async Task CUPS_MultiStepTrain_DoesNotThrow()
     {
-        var model = new CUPS<double>(Arch(), numClasses: 5);
+        var model = new CUPS<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 

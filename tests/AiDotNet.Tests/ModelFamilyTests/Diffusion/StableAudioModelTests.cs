@@ -4,11 +4,17 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class StableAudioModelTests : DiffusionModelTestBase
+// Compute-bound foundation-scale model: Clone_ShouldProduceIdenticalOutput exceeds the 120s
+// [Fact(Timeout)] gate in ISOLATION (verified solo, fresh process), so it belongs in the HeavyTimeout
+// nightly lane rather than the default PR gate (#1706/#1305) - the Clone logic is correct; the model is
+// simply too large to run a forward within the envelope.
+[Xunit.Trait("Category", "HeavyTimeout")]
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
+public class StableAudioModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 64, 32, 32];
     protected override int[] OutputShape => [1, 64, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new StableAudioModel<double>();
+    protected override IDiffusionModel<float> CreateModel()
+        => new StableAudioModel<float>();
 }

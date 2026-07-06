@@ -14,6 +14,9 @@ class Program
     private static readonly Dictionary<string, Action> ProfileModes = new()
     {
         ["chronosbolt-profile"] = ChronosBoltProfile.Run,
+        ["controlnetflux-profile"] = ControlNetFluxProfile.Run,
+        ["audioldm-determinism"] = AudioLDMDeterminismProbe.Run,
+        ["controlnetflux-nostream"] = ControlNetFluxProfile.RunNoStream,
         ["timemoe-profile"]     = TimeMoEProfile.Run,
         ["timesfm-profile"]     = TimesFMProfile.Run,
         ["moment-profile"]      = MOMENTProfile.Run,
@@ -22,6 +25,9 @@ class Program
         ["nbeats-profile"]      = NBEATSProfile.Run,
         ["autoformer-profile"]  = AutoformerProfile.Run,
         ["resnet50-profile"]    = ResNet50Profile.Run,
+        ["whispertimestamped-profile"] = WhisperTimestampedProfile.Run,
+        ["whispertimestamped-profile-f32"] = WhisperTimestampedProfile.RunFloat,
+        ["ntm-determinism-probe"] = NtmDeterminismProbe.Run,
         ["clone-diag"]          = CloneDiag.Run,
         ["ngboost-profile"]     = NGBoostProfile.Run,
         ["svc-profile"]         = SVCProfile.Run,
@@ -32,6 +38,10 @@ class Program
         ["fused-min-repro"]     = FusedPropagationMinRepro.Run,
         ["grafprint-divergence"] = GraFPrintFusedDivergence.Run,
         ["bn-fused-grad-diff"]  = BnFusedGradDiff.Run,
+        ["acestep-nan-diag"]    = ACEStepNanDiag.Run,
+        ["ace-tail-min-repro"]  = AceTailMinRepro.Run,
+        ["tape-matmul-micro"]   = TapeMatMulMicroTest.Run,
+        ["arena1668-probe"]     = Arena1668Probe.Run,
     };
 
     static async Task Main(string[] args)

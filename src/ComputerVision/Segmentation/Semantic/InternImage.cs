@@ -235,7 +235,7 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// decoder aggregates multi-scale features for accurate predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }

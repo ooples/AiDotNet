@@ -152,7 +152,10 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             // parameters changed after training" cluster the per-step
             // invariants caught. Callers can still pass an explicit loss
             // function to override this.
-            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
+            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(),
+            options: null,
+            defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(0.0002, 0.5),
+            defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(0.0002, 0.5))
     {
         _options = options ?? new DCGANOptions();
         Options = _options;
@@ -169,6 +172,30 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         _imageWidth = imageWidth;
         _generatorFeatureMaps = generatorFeatureMaps;
         _discriminatorFeatureMaps = discriminatorFeatureMaps;
+
+        // DCGAN paper Adam (Radford et al. 2016 §4: lr=2e-4, β1=0.5) on the optimizer the
+        // networks ACTUALLY train through — NeuralNetworkBase.GetOrCreateBaseOptimizer,
+        // which otherwise hands back the generic Adam(1e-3, β1=0.9). The generic rate plus
+        // β1=0.9's heavy momentum destabilizes the adversarial game (the GAN-level
+        // _generator/_discriminatorOptimizer fields are NOT on this train path, so they
+        // can't carry the paper hyperparameters; the network base optimizer is the one).
+        ((NeuralNetworkBase<T>)Generator).SetBaseTrainOptimizer(
+            new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                { InitialLearningRate = 0.0002, Beta1 = 0.5, UseAMSGrad = false }));
+        ((NeuralNetworkBase<T>)Discriminator).SetBaseTrainOptimizer(
+            new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                { InitialLearningRate = 0.0002, Beta1 = 0.5, UseAMSGrad = false }));
+
+        // Gradient penalty on the discriminator (Gulrajani et al. 2017; advocated for
+        // standard, non-Wasserstein GANs by Mescheder et al. 2018, "Which Training Methods
+        // for GANs do actually Converge?"). It enforces an approximately 1-Lipschitz
+        // discriminator, bounding its logits so it cannot run away and drive the
+        // generator's non-saturating loss −log σ(D(G(z))) to explode (the observed
+        // step1≈2 → step100≈700+ blow-up on the single-pair memorization task). Reuses the
+        // existing tape-tracked penalty path in GenerativeAdversarialNetwork.Train.
+        EnableGradientPenalty();
     }
 
     /// <summary>

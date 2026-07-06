@@ -18,7 +18,15 @@ public class GlowTTSOptions : AcousticModelOptions
         Temperature = other.Temperature;
     }
 
-    public GlowTTSOptions() { EncoderDim = 192; DecoderDim = 80; HiddenDim = 192; NumEncoderLayers = 6; NumDecoderLayers = 12; NumHeads = 2; }
+    public GlowTTSOptions()
+    {
+        EncoderDim = 192;
+        DecoderDim = 80;
+        HiddenDim = 192;
+        NumEncoderLayers = 6;
+        NumDecoderLayers = 12;
+        NumHeads = 2;
+    }
 
     /// <summary>Gets or sets the number of flow coupling layers.</summary>
     public int NumFlowLayers { get; set; } = 12;

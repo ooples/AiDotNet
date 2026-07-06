@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using AiDotNet.Clustering.Evaluation;
+
 namespace AiDotNet.Models
 {
     /// <summary>
@@ -154,5 +157,43 @@ namespace AiDotNet.Models
         /// </para>
         /// </remarks>
         public ModelStats<T, TInput, TOutput> ModelStats { get; set; } = ModelStats<T, TInput, TOutput>.Empty();
+
+        /// <summary>
+        /// Gets or sets the clustering quality metrics, populated when the model is an unsupervised clustering model.
+        /// </summary>
+        /// <value>
+        /// A <see cref="ClusteringScores"/> carrying internal metrics (Silhouette, Davies-Bouldin, Calinski-Harabasz)
+        /// and, when ground-truth labels are available, external metrics (Adjusted Rand Index, Normalized Mutual
+        /// Information). <see langword="null"/> for supervised models.
+        /// </value>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> Clustering groups data without labels, so it is scored differently from
+        /// regression or classification. These numbers tell you how well-separated and compact your clusters are:
+        /// - <b>Silhouette</b> (-1 to 1): higher is better — points sit comfortably inside their own cluster.
+        /// - <b>Davies-Bouldin</b> (0 and up): lower is better — clusters are distinct from one another.
+        /// - <b>Calinski-Harabasz</b> (0 and up): higher is better — clusters are dense and well-separated.
+        ///
+        /// This is filled in automatically when you build a clustering model through the facade, so you can read
+        /// <c>result.Evaluation.ClusteringMetrics.Silhouette</c> without re-running anything.
+        /// </para>
+        /// </remarks>
+        public ClusteringScores? ClusteringMetrics { get; set; }
+
+        /// <summary>
+        /// Gets or sets additional, model-specific scalar metrics keyed by name.
+        /// </summary>
+        /// <value>
+        /// A dictionary of named scalar metrics. This is the home for domain-specific measures that do not fit the
+        /// supervised train/validation/test shape — for example generative-model scores (Fréchet Inception Distance,
+        /// Inception Score), image / audio / video quality measures, or ranking metrics such as NDCG.
+        /// </value>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> Different kinds of models are judged by different numbers. A spam classifier
+        /// cares about accuracy and F1; an image generator cares about FID and Inception Score; a recommender cares
+        /// about ranking metrics. Those specialised scores live here, each under a descriptive name, so every model
+        /// can report the metrics that actually matter for it through one consistent place.
+        /// </para>
+        /// </remarks>
+        public Dictionary<string, double> AdditionalMetrics { get; set; } = new();
     }
 }

@@ -1,5 +1,6 @@
 ﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -222,7 +223,7 @@ public class ActivationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         return _useVectorActivation ? ApplyVectorActivation(input) : ApplyScalarActivation(input);
     }
 
@@ -239,7 +240,7 @@ public class ActivationLayer<T> : LayerBase<T>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
         var activation = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
-        return activation.Activate(input);
+        return ActivationHelper.ApplyActivation(activation, input, Engine);
     }
 
     /// <summary>
@@ -255,7 +256,7 @@ public class ActivationLayer<T> : LayerBase<T>
     private Tensor<T> ApplyVectorActivation(Tensor<T> input)
     {
         var activation = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
-        return activation.Activate(input);
+        return ActivationHelper.ApplyActivation(activation, input, Engine);
     }
 
     /// <summary>

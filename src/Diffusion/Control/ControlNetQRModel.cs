@@ -107,8 +107,13 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
             inputChannels: 3, latentChannels: LATENT_CHANNELS, baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
 
+        // Per the ControlNet paper the control branch is a trainable copy of the base UNet's encoder,
+        // so it must mirror the base UNet's channel configuration (else the injected control residuals
+        // would not align with the UNet feature maps). Derive its width/depth from _baseUNet rather than
+        // hardcoding SD1.5's 320/[1,2,4,4], so an injected tiny base UNet yields a matching tiny branch.
         _controlEncoder = new ControlNetEncoder<T>(
-            inputChannels: 1, baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, seed: seed);
+            inputChannels: 1, baseChannels: _baseUNet.BaseChannels,
+            channelMultipliers: _baseUNet.ChannelMultipliers, seed: seed);
     }
 
     /// <inheritdoc />
@@ -156,8 +161,24 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new ControlNetQRModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        // Lazy-preserving Clone (recipe from #1596): delegate to the base UNet's and VAE's own Clone()
+        // (preserves materialized weights, reconstructs from actual config) instead of rebuilding a
+        // default-scale model and SetParameters(GetParameters()), which mismatches an injected non-default
+        // variant and re-randomizes the clone's unmaterialized lazy weights.
+        var clone = new ControlNetQRModel<T>(
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
+
+        // The control-branch encoder is a separate trainable component (counted
+        // in ParameterCount/GetParameters); the constructor builds a fresh one,
+        // so transfer this model's trained weights into the clone explicitly —
+        // otherwise the clone silently loses the control-branch state.
+        if (_controlEncoder.ParameterCount > 0)
+        {
+            clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
+        }
+
         return clone;
     }
 

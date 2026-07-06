@@ -220,4 +220,14 @@ public class FusedOptimizerParityTests
                 null, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
         AssertOptimizerParity("LAMB", fusedSteps, diff, trainDelta, adamDiff);
     }
+
+    [Fact]
+    public void AMSGrad_FusedMatchesEager_NoWorseThanAdam()
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
+            new AMSGradOptimizer<float, Tensor<float>, Tensor<float>>(
+                null, new AMSGradOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
+        AssertOptimizerParity("AMSGrad", fusedSteps, diff, trainDelta, adamDiff);
+    }
 }

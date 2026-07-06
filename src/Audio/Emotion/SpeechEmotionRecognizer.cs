@@ -818,7 +818,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     #region Model Serialization
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var probabilities = GetEmotionProbabilities(input);
 

@@ -673,6 +673,20 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     /// </summary>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // Accept both the augmented [N, p+1] form (column 0 = treatment indicator,
+        // columns 1.. = covariates) that Train()/CausalModelBase consumes, and the
+        // plain [N, p] covariate form. Strip the treatment column when present so
+        // propensity-coefficient indexing stays in range — mirrors TLearner/SLearner.
+        if (input.Columns == NumFeatures + 1)
+        {
+            int n = input.Rows;
+            var features = new Matrix<T>(n, NumFeatures);
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < NumFeatures; j++)
+                    features[i, j] = input[i, j + 1];
+            return EstimatePropensityScores(features);
+        }
+
         return EstimatePropensityScores(input);
     }
 

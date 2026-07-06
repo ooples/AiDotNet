@@ -147,9 +147,13 @@ public class TSDSRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new TSDSRModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        // Lazy-preserving Clone (recipe from #1596): delegate to the predictor's and VAE's own Clone()
+        // instead of rebuild-at-default-scale + SetParameters(GetParameters()), which re-randomizes
+        // the clone's unmaterialized lazy weights.
+        return new TSDSRModel<T>(
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     /// <inheritdoc />

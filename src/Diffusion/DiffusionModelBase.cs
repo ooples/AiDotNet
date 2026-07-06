@@ -1,5 +1,7 @@
 ﻿using System.Linq;
 using AiDotNet.Autodiff;
+using AiDotNet.Deployment.Optimization.Quantization;
+using AiDotNet.Deployment.Optimization.Quantization.Training;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -10,6 +12,8 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
@@ -35,7 +39,7 @@ namespace AiDotNet.Diffusion;
 /// Specific diffusion models (like DDPM, Latent Diffusion) extend this base to implement
 /// their unique noise prediction architectures.</para>
 /// </remarks>
-public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable
+public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable, AiDotNet.Interfaces.ISelfSupervisedModel
 {
     /// <summary>
     /// Concrete diffusion models can override this method to yield the components
@@ -133,9 +137,38 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     private HashSet<int> _activeFeatureIndices = new HashSet<int>();
 
     /// <summary>
+    /// G5 (#1624) quantization-aware-training hook, created lazily on the first <see cref="Train"/> step
+    /// once <see cref="IsQuantizationAwareTrainingEnabled"/> is true.
+    /// </summary>
+    private QATTrainingHook<T>? _qatHook;
+
+    /// <summary>QAT config (explicit or default). Captured by <see cref="EnableQuantizationAwareTraining"/>.</summary>
+    private QuantizationConfiguration? _qatConfig;
+
+    /// <summary>
+    /// Explicit QAT selection: <c>null</c> = off (opt-in default), <c>true</c>/<c>false</c> = forced on/off
+    /// via <see cref="EnableQuantizationAwareTraining"/> / <see cref="DisableQuantizationAwareTraining"/>.
+    /// </summary>
+    private bool? _qatExplicit;
+
+    /// <summary>
     /// The learning rate converted to type T for training computations.
     /// </summary>
     protected T LearningRate;
+
+    // Gradient-based optimizer driving the shared diffusion Train step. DDPM (Ho et al. 2020,
+    // Algorithm 1) trains with Adam — NOT plain SGD: adaptive per-parameter steps are far more robust
+    // than a single global LR. Plain SGD's tiny, undirected steps let the fixed (x0, ε, t)
+    // noise-prediction probe drift the WRONG way over a few steps on an unlucky init / FP reduction
+    // order (exactly the intermittent Training_ShouldReducePredictionError failure); Adam's normalized
+    // step reliably descends. Fully user-configurable via DiffusionModelOptions.OptimizerFactory; when none is
+    // supplied this is lazily set on the first Train step to the paper-faithful default — a plain Adam
+    // (β1=0.9, β2=0.999, ε=1e-8, NO weight decay, and the non-paper adaptive-betas / adaptive-LR /
+    // AMSGrad extras left OFF). The optimizer owns its state (moments, step counter, bias correction)
+    // internally and checkpoints serialize that optimizer payload separately from model parameters,
+    // mirroring PyTorch's optimizer.state separation. A clone starts from a fresh optimizer because
+    // this field is not copied.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
 
     /// <summary>
     /// Cached result of the reflection walk that discovers trainable parameter tensors.
@@ -146,6 +179,135 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     private Tensor<T>[]? _cachedTrainableParameters;
 
+    // #1706: set once the noise predictor's lazy weights have been materialized OUTSIDE the
+    // transient per-Generate denoise arena (see the warmup in Generate). Stops the first Generate
+    // from allocating model-lifetime weights into that arena, which frees them on dispose.
+    private bool _lazyWeightsWarmed;
+
+    // ── Copy-on-write weight sharing (cheap Clone of large models) ───────────────────────────────
+    //
+    // Clone() shares the parent's weight TENSORS by reference instead of deep-copying every
+    // parameter (a 600M-param model would otherwise copy ~2.4 GB on every clone). The clone gets its
+    // OWN layer objects — and therefore its own forward activation caches — but each layer's weight
+    // tensors point at the parent's, so Predict on either model reads identical weights at O(1) clone
+    // cost. The first time EITHER model WRITES a weight (training), it transparently copies its own
+    // weights first (copy-on-write) so neither can corrupt the other. A shared set is reference-
+    // counted: when a member detaches, the remaining members keep sharing, and once only one member
+    // is left it owns the tensors outright and never needs to copy.
+
+    /// <summary>Reference-counted membership token for a set of models sharing weight tensors.</summary>
+    private sealed class WeightShareGroup
+    {
+        private int _count;
+        public WeightShareGroup(int initialCount) => _count = initialCount;
+        /// <summary>A new model joins the shared set.</summary>
+        public void Join() { lock (this) _count++; }
+        /// <summary>Decrements the sharer count; returns true if a copy is required (others remain).</summary>
+        public bool LeaveAndNeedsCopy()
+        {
+            lock (this)
+            {
+                bool othersRemain = _count > 1;
+                if (_count > 0) _count--;
+                return othersRemain;
+            }
+        }
+    }
+
+    private WeightShareGroup? _shareGroup;
+
+    /// <summary>
+    /// Reflection-walks the model graph (same traversal as <see cref="CollectTrainableParameters"/>)
+    /// and returns every <see cref="Interfaces.ITrainableLayer{T}"/> in a stable order, so a clone's
+    /// layers can be paired positionally with its parent's.
+    /// </summary>
+    private List<Interfaces.ITrainableLayer<T>> CollectTrainableLayers()
+    {
+        var layers = new List<Interfaces.ITrainableLayer<T>>();
+        CollectLayersInto(this, layers, new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance));
+        return layers;
+    }
+
+    private void CollectLayersInto(object? obj, List<Interfaces.ITrainableLayer<T>> layers, HashSet<object> visited)
+    {
+        if (obj is null || !visited.Add(obj)) return;
+        if (obj is Interfaces.ITrainableLayer<T> trainable) layers.Add(trainable);
+        foreach (var field in obj.GetType().GetFields(
+                     System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+        {
+            Type ft = field.FieldType;
+            if (ft.IsValueType || ft == typeof(string)) continue;
+            object? value;
+            try { value = field.GetValue(obj); } catch { continue; }
+            if (value is null) continue;
+            if (value is System.Collections.IEnumerable en && value is not Interfaces.ITrainableLayer<T>)
+                foreach (var item in en) CollectLayersInto(item, layers, visited);
+            else
+                CollectLayersInto(value, layers, visited);
+        }
+    }
+
+    /// <summary>
+    /// Makes this (freshly-constructed) model SHARE <paramref name="parent"/>'s weight tensors by
+    /// reference — the copy-on-write fast path for <see cref="Clone"/>. Both models join a shared
+    /// reference-counted set; the first weight write on either triggers a private copy. The two layer
+    /// lists must have identical structure (same model class + config), which Clone guarantees.
+    /// </summary>
+    protected void ShareWeightsFrom(DiffusionModelBase<T> parent)
+    {
+        var parentLayers = parent.CollectTrainableLayers();
+        var myLayers = CollectTrainableLayers();
+        if (parentLayers.Count != myLayers.Count)
+            throw new InvalidOperationException(
+                $"ShareWeightsFrom: layer count mismatch (parent {parentLayers.Count} vs clone {myLayers.Count}). " +
+                "Copy-on-write clone requires identical structure.");
+
+        for (int i = 0; i < myLayers.Count; i++)
+            myLayers[i].SetTrainableParameters(parentLayers[i].GetTrainableParameters());
+
+        if (parent._shareGroup is null)
+        {
+            // Parent was a sole owner; it and this clone now form a shared set of two. The parent must
+            // also copy-on-write before its next weight write, so it joins the group too.
+            parent._shareGroup = new WeightShareGroup(2);
+        }
+        else
+        {
+            // Parent already shares with one or more clones; this one joins the existing set.
+            parent._shareGroup.Join();
+        }
+        _shareGroup = parent._shareGroup;
+        InvalidateTrainableParametersCache();
+    }
+
+    /// <summary>
+    /// Copy-on-write guard: if this model is sharing its weight tensors with another model, give it a
+    /// private deep copy of every weight tensor BEFORE the caller mutates any of them. Called at the
+    /// top of every weight-mutating entry point (<see cref="Train"/>, <see cref="SetParameters"/>).
+    /// No-op once the model owns its weights outright.
+    /// </summary>
+    protected void EnsureOwnWeights()
+    {
+        var group = _shareGroup;
+        if (group is null) return;
+        _shareGroup = null;
+        if (group.LeaveAndNeedsCopy())
+        {
+            _trainingOptimizer?.Reset();
+            _trainingOptimizer = null;
+
+            foreach (var layer in CollectTrainableLayers())
+            {
+                var shared = layer.GetTrainableParameters();
+                if (shared is null) continue;
+                var owned = new Tensor<T>[shared.Count];
+                for (int i = 0; i < shared.Count; i++) owned[i] = shared[i].Clone();
+                layer.SetTrainableParameters(owned);
+            }
+        }
+        InvalidateTrainableParametersCache();
+    }
+
     /// <inheritdoc />
     public INoiseScheduler<T> Scheduler => _scheduler;
 
@@ -154,14 +316,43 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
     /// <summary>
     /// Streams the diffusion stack's trainable weight tensors per-tensor.
-    /// Default implementation is empty; concrete subclasses (latent
-    /// diffusion, cascade, dual-encoder) override to yield from their
-    /// noise predictor / VAE / conditioner sub-models. Foundation-scale
-    /// stacks overflow <see cref="int.MaxValue"/> in the aggregate
-    /// <see cref="ParameterCount"/>, so callers walking these chunks
-    /// accumulate length into a <see cref="long"/>.
+    /// Concrete subclasses (latent diffusion, cascade, dual-encoder) override
+    /// to yield from their noise predictor / VAE / conditioner sub-models,
+    /// staying flat-free at foundation scale. The default here yields the flat
+    /// <see cref="GetParameters"/> as a SINGLE chunk (not empty) so a
+    /// <c>SetParameterChunks(GetParameterChunks())</c> round-trip on a
+    /// non-overriding stack is correct rather than a silent no-op; it is not
+    /// flat-free, so a foundation-scale stack SHOULD override. Callers walking
+    /// these chunks accumulate length into a <see cref="long"/> (the aggregate
+    /// <see cref="ParameterCount"/> can overflow <see cref="int.MaxValue"/>).
     /// </summary>
-    public virtual IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        var p = GetParameters();
+        if (p.Length == 0) return System.Linq.Enumerable.Empty<Tensor<T>>();
+        return new[] { new Tensor<T>(new[] { p.Length }, p) };
+    }
+
+    /// <summary>
+    /// Streaming counterpart to <see cref="SetParameters"/>: assigns weights from per-tensor
+    /// chunks in <see cref="GetParameterChunks"/> order without materializing a flat aggregate.
+    /// Default buffers the chunks into one flat <see cref="Vector{T}"/> and delegates to
+    /// <see cref="SetParameters"/> (back-compatible for tractable stacks); foundation-scale
+    /// subclasses override to consume one chunk at a time and stay flat-free.
+    /// </summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        // Detach any copy-on-write-shared weights before mutating in place — SetParameters writes
+        // through raw spans that bypass the COW write barrier, so without this a chunk assignment
+        // could corrupt a sibling clone. Same guard Train() applies.
+        EnsureOwnWeights();
+
+        // Buffer the chunk stream into one flat vector and delegate to SetParameters. Shared with
+        // VAEModelBase, NoisePredictorBase's legacy fallback, and the composite latent-diffusion models
+        // via DiffusionParameterChunkHelper (single source of truth for the framing/validation rules).
+        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+    }
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
@@ -229,6 +420,29 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             : RandomHelper.CreateSecureRandom();
     }
 
+    /// <summary>
+    /// Creates a reproducible RNG for the INFERENCE / generation path. When the
+    /// caller passes no explicit <paramref name="seed"/>, a STABLE seed (the
+    /// model's construction seed, else a fixed constant) is used — deliberately
+    /// NOT the advancing <see cref="RandomGenerator"/> — so that two
+    /// <c>Predict(sameInput)</c> calls draw the identical noise and produce the
+    /// identical output (the <c>Predict_ShouldBeDeterministic</c> contract every
+    /// diffusion model must honor), while callers wanting sample variety still
+    /// pass an explicit seed. Training intentionally keeps using
+    /// <see cref="RandomGenerator"/>, which MUST advance across steps to draw
+    /// fresh timesteps/noise each iteration.
+    /// </summary>
+    /// <param name="seed">Optional explicit seed; when null a stable seed is used.</param>
+    protected Random CreateInferenceRng(int? seed)
+        => RandomHelper.CreateSeededRandom(seed ?? _options.Seed ?? InferenceDefaultSeed);
+
+    /// <summary>
+    /// Fixed fallback seed for <see cref="CreateInferenceRng"/> when the model
+    /// was constructed without a seed — any constant works; it only needs to be
+    /// stable across calls so unseeded generation is reproducible.
+    /// </summary>
+    private const int InferenceDefaultSeed = 0;
+
     #region IDiffusionModel<T> Implementation
 
     /// <inheritdoc />
@@ -281,6 +495,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         ValidateGenerateInputs(shape, numInferenceSteps, out long totalElements);
 
         using var _ = new NoGradScope<T>();
+        // Also enter an InferenceMode scope so layers skip their backward-activation caches
+        // on the async path too (no backward runs here). Unlike TensorArena (ThreadStatic,
+        // not wrapped here because await can resume on another thread), InferenceMode is
+        // AsyncLocal and flows across await/continuations, so this is safe for async (#1668).
+        using var _inferenceScope = InferenceMode.Enter();
 
         Vector<T> sample = ResolveInitialSample(shape, numInferenceSteps, seed, initialSample, totalElements);
 
@@ -409,7 +628,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                     nameof(initialSample));
             return initialSample;
         }
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         return SampleNoise((int)totalElements, rng);
     }
 
@@ -452,6 +671,61 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Pre-allocate reusable noise prediction vector to avoid per-step allocation
         var noisePredVec = new Vector<T>(sample.Length);
 
+        // #1706 (HiDream/MMDiTX; #1710 follow-up): a freshly-constructed noise predictor
+        // materializes its lazy weights (LazyDense / conv / embedding) on its FIRST forward, via
+        // the forward path. If that first forward runs inside the transient per-Generate arena
+        // created below, those model-lifetime weights are RentPinned into it and freed when the
+        // arena disposes at the end of THIS call — so the NEXT Generate reads recycled memory and
+        // Predict becomes non-deterministic (confirmed: arena-on differs by ~5e5, arena-off is
+        // exact, and a single warmup outside the arena restores determinism). Materialize them
+        // once here with a single warmup forward OUTSIDE the arena so they land on the GC heap
+        // (or an outer, longer-lived arena) and survive. One forward, one time per model; the
+        // denoise loop's per-step arena recycling below is unchanged.
+        if (!_lazyWeightsWarmed)
+        {
+            int warmupTimestep = 0;
+            foreach (var t in _scheduler.Timesteps) { warmupTimestep = t; break; }
+            sample.AsSpan().CopyTo(sampleTensor.AsWritableSpan());
+            using (InferenceMode.Enter())
+            {
+                PredictNoiseStep(sampleTensor, warmupTimestep);
+            }
+            _lazyWeightsWarmed = true;
+        }
+
+        // Forward caching allocator (Tensors #661 consumer wiring, second boundary
+        // after NeuralNetworkBase.Predict): a NoisePredictorBase forward is NOT a
+        // NeuralNetworkBase.Predict call, so its per-step intermediate tensors are
+        // never recycled by the Predict funnel. Run the whole denoise loop inside one
+        // TensorArena and Reset() per step so every step's predictor + scheduler
+        // intermediates are recycled rather than GC-churned — ~50 forwards per
+        // generation is the dominant inference-time allocation source. The carried
+        // latent (`sample`) is the one value that must survive each Reset, so it is
+        // detached to a GC-owned buffer below. The pre-allocated `sampleTensor` /
+        // `noisePredVec` are created above (outside the arena) and are therefore GC.
+        // (The async GenerateAsyncCore path is intentionally NOT wrapped: TensorArena.Current
+        // is [ThreadStatic] and `await ...ConfigureAwait(false)` can resume on another thread,
+        // which would desynchronise the arena scope — an async-aware arena is a separate change.)
+        //
+        // Arena safety (issue #1668): the multi-step denoise loop was previously NOT
+        // arena-safe because diffusion forward layers retained per-forward backward-
+        // activation caches (`_lastInput`, pre-SiLU buffers, attention reshape scratch).
+        // Those fields held references into arena scratch; the per-step arena.Reset()
+        // recycled that scratch, so a later step's allocation aliased a still-referenced
+        // cached buffer and corrupted its shape/data (a downsample conv output emerging
+        // with a stale [B, H*W, C] attention layout → "Input has N channels but layer
+        // expects M", and a native crash when it corrupted the shared pool).
+        //
+        // The fix is the InferenceMode scope below: it is the torch.inference_mode()
+        // analog, and every layer's ShouldCacheForBackward guard is false inside it, so
+        // no backward-activation cache is populated during the denoise loop. With nothing
+        // referencing scratch across a Reset, the per-step recycle is safe. The carried
+        // latent (`sample`) is separately detached to a GC buffer each step (below).
+        using var _inferenceScope = InferenceMode.Enter();
+        using var arena = (InferenceArenaSettings.Enabled && InferenceArenaSettings.DiffusionDenoiseEnabled)
+            ? TensorArena.Create()
+            : null;
+
         // Iterative denoising loop
         foreach (var timestep in _scheduler.Timesteps)
         {
@@ -461,7 +735,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             sampleSpan.CopyTo(tensorSpan);
 
             // Predict the noise
-            var noisePrediction = PredictNoise(sampleTensor, timestep);
+            var noisePrediction = PredictNoiseStep(sampleTensor, timestep);
 
             // Copy prediction to pre-allocated vector (avoids ToVector() allocation).
             // Fail fast on length mismatch — silently truncating or leaving stale
@@ -485,6 +759,19 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 sample,
                 NumOps.Zero);
 
+            // Detach the carried latent to a GC-owned buffer so it survives the
+            // arena Reset() below: Vector arithmetic in _scheduler.Step routes its
+            // output through TensorAllocator.Rent (arena Tier-0), so without this copy
+            // `sample` would point into recycled scratch on the next step. new Vector<T>(len)
+            // allocates a plain GC array; arena?.Reset() then recycles every other per-step
+            // tensor (predictor intermediates, scheduler temporaries).
+            if (arena != null)
+            {
+                var detached = new Vector<T>(sample.Length);
+                sample.AsSpan().CopyTo(detached.AsWritableSpan());
+                sample = detached;
+            }
+
             // NaN/Inf guard per Ho et al. 2020 §3.2: a trained DDPM produces
             // bounded predictions ε ≈ N(0, I), but an untrained / randomly-
             // initialized noise predictor can emit values orders of magnitude
@@ -500,6 +787,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 System.Diagnostics.Trace.TraceWarning(
                     $"DiffusionModelBase.Generate: sanitized {sanitizedCount} non-finite element(s) at timestep {timestep}.");
             }
+
+            // Recycle this step's intermediates (predictor activations + scheduler
+            // temporaries) for the next step. The only value carried forward —
+            // `sample` — was detached to GC above, and sampleTensor/noisePredVec
+            // live outside the arena, so the reset is safe. Without this the arena
+            // would accumulate all ~50 steps and only free on loop exit.
+            arena?.Reset();
         }
 
         return new Tensor<T>(shape, sample);
@@ -507,6 +801,97 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
     /// <inheritdoc />
     public abstract Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep);
+
+    /// <summary>
+    /// Runs one denoising-step noise prediction, optionally inside a GPU deferred execution graph
+    /// (AiDotNet.Tensors #642) when <see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/> is
+    /// enabled and the active engine is a CUDA <c>DirectGpuTensorEngine</c>. Recording the whole
+    /// forward into one graph keeps intermediates on-device, fuses kernels, overlaps streams, reuses
+    /// buffers, and drops per-op host round-trips — the substrate a CUDA-graph capture replays.
+    /// A recoverable failure (or a non-CUDA / unavailable engine) transparently falls back to the
+    /// eager <see cref="PredictNoise"/> — but only failures that surface as exceptions are caught;
+    /// an op that is not yet deferred-correct can still silently produce wrong-but-finite output, so
+    /// this is NOT an unconditional "never worse than eager" guarantee (see
+    /// <see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/>).
+    /// </summary>
+    // #1650/#638: the predictor's own CUDA-graph STREAM capture (AIDOTNET_DIFFUSION_CUDA_GRAPH=1, handled inside
+    // PredictNoise) and the #642 deferred-recording scope are MUTUALLY EXCLUSIVE graph mechanisms on the same
+    // engine stream — running the deferred scope around a PredictNoise that itself stream-captures conflicts.
+    // When stream capture is on it SUPERSEDES the deferred scope, so skip the scope and let PredictNoise capture.
+    // Read the env LIVE each call (not a cached static): it's the mutual-exclusion switch between the predictor's
+    // stream capture and the #642 deferred scope, so a value cached before the env is set could wrap a
+    // stream-capturing PredictNoise in the deferred scope. A per-step env read is negligible. (CodeRabbit #671/#1650)
+    private static bool PredictorStreamCapture =>
+        System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
+
+    private Tensor<T> PredictNoiseStep(Tensor<T> noisySample, int timestep)
+    {
+        if (!_options.UseGpuExecutionGraph || PredictorStreamCapture)
+            return PredictNoise(noisySample, timestep);
+
+        var engine = AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        if (engine is null || !engine.IsGpuAvailable)
+        {
+            // Enabled but there is no CUDA engine to record into → this IS a fallback per the
+            // diagnostics contract (the "no GPU" case documented on
+            // DiffusionDeferredStepDiagnostics.FellBackCount), so count it rather than returning
+            // eager silently and undercounting non-CUDA fallbacks.
+            DiffusionDeferredStepDiagnostics.RecordFellBack();
+            return PredictNoise(noisySample, timestep);
+        }
+
+        try
+        {
+            // ExecuteEagerlyWhileRecording=true is REQUIRED for correctness: the RecordingGpuBackend overrides
+            // only a subset of ops, so non-overridden UNet ops (GroupNorm, reductions, upsample, concat) would
+            // otherwise execute eagerly mid-record reading not-yet-produced buffers → garbage (#1650/#642 trace-
+            // by-execution fix). Without it the deferred path silently produces wrong-but-finite denoising.
+            using var scope = engine.BeginDeferredScope(
+                new AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions { ExecuteEagerlyWhileRecording = true });
+            if (scope is null)
+            {
+                DiffusionDeferredStepDiagnostics.RecordFellBack();
+                return PredictNoise(noisySample, timestep);
+            }
+
+            // Ops inside PredictNoise route through DeferredScope.Current.RecordingBackend
+            // automatically; Execute() replays the recorded, optimized graph. The result tensor
+            // stays GPU-resident (lazy) and is materialised on first CPU read by the caller — its
+            // output buffer is owned by the activation cache, so it survives the scope dispose.
+            var prediction = PredictNoise(noisySample, timestep);
+            scope.Execute();
+            // Materialise the result to a GC-owned CPU tensor BEFORE the deferred scope disposes.
+            // The lazy result is GPU-resident and its backing buffer is owned by the scope's
+            // recording backend / activation cache, which is torn down on scope dispose — reading
+            // it AFTER dispose (as the denoise loop does, via AsSpan) yields recycled/garbage
+            // values. ToArray() forces the GPU->CPU download while the buffers are still alive,
+            // and wrapping in a fresh Tensor detaches from the scope-owned storage. (Mirrors the
+            // inference-arena DetachFromArena pattern.)
+            var dims = new int[prediction.Rank];
+            for (int d = 0; d < dims.Length; d++) dims[d] = prediction.Shape[d];
+            var materialized = new Tensor<T>(prediction.ToArray(), dims);
+            DiffusionDeferredStepDiagnostics.RecordExecuted();
+            return materialized;
+        }
+        // Fall back to eager only for RECOVERABLE failures (an op not yet deferred-correct, a
+        // transient GPU/runtime fault, a deferred-scope rejection). Unrecoverable conditions
+        // (host OOM, access violation, stack overflow) are NOT masked — re-running the same
+        // forward eagerly cannot help and would hide a real fault behind a "never worse than
+        // eager" claim, exactly the silent-wrong-output risk #1650 is meant to avoid.
+        catch (System.Exception ex) when (!IsUnrecoverable(ex))
+        {
+            DiffusionDeferredStepDiagnostics.RecordFellBack();
+            System.Diagnostics.Trace.TraceWarning(
+                "DiffusionModelBase.PredictNoiseStep: deferred GPU forward failed, falling back to "
+              + $"eager PredictNoise (timestep {timestep}): {ex.GetType().Name}: {ex.Message}");
+            return PredictNoise(noisySample, timestep);
+        }
+    }
+
+    private static bool IsUnrecoverable(System.Exception ex) =>
+        ex is OutOfMemoryException
+           or System.StackOverflowException
+           or System.AccessViolationException;
 
     /// <inheritdoc />
     /// <remarks>
@@ -566,8 +951,80 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </list>
     /// You can control the step size by setting the LearningRate in the options.</para>
     /// </remarks>
+    /// <summary>
+    /// Forces quantization-aware training ON (G5, #1624): from the next <see cref="Train"/> step the
+    /// forward pass uses fake-quantized weights (quantize→dequantize, simulating int8 inference
+    /// precision) while keeping full-precision shadow weights that the optimizer updates (a
+    /// straight-through estimator), so the model learns weights that survive post-training int8
+    /// quantization. QAT is opt-in and OFF by default at every model size — call this to engage it
+    /// (foundation-scale models that target int8 deployment opt in here). QAT is lossy — it changes the
+    /// training trajectory. Pass a
+    /// <see cref="QuantizationConfiguration"/> to tune bit width / symmetry; default is symmetric int8.
+    /// </summary>
+    public void EnableQuantizationAwareTraining(QuantizationConfiguration? config = null)
+    {
+        _qatExplicit = true;
+        _qatConfig = config;
+        _qatHook = null; // rebuilt lazily in Train with the new config
+    }
+
+    /// <summary>Forces quantization-aware training OFF (the default); use after an explicit enable.</summary>
+    public void DisableQuantizationAwareTraining()
+    {
+        _qatExplicit = false;
+        _qatHook = null;
+    }
+
+    /// <summary>
+    /// Whether quantization-aware training is engaged for <see cref="Train"/> (G5, #1624). Opt-in and OFF
+    /// by default at every model size; turn it on/off explicitly via
+    /// <see cref="EnableQuantizationAwareTraining"/> / <see cref="DisableQuantizationAwareTraining"/>.
+    /// </summary>
+    public bool IsQuantizationAwareTrainingEnabled =>
+        // Opt-in, default OFF — matching the Train() contract comment, the project's
+        // streaming/activation-checkpointing convention, and PyTorch (torch QAT is always
+        // explicit, never engaged by model size). The previous auto-engage-by-parameter-
+        // count (>= 500M) silently turned QAT ON for every foundation-scale diffusion model:
+        // each train step then fake-quantized ALL ~1.8B weights (a serial ToVector copy of
+        // the full weight set + per-element requantize + copy-back), which a CPU profile
+        // measured at ~96s/iter of pure overhead — over half a Kandinsky train step — AND,
+        // being lossy, changed the training trajectory of the vanilla-DDPM contract tests.
+        // Foundation models that target int8 deployment opt in via EnableQuantizationAwareTraining().
+        _qatExplicit ?? false;
+
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Copy-on-write: if this model shares weight tensors with a clone/parent, give it a private
+        // copy before we mutate weights in place below, so the other model isn't corrupted.
+        EnsureOwnWeights();
+
+        // G5 (#1624) quantization-aware training (opt-in, default OFF). Fake-quantize the weights the
+        // forward will use, keeping full-precision shadows to restore before the optimizer update — the
+        // straight-through estimator: gradients computed against the quantized values update the
+        // full-precision weights. Quantization happens OUTSIDE the gradient tape, so the STE is implicit
+        // (the tape treats the quantized values as the leaf weights). On the very first step the lazy
+        // layers aren't resolved yet (empty/zero-length collection) so this is a natural no-op warmup.
+        Tensor<T>[]? qatParams = null;
+        Vector<T>[]? qatShadows = null;
+        if (IsQuantizationAwareTrainingEnabled)
+        {
+            _qatHook ??= new QATTrainingHook<T>(_qatConfig ?? new QuantizationConfiguration { QATWarmupEpochs = 0 });
+            qatParams = CollectTrainableParameters();
+            if (qatParams.Length > 0)
+            {
+                _qatHook.Reset(); // fresh per-tensor scales each step, tracking the current weight range
+                qatShadows = new Vector<T>[qatParams.Length];
+                for (int i = 0; i < qatParams.Length; i++)
+                {
+                    qatShadows[i] = qatParams[i].ToVector();
+                    if (qatShadows[i].Length == 0) continue;
+                    var quantized = _qatHook.ApplyFakeQuantization(qatShadows[i], "qat_param_" + i);
+                    var span = qatParams[i].Data.Span;
+                    for (int k = 0; k < span.Length && k < quantized.Length; k++) span[k] = quantized[k];
+                }
+            }
+        }
+
         // Tape-based direct per-tensor SGD step. The forward pass records Engine
         // ops onto the thread-local gradient tape, backward returns per-tensor
         // gradients, and we apply them in place via param -= lr * grad. This
@@ -620,20 +1077,102 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Backward pass via graph-based autodiff.
         var grads = tape.ComputeGradients(loss, paramTensors);
 
-        // Per-tensor SGD: param -= lr * grad, applied in place so registered
-        // tensor references stay stable across training steps.
-        foreach (var param in paramTensors)
+        // Global gradient-norm clipping (canonical diffusion training: HuggingFace
+        // diffusers and the SVD / Video-Diffusion reference recipes call
+        // torch.nn.utils.clip_grad_norm_(params, max_norm=1.0) after every backward).
+        // Plain SGD without it can overshoot on a freshly random-initialised model —
+        // a single step can move the noise-prediction error the WRONG way before the
+        // weights settle, which is exactly what Training_ShouldReducePredictionError
+        // caught for FateZero (error rose 0.399 -> 0.456 over 10 steps on an unlucky
+        // init, while the seeded sibling models happened to start in a stable basin).
+        // Clipping rescales the WHOLE gradient by max_norm/‖g‖ when ‖g‖ exceeds the
+        // threshold, so it bounds the step magnitude while preserving its direction —
+        // it can only stabilise training, never reverse a descent direction. The norm
+        // is computed with Engine reductions (no per-element scalar loop).
+        // Global gradient-norm clipping is delegated to the optimizer (configured at MaxGradientNorm
+        // = 1.0 below — the canonical DDPM / HuggingFace-diffusers recipe of
+        // clip_grad_norm_(params, 1.0)). The optimizer's Step performs the clip on its SIMD path
+        // right before the moment update, so there's no separate per-step scalar reduction here.
+
+        // G5 (#1624): restore the full-precision shadow weights before the optimizer step, so the
+        // update lands on full precision (straight-through estimator). The forward used the quantized
+        // values; the gradients are computed against them but applied to the full-precision weights.
+        if (qatParams is not null && qatShadows is not null)
         {
-            if (!grads.TryGetValue(param, out var grad) || grad is null) continue;
-            var update = Engine.TensorMultiplyScalar(grad, LearningRate);
-            var paramSpan = param.Data.Span;
-            var updateSpan = update.AsSpan();
-            int n = Math.Min(paramSpan.Length, updateSpan.Length);
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < qatParams.Length; i++)
             {
-                paramSpan[i] = NumOps.Subtract(paramSpan[i], updateSpan[i]);
+                var span = qatParams[i].Data.Span;
+                var shadow = qatShadows[i];
+                for (int k = 0; k < span.Length && k < shadow.Length; k++) span[k] = shadow[k];
             }
         }
+
+        // Apply the configured gradient-based optimizer. Default: paper-faithful Adam (DDPM, Ho et al.
+        // 2020 — Adam, NOT AdamW: β1=0.9, β2=0.999, ε=1e-8, no weight decay), reusing the shared
+        // optimizer infrastructure so nothing is hardcoded and the update runs on its vectorized (SIMD)
+        // Engine path. The non-paper extras (adaptive betas, adaptive LR, AMSGrad) are disabled so the
+        // default reproduces the paper exactly (DDPM uses a FIXED learning rate — no schedule/warmup).
+        //
+        // LR contract: the model's LearningRate is captured ONCE here, at the lazy first-Train build, and
+        // is thereafter fixed for the default optimizer (matching the paper's constant LR). Set
+        // LearningRate before the first Train to choose it. To vary LR during training (warmup, decay,
+        // schedules), supply an optimizer that owns its own scheduler via DiffusionModelOptions
+        // .OptimizerFactory — that optimizer's LR then drives training and this constant-LR default is
+        // bypassed entirely. Mutating the model's LearningRate after the first Train does NOT retroactively
+        // change the already-built default optimizer, by design.
+        _trainingOptimizer ??= _options.OptimizerFactory?.Invoke() ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            model: null,
+            options: new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                // NumOps.ToDouble (not Convert.ToDouble) — the project's numeric abstraction converts any T
+                // consistently, whereas Convert.ToDouble only works for IConvertible T and boxes.
+                InitialLearningRate = NumOps.ToDouble(LearningRate),
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveBetas = false,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+                // DDPM does no NaN-skipping; disabling the guard also drops the O(total-gradient)
+                // pre-scan the lean Step kernel would otherwise run every step.
+                AnomalyGuardMode = AdamAnomalyGuardMode.Never,
+                EnableGradientClipping = true,
+                GradientClippingMethod = GradientClippingMethod.ByNorm,
+                MaxGradientNorm = 1.0,
+            });
+
+        // Drive the optimizer through its tape-step entry point. Step(TapeStepContext) runs the
+        // optimizer's fused, in-place, allocation-free SIMD kernel directly on the parameter tensors
+        // and their gradients — it does NOT take the legacy flat-vector UpdateParameters round-trip
+        // (~17 intermediate Vector<T> allocations per step) that dominated foundation-scale training
+        // wall-time and timed the FateZero/Step1XEdit probes out. The optimizer owns its per-parameter
+        // moment state (keyed by tensor reference, stable across in-place steps) plus the global-norm
+        // clip; nothing is materialized or copied here. The forward/loss closures are only consulted by
+        // optimizers that re-evaluate the objective (e.g. line search); Adam ignores them.
+        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
+        Tensor<T> RecomputeForward(Tensor<T> inp, Tensor<T> _) => PredictNoise(inp, timestep);
+        Tensor<T> RecomputeLoss(Tensor<T> inp, Tensor<T> target)
+        {
+            using var noGrad = new NoGradScope<T>();
+            var recomputed = RecomputeForward(inp, target);
+            var diff2 = Engine.TensorSubtract(recomputed, target);
+            var sq2 = Engine.TensorMultiply(diff2, diff2);
+            return Engine.TensorMultiplyScalar(
+                Engine.ReduceSum(sq2, null),
+                NumOps.FromDouble(1.0 / sq2.Length));
+        }
+        // paramTensors is already a Tensor<T>[] (which implements IReadOnlyList<Tensor<T>>, the ctor's
+        // parameter type), so pass it directly instead of allocating a fresh List every Train call. The
+        // only remaining per-step allocation on this path is the two objective-re-evaluation delegates
+        // (RecomputeForward / RecomputeLoss) — they capture `timestep`/`this`, so they can't be cached
+        // statically. They are part of the TapeStepContext contract and are consulted ONLY by optimizers
+        // that re-evaluate the objective (e.g. line search); the default Adam ignores them entirely. Two
+        // small closures per step is negligible next to the tape's per-op tensor traffic.
+        var stepContext = new TapeStepContext<T>(
+            paramTensors, grads, lossValue,
+            noisySampleTensor, noiseTensor,
+            RecomputeForward, RecomputeLoss);
+        _trainingOptimizer.Step(stepContext);
     }
 
     /// <inheritdoc />
@@ -1058,6 +1597,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             }
         }
 
+        // #1713: a Tensor<T> is a DATA LEAF — its scalar values are model parameters (already
+        // collected via the owning ITrainableLayer above), never a container of further layers.
+        // Descending into its backing storage and recursing element-by-element is the Meissonic
+        // hang: a 304M-parameter model walked one boxed scalar at a time (each added to the
+        // visited set). Stop at the tensor boundary. Tensor<T> fields are already skipped below,
+        // but tensors reached via Tensor<T>[] / List<Tensor<T>> / object-typed fields are not, so
+        // this guard is what actually closes the walk.
+        if (obj is Tensor<T>) return;
+
         // Recurse into every reference-type instance field so nested composites
         // (e.g., DiffusionModel -> UNetNoisePredictor -> List<Layer>) are fully
         // walked even when the intermediate types don't implement ITrainableLayer.
@@ -1065,30 +1613,102 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         var type = obj.GetType();
         if (type.IsPrimitive || type == typeof(string) || type.IsEnum) return;
 
-        foreach (var field in type.GetFields(
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.NonPublic |
-            System.Reflection.BindingFlags.Public))
+        // Walk the FULL inheritance chain. Type.GetFields(Instance|NonPublic|Public) does NOT return
+        // PRIVATE fields declared on base classes, so when a field is typed as a subclass (e.g.
+        // SiTPredictor) whose layers actually live in a private field on its base
+        // (DiTNoisePredictor._blocks), that base-private field — and therefore the entire noise
+        // predictor — was invisible to this walk, leaving the model's denoiser untrainable
+        // ("no trainable parameters discoverable"). Enumerate DeclaredOnly fields at every level up
+        // the hierarchy so base-class privates are included; DeclaredOnly returns each field exactly
+        // once at its declaring type and the visited set guards object cycles.
+        for (var t = type; t != null && t != typeof(object); t = t.BaseType)
         {
-            // Skip compiler-generated backing fields for non-ref properties and
-            // fields whose declared type can't hold a trainable layer.
-            if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
-                field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
-                continue;
-
-            var val = field.GetValue(obj);
-            if (val is null) continue;
-
-            if (val is System.Collections.IEnumerable enumerable && val is not string)
+            foreach (var field in t.GetFields(
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.DeclaredOnly))
             {
-                foreach (var item in enumerable)
-                    CollectLayerParameters(item, allParams, visited);
-            }
-            else
-            {
-                CollectLayerParameters(val, allParams, visited);
+                // Skip compiler-generated backing fields for non-ref properties and
+                // fields whose declared type can't hold a trainable layer.
+                if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
+                    field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
+                    continue;
+
+                var val = field.GetValue(obj);
+                if (val is null) continue;
+
+                if (val is System.Collections.IEnumerable enumerable && val is not string)
+                {
+                    // #1713: only descend into collections whose ELEMENTS could be layers/composites.
+                    // Skip value-type element collections (a layer's float[] weight buffer, a Tensor's
+                    // backing array, List<int> shapes, etc.) — iterating their scalar elements is
+                    // pathological on a foundation-scale model and never yields a layer.
+                    if (!EnumerableElementsAreValueTypes(val.GetType()))
+                    {
+                        foreach (var item in enumerable)
+                            CollectLayerParameters(item, allParams, visited);
+                    }
+                }
+                else
+                {
+                    CollectLayerParameters(val, allParams, visited);
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// #1713: true when <paramref name="enumerableType"/> is a collection of value-type elements
+    /// (e.g. <c>float[]</c>, <c>List&lt;int&gt;</c>, a tensor's scalar backing array). Such collections
+    /// hold data, not layers, so the trainable-parameter walk must not recurse element-by-element into
+    /// them — on a foundation-scale model that is millions of boxed scalars (the Meissonic Train hang).
+    /// A non-generic or reference-element enumerable returns false so genuine layer collections
+    /// (List&lt;ILayer&gt;, ITrainableLayer[]) are still walked.
+    /// </summary>
+    private static bool EnumerableElementsAreValueTypes(Type enumerableType)
+    {
+        if (enumerableType.IsArray)
+        {
+            var elem = enumerableType.GetElementType();
+            return elem is not null && elem.IsValueType;
+        }
+
+        foreach (var iface in enumerableType.GetInterfaces())
+        {
+            if (iface.IsGenericType &&
+                iface.GetGenericTypeDefinition() == typeof(System.Collections.Generic.IEnumerable<>))
+            {
+                return iface.GetGenericArguments()[0].IsValueType;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>
+    /// via the Tensors copy-on-write <c>Tensor&lt;T&gt;.CloneShared()</c> (O(1)-until-write), instead of the
+    /// flat <c>GetParameters()</c> → <c>SetParameters()</c> round-trip that materializes the entire model a
+    /// second time (and a giant intermediate flat vector) — the source of the large-diffusion-model Clone
+    /// OOM on the 16 GB runner. The first in-place write to either side privatizes that tensor, so the clone
+    /// is observationally identical to the flat-copy clone. Fidelity is equivalent to the existing path
+    /// because both transfer exactly the model's trainable tensors (diffusion models carry no non-trainable
+    /// running statistics / serialization extras) — this just shares them rather than copying.
+    ///
+    /// <para>Walks <paramref name="source"/> and <c>this</c> in parallel via reflection (identical type ⇒
+    /// identical field order ⇒ matching layer order, the same assumption <see cref="CollectTrainableParameters"/>
+    /// already relies on) and re-binds each destination layer's parameters through
+    /// <see cref="Interfaces.ITrainableLayer{T}.SetTrainableParameters"/>. Returns <c>false</c> if the
+    /// trainable-layer structure does not match 1:1 (the caller then falls back to the flat copy), and never
+    /// leaves a half-shared clone — structure is fully verified before any sharing.</para>
+    /// </summary>
+    protected bool TryShareParametersFrom(DiffusionModelBase<T> source)
+    {
+        if (!AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this))
+            return false;
+        InvalidateTrainableParametersCache();
+        return true;
     }
 
     /// <summary>
@@ -1202,4 +1822,33 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     }
 
     #endregion
+}
+
+/// <summary>
+/// Process-wide observability for the opt-in GPU deferred denoising step
+/// (<see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/>, #642 / #1650). The step falls back
+/// to the eager forward on any recoverable failure, which would otherwise be invisible — a
+/// not-yet-deferred-correct op would silently run eagerly and look "fine". These counters let tests
+/// (and production telemetry) assert the deferred GPU graph ACTUALLY executed, rather than trusting a
+/// bit-equivalence that an eager fallback would also satisfy.
+/// </summary>
+internal static class DiffusionDeferredStepDiagnostics
+{
+    private static long _executed;
+    private static long _fellBack;
+
+    /// <summary>Number of denoising steps whose forward ran through the deferred GPU graph + Execute().</summary>
+    public static long ExecutedCount => System.Threading.Interlocked.Read(ref _executed);
+
+    /// <summary>Number of denoising steps that fell back to the eager forward (no GPU, null scope, or a recoverable deferred failure).</summary>
+    public static long FellBackCount => System.Threading.Interlocked.Read(ref _fellBack);
+
+    public static void Reset()
+    {
+        System.Threading.Interlocked.Exchange(ref _executed, 0);
+        System.Threading.Interlocked.Exchange(ref _fellBack, 0);
+    }
+
+    internal static void RecordExecuted() => System.Threading.Interlocked.Increment(ref _executed);
+    internal static void RecordFellBack() => System.Threading.Interlocked.Increment(ref _fellBack);
 }

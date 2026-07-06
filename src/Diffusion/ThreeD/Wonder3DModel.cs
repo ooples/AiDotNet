@@ -139,7 +139,20 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => false;
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount
+    {
+        get
+        {
+            // Trigger lazy shape resolution so the count reflects the arch-derived
+            // total, not just already-materialized layers — callers that size a
+            // buffer off ParameterCount must see the same count SetParameters
+            // validates against. Same lazy-init pattern as SDXLTurboModel /
+            // RealESRGANModel (PR #1562).
+            _unet.TriggerLazyShapeResolution();
+            _vae.TriggerLazyShapeResolution();
+            return _unet.ParameterCount + _vae.ParameterCount;
+        }
+    }
 
     /// <summary>
     /// Gets the number of canonical viewpoints generated simultaneously.
@@ -211,6 +224,10 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Resolve lazy layers first so the returned vector length matches
+        // ParameterCount (see ParameterCount remarks).
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
         var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
@@ -222,6 +239,10 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Resolve lazy layers BEFORE reading the per-sub-model counts the
+        // incoming vector is validated against (see ParameterCount remarks).
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetCount = checked((int)_unet.ParameterCount);
         var vaeCount = checked((int)_vae.ParameterCount);
         if (parameters.Length != unetCount + vaeCount)
@@ -244,17 +265,26 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
-            baseChannels: BASE_CHANNELS, channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2, attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-        return new Wonder3DModel<T>(unet: clonedUnet,
-            vae: new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
-                baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 },
-                numResBlocksPerLevel: 2, latentScaleFactor: 0.18215),
-            conditioner: _conditioner, defaultPointCount: DefaultPointCount);
+        // Delegate to the U-Net's and VAE's own Clone implementations, which
+        // resolve lazy shape inference on BOTH source and clone before copying
+        // weights. The previous "construct fresh + SetParameters(GetParameters())"
+        // dance re-hit the lazy-init bug on the U-Net AND never copied the VAE's
+        // weights at all — the clone decoded through a fresh random VAE and
+        // produced different Predict outputs than the source
+        // (Clone_ShouldProduceIdenticalOutput). Same fix pattern as
+        // SDXLTurboModel / RealESRGANModel / EDiffIModel (PR #1562).
+        // Preserve outer configuration (architecture / options / scheduler) so
+        // custom diffusion settings round-trip through Clone.
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
+        return new Wonder3DModel<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
+            unet: clonedUnet,
+            vae: clonedVae,
+            conditioner: _conditioner,
+            defaultPointCount: DefaultPointCount);
     }
 
     #endregion

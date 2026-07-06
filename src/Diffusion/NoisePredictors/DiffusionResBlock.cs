@@ -159,25 +159,41 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // `block2.SetParameters(block1.GetParameters()) ⇒ block2(x) == block1(x)`
         // determinism contract relied on by tests and checkpoint reload.
         //
-        // We trigger materialization by running one probe forward through the
-        // whole block (with NoGradScope so the tape stays clean), then reset
-        // per-step state. Memory cost: one [1, C, S, S] tensor's worth of
-        // intermediate activations per block at construction time, returned
-        // to the pool by ResetState. Cheap relative to one training step.
-        {
-            using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var probeInput = new Tensor<T>([1, inChannels, spatialSize, spatialSize]);
-            if (timeEmbedDim > 0)
-            {
-                var probeTime = new Tensor<T>([1, timeEmbedDim]);
-                Forward(probeInput, probeTime);
-            }
-            else
-            {
-                Forward(probeInput);
-            }
-            ResetState();
-        }
+        // Sublayers are left FULLY LAZY here — no shape resolution and no weight
+        // allocation in the ctor. At paper scale eager allocation was the dominant
+        // construction cost (a single SD U-Net is ~860M params, ~7 GB at double) and
+        // OOM'd the 16 GB CI runner on construction alone (Unit-03b). The owning
+        // UNetNoisePredictor resolves every sublayer's TRUE shape via its shape-only
+        // forward (ResolveShapesViaForward) before any ParameterCount / GetParameters
+        // read — the single source of truth that matches the real forward exactly —
+        // and weights materialise on demand at that GetParameters or the first real
+        // Forward. The SetParameters(GetParameters()) determinism contract is
+        // unaffected: GetParameters resolves shapes then materialises, and
+        // SetParameters overwrites the values.
+        _ = inChannels; _ = outChannels; _ = spatialSize; _ = timeEmbedDim;
+    }
+
+    /// <summary>
+    /// Propagates eval/training mode to the block's nested sublayers.
+    /// </summary>
+    /// <remarks>
+    /// LayerBase.SetTrainingMode only walks RegisterSubLayer-registered children, which
+    /// this block never populates (its sublayers are private fields), so without this
+    /// override <c>model.SetTrainingMode(false)</c> would never reach the convolutions —
+    /// leaving them on the allocating tape/training Forward branch (Conv2D + CPU
+    /// broadcast-add) during inference instead of the zero-alloc, GPU-resident inference
+    /// fast path (Conv2DInto + in-place bias). Mirrors PyTorch <c>nn.Module.train(mode)</c>
+    /// walking <c>self.children()</c> recursively.
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _norm1.SetTrainingMode(isTraining);
+        _conv1.SetTrainingMode(isTraining);
+        _timeMlp.SetTrainingMode(isTraining);
+        _norm2.SetTrainingMode(isTraining);
+        _conv2.SetTrainingMode(isTraining);
+        _skipConv?.SetTrainingMode(isTraining);
     }
 
     /// <summary>
@@ -242,12 +258,17 @@ public class DiffusionResBlock<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _originalInputShape = input._shape;
-        _lastInput = input;
+        // Only retain the per-layer backward-activation caches when an eager manual
+        // Backward will read them. In inference (and under the tape / graph capture)
+        // these references are dead weight and, inside the denoise-loop arena, would
+        // alias scratch recycled by the per-step Reset (issue #1668).
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
         _lastForwardUsedTime = false;
 
         // First block: GroupNorm → SiLU → Conv3x3
         var h = _norm1.Forward(input);
-        _preSiLU1 = h;
+        _preSiLU1 = cacheBwd ? h : null;
         h = ApplySiLU(h);
         h = _conv1.Forward(h);
 
@@ -256,7 +277,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
         // Second block: GroupNorm → SiLU → Conv3x3
         h = _norm2.Forward(h);
-        _preSiLU2 = h;
+        _preSiLU2 = cacheBwd ? h : null;
         h = ApplySiLU(h);
         h = _conv2.Forward(h);
 
@@ -274,7 +295,11 @@ public class DiffusionResBlock<T> : LayerBase<T>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> timeEmbed)
     {
         _originalInputShape = input._shape;
-        _lastInput = input;
+        // See Forward(input): keep the backward-activation caches only when an eager
+        // manual Backward will read them, so inference (denoise-loop arena) holds no
+        // recycled-scratch reference across the per-step Reset (issue #1668).
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
         _lastForwardUsedTime = true;
 
         // Eval-mode (no tape) can use the in-place Engine variants for the
@@ -287,6 +312,22 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // backward needs the pre-add tensor to recover gradients.
         bool useInPlace = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
                           || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+
+        // Within-resblock GPU profiling (AIDOTNET_PROFILE_SYNC=1 → real GPU time per sub-op). Feeds the same
+        // sink the UNet uses; entries prefixed "rb." so the aggregator splits conv vs groupnorm vs add.
+        var _profSink = AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.ForwardProfilingSink;
+        var _profSw = _profSink is null ? null : System.Diagnostics.Stopwatch.StartNew();
+        var _profSync = _profSink is not null
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_PROFILE_SYNC") == "1"
+            ? Engine as AiDotNet.Tensors.Engines.DirectGpuTensorEngine : null;
+        void RbTick(string s)
+        {
+            if (_profSw is null || _profSink is null) return;
+            _profSync?.SynchronizeStream();
+            _profSw.Stop();
+            _profSink.Enqueue(("rb." + s, _profSw.Elapsed.TotalMilliseconds));
+            _profSw.Restart();
+        }
 
         Tensor<T> h;
         if (useInPlace && input.Rank == 4)
@@ -310,14 +351,16 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 Convert.ToDouble(_norm1.GetEpsilon(), System.Globalization.CultureInfo.InvariantCulture));
             // _preSiLU1 is only consumed by Backward; eval-mode skips it.
             _preSiLU1 = null;
+            RbTick("gn1swish");
             h = _conv1.Forward(h);
+            RbTick("conv1");
         }
         else
         {
             // Tape-active path: keep the allocating Forward chain so
             // backward can recover the pre-SiLU tensor.
             h = _norm1.Forward(input);
-            _preSiLU1 = h;
+            _preSiLU1 = cacheBwd ? h : null;
             h = ApplySiLU(h);
             h = _conv1.Forward(h);
         }
@@ -357,12 +400,14 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 Engine.TensorBroadcastAddInPlace(h, timeProj);
             else
                 h = Engine.TensorBroadcastAdd(h, timeProj);
+            RbTick("time");
         }
 
         // Skip connection. Identity case (no skipConv) is alloc-free; the
         // 1×1 conv case pools its own output via
         // ConvolutionalLayer._preAllocatedOutput so no extra work needed.
         var residual = _skipConv is not null ? _skipConv.Forward(input) : input;
+        RbTick("skip");
 
         // Second block: GroupNorm → SiLU → Conv3x3 — eval-mode uses the
         // same fused-into-pooled-buffer fast path as norm1, sized to the
@@ -381,12 +426,14 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 Convert.ToDouble(_norm2.GetEpsilon(), System.Globalization.CultureInfo.InvariantCulture));
             _preSiLU2 = null;
             h = n2;
+            RbTick("gn2swish");
             h = _conv2.Forward(h);
+            RbTick("conv2");
         }
         else
         {
             h = _norm2.Forward(h);
-            _preSiLU2 = h;
+            _preSiLU2 = cacheBwd ? h : null;
             h = ApplySiLU(h);
             h = _conv2.Forward(h);
         }
@@ -401,10 +448,12 @@ public class DiffusionResBlock<T> : LayerBase<T>
             if (sameShape)
             {
                 Engine.TensorAddInPlace(h, residual);
+                RbTick("residual");
                 return h;
             }
         }
         h = Engine.TensorAdd(h, residual);
+        RbTick("residual");
         return h;
     }
 

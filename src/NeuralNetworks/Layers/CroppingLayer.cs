@@ -211,7 +211,7 @@ public class CroppingLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input;
+            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
             _gpuCachedInputShape = (int[])inputShape.Clone();
         }
 
@@ -438,7 +438,7 @@ public class CroppingLayer<T> : LayerBase<T>
             input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _lastInput = input4D;
+        _lastInput = ShouldCacheForBackward ? input4D : null; // #1668: skip in inference (arena safety)
 
         // Convert from NHWC [batch, height, width, channels] to NCHW [batch, channels, height, width]
         var inputNCHW = Engine.TensorPermute(input4D, [0, 3, 1, 2]);

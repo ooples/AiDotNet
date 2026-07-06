@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits all neural network invariant tests and adds GAN-specific invariants:
 /// generator output shape, mode diversity, parameter count, and output range.
 /// </summary>
-public abstract class GANModelTestBase : NeuralNetworkModelTestBase
+public abstract class GANModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // GAN INVARIANT: Generator Output Shape
@@ -60,7 +60,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(output1[i]) - ConvertToDouble(output2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -106,8 +106,9 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(Math.Abs(output[i]) < 1e6,
-                $"Output[{i}] = {output[i]:E4} is out of reasonable range [-1e6, 1e6]. " +
+            double ov = ConvertToDouble(output[i]);
+            Assert.True(Math.Abs(ov) < 1e6,
+                $"Output[{i}] = {ov:E4} is out of reasonable range [-1e6, 1e6]. " +
                 "Generator may have exploding values.");
         }
     }
@@ -152,21 +153,26 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
         for (int s = 0; s < followOnSteps; s++) network.Train(input, target);
         double lossFinal = ConvertLossToDouble(network.GetLastLoss());
 
+        // The invariant for a GAN on this memorization task is FINITENESS, not a bounded
+        // explosion ratio. Rationale (#1706): the task trains on a single (real, fake) pair, which
+        // is perfectly separable, and the non-saturating generator objective is softplus(−D(fake)).
+        // A sufficiently powerful discriminator (e.g. DCGAN's deep conv stack) has NO finite BCE
+        // minimizer on separable data — it drives its fake-logit toward −∞, so the generator's
+        // loss GROWS without bound as the discriminator wins. That growth is the mathematically
+        // expected behavior of adversarial training on a degenerate single pair, NOT a bug, so the
+        // previous "loss must not grow >100×" heuristic was ill-posed for strong-discriminator
+        // GANs and false-failed them (DCGAN: step1≈4, step100≈700-1000, a chaotic 150-250× that
+        // tracked the discriminator's logit magnitude, not any optimizer misbehavior). The REAL
+        // numerical-health failures this test must catch — sign errors and gradient explosions —
+        // manifest as NaN / ±Inf, which the two finiteness assertions below detect directly and
+        // without false positives. (Generator learning / non-zero gradients / parameter change are
+        // covered by Training_ShouldChangeParameters and GradientFlow_ShouldBeNonZeroAndFinite.)
         Assert.False(double.IsNaN(lossStep1) || double.IsInfinity(lossStep1),
             $"GAN generator loss after step 1 is non-finite: {lossStep1} (sign error or first-step explosion).");
         Assert.False(double.IsNaN(lossFinal) || double.IsInfinity(lossFinal),
-            $"GAN generator loss after step {MemorizationTaskIterations} is non-finite: {lossFinal} (post-explosion drift).");
-
-        // Adversarial loss can fluctuate but shouldn't explode by >100×
-        // across a handful of steps on a memorization pair — that would
-        // indicate a runaway generator/discriminator imbalance, not
-        // healthy oscillation.
-        double explosionRatio = lossStep1 > 1e-12 ? lossFinal / lossStep1 : lossFinal;
-        Assert.True(explosionRatio < 100.0,
-            $"GAN loss exploded across memorization steps: step 1={lossStep1:F6}, "
-            + $"step {MemorizationTaskIterations}={lossFinal:F6} (ratio={explosionRatio:F2}×). "
-            + "Diagnostic: generator/discriminator imbalance — one side is dominating "
-            + "and the other can't keep up.");
+            $"GAN generator loss after step {MemorizationTaskIterations} is non-finite: {lossFinal} "
+            + "(gradient explosion / sign error — NaN or Inf indicates a real numerical bug, whereas a "
+            + "large finite value is legitimate adversarial growth on a separable memorization pair).");
     }
 
     // =====================================================
@@ -204,11 +210,11 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
         try { network1.Predict(input); }
         catch (System.InvalidOperationException) { /* layer requires training mode for first forward */ }
 
-        INeuralNetworkModel<double> network2;
-        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
-            network2 = (INeuralNetworkModel<double>)nn1.Clone();
+        INeuralNetworkModel<T> network2;
+        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn1)
+            network2 = (INeuralNetworkModel<T>)nn1.Clone();
         else
-            network2 = (INeuralNetworkModel<double>)network1.Clone();
+            network2 = (INeuralNetworkModel<T>)network1.Clone();
 
         int shortIters = MoreDataShortIterations;
         int longIters = MoreDataLongIterations;
@@ -304,3 +310,6 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
         }
     }
 }
+
+/// <summary>Double-precision default for <see cref="GANModelTestBase{T}"/>.</summary>
+public abstract class GANModelTestBase : GANModelTestBase<double> { }

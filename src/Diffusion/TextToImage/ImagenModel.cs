@@ -413,39 +413,10 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedBase = new UNetNoisePredictor<T>(
-            inputChannels: IMAGEN_PIXEL_CHANNELS,
-            outputChannels: IMAGEN_PIXEL_CHANNELS,
-            baseChannels: 256,
-            channelMultipliers: [1, 2, 4, 8],
-            numResBlocks: 3,
-            attentionResolutions: [8, 4, 2],
-            contextDim: IMAGEN_CROSS_ATTENTION_DIM);
-        clonedBase.SetParameters(_baseUnet.GetParameters());
-
-        var clonedSR1 = new UNetNoisePredictor<T>(
-            inputChannels: IMAGEN_PIXEL_CHANNELS * 2,
-            outputChannels: IMAGEN_PIXEL_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2],
-            contextDim: IMAGEN_CROSS_ATTENTION_DIM);
-        clonedSR1.SetParameters(_superRes1Unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: IMAGEN_PIXEL_CHANNELS,
-            baseChannels: 64,
-            channelMultipliers: [1, 2, 4],
-            numResBlocksPerLevel: 1,
-            latentScaleFactor: 1.0);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new ImagenModel<T>(
-            baseUnet: clonedBase,
-            superRes1Unet: clonedSR1,
-            vae: clonedVae,
+                                return new ImagenModel<T>(
+            baseUnet: (UNetNoisePredictor<T>)_baseUnet.Clone(),
+            superRes1Unet: (UNetNoisePredictor<T>)_superRes1Unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             dynamicThresholdPercentile: _dynamicThresholdPercentile);
     }

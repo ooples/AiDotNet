@@ -241,20 +241,8 @@ public class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: 1152,
-            numLayers: 28, numHeads: 16, patchSize: 2,
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new PixArtDeltaModel<T>(
-            dit: clonedDit, vae: clonedVae, conditioner: _conditioner);
+                        return new PixArtDeltaModel<T>(
+            dit: (DiTNoisePredictor<T>)_dit.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
     }
 
     #endregion

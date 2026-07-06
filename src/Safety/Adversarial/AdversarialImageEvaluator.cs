@@ -113,7 +113,7 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
     /// in [0, 1]. Input shape: <c>[C, H, W]</c> (single sample) or <c>[B, C, H, W]</c>
     /// (batched). Output shape: <c>[1]</c> or <c>[B, 1]</c> respectively.
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
@@ -299,6 +299,16 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
         Description = "Feature-squeezing ensemble adversarial-image detector (Xu et al. 2018).",
         FeatureCount = FeatureCount,
         Complexity = 1,
+        // Populate AdditionalInfo (the canonical InputShape/OutputShape/hyperparameter report) and
+        // ModelData — an empty shell fails the Metadata_ShouldExist invariant every model is held to.
+        AdditionalInfo = new System.Collections.Generic.Dictionary<string, object>
+        {
+            { "FeatureCount", FeatureCount },
+            { "DetectionThreshold", _threshold },
+            { "InputShape", Architecture.GetInputShape() },
+            { "OutputShape", Architecture.GetOutputShape() },
+        },
+        ModelData = SerializeForMetadata(),
     };
 
     /// <inheritdoc />

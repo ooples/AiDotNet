@@ -147,11 +147,16 @@ public class SDXLInpaintingModel<T> : LatentDiffusionModelBase<T>
         // copies parameters atomically.
         var predictorClone = (UNetNoisePredictor<T>)_predictor.Clone();
         var vaeClone = (StandardVAE<T>)_vae.Clone();
+        var options = GetOptions() is DiffusionModelOptions<T> diffusionOptions
+            ? new DiffusionModelOptions<T>(diffusionOptions)
+            : null;
         return new SDXLInpaintingModel<T>(
+            architecture: Architecture,
+            options: options,
             predictor: predictorClone,
             vae: vaeClone,
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
     }
 
     /// <inheritdoc />

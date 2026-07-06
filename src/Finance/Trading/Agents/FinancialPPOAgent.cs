@@ -1,3 +1,4 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
@@ -8,8 +9,9 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
-using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.ReinforcementLearning.Common;
 using AiDotNet.LossFunctions;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.Finance.Trading.Agents;
 
@@ -54,12 +56,27 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
 {
     #region Fields
 
+    private const string ObservationNormalizerMarker = "AiDotNet.FinancialPPOAgent.ObservationNormalizer.v1";
+    private const double ObservationNormalizerEpsilon = 1e-8;
+    private const double ObservationClipRange = 10.0;
+
     private readonly FinancialPPOAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic;
-    private readonly ReplayBuffer<T> ReplayBuffer;
+    private readonly Trajectory<T> _trajectory;
+    private readonly List<Vector<T>> _nextStates;
+    private readonly Random _random;
     private readonly NeuralNetworkArchitecture<T> _actorArchitecture;
     private readonly NeuralNetworkArchitecture<T> _criticArchitecture;
+    private double[]? _observationMean;
+    private double[]? _observationM2;
+    private long _observationCount;
+    private Vector<T>? _lastActionRawState;
+    private Vector<T>? _lastActionNormalizedState;
+    private Vector<T>? _lastActionVector;
+    private Vector<T>? _lastStoredNextRawState;
+    private T _lastActionLogProb = default!;
+    private bool _hasLastActionLogProb;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -99,15 +116,207 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
-        EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
-        EnsureDefaultLayers(criticArchitecture, options.StateSize, 1);
+        EnsurePpoDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
+        EnsurePpoDefaultLayers(criticArchitecture, options.StateSize, 1);
 
-        _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
+        var actor = new NeuralNetwork<T>(
+            actorArchitecture,
+            optimizer: CreatePpoOptimizer(null, options),
+            lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        var critic = new NeuralNetwork<T>(
+            criticArchitecture,
+            optimizer: CreatePpoOptimizer(null, options),
+            lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        actor.SetBaseTrainOptimizer(CreatePpoOptimizer(actor, options));
+        critic.SetBaseTrainOptimizer(CreatePpoOptimizer(critic, options));
+
+        _actor = actor;
+        _critic = critic;
+        _trajectory = new Trajectory<T>();
+        _nextStates = new List<Vector<T>>();
+        _random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     #endregion
+
+    private static void EnsurePpoDefaultLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int expectedInputSize,
+        int expectedOutputSize)
+    {
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+
+        if (architecture.CalculatedInputSize != expectedInputSize)
+            throw new ArgumentException($"Architecture input size {architecture.CalculatedInputSize} does not match expected {expectedInputSize}.", nameof(architecture));
+
+        if (architecture.OutputSize != expectedOutputSize)
+            throw new ArgumentException($"Architecture output size {architecture.OutputSize} does not match expected {expectedOutputSize}.", nameof(architecture));
+
+        if (architecture.Layers.Count == 0)
+        {
+            architecture.Layers.Add(new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()));
+            architecture.Layers.Add(new DenseLayer<T>(64, (IActivationFunction<T>)new TanhActivation<T>()));
+            architecture.Layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+        }
+    }
+
+    private static AdamOptimizer<T, Tensor<T>, Tensor<T>> CreatePpoOptimizer(
+        IFullModel<T, Tensor<T>, Tensor<T>>? model,
+        TradingAgentOptions<T> options)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            model,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = numOps.ToDouble(options.LearningRate),
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false
+            });
+    }
+
+    private Vector<T> NormalizeObservation(Vector<T> state, bool updateStatistics)
+    {
+        if (updateStatistics)
+        {
+            UpdateObservationStatistics(state);
+        }
+
+        if (_observationMean is null ||
+            _observationM2 is null ||
+            _observationMean.Length != state.Length ||
+            _observationCount == 0)
+        {
+            return CopyVector(state);
+        }
+
+        var normalized = new Vector<T>(state.Length);
+        if (_observationCount < 2)
+        {
+            return normalized;
+        }
+
+        double denominator = Math.Max(1, _observationCount - 1);
+        for (int i = 0; i < state.Length; i++)
+        {
+            double variance = _observationM2[i] / denominator;
+            double scale = Math.Sqrt(Math.Max(variance, ObservationNormalizerEpsilon));
+            double value = (NumOps.ToDouble(state[i]) - _observationMean[i]) / scale;
+            value = Math.Max(-ObservationClipRange, Math.Min(ObservationClipRange, value));
+            normalized[i] = NumOps.FromDouble(value);
+        }
+
+        return normalized;
+    }
+
+    private void UpdateObservationStatistics(Vector<T> state)
+    {
+        EnsureObservationStatistics(state.Length);
+
+        _observationCount++;
+        for (int i = 0; i < state.Length; i++)
+        {
+            double value = NumOps.ToDouble(state[i]);
+            double delta = value - _observationMean![i];
+            _observationMean[i] += delta / _observationCount;
+            double delta2 = value - _observationMean[i];
+            _observationM2![i] += delta * delta2;
+        }
+    }
+
+    private void EnsureObservationStatistics(int observationSize)
+    {
+        if (_observationMean is not null && _observationMean.Length == observationSize)
+        {
+            return;
+        }
+
+        _observationMean = new double[observationSize];
+        _observationM2 = new double[observationSize];
+        _observationCount = 0;
+    }
+
+    private void CacheSelectedAction(Vector<T> rawState, Vector<T> normalizedState, Vector<T> action, T logProb)
+    {
+        _lastActionRawState = CopyVector(rawState);
+        _lastActionNormalizedState = CopyVector(normalizedState);
+        _lastActionVector = CopyVector(action);
+        _lastActionLogProb = logProb;
+        _hasLastActionLogProb = true;
+    }
+
+    private bool TryGetCachedPolicyState(
+        Vector<T> state,
+        Vector<T> action,
+        out Vector<T> normalizedState,
+        out T logProb)
+    {
+        if (!_hasLastActionLogProb ||
+            _lastActionRawState is null ||
+            _lastActionNormalizedState is null ||
+            _lastActionVector is null ||
+            !VectorsApproximatelyEqual(_lastActionRawState, state) ||
+            !VectorsApproximatelyEqual(_lastActionVector, action))
+        {
+            normalizedState = null!;
+            logProb = NumOps.Zero;
+            return false;
+        }
+
+        normalizedState = CopyVector(_lastActionNormalizedState);
+        logProb = _lastActionLogProb;
+        return true;
+    }
+
+    private void MarkHiddenEpisodeBoundaryIfNeeded(Vector<T> currentRawState)
+    {
+        if (_trajectory.Length == 0 || _lastStoredNextRawState is null)
+        {
+            return;
+        }
+
+        int previousIndex = _trajectory.Length - 1;
+        if (!_trajectory.Dones[previousIndex] &&
+            !VectorsApproximatelyEqual(_lastStoredNextRawState, currentRawState))
+        {
+            _trajectory.Dones[previousIndex] = true;
+        }
+    }
+
+    private bool VectorsApproximatelyEqual(Vector<T> left, Vector<T> right)
+    {
+        if (left.Length != right.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < left.Length; i++)
+        {
+            double a = NumOps.ToDouble(left[i]);
+            double b = NumOps.ToDouble(right[i]);
+            double tolerance = 1e-6 * Math.Max(1.0, Math.Max(Math.Abs(a), Math.Abs(b)));
+            if (Math.Abs(a - b) > tolerance)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static Vector<T> CopyVector(Vector<T> source)
+    {
+        var copy = new Vector<T>(source.Length);
+        for (int i = 0; i < source.Length; i++)
+        {
+            copy[i] = source[i];
+        }
+
+        return copy;
+    }
 
     #region Action Selection
 
@@ -119,13 +328,23 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var probs = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
+        var normalizedState = NormalizeObservation(state, updateStatistics: training);
+        var logits = _actor.Predict(CreateStateTensor(normalizedState)).ToVector();
+
+        if (_options.ContinuousActions)
+        {
+            CacheSelectedAction(state, normalizedState, logits, NumOps.Zero);
+            return logits;
+        }
+
+        var probs = Softmax(logits);
         
         if (training)
         {
-            int actionIdx = SampleAction(probs);
+            int actionIdx = SampleCategorical(probs);
             var action = new Vector<T>(TradingOptions.ActionSize);
             action[actionIdx] = NumOps.One;
+            CacheSelectedAction(state, normalizedState, action, LogProbability(probs, actionIdx));
             return action;
         }
 
@@ -142,6 +361,7 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
 
         var result = new Vector<T>(TradingOptions.ActionSize);
         result[bestIdx] = NumOps.One;
+        CacheSelectedAction(state, normalizedState, result, LogProbability(probs, bestIdx));
         return result;
     }
 
@@ -153,9 +373,9 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialPPOAgent model, SampleAction performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    private int SampleAction(Vector<T> probabilities)
+    private int SampleCategorical(Vector<T> probabilities)
     {
-        double r = RandomHelper.CreateSecureRandom().NextDouble();
+        double r = _random.NextDouble();
         double cumulative = 0;
         for (int i = 0; i < probabilities.Length; i++)
         {
@@ -177,58 +397,313 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override T Train()
     {
-        if (ReplayBuffer.Count < TradingOptions.BatchSize) return NumOps.Zero;
-
-        var batch = ReplayBuffer.Sample(TradingOptions.BatchSize);
-        int n = batch.Count;
-        if (n == 0) return NumOps.Zero;
-
-        // Pack the whole minibatch into [n, stateDim] / [n, actionDim] tensors and run ONE batched
-        // forward/backward for the critic and the actor. The previous per-experience loop built a
-        // fresh autograd tape per sample (BatchSize tapes per Train call), which profiling showed
-        // was ~60% of RL training time. Batching is the standard mini-batch update and amortizes
-        // the tape/optimizer overhead across the batch.
-        int stateDim = batch[0].State.Length;
-        int actionDim = batch[0].Action.Length;
-        var gamma = NumOps.FromDouble(Convert.ToDouble(TradingOptions.DiscountFactor));
-
-        var statesData = new T[n * stateDim];
-        var nextStatesData = new T[n * stateDim];
-        var actionsData = new T[n * actionDim];
-        for (int i = 0; i < n; i++)
+        if (_trajectory.Length == 0)
         {
-            var exp = batch[i];
-            for (int j = 0; j < stateDim; j++)
-            {
-                statesData[i * stateDim + j] = exp.State[j];
-                nextStatesData[i * stateDim + j] = exp.NextState[j];
-            }
+            return NumOps.Zero;
+        }
 
-            for (int j = 0; j < actionDim; j++)
+        if (_trajectory.Length < GetMinimumRolloutSize() && !LatestStepIsTerminal())
+        {
+            return NumOps.Zero;
+        }
+
+        TrainingSteps++;
+
+        ComputeAdvantagesAndReturns();
+
+        T totalLoss = NumOps.Zero;
+        int updateCount = 0;
+        int trajectoryLength = _trajectory.Length;
+        int epochCount = GetEffectiveEpochCount(trajectoryLength);
+        int minibatchCount = GetEffectiveMiniBatchCount(trajectoryLength);
+        int minibatchSize = Math.Max(1, (int)Math.Ceiling((double)trajectoryLength / minibatchCount));
+
+        for (int epoch = 0; epoch < epochCount; epoch++)
+        {
+            var indices = Enumerable.Range(0, trajectoryLength)
+                .OrderBy(_ => _random.Next())
+                .ToArray();
+
+            for (int start = 0; start < indices.Length; start += minibatchSize)
             {
-                actionsData[i * actionDim + j] = exp.Action[j];
+                int count = Math.Min(minibatchSize, indices.Length - start);
+                var batchIndices = new int[count];
+                Array.Copy(indices, start, batchIndices, 0, count);
+
+                var loss = UpdatePpoMiniBatch(batchIndices);
+                totalLoss = NumOps.Add(totalLoss, loss);
+                updateCount++;
             }
         }
 
-        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
-        var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
-        var actions = new Tensor<T>([n, actionDim], new Vector<T>(actionsData));
+        var averageLoss = updateCount == 0
+            ? NumOps.Zero
+            : NumOps.Divide(totalLoss, NumOps.FromDouble(updateCount));
+        LossHistory.Add(averageLoss);
 
-        // Bootstrap value targets in one batched critic forward over all next-states.
-        var vNext = _critic.Predict(nextStates).ToVector();
-        var targetData = new T[n];
-        for (int i = 0; i < n; i++)
+        _trajectory.Clear();
+        _nextStates.Clear();
+
+        return averageLoss;
+    }
+
+    private int GetEffectiveEpochCount(int trajectoryLength)
+    {
+        int configuredEpochs = Math.Max(1, _options.NumEpochs);
+        return trajectoryLength < 8 ? 1 : configuredEpochs;
+    }
+
+    private int GetEffectiveMiniBatchCount(int trajectoryLength)
+    {
+        if (trajectoryLength < 8)
         {
-            var bootstrap = batch[i].Done ? NumOps.Zero : NumOps.Multiply(gamma, vNext[i]);
-            targetData[i] = NumOps.Add(batch[i].Reward, bootstrap);
+            return 1;
         }
 
-        var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
+        return Math.Max(1, Math.Min(_options.NumMiniBatches, trajectoryLength));
+    }
 
-        _critic.Train(states, targets);
-        _actor.Train(states, actions);
+    private int GetMinimumRolloutSize()
+    {
+        return Math.Max(1, _options.BatchSize);
+    }
 
-        return NumOps.Zero;
+    private bool LatestStepIsTerminal()
+    {
+        return _trajectory.Length > 0 && _trajectory.Dones[^1];
+    }
+
+    private T UpdatePpoMiniBatch(int[] batchIndices)
+    {
+        int n = batchIndices.Length;
+        int stateDim = GetBatchStateSize(batchIndices);
+        var returns = _trajectory.Returns ?? throw new InvalidOperationException("Returns not initialized.");
+        var advantages = _trajectory.Advantages ?? throw new InvalidOperationException("Advantages not initialized.");
+
+        var states = new Tensor<T>([n, stateDim]);
+        var targetReturns = new Tensor<T>([n, 1]);
+        var oldLogProbs = new Tensor<T>([n]);
+        var advantageTensor = new Tensor<T>([n]);
+
+        for (int i = 0; i < n; i++)
+        {
+            int idx = batchIndices[i];
+            CopyStateToBatch(states, i, _trajectory.States[idx], stateDim);
+
+            targetReturns[i, 0] = returns[idx];
+            oldLogProbs[i] = _trajectory.LogProbs[idx];
+            advantageTensor[i] = advantages[idx];
+        }
+
+        _critic.Train(states, targetReturns);
+        T valueLoss = _critic.GetLastLoss();
+
+        if (_options.ContinuousActions)
+        {
+            var actionTargets = new Tensor<T>([n, TradingOptions.ActionSize]);
+            for (int i = 0; i < n; i++)
+            {
+                var action = _trajectory.Actions[batchIndices[i]];
+                for (int j = 0; j < TradingOptions.ActionSize; j++)
+                {
+                    actionTargets[i, j] = action[j];
+                }
+            }
+
+            _actor.Train(states, actionTargets);
+            return NumOps.Add(valueLoss, _actor.GetLastLoss());
+        }
+
+        var actionIndices = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            actionIndices[i] = ArgMax(_trajectory.Actions[batchIndices[i]]);
+        }
+
+        var trainableActor = (NeuralNetworkBase<T>)_actor;
+        T policyLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
+        {
+            var engine = AiDotNetEngine.Current;
+            var newLogProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(engine, actorOutput, actionIndices);
+            var logDiff = engine.TensorSubtract(newLogProbs, oldLogProbs);
+            var ratio = engine.TensorExp(logDiff);
+
+            var surr1 = engine.TensorMultiply(ratio, advantageTensor);
+            var clippedRatio = engine.TensorClamp(
+                ratio,
+                NumOps.FromDouble(1.0 - TradingOptions.PPOClipRange),
+                NumOps.FromDouble(1.0 + TradingOptions.PPOClipRange));
+            var surr2 = engine.TensorMultiply(clippedRatio, advantageTensor);
+
+            var minSurr = engine.TensorNegate(
+                engine.TensorMax(
+                    engine.TensorNegate(surr1),
+                    engine.TensorNegate(surr2)));
+
+            var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(engine, actorOutput);
+            var entropyBonus = engine.TensorMultiplyScalar(entropy, NumOps.FromDouble(TradingOptions.EntropyCoefficient));
+            var objective = engine.TensorAdd(minSurr, entropyBonus);
+            var allAxes = Enumerable.Range(0, objective.Shape.Length).ToArray();
+            var meanObjective = engine.ReduceMean(objective, allAxes, keepDims: false);
+            return engine.TensorNegate(meanObjective);
+        });
+
+        return NumOps.Add(policyLoss, NumOps.Multiply(NumOps.FromDouble(TradingOptions.ValueCoefficient), valueLoss));
+    }
+
+    private Tensor<T> CreateStateTensor(Vector<T> normalizedState)
+    {
+        return Tensor<T>.FromVector(normalizedState);
+    }
+
+    private int GetBatchStateSize(int[] batchIndices)
+    {
+        if (batchIndices.Length == 0)
+        {
+            return Math.Max(1, TradingOptions.StateSize);
+        }
+
+        int stateSize = _trajectory.States[batchIndices[0]].Length;
+        for (int i = 1; i < batchIndices.Length; i++)
+        {
+            int nextSize = _trajectory.States[batchIndices[i]].Length;
+            if (nextSize != stateSize)
+            {
+                throw new InvalidOperationException(
+                    $"PPO trajectory contains mixed state sizes ({stateSize} and {nextSize}). " +
+                    "Use a stable observation schema before training.");
+            }
+        }
+
+        return stateSize;
+    }
+
+    private static void CopyStateToBatch(Tensor<T> batch, int row, Vector<T> state, int stateSize)
+    {
+        for (int j = 0; j < stateSize; j++)
+        {
+            batch[row, j] = state[j];
+        }
+    }
+
+    private void ComputeAdvantagesAndReturns()
+    {
+        var advantages = new List<T>(_trajectory.Length);
+        var returns = new List<T>(_trajectory.Length);
+        T lastGae = NumOps.Zero;
+        var gamma = TradingOptions.DiscountFactor;
+        var lambda = NumOps.FromDouble(TradingOptions.GAELambda);
+
+        for (int t = _trajectory.Length - 1; t >= 0; t--)
+        {
+            T nextValue = _trajectory.Dones[t] ? NumOps.Zero : PredictValueFromNormalized(_nextStates[t]);
+            var delta = NumOps.Add(
+                _trajectory.Rewards[t],
+                NumOps.Subtract(NumOps.Multiply(gamma, nextValue), _trajectory.Values[t]));
+
+            lastGae = NumOps.Add(
+                delta,
+                NumOps.Multiply(
+                    NumOps.Multiply(gamma, lambda),
+                    _trajectory.Dones[t] ? NumOps.Zero : lastGae));
+
+            advantages.Insert(0, lastGae);
+            returns.Insert(0, NumOps.Add(lastGae, _trajectory.Values[t]));
+        }
+
+        NormalizeAdvantagesWhenStable(advantages);
+
+        _trajectory.Advantages = advantages;
+        _trajectory.Returns = returns;
+    }
+
+    private void NormalizeAdvantagesWhenStable(List<T> advantages)
+    {
+        if (advantages.Count < 8)
+        {
+            return;
+        }
+
+        var stdAdv = StatisticsHelper<T>.CalculateStandardDeviation(advantages);
+        if (Math.Abs(NumOps.ToDouble(stdAdv)) <= 1e-8)
+        {
+            return;
+        }
+
+        T meanAdv = NumOps.Zero;
+        foreach (var advantage in advantages)
+        {
+            meanAdv = NumOps.Add(meanAdv, advantage);
+        }
+
+        meanAdv = NumOps.Divide(meanAdv, NumOps.FromDouble(advantages.Count));
+
+        for (int i = 0; i < advantages.Count; i++)
+        {
+            advantages[i] = NumOps.Divide(
+                NumOps.Subtract(advantages[i], meanAdv),
+                NumOps.Add(stdAdv, NumOps.FromDouble(1e-8)));
+        }
+    }
+
+    private T PredictValueFromNormalized(Vector<T> normalizedState)
+    {
+        return _critic.Predict(CreateStateTensor(normalizedState)).ToVector()[0];
+    }
+
+    private T ComputeDiscreteLogProbFromNormalized(Vector<T> normalizedState, Vector<T> action)
+    {
+        var logits = _actor.Predict(CreateStateTensor(normalizedState)).ToVector();
+        var probs = Softmax(logits);
+        int actionIndex = ArgMax(action);
+        return LogProbability(probs, actionIndex);
+    }
+
+    private T LogProbability(Vector<T> probabilities, int actionIndex)
+    {
+        return NumOps.FromDouble(Math.Log(NumOps.ToDouble(probabilities[actionIndex]) + 1e-10));
+    }
+
+    private Vector<T> Softmax(Vector<T> logits)
+    {
+        T maxLogit = logits[0];
+        for (int i = 1; i < logits.Length; i++)
+        {
+            if (NumOps.GreaterThan(logits[i], maxLogit))
+            {
+                maxLogit = logits[i];
+            }
+        }
+
+        var probabilities = new Vector<T>(logits.Length);
+        T sumExp = NumOps.Zero;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            var exp = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], maxLogit))));
+            probabilities[i] = exp;
+            sumExp = NumOps.Add(sumExp, exp);
+        }
+
+        for (int i = 0; i < probabilities.Length; i++)
+        {
+            probabilities[i] = NumOps.Divide(probabilities[i], sumExp);
+        }
+
+        return probabilities;
+    }
+
+    private int ArgMax(Vector<T> vector)
+    {
+        int maxIndex = 0;
+        for (int i = 1; i < vector.Length; i++)
+        {
+            if (NumOps.GreaterThan(vector[i], vector[maxIndex]))
+            {
+                maxIndex = i;
+            }
+        }
+
+        return maxIndex;
     }
 
     #endregion
@@ -273,8 +748,23 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        var experience = new Experience<T>(state, action, reward, nextState, done);
-        ReplayBuffer.Add(experience);
+        MarkHiddenEpisodeBoundaryIfNeeded(state);
+
+        bool usedCachedPolicy = TryGetCachedPolicyState(state, action, out var normalizedState, out var logProb);
+        if (!usedCachedPolicy)
+        {
+            normalizedState = NormalizeObservation(state, updateStatistics: true);
+            logProb = _options.ContinuousActions
+                ? NumOps.Zero
+                : ComputeDiscreteLogProbFromNormalized(normalizedState, action);
+        }
+
+        var normalizedNextState = NormalizeObservation(nextState, updateStatistics: false);
+        var value = PredictValueFromNormalized(normalizedState);
+
+        _trajectory.AddStep(normalizedState, CopyVector(action), reward, value, logProb, done);
+        _nextStates.Add(normalizedNextState);
+        _lastStoredNextRawState = CopyVector(nextState);
     }
 
     #endregion
@@ -299,6 +789,8 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
         writer.Write(actorData);
         writer.Write(criticData.Length);
         writer.Write(criticData);
+        writer.Write(ObservationNormalizerMarker);
+        WriteObservationNormalizer(writer);
         return ms.ToArray();
     }
 
@@ -318,6 +810,49 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
         _actor.Deserialize(reader.ReadBytes(actorLen));
         int criticLen = reader.ReadInt32();
         _critic.Deserialize(reader.ReadBytes(criticLen));
+        if (ms.Position < ms.Length)
+        {
+            string marker = reader.ReadString();
+            if (marker == ObservationNormalizerMarker)
+            {
+                ReadObservationNormalizer(reader);
+            }
+        }
+    }
+
+    private void WriteObservationNormalizer(BinaryWriter writer)
+    {
+        writer.Write(_observationCount);
+        int length = _observationMean?.Length ?? 0;
+        writer.Write(length);
+
+        for (int i = 0; i < length; i++)
+        {
+            writer.Write(_observationMean![i]);
+            writer.Write(_observationM2![i]);
+        }
+    }
+
+    private void ReadObservationNormalizer(BinaryReader reader)
+    {
+        _observationCount = reader.ReadInt64();
+        int length = reader.ReadInt32();
+
+        _observationMean = length > 0 ? new double[length] : null;
+        _observationM2 = length > 0 ? new double[length] : null;
+
+        for (int i = 0; i < length; i++)
+        {
+            _observationMean![i] = reader.ReadDouble();
+            _observationM2![i] = reader.ReadDouble();
+        }
+    }
+
+    private void CopyObservationNormalizerFrom(FinancialPPOAgent<T> source)
+    {
+        _observationCount = source._observationCount;
+        _observationMean = source._observationMean is null ? null : (double[])source._observationMean.Clone();
+        _observationM2 = source._observationM2 is null ? null : (double[])source._observationM2.Clone();
     }
 
     /// <summary>
@@ -394,6 +929,7 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
     {
         var clone = new FinancialPPOAgent<T>(_actorArchitecture, _criticArchitecture, TradingOptions);
         clone.SetParameters(GetParameters());
+        clone.CopyObservationNormalizerFrom(this);
         return clone;
     }
 
@@ -407,7 +943,10 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return _actor.ComputeGradients(Tensor<T>.FromVector(input), Tensor<T>.FromVector(target), lossFunction);
+        return _actor.ComputeGradients(
+            CreateStateTensor(NormalizeObservation(input, updateStatistics: false)),
+            Tensor<T>.FromVector(target),
+            lossFunction);
     }
 
     /// <summary>

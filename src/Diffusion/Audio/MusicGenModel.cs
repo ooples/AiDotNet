@@ -640,7 +640,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         }
 
         // Initialize random latent
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latent = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -712,7 +712,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         }
 
         // Initialize with partial noise (more structure from prompt)
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var noise = SampleNoiseTensor(latentShape, rng);
 
         // Blend prompt latent into initial state
@@ -1023,15 +1023,19 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        return new MusicGenModel<T>(
-            options: null,
-            scheduler: null,
-            unet: null,
-            musicVAE: null,
+        var clone = new MusicGenModel<T>(
+            architecture: Architecture,
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            musicVAE: (AudioVAE<T>)_musicVAE.Clone(),
             textConditioner: _textConditioner,
             modelSize: _modelSize,
             sampleRate: SampleRate,
             defaultDurationSeconds: DefaultDurationSeconds);
+
+        clone._melodyEncoder.SetParameters(_melodyEncoder.GetParameters());
+        clone._rhythmEncoder.SetParameters(_rhythmEncoder.GetParameters());
+
+        return clone;
     }
 
     #endregion

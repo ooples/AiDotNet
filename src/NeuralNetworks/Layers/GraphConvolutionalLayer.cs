@@ -203,7 +203,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     // token stream with no data-flow edges) opt in. DeserializationHelper
     // reconstructs cloned/round-tripped graph layers with this enabled so a
     // model whose adjacency is only set at runtime survives serialization.
-    private readonly bool _implicitIdentityWhenUnset;
+    private bool _implicitIdentityWhenUnset;
 
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
@@ -522,6 +522,17 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// In a molecule, it would show which atoms are bonded to each other.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Post-construction equivalent of the <c>implicitIdentityWhenUnset</c> ctor flag: enables the
+    /// self-loops-only (identity) tolerance for callers that constructed the layer strictly but later
+    /// need the scaffold / clone / deserialize tolerance. The default remains strict (throw on a
+    /// missing graph); this is an explicit opt-in, never a silent default.
+    /// </summary>
+    public void EnableImplicitIdentityAdjacency()
+    {
+        _implicitIdentityWhenUnset = true;
+    }
+
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         // Check if we need to re-extract edges (new matrix or first time)
@@ -679,13 +690,10 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             ? input.Shape[input.Shape.Length - 2]
             : 1;
 
-        // A graph convolution is undefined without a graph: per Kipf & Welling
-        // (2017) the propagation rule H' = Â·H·W is built on the adjacency Â, so an
-        // unset adjacency is a usage error — throw rather than silently degrade to
-        // a per-node MLP. Models that legitimately run on plain sequences with no
-        // explicit graph opt into a self-loop identity fallback via the
-        // constructor flag (which survives Clone, so the cloned layer behaves the
-        // same as the original).
+        // With no supplied graph, use self-loops only. This is equivalent to
+        // Â = I in the Kipf-Welling propagation H' = Â·H·W, so the layer remains
+        // a well-defined per-node transform while production callers can still
+        // provide the real graph via SetAdjacencyMatrix or SetEdges.
         if (_adjacencyMatrix is null)
         {
             if (!_implicitIdentityWhenUnset)
@@ -1099,7 +1107,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         int outputFeatures = bias.Length;
 
         // Reshape bias from [outputFeatures] to [1, 1, outputFeatures]
-        var biasReshaped = bias.Reshape([1, 1, outputFeatures]);
+        var biasReshaped = Engine.Reshape(bias, [1, 1, outputFeatures]);
 
         // Tile across batch and node dimensions: [batchSize, numNodes, outputFeatures]
         var broadcast = Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
@@ -1114,11 +1122,11 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private Tensor<T> BatchedMatMul3Dx2D(Tensor<T> input3D, Tensor<T> weights2D, int batch, int rows, int cols, int outputCols)
     {
         // Flatten batch dimension: [batch, rows, cols] -> [batch * rows, cols]
-        var flattened = input3D.Reshape([batch * rows, cols]);
+        var flattened = Engine.Reshape(input3D, [batch * rows, cols]);
         // Standard 2D matmul: [batch * rows, cols] @ [cols, output_cols] -> [batch * rows, output_cols]
         var result = Engine.TensorMatMul(flattened, weights2D);
         // Unflatten: [batch * rows, output_cols] -> [batch, rows, output_cols]
-        return result.Reshape([batch, rows, outputCols]);
+        return Engine.Reshape(result, [batch, rows, outputCols]);
     }
 
     private Tensor<T>? _weightsVelocity;

@@ -55,7 +55,8 @@ public class ForecastMultiHorizonTests
         Assert.Equal(horizon, direct.Length);
         for (int h = 0; h < horizon; h++)
         {
-            Assert.True(double.IsFinite(direct[h]), $"direct forecast step {h} was not finite: {direct[h]}");
+            // net471 has no double.IsFinite; !IsNaN && !IsInfinity is the equivalent (both exist since .NET 2.0).
+            Assert.True(!double.IsNaN(direct[h]) && !double.IsInfinity(direct[h]), $"direct forecast step {h} was not finite: {direct[h]}");
         }
 
         // Recursive fallback (horizon != trained ForecastHorizon) must also produce a finite path of the right length.
@@ -63,7 +64,7 @@ public class ForecastMultiHorizonTests
         Assert.Equal(6, recursive.Length);
         for (int h = 0; h < 6; h++)
         {
-            Assert.True(double.IsFinite(recursive[h]), $"recursive forecast step {h} was not finite: {recursive[h]}");
+            Assert.True(!double.IsNaN(recursive[h]) && !double.IsInfinity(recursive[h]), $"recursive forecast step {h} was not finite: {recursive[h]}");
         }
     }
 
@@ -87,7 +88,7 @@ public class ForecastMultiHorizonTests
         Assert.Equal(5, forecast.Length);
         for (int h = 0; h < 5; h++)
         {
-            Assert.True(double.IsFinite(forecast[h]), $"AR recursive forecast step {h} was not finite: {forecast[h]}");
+            Assert.True(!double.IsNaN(forecast[h]) && !double.IsInfinity(forecast[h]), $"AR recursive forecast step {h} was not finite: {forecast[h]}");
         }
     }
 }

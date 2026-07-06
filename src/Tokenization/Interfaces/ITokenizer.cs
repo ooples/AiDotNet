@@ -6,6 +6,7 @@ namespace AiDotNet.Tokenization.Interfaces
     /// <summary>
     /// Interface for text tokenizers.
     /// </summary>
+    [AiDotNet.Configuration.YamlConfigurable("Tokenizer")]
     public interface ITokenizer
     {
         /// <summary>

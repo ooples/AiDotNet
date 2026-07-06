@@ -108,9 +108,16 @@ public class CACTIModel<T> : LatentDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new CACTIModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        // Lazy-preserving Clone (recipe from #1596): delegate to the predictor's and VAE's own Clone()
+        // instead of rebuild-at-default-scale + SetParameters(GetParameters()), which re-randomizes
+        // the clone's unmaterialized lazy weights.
+        return new CACTIModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     public override ModelMetadata<T> GetModelMetadata()

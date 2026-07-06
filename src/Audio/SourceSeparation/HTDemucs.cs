@@ -131,7 +131,21 @@ public class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
     {
         int len = 0; foreach (var s in sep.Sources.Values) if (s.Length > len) len = s.Length;
         var o = new Tensor<T>([len]);
-        foreach (var kvp in sep.Sources) { double v = vols.TryGetValue(kvp.Key, out var vol) ? vol : 1.0; for (int i = 0; i < kvp.Value.Length; i++) o[i] = NumOps.Add(o[i], NumOps.FromDouble(NumOps.ToDouble(kvp.Value[i]) * v)); }
+        foreach (var kvp in sep.Sources)
+        {
+            double v = vols.TryGetValue(kvp.Key, out var vol) ? vol : 1.0;
+            if (kvp.Value.Length == o.Length && kvp.Value.Rank == o.Rank)
+            {
+                var scaled = Engine.TensorMultiplyScalar(kvp.Value, NumOps.FromDouble(v));
+                o = Engine.TensorAdd(o, scaled);
+            }
+            else
+            {
+                T vT = NumOps.FromDouble(v);
+                for (int i = 0; i < kvp.Value.Length && i < o.Length; i++)
+                    o[i] = NumOps.Add(o[i], NumOps.Multiply(kvp.Value[i], vT));
+            }
+        }
         return o;
     }
 
@@ -149,7 +163,7 @@ public class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
             numStems: _options.NumStems, dropoutRate: _options.DropoutRate));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {

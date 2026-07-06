@@ -258,7 +258,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
     /// </summary>
     /// <param name="input">Input tensor containing frame and mask concatenated [B, C+1, H, W].</param>
     /// <returns>Inpainted frame.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Ensure 4D input
         bool hasBatch = input.Rank == 4;

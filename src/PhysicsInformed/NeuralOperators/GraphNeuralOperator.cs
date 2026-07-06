@@ -203,7 +203,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// </summary>
         /// <param name="input">Input tensor containing node features (and optional adjacency).</param>
         /// <returns>Predicted node features.</returns>
-        public override Tensor<T> Predict(Tensor<T> input)
+        protected override Tensor<T> PredictCore(Tensor<T> input)
         {
             if (input == null)
             {

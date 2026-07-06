@@ -444,6 +444,8 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         _tapeStep++;
 
         T momentum = NumOps.FromDouble(_options.Momentum);
@@ -688,18 +690,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         int baseDataLength = reader.ReadInt32();
         byte[] baseData = reader.ReadBytes(baseDataLength);
-
-        // Read base class data manually
-        using (var baseMs = new MemoryStream(baseData))
-        using (var baseReader = new BinaryReader(baseMs))
-        {
-            string typeName = baseReader.ReadString();
-            if (typeName != this.GetType().AssemblyQualifiedName)
-            {
-                throw new InvalidOperationException("Mismatched optimizer type during deserialization.");
-            }
-            baseReader.ReadString(); // Skip base options
-        }
+        base.Deserialize(baseData);
 
         string optionsJson = reader.ReadString();
         _options = JsonConvert.DeserializeObject<LARSOptimizerOptions<T, TInput, TOutput>>(optionsJson)

@@ -15,11 +15,11 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 // the standard NeuralNetworkModelTestBase instead — the network's real
 // contract (forward finite, training reduces loss, gradients flow, clone
 // preserves outputs) is already covered there.
-public class HopeNetworkTests : NeuralNetworkModelTestBase
+public class HopeNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [256];
     protected override int[] OutputShape => [256];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new HopeNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new HopeNetwork<float>();
 }

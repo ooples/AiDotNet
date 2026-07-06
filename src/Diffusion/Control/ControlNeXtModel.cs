@@ -135,8 +135,21 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new ControlNeXtModel<T>(controlType: _controlType, conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        // Clone the ACTUAL baseUNet/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
+        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
+        // shapes no longer lined up 1:1 and Clone diverged. Cloning the resolved baseUNet/VAE (+ same
+        // architecture/options/scheduler) makes the clone structurally identical.
+        var clone = new ControlNeXtModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            controlType: _controlType,
+            conditioner: _conditioner,
+            seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
         return clone;
     }
 

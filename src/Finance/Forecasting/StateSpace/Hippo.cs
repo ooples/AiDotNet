@@ -410,7 +410,7 @@ public class Hippo<T> : ForecastingModelBase<T>
     /// In native mode, it runs through our custom layer implementation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }

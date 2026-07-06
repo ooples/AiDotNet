@@ -272,7 +272,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         return warped;
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Expects concatenated frame pair [B, C*2, H, W]
         // Split into two frames and estimate flow

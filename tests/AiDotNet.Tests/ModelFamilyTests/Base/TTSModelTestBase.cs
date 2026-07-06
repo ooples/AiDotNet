@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// different text produces different audio, longer text produces longer output,
 /// empty input handling, and speaker consistency.
 /// </summary>
-public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
+public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // TTS INVARIANT: Different Text → Different Audio
@@ -37,7 +37,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
         int minLen = Math.Min(audio1.Length, audio2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(audio1[i] - audio2[i]) > 1e-10)
+            if (Math.Abs(ConvertToDouble(audio1[i]) - ConvertToDouble(audio2[i])) > 1e-10)
             {
                 anyDifferent = true;
                 break;
@@ -84,12 +84,12 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
                 $"TTS output[{i}] is NaN — numerical instability in synthesis.");
-            Assert.False(double.IsInfinity(output[i]),
+            Assert.False(double.IsInfinity(ConvertToDouble(output[i])),
                 $"TTS output[{i}] is Infinity — overflow in synthesis.");
-            Assert.True(Math.Abs(output[i]) < 1e6,
-                $"TTS output[{i}] = {output[i]:E4} is out of reasonable range.");
+            Assert.True(Math.Abs(ConvertToDouble(output[i])) < 1e6,
+                $"TTS output[{i}] = {ConvertToDouble(output[i]):E4} is out of reasonable range.");
         }
     }
 
@@ -117,3 +117,6 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
             Assert.Equal(out1[i], out2[i]);
     }
 }
+
+/// <summary>Double-precision default for <see cref="TTSModelTestBase{T}"/>.</summary>
+public abstract class TTSModelTestBase : TTSModelTestBase<double> { }

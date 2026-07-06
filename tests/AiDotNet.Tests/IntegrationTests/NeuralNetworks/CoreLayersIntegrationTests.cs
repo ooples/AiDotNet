@@ -542,6 +542,30 @@ public class CoreLayersIntegrationTests
         }
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task DropoutLayer_Metadata_PersistsDropoutRate()
+    {
+        await Task.Yield();
+        // Regression for #1679: DropoutLayer's dropoutRate constructor argument has no
+        // trainable-parameter backing, so it MUST be written to GetMetadata(). Without it,
+        // DeserializationHelper rebuilds the layer through the `DropoutLayer(double = 0.5)`
+        // constructor and falls back to the 0.5 DEFAULT, silently changing a configured
+        // 0.2-dropout model into a 0.5-dropout one whenever it is cloned through the eager
+        // (serialize/deserialize) DeepCopy path — the cloned model then trains with far more
+        // aggressive dropout than the original and diverges (EmotiVoice MoreData_ShouldNotDegrade).
+        var layer = new DropoutLayer<float>(0.2);
+        var metadata = layer.GetMetadata();
+
+        Assert.True(metadata.ContainsKey("DropoutRate"),
+            "DropoutLayer.GetMetadata() must persist 'DropoutRate' so clone/deserialize reconstructs the configured rate, not the 0.5 default.");
+        // precision 4 distinguishes the configured 0.2 from the 0.5 default while tolerating
+        // the float (T) round-trip (0.2f -> 0.20000000298...).
+        Assert.Equal(
+            0.2,
+            double.Parse(metadata["DropoutRate"], System.Globalization.CultureInfo.InvariantCulture),
+            precision: 4);
+    }
+
     #endregion
 
     #region FlattenLayer Tests

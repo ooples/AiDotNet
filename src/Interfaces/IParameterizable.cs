@@ -76,6 +76,44 @@ public interface IParameterizable<T, TInput, TOutput>
     // a regular virtual on both targets — net471 callers just access it
     // through the concrete type instead of the interface.
     IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
+
+    /// <summary>
+    /// Streaming counterpart to <see cref="SetParameters"/>: assigns the model's trainable
+    /// weight tensors from a sequence of per-tensor chunks supplied in the SAME order
+    /// <see cref="GetParameterChunks"/> yields them, WITHOUT ever materializing a flat
+    /// <c>Vector&lt;T&gt;</c> of all parameters. Foundation-scale models (&gt;2.1 B params) cannot
+    /// round-trip through the flat <see cref="SetParameters"/> path — the aggregate overflows
+    /// <c>Vector.Length</c>'s <see cref="int"/> contract and OOMs the host — so they override this
+    /// to consume one chunk at a time.
+    /// </summary>
+    /// <remarks>
+    /// Default implementation buffers the chunks into a single flat <c>Vector&lt;T&gt;</c> and
+    /// delegates to <see cref="SetParameters"/>. This is correct and back-compatible for tractable
+    /// models; only foundation-scale types need to override it to stay flat-free.
+    /// </remarks>
+    void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new System.ArgumentNullException(nameof(chunks));
+        var buffered = new List<Tensor<T>>();
+        long total = 0;
+        foreach (var chunk in chunks)
+        {
+            if (chunk is null)
+                throw new System.ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
+            buffered.Add(chunk);
+            total += chunk.Length;
+        }
+
+        var flat = new Vector<T>(checked((int)total));
+        int offset = 0;
+        foreach (var chunk in buffered)
+        {
+            var v = chunk.ToVector();
+            for (int i = 0; i < v.Length; i++) flat[offset++] = v[i];
+        }
+
+        SetParameters(flat);
+    }
 #endif
 
     /// <summary>

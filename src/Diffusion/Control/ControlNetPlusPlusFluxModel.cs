@@ -135,9 +135,29 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL predictor and VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/rewardWeight/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-
+        // unresolved Flux predictor/VAE, so after the source resolved its lazy layers the copy-on-write
+        // share no longer lined up 1:1 and the clone diverged. Cloning the resolved predictor/VAE makes
+        // the clone structurally identical (the control encoder is then transferred by the share below).
         var clone = new ControlNetPlusPlusFluxModel<T>(
-            controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: null);
+        // #1624: O(1)-until-write copy-on-write parameter share (avoids the full-model flatten copy that
+        // OOMs the 16 GB runner). Foundation-scale (12B FLUX) fallback when the share doesn't line up 1:1:
+        // restore the base predictor/VAE through the STREAMING chunked API (never materializes a flat 12B
+        // Vector<T> — that flatten is the #1624 clone OOM). The inherited GetParameterChunks() covers only
+        // predictor/VAE/conditioner, so restore the small conv control encoder via its own flat API after.
+        // (On net471 the chunked base restore no-ops — but net471 does not run a 12B FLUX predictor.)
+        if (!clone.TryShareParametersFrom(this))
+        {
+            clone.SetParameterChunks(GetParameterChunks());
+            clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
+        }
         return clone;
     }
 

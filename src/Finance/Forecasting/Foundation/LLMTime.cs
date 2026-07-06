@@ -214,7 +214,7 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
     }
@@ -240,6 +240,27 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     public override void UpdateParameters(Vector<T> gradients)
     {
         // Parameters are updated through the optimizer in Train()
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// LLMTime's real forward (<see cref="ForwardNative"/>) instance-normalizes the series and
+    /// promotes a rank-1 [context] input to a rank-2 [1, context] batch before running the layer
+    /// stack, whose leading ReshapeLayer expects a per-sample element count of <c>context</c>. The
+    /// base layer-by-layer walk skips that preprocessing, so a rank-1 probe input reaches the
+    /// ReshapeLayer as [context] (read as <c>context</c> samples of 1 element) and throws an
+    /// element-count mismatch. Apply the same preprocessing here so the activations reflect the
+    /// real forward path.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+        return base.GetNamedLayerActivations(current);
     }
 
     /// <inheritdoc/>
@@ -453,7 +474,7 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
             current = layer.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
     }

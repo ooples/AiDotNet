@@ -118,6 +118,25 @@ public class ResidualLayer<T> : LayerBase<T>
     public override bool SupportsTraining => _innerLayer?.SupportsTraining ?? false;
 
     /// <summary>
+    /// A residual block is only fully shape-resolved once its WRAPPED inner layer is.
+    /// </summary>
+    /// <remarks>
+    /// The base check only inspects this layer's own InputShape/OutputShape, which a
+    /// residual block resolves from its inner layer's declared dims at construction —
+    /// so the base would report <c>true</c> while the inner layer's lazy weight dims are
+    /// still unresolved. That makes the model's lazy-shape chain-walk (driven by
+    /// <c>ParameterCount</c> / Clone's parameter I/O) SKIP this layer, leaving the inner
+    /// layer lazy: ParameterCount then reports the inner's stale count during a clone but
+    /// its real materialized count after a forward, so Clone sizes the copy wrong and
+    /// throws "Expected N, but got M" (the #1605 lazy-preserving-Clone class of bug).
+    /// Reporting unresolved until the inner layer resolves lets the chain-walk call
+    /// <see cref="OnFirstForward"/>, which propagates resolution into the inner layer.
+    /// </remarks>
+    public override bool IsShapeResolved =>
+        base.IsShapeResolved
+        && (_innerLayer is not LayerBase<T> innerLayerBase || innerLayerBase.IsShapeResolved);
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     /// <value>
@@ -167,7 +186,7 @@ public class ResidualLayer<T> : LayerBase<T>
 
             // Cache state for backward pass only during training
             // Skip this expensive download during inference (50% overhead reduction)
-            if (IsTrainingMode)
+            if (ShouldCacheForBackward) // #1668: skip backward caches in inference (arena safety)
             {
                 _lastInput = input;
                 _lastInnerOutput = innerOutput;
@@ -179,8 +198,8 @@ public class ResidualLayer<T> : LayerBase<T>
             var inputCpu = input;
             var innerOutputCpu = _innerLayer.Forward(inputCpu);
 
-            // Cache state for backward pass only during training
-            if (IsTrainingMode)
+            // Cache state for backward pass only when an eager Backward will read it (#1668).
+            if (ShouldCacheForBackward)
             {
                 _lastInput = inputCpu;
                 _lastInnerOutput = innerOutputCpu;
@@ -200,8 +219,8 @@ public class ResidualLayer<T> : LayerBase<T>
             // No inner layer - input passes through
             result = input;
 
-            // Cache state for backward pass only during training
-            if (IsTrainingMode)
+            // Cache state for backward pass only when an eager Backward will read it (#1668).
+            if (ShouldCacheForBackward)
             {
                 _lastInput = input;
                 _lastInnerOutput = null;
@@ -248,6 +267,13 @@ public class ResidualLayer<T> : LayerBase<T>
         : base(new[] { -1 }, new[] { -1 }, activationFunction ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
+        // Register the inner layer as a sub-layer so gradient-tape training collects
+        // its parameters. TapeTrainingStep.CollectParameters recurses through
+        // GetSubLayers(); without this the inner layer's weights are NEVER added to
+        // the optimizer's parameter set and the residual block trains as a no-op
+        // (the inner conv/dense stays at its random init). All learning in a residual
+        // block happens in the inner layer, so this is essential, not optional.
+        if (innerLayer != null) RegisterSubLayer(innerLayer);
         ValidateInnerLayer();
     }
 
@@ -282,6 +308,9 @@ public class ResidualLayer<T> : LayerBase<T>
         : base(new[] { -1 }, new[] { -1 }, vectorActivation ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
+        // See the scalar-activation constructor: register the inner layer so the
+        // gradient tape trains it (otherwise the residual block is a training no-op).
+        if (innerLayer != null) RegisterSubLayer(innerLayer);
         ValidateInnerLayer();
     }
 
@@ -292,6 +321,25 @@ public class ResidualLayer<T> : LayerBase<T>
     {
         var shape = input.Shape.ToArray();
         ResolveShapes(shape, shape);
+
+        // Propagate shape resolution into the wrapped inner layer during a
+        // shape-only chain-walk (ParameterCount / Clone's lazy-preserving
+        // parameter I/O). Without this, ResidualLayer reports its inner
+        // layer's UNresolved ParameterCount during shape-only resolution but
+        // its real (materialized) count after a forward — so Clone sizes the
+        // copy from the stale count and SetParameters throws "Expected N, but
+        // got M" (the #1605 lazy-preserving-Clone class of bug). A residual
+        // block requires its inner layer to be shape-preserving, so the
+        // inner layer's input shape is exactly this layer's input shape.
+        // On a REAL forward the inner layer is materialized by
+        // _innerLayer.Forward in Forward(), so we only need to drive the
+        // shape-only resolution here.
+        if (IsResolvingShapesOnly
+            && _innerLayer is LayerBase<T> innerLayerBase
+            && !innerLayerBase.IsShapeResolved)
+        {
+            innerLayerBase.ResolveShapesOnly(shape);
+        }
     }
 
     /// <summary>
@@ -373,7 +421,14 @@ public class ResidualLayer<T> : LayerBase<T>
     /// </remarks>
     public void SetInnerLayer(ILayer<T> innerLayer)
     {
+        // Unregister the layer being replaced first — RegisterSubLayer APPENDS without
+        // dedup, so without this a post-construction SetInnerLayer would leave the old
+        // inner layer in GetSubLayers() alongside the new one, and gradient-tape training
+        // would collect (and try to optimize) the stale layer's parameters too.
+        if (_innerLayer != null) UnregisterSubLayer(_innerLayer);
         _innerLayer = innerLayer;
+        // Register so gradient-tape training collects the new inner layer's params.
+        if (innerLayer != null) RegisterSubLayer(innerLayer);
         ValidateInnerLayer();
     }
 
@@ -405,9 +460,26 @@ public class ResidualLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
-        _lastInnerOutput = _innerLayer?.Forward(input);
-        var result = _lastInnerOutput == null ? input : Engine.TensorAdd(input, _lastInnerOutput);
+        // #1668: gate backward caches; forward uses the local innerOutput (chained).
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
+        var innerOutput = _innerLayer?.Forward(input);
+
+        // A residual block's inner branch is shape-preserving by contract (out = x + F(x)), so the
+        // element count always matches the skip. But some inner layers legitimately return the same
+        // data in a different RANK/layout — e.g. ConvolutionalLayer reshapes a rank-2 [B, C] input to
+        // [B, C, 1, 1] internally and returns it rank-4, while the skip stays rank-2. Reconcile the
+        // inner output back to the skip's shape before the identity add so residual-wrapped conv (and
+        // any rank-normalizing inner layer) composes instead of throwing "shapes must match".
+        if (innerOutput is not null
+            && innerOutput.Length == input.Length
+            && !System.Linq.Enumerable.SequenceEqual(innerOutput._shape, input._shape))
+        {
+            innerOutput = Engine.Reshape(innerOutput, input._shape);
+        }
+
+        _lastInnerOutput = cacheBwd ? innerOutput : null;
+        var result = innerOutput == null ? input : Engine.TensorAdd(input, innerOutput);
 
         return ApplyActivation(result);
     }
@@ -479,6 +551,30 @@ public class ResidualLayer<T> : LayerBase<T>
         var metadata = base.GetMetadata();
         if (_innerLayer != null)
         {
+            // Full round-trip of an ARBITRARY inner layer — not just a DenseLayer.
+            // Store the inner layer's registry type name (LayerTypes is keyed by
+            // Type.Name, so GetType().Name is the right key), its full I/O shapes,
+            // and its OWN metadata nested under an "Inner__" prefix. A scalar
+            // InnerInputSize/InnerOutputSize cannot capture a ConvolutionalLayer's
+            // FilterSize/Stride/Padding/channels, so a ResidualLayer wrapping a Conv
+            // previously deserialized as a wrong-sized DenseLayer and Clone()/DeepCopy()
+            // threw "Expected N parameters, but got M" (the #1605 lazy-preserving-Clone
+            // class of bug). The "Inner__" prefix keeps the inner layer's keys (e.g.
+            // its own ScalarActivationType) from colliding with this layer's residual
+            // activation metadata.
+            metadata["InnerLayerTypeName"] = _innerLayer.GetType().Name;
+            metadata["InnerLayerInputShape"] = string.Join(",", _innerLayer.GetInputShape());
+            metadata["InnerLayerOutputShape"] = string.Join(",", _innerLayer.GetOutputShape());
+            if (_innerLayer is LayerBase<T> innerLayerBase)
+            {
+                foreach (var kv in innerLayerBase.GetMetadata())
+                {
+                    metadata["Inner__" + kv.Key] = kv.Value;
+                }
+            }
+
+            // Legacy scalar fields — kept so older saved models that wrapped a
+            // DenseLayer still deserialize via the fallback path below.
             metadata["InnerLayerType"] = _innerLayer.GetType().AssemblyQualifiedName ?? _innerLayer.GetType().FullName ?? string.Empty;
             metadata["InnerInputSize"] = _innerLayer.GetInputShape()[0].ToString();
             metadata["InnerOutputSize"] = _innerLayer.GetOutputShape()[0].ToString();

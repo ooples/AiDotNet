@@ -300,22 +300,24 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// to the next expert, with the last one making the final decision.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Support any sequence length by dynamically adapting
-        // Attention mechanisms naturally handle variable-length sequences
-        // If input sequence is longer than configured, layers will handle it internally
-        var current = input;
-        foreach (var layer in Layers)
+        // Support any sequence length by dynamically adapting (attention layers handle variable length
+        // internally). Wrapped in the #1622 verify-then-trust compiled gate; no-op unless engaged.
+        return Accelerate(input, () =>
         {
-            current = layer.Forward(current);
-        }
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
 
-        return current;
+            return current;
+        });
     }
 
     /// <summary>

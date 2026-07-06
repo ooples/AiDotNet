@@ -1,11 +1,88 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using System.Runtime;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
+
+/// <summary>
+/// Process-wide lock guarding the teardown LOH-compaction critical section, which mutates the
+/// PROCESS-GLOBAL <see cref="System.Runtime.GCSettings.LargeObjectHeapCompactionMode"/>. It is a
+/// NON-generic holder on purpose: a static field inside a generic base (e.g.
+/// <c>NeuralNetworkModelTestBase&lt;T&gt;</c>) gets a SEPARATE instance per closed type
+/// (<c>&lt;float&gt;</c> vs <c>&lt;double&gt;</c>), which would let parallel teardowns across type
+/// boundaries enter the "lock" concurrently and race on the global GC flag. Every model-family test
+/// base (NeuralNetworks + Diffusion) serializes on this single object.
+/// </summary>
+internal static class ModelFamilyTestGcGate
+{
+    internal static readonly object LohCompaction = new();
+
+    /// <summary>
+    /// Between-test memory reclaim shared by EVERY model-family test base (NeuralNetworks, Diffusion,
+    /// Classification, Regression, TimeSeries, Clustering). Two retention sources let committed memory
+    /// accumulate across a shard's model classes until a heavy shard OOM-kills the 16 GB CI runner even
+    /// though each model is disposed:
+    /// <list type="number">
+    /// <item><b>InferenceWeightCache</b> — fused-MlpForward / SgemmWithCachedB / Conv2D-kernel packs key
+    /// derived weight forms by the weight ARRAY's object identity, pinning disposed models' tensors.</item>
+    /// <item><b>LOH not compacted</b> — plain GC.Collect() sweeps but does not compact the LOH; under
+    /// DOTNET_GCHeapHardLimit (the CI cap) committed-but-free LOH counts against the limit.</item>
+    /// </list>
+    /// This clears the cache and runs a compacting Gen-2 collect, serialized on
+    /// <see cref="LohCompaction"/> because <c>GCSettings.LargeObjectHeapCompactionMode</c> is
+    /// process-global. Pure hygiene — changes no assertion, scale, iteration count, or timeout. On the
+    /// light classical-ML bases the heap is small, so the compacting collect is cheap.
+    /// </summary>
+    internal static void ReclaimBetweenTests()
+    {
+        // Drop process-wide weight-derived caches that pin the disposed model's tensors.
+        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
+
+        // #1706: foundation-scale models auto-enable weight streaming, registering their weights with
+        // the process-global WeightRegistry singleton, which is NOT cleared when the model is
+        // disposed. The next streaming model's ctor then throws "WeightRegistry.Configure: existing
+        // streaming pool has N registered entries" (and a timed-out streaming test leaves a partial
+        // registration behind too). Reset the registry here — in the between-tests hook EVERY
+        // model-family base already calls — after every test. This is the
+        // generic cross-test fix for all foundation-scale streaming models (Phi3Vision, SmolVLM,
+        // GrokVision, …) across every shard, replacing per-model opt-ins. It is unconditional so a
+        // broken registry state cannot make the readable-report pre-check fail closed.
+        lock (LohCompaction)
+        {
+            // Reset the process-global WeightRegistry singleton under the SAME lock as the LOH
+            // compaction: with parallel test collections enabled (xunit.runner.json), light-model
+            // teardowns run concurrently and would otherwise race on this global reset. Best-effort —
+            // a reset failure must not mask the test's own result (the contaminated registry surfaces
+            // on the next streaming ctor), but log it rather than swallowing silently so a genuine
+            // pool error is diagnosable.
+            try
+            {
+                NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ReclaimBetweenTests: ResetWeightStreamingForTests failed: {ex}");
+                System.Console.Error.WriteLine($"[ReclaimBetweenTests] ResetWeightStreamingForTests failed: {ex.Message}");
+            }
+
+            // First pass: compacting Gen-2 + LOH reclaims everything unreachable, including the
+            // just-disposed model's weight tensors.
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+
+            // Second pass: reclaim finalizer-released memory (pool return paths) + any LOH allocations
+            // made by finalizers.
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
+    }
+}
 
 /// <summary>
 /// Base test class for neural network models implementing INeuralNetworkModel&lt;double&gt;.
@@ -16,6 +93,31 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 {
     /// <summary>Numeric operations for the model's element type <typeparamref name="T"/>.</summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// #1706/#1305: process-wide gate (cap = 1) that serializes the heaviest NeuralNetworks
+    /// ModelFamily tests so a slow forward/backward runs UNCONTENDED. These models fit their
+    /// per-test <c>[Fact(Timeout)]</c> budget in isolation (e.g. SmolVLM ~104s, SPLADE ~93s,
+    /// SimCSE ~53s) — but the determinism mode pins BLAS to a single thread, and xunit runs the
+    /// shard's tests in parallel, so under core contention they slip past the envelope and time out
+    /// (the #1305 "fits in isolation, fails in the shard" failure). Serializing only the heavy ones
+    /// keeps every light test fully parallel. Mirrors <c>DiffusionModelTestBase</c>'s heavy gate.
+    /// </summary>
+    private static readonly System.Threading.SemaphoreSlim _heavyTestGate = new(1, 1);
+
+    /// <summary>
+    /// Per-instance flag: whether THIS test acquired <see cref="_heavyTestGate"/>, so DisposeAsync
+    /// only releases when it actually acquired (no release-without-acquire if init fails earlier).
+    /// </summary>
+    private bool _heavyGateAcquired;
+
+    /// <summary>
+    /// Override to <c>true</c> on a model whose forward/backward fits its per-test timeout only when
+    /// run uncontended; it then serializes through <see cref="_heavyTestGate"/>. Default <c>false</c>
+    /// keeps light models fully parallel. (Deferred, not skipped — a model graduates back to
+    /// <c>false</c> once its forward is fast enough to survive parallel contention.)
+    /// </summary>
+    protected virtual bool RequiresHeavySerialization => false;
 
     protected abstract INeuralNetworkModel<T> CreateNetwork();
 
@@ -134,8 +236,30 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual int MoreDataLongIterations => 200;
 
     /// <inheritdoc />
-    public virtual Task InitializeAsync()
+    public virtual async Task InitializeAsync()
     {
+        // #1706/#1305: heavy models serialize so their (single-threaded-BLAS) forward/backward runs
+        // uncontended and fits the per-test timeout. Acquired before the determinism setup so the
+        // entire test body is covered; released in DisposeAsync.
+        if (RequiresHeavySerialization)
+        {
+            await _heavyTestGate.WaitAsync().ConfigureAwait(false);
+            _heavyGateAcquired = true;
+        }
+
+        // #1706: start each streaming-scale test with a clean process-global WeightRegistry. The
+        // DisposeAsync reset below does NOT run when the prior test TIMED OUT (xUnit abandons the
+        // test thread, so IAsyncLifetime teardown is skipped), leaving its 1 partially-registered
+        // streaming entry behind — the next test's ctor then throws "existing streaming pool has N
+        // registered entries". Resetting here, before this test constructs its model, recovers from a
+        // timed-out predecessor too. Safe for the same reason as the DisposeAsync reset: every
+        // streaming-scale test is serialized (heavy gate acquired just above, or the
+        // FoundationScaleSerial collection's DisableParallelization), so nothing else is running.
+        if (ResetsWeightStreamingBetweenTests)
+        {
+            NeuralNetworkBase<T>.ResetWeightStreamingForTests();
+        }
+
         // Bit-exact reproducibility for per-test loss / parameter assertions.
         // OpenBLAS's multi-threaded GEMM partitions K across native threads
         // and sums partial products in thread-completion order — fixed via
@@ -175,7 +299,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // test's actual subject. Reset clears the registry + disposes
         // the pool so each test starts from a clean global state.
         AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -184,13 +307,78 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// tensor allocations that, without GC pressure between xunit test methods,
     /// stack up in the shared-process runner and OOM before the job ever finishes.
     /// </summary>
+    /// <remarks>
+    /// Two retention sources made the heavy NeuralNetworks shards (O-R, etc.)
+    /// accumulate committed memory across model classes until the 16 GB CI runner
+    /// died mid-shard ("runner has received a shutdown signal"), even though each
+    /// model is <c>using</c>-disposed:
+    /// <list type="number">
+    /// <item><b>InferenceWeightCache</b> \u2014 the fused-MlpForward / SgemmWithCachedB /
+    /// Conv2D-kernel cache keys derived weight forms by the weight ARRAY's object
+    /// identity, so it pins the just-disposed model's weight tensors and they can't
+    /// be collected. Cleared here.</item>
+    /// <item><b>LOH not compacted</b> \u2014 model weight/activation arrays are far above
+    /// the 85 KB LOH threshold; plain <see cref="GC.Collect()"/> sweeps the LOH but
+    /// leaves it fragmented/committed. Under <c>DOTNET_GCHeapHardLimit</c> (the CI
+    /// 16 GB cap) committed-but-free LOH counts against the limit, so the runner OOMs
+    /// even though the live set is small. A compacting Gen-2 collect returns it.</item>
+    /// </list>
+    /// This is pure between-test memory hygiene \u2014 it changes no assertion, scale,
+    /// iteration count, or timeout. Mirrors the proven DiffusionModelTestBase teardown.
+    /// </remarks>
     public virtual Task DisposeAsync()
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        try
+        {
+            ModelFamilyTestGcGate.ReclaimBetweenTests();
+
+            // #1706: foundation-scale models auto-enable weight streaming, which registers their
+            // weights with the process-global WeightRegistry singleton. That registry is NOT cleared
+            // when the model goes out of scope, so the NEXT streaming model's ctor hits
+            // "WeightRegistry.Configure: existing streaming pool has N registered entries" (observed
+            // across sequential Phi3Vision tests). Reset it between tests using the sanctioned
+            // test-only reset. Safe only because every streaming-scale test is serialized — via the
+            // heavy gate (RequiresHeavySerialization) OR the FoundationScaleSerial collection
+            // (DisableParallelization = nothing else runs concurrently) — so the reset can never race
+            // another model's streaming forward. Not swallowed: a reset failure means the next
+            // streaming test would run against a contaminated singleton, which must surface here.
+            if (ResetsWeightStreamingBetweenTests)
+            {
+                NeuralNetworkBase<T>.ResetWeightStreamingForTests();
+            }
+        }
+        finally
+        {
+            // Release the heavy gate if this test acquired it, so the next heavy test can run.
+            if (_heavyGateAcquired)
+            {
+                _heavyTestGate.Release();
+                _heavyGateAcquired = false;
+            }
+        }
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Whether <see cref="InitializeAsync"/> / <see cref="DisposeAsync"/> reset the process-global
+    /// weight-streaming registry around this test. Defaults to <c>false</c>; ONLY foundation-scale
+    /// models that auto-enable weight streaming (the large VLMs — Phi3Vision, SmolVLM) override it
+    /// to <c>true</c>, so the reset never runs for the small/non-streaming models that make up the
+    /// rest of the suite (keeping their behaviour unchanged). Only override when the test is
+    /// serialized — via the heavy gate or the <c>FoundationScaleSerial</c> collection — because the
+    /// reset must not run concurrently with another model's streaming forward (#1706).
+    /// </summary>
+    /// <remarks>
+    /// This recovers a clean registry between sequential streaming tests that COMPLETE normally, and
+    /// protects a later streaming model from a prior one's leftover entries. It cannot fully clean up
+    /// after a test that TIMES OUT: xUnit only abandons the timed-out test thread, which keeps running
+    /// its (multi-minute) forward and re-registering weights into the global registry, so a reset
+    /// before the next test races that still-live thread. The large VLMs that opt in here are tagged
+    /// <c>HeavyTimeout</c> precisely because their forwards exceed the 120 s budget — so their
+    /// residual registry errors are a downstream symptom of that (deferred) timeout, not a separate
+    /// unfixed leak.
+    /// </remarks>
+    protected virtual bool ResetsWeightStreamingBetweenTests => false;
 
     /// <summary>
     /// Tolerance for the MoreData test. Models with non-continuous outputs
@@ -280,9 +468,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
-        // Measure initial loss (MSE)
+        // Measure initial loss (model's objective — MSE for most families, the model's own loss for
+        // raw-logit cross-entropy LMs where MSE is meaningless; see MeasureLoss).
         var initialOutput = network.Predict(input);
-        double initialLoss = ComputeMSE(initialOutput, target);
+        double initialLoss = MeasureLoss(network, initialOutput, target);
 
         // Train
         for (int i = 0; i < TrainingIterations * 3; i++)
@@ -290,7 +479,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         // Measure final loss
         var finalOutput = network.Predict(input);
-        double finalLoss = ComputeMSE(finalOutput, target);
+        double finalLoss = MeasureLoss(network, finalOutput, target);
 
         if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
         {
@@ -722,9 +911,22 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var clonedOutput = cloned.Predict(input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
+        // Clone preserves weights exactly, but the two Predict calls don't take a bit-identical compute
+        // path: the original's forward populates cached/compiled plans (e.g. SIMD pre-packed weights),
+        // while the clone runs them fresh, so float32 results differ at the ~1e-7 (float-epsilon) level.
+        // A re-randomized / weight-dropping clone differs by O(1), not O(1e-7), so a dtype-appropriate
+        // relative+absolute tolerance (torch.allclose-style) still catches real Clone bugs while not
+        // demanding sub-float-epsilon equality. double stays strict (its path diff is ~1e-13).
+        bool isFloat = typeof(T) == typeof(float);
+        double atol = isFloat ? 1e-4 : 1e-10;
+        double rtol = isFloat ? 1e-3 : 0.0;
         for (int i = 0; i < original.Length; i++)
-            Assert.True(Math.Abs(ConvertToDouble(original[i]) - ConvertToDouble(clonedOutput[i])) < 1e-10,
-                $"Clone output[{i}] differs: original={original[i]}, cloned={clonedOutput[i]}");
+        {
+            double a = ConvertToDouble(original[i]);
+            double b = ConvertToDouble(clonedOutput[i]);
+            Assert.True(Math.Abs(a - b) <= atol + rtol * Math.Abs(a),
+                $"Clone output[{i}] differs beyond {(isFloat ? "float" : "double")} tolerance: original={original[i]}, cloned={clonedOutput[i]}");
+        }
     }
 
     // =====================================================
@@ -950,12 +1152,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         for (int i = 0; i < shortIters; i++)
             network1.Train(input, target);
-        double lossShort = ComputeMSE(network1.Predict(input), target);
+        double lossShort = MeasureLoss(network1, network1.Predict(input), target);
 
         // Train network2 for the "long" iteration count (default 200)
         for (int i = 0; i < longIters; i++)
             network2.Train(input2, target2);
-        double lossLong = ComputeMSE(network2.Predict(input2), target2);
+        double lossLong = MeasureLoss(network2, network2.Predict(input2), target2);
 
         // Training divergence → NaN loss is the exact failure mode this invariant
         // should catch. Fail fast instead of skipping the assertion.
@@ -990,6 +1192,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual double TrainingErrorMultiplier => 3.0;
 
+    /// <summary>
+    /// True when <see cref="TrainingError_ShouldNotExceedTestError"/> is a
+    /// load-bearing invariant for this model. Override to false for models whose
+    /// <c>Train()</c> is NOT supervised gradient-descent fitting of a fixed
+    /// (input, target) pair — e.g. HTM, whose Hebbian spatial-pooler / temporal-
+    /// memory learning plus homeostatic boosting continuously re-codes the
+    /// input's sparse representation (Cui, Ahmad &amp; Hawkins 2017), so the model
+    /// cannot — and by design does not — fit a fixed training target tighter than
+    /// an arbitrary test target. This is the same paper-faithful rationale the HTM
+    /// test applies to Training_ShouldReduceLoss / MoreData / ScaledInput. Narrow
+    /// opt-out (mirrors NEAT's <c>OptimizerStepParamL2InvariantApplicable</c>) so
+    /// gradient-trained models keep asserting this invariant. Default true.
+    /// </summary>
+    protected virtual bool TrainingErrorInvariantApplicable => true;
+
     [Fact(Timeout = 120000)]
     public async Task TrainingError_ShouldNotExceedTestError()
     {
@@ -998,19 +1215,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
+        if (!TrainingErrorInvariantApplicable) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
         for (int i = 0; i < TrainingIterations * 3; i++)
             network.Train(input, target);
 
-        double trainMSE = ComputeMSE(network.Predict(input), target);
+        double trainMSE = MeasureLoss(network, network.Predict(input), target);
         var testInput = CreateRandomTensor(InputShape, ModelTestHelpers.CreateSeededRandom(99));
         // CreateRandomTargetTensor for the same reason the trainTarget
         // a few lines above uses it — type-constrained families (NER /
         // CRF) need legal label values.
         var testTarget = CreateRandomTargetTensor(EffectiveOutputShape, ModelTestHelpers.CreateSeededRandom(99));
-        double testMSE = ComputeMSE(network.Predict(testInput), testTarget);
+        double testMSE = MeasureLoss(network, network.Predict(testInput), testTarget);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
         {
@@ -1145,6 +1363,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual double OptimizerStepL2UpperBound => 2.0;
 
+    /// <summary>
+    /// True when the single-step parameter-L2 bound applies. The invariant assumes a
+    /// GRADIENT-OPTIMIZER step on a FIXED-topology network, where one update should not
+    /// move the weight-vector norm more than ~2×. It does NOT apply to topology-AUGMENTING
+    /// evolutionary models (NEAT, Stanley &amp; Miikkulainen 2002): there is no "optimizer
+    /// step" — one Train call evolves a population for many generations and ADDS
+    /// connections/nodes by design, so <c>GetParameters()</c> grows in LENGTH and the L2
+    /// norm necessarily increases with the complexifying genome. Bounding it to 2× would
+    /// contradict the paper's core "Augmenting Topologies" mechanism. Override to
+    /// <c>false</c> for such models (their weight-magnitude stability is still exercised by
+    /// the bounded per-connection weight clamp in the model itself, and convergence by
+    /// <see cref="Training_ShouldReduceLoss"/> / <c>LossStrictlyDecreasesOnMemorizationTask</c>).
+    /// </summary>
+    protected virtual bool OptimizerStepParamL2InvariantApplicable => true;
+
     [Fact(Timeout = 120000)]
     public async Task OptimizerStep_ParamL2_DoesNotExplode()
     {
@@ -1153,6 +1386,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
+        if (!OptimizerStepParamL2InvariantApplicable) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -1422,6 +1656,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             mse += diff * diff;
         }
         return mse / len;
+    }
+
+    /// <summary>
+    /// Trajectory-loss metric for the training-invariant tests. For models whose head emits RAW LOGITS
+    /// trained with cross-entropy-with-logits (RWKV4 / Eagle / Finch and any other model that wires
+    /// <see cref="CrossEntropyWithLogitsLoss{T}"/>), MSE against the (random) target is a meaningless
+    /// signal: it GROWS as the correct-class logits grow during HEALTHY training, so legitimately
+    /// successful training reads as "loss increased / degraded". For those models we measure the
+    /// model's OWN training objective — which decreases as the model is optimized, the correct
+    /// semantics for "training reduces loss" and "more data should not degrade". Every other family
+    /// keeps <see cref="ComputeMSE"/> byte-identical, since this branch only triggers when the model's
+    /// loss function is cross-entropy-with-logits.
+    /// </summary>
+    protected double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> output, Tensor<T> target)
+    {
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce)
+        {
+            int len = Math.Min(output.Length, target.Length);
+            if (len == 0) return double.NaN;
+            var predicted = new Vector<T>(len);
+            var actual = new Vector<T>(len);
+            for (int i = 0; i < len; i++) { predicted[i] = output[i]; actual[i] = target[i]; }
+            return ConvertToDouble(ce.CalculateLoss(predicted, actual));
+        }
+        return ComputeMSE(output, target);
     }
 
     /// <summary>

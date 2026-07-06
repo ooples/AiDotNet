@@ -141,7 +141,7 @@ namespace AiDotNet.NeuralNetworks
             ILossFunction<T>? lossFunction = null,
             double maxGradNorm = 1.0,
             FastTextOptions? options = null)
-            : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), maxGradNorm)
+            : base(architecture, lossFunction ?? new CategoricalCrossEntropyLoss<T>(), maxGradNorm)
         {
             _options = options ?? new FastTextOptions();
             Options = _options;
@@ -150,7 +150,16 @@ namespace AiDotNet.NeuralNetworks
             _bucketSize = bucketSize;
             _embeddingDimension = embeddingDimension;
             _maxTokens = maxTokens;
-            _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
+            // FastText's head is a vocab-wide SoftmaxActivation; its training objective is
+            // the multinomial cross-entropy over classes (Joulin et al. 2016 "Bag of Tricks"
+            // minimizes softmax NLL). The previous BinaryCrossEntropyLoss treats each of the
+            // 10000 softmax outputs as an INDEPENDENT binary target, so its gradient fights
+            // the softmax's sum-to-one constraint (it pushes every class toward ~0.5, which a
+            // distribution can never satisfy) — the loss barely moves and, with more steps,
+            // the conflicting updates degrade it (the LossStrictlyDecreases / MoreData
+            // failures). CategoricalCrossEntropyLoss is the correct softmax-classifier pairing
+            // (codebase convention: SoftmaxActivation + CategoricalCrossEntropyLoss).
+            _lossFunction = lossFunction ?? new CategoricalCrossEntropyLoss<T>();
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
             InitializeLayersCore(false);

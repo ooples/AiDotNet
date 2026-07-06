@@ -537,7 +537,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
                 "Eigenbasis or Laplacian must be set via SetEigenbasis or SetLaplacian before calling Forward.");
         }
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         bool hasBatch = input.Rank == 3;
         int numVertices = hasBatch ? input.Shape[1] : input.Shape[0];

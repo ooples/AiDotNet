@@ -164,17 +164,8 @@ public class SnapVideoModel<T> : VideoDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: 2048,
-            numLayers: 28,
-            numHeads: 16,
-            patchSize: 2,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        return new SnapVideoModel<T>(
-            predictor: clonedPredictor,
+                return new SnapVideoModel<T>(
+            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

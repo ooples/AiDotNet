@@ -123,6 +123,13 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0,
         EfficientNetOptions? options = null)
+        // CategoricalCrossEntropyLoss (the MultiClassClassification default) expects softmax
+        // PROBABILITIES. The classification head ends in a SoftmaxActivation DenseLayer (per
+        // CreateDefaultEfficientNetLayers, matching Tan & Le 2019 §3 and the codebase classifier
+        // convention used by VGG et al.), so loss and head are consistent. The previous head used
+        // IdentityActivation (raw logits) against this probability loss, producing a wrong gradient
+        // (differentiated as if the logits were probabilities) that diverged training
+        // (Training_ShouldReduceLoss saw 0.33 -> 7094).
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         _options = options ?? new EfficientNetOptions();

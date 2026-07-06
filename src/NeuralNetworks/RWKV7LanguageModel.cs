@@ -120,15 +120,18 @@ public class RWKV7LanguageModel<T> : NeuralNetworkBase<T>
 
     #region NeuralNetworkBase Overrides
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
-        var output = input;
-        for (int i = 0; i < Layers.Count; i++)
+        return Accelerate(input, () =>
         {
-            output = Layers[i].Forward(output);
-        }
-        return output;
+            var output = input;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                output = Layers[i].Forward(output);
+            }
+            return output;
+        });
     }
 
     public override void UpdateParameters(Vector<T> gradients)

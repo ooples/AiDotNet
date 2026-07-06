@@ -3,6 +3,7 @@ using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -66,6 +67,7 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
         : base(random)
     {
         _options = options ?? new FinancialAutoMLOptions<T>();
+        _options.Architecture ??= CreateDefaultArchitecture();
         _options.Validate();
 
         if (_options.SearchStrategy != AutoMLSearchStrategy.RandomSearch)
@@ -100,6 +102,12 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
             SetCandidateModels(GetDefaultModelsForDomain(_options.Domain));
         }
     }
+
+    private static NeuralNetworkArchitecture<T> CreateDefaultArchitecture() => new(
+        inputType: InputType.OneDimensional,
+        taskType: NeuralNetworkTaskType.Regression,
+        inputSize: 16,
+        outputSize: 1);
 
     /// <summary>
     /// Runs the AutoML search loop.

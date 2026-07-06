@@ -352,7 +352,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         var videoLatentShape = new[] { 1, LatentChannels, effectiveNumFrames, latentHeight, latentWidth };
 
         // Generate initial noise for all frames
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(videoLatentShape, rng);
 
         // Set up scheduler
@@ -421,7 +421,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         Tensor<T> augmentedImage;
         if (noiseAugStrength > 0)
         {
-            var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+            var rng = CreateInferenceRng(seed);
             var noise = DiffusionNoiseHelper<T>.SampleGaussian(image._shape, rng);
             var scaledNoise = DiffusionNoiseHelper<T>.ScaleNoise(noise, noiseAugStrength);
 
@@ -598,7 +598,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
 
         // Create initial video latents with interpolation guidance
         var videoLatentShape = new[] { 1, numFrames, LatentChannels, latentHeight, latentWidth };
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(videoLatentShape, rng);
 
         // Create image embedding from start image

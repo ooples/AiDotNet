@@ -467,6 +467,73 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
         metadata["AttentionBlocks"] = attentionCount.ToString();
         metadata["SSMBlocks"] = ssmCount.ToString();
 
+        // Persist the per-position attention/SSM pattern so deserialization
+        // can construct each inner block with the correct type instead of
+        // assuming all-SSM (issue #1239 placeholder follow-up). Format is
+        // a comma-free 0/1 string ("01000010" → length-8 with attention at
+        // positions 1 and 6).
+        var patternChars = new char[_isAttentionBlock.Length];
+        for (int i = 0; i < _isAttentionBlock.Length; i++)
+            patternChars[i] = _isAttentionBlock[i] ? '1' : '0';
+        metadata["AttentionPattern"] = new string(patternChars);
+
+        // Persist enough info for the deserializer to construct real inner-block
+        // instances (each with the matching ParameterCount). We sample from the
+        // first SSM block and the first attention block we find — the LayerHelper
+        // factories (CreateJambaLayers/CreateSambaLayers/CreateZamba2Layers)
+        // construct uniform per-type dimensions, so a single sample suffices.
+        // The BLOCK TYPE matters: Jamba/Samba use MambaBlock (SSM) +
+        // GatedLinearAttentionLayer (attention), whereas Zamba2 uses Mamba2Block
+        // for BOTH its SSM and its attention-flagged positions. Without persisting
+        // the type, deserialization rebuilt every block as MambaBlock/GLA and the
+        // cloned scheduler's ParameterCount diverged from the original (Zamba2
+        // Clone_AfterTraining: 5052928 vs 5618976).
+        void PersistMamba2Dims(Mamba2Block<T> m2)
+        {
+            metadata["Mamba2StateDimension"] = m2.StateDimension.ToString();
+            metadata["Mamba2NumHeads"] = m2.NumHeads.ToString();
+            metadata["Mamba2ExpandFactor"] =
+                (m2.InnerDimension / Math.Max(1, m2.ModelDimension)).ToString();
+            metadata["Mamba2ConvKernelSize"] = m2.ConvKernelSize.ToString();
+            metadata["Mamba2ChunkSize"] = m2.ChunkSize.ToString();
+        }
+        for (int i = 0; i < _blocks.Length; i++)
+        {
+            if (_isAttentionBlock[i]) continue;
+            if (_blocks[i] is Mamba2Block<T> m2)
+            {
+                metadata["SsmBlockType"] = "Mamba2";
+                PersistMamba2Dims(m2);
+                break;
+            }
+            if (_blocks[i] is MambaBlock<T> mamba)
+            {
+                metadata["SsmBlockType"] = "Mamba1";
+                metadata["MambaStateDimension"] = mamba.StateDimension.ToString();
+                metadata["MambaExpandFactor"] =
+                    (mamba.InnerDimension / Math.Max(1, mamba.ModelDimension)).ToString();
+                metadata["MambaConvKernelSize"] = mamba.ConvKernelSize.ToString();
+                metadata["MambaDtRank"] = mamba.DtRank.ToString();
+                break;
+            }
+        }
+        for (int i = 0; i < _blocks.Length; i++)
+        {
+            if (!_isAttentionBlock[i]) continue;
+            if (_blocks[i] is Mamba2Block<T> m2)
+            {
+                metadata["AttnBlockType"] = "Mamba2";
+                PersistMamba2Dims(m2);
+                break;
+            }
+            if (_blocks[i] is GatedLinearAttentionLayer<T> gla)
+            {
+                metadata["AttnBlockType"] = "GLA";
+                metadata["AttentionNumHeads"] = gla.NumHeads.ToString();
+                break;
+            }
+        }
+
         return metadata;
     }
 

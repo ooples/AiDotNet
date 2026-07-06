@@ -20,7 +20,19 @@ public class Tacotron2Options : AcousticModelOptions
         AttentionLocationChannels = other.AttentionLocationChannels;
     }
 
-    public Tacotron2Options() { EncoderDim = 512; DecoderDim = 80; HiddenDim = 512; NumEncoderLayers = 3; NumDecoderLayers = 2; NumHeads = 1; OutputsPerStep = 1; UsePostnet = true; PostnetDim = 512; PostnetLayers = 5; }
+    public Tacotron2Options()
+    {
+        EncoderDim = 512;
+        DecoderDim = 80;
+        HiddenDim = 512;
+        NumEncoderLayers = 3;
+        NumDecoderLayers = 2;
+        NumHeads = 1;
+        OutputsPerStep = 1;
+        UsePostnet = true;
+        PostnetDim = 512;
+        PostnetLayers = 5;
+    }
 
     /// <summary>Gets or sets the prenet dimension.</summary>
     public int PrenetDim { get; set; } = 256;

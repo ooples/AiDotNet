@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using AiDotNet.FitDetectors;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.LossFunctions;
@@ -39,8 +40,15 @@ public class Bucket1_TrainingPipelineTests : ConfigureMethodTestBase
     /// </summary>
     [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
-    public void Baseline_DirectTrain_ProducesNonDegenerateOutput()
+    public async Task Baseline_DirectTrain_ProducesNonDegenerateOutput()
     {
+        // Async because [Fact(Timeout=...)] only works on async methods —
+        // xUnit throws "Tests marked with Timeout are only supported for
+        // async tests" on the sync variant, which made this fail outright
+        // before any assertion ran. The body is synchronous canary training;
+        // the Task.Yield() up front gives xUnit the async surface it needs
+        // without changing any of the underlying compute.
+        await Task.Yield();
         var model = MakeCanaryModel();
         var (features, labels) = MakeMemorizationSet();
         var (topOne, spread) = DirectTrainAndMeasure(model, features, labels);

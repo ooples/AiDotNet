@@ -330,28 +330,9 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: INPUT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new PaintByExampleModel<T>(
-            unet: clonedUnet,
-            vae: clonedVae,
+                        return new PaintByExampleModel<T>(
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
     }
 

@@ -335,7 +335,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     /// - The last station outputs the final product (prediction)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
@@ -366,13 +366,16 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Forward pass through each layer in the network
-        Tensor<T> currentOutput = input;
-        foreach (var layer in Layers)
+        return Accelerate(input, () =>
         {
-            currentOutput = layer.Forward(currentOutput);
-        }
+            Tensor<T> currentOutput = input;
+            foreach (var layer in Layers)
+            {
+                currentOutput = layer.Forward(currentOutput);
+            }
 
-        return currentOutput;
+            return currentOutput;
+        });
     }
 
     /// <summary>

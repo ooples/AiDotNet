@@ -11,6 +11,9 @@ on:
       - '**.csproj'
       - '.github/workflows/codacy.yml'
   pull_request:
+    # Include ready_for_review (default types omit it): the codacy job is gated on
+    # draft != true, so a draft→ready transition must re-trigger it.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ master, main ]
     paths:
       - '**.cs'
@@ -41,7 +44,7 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 150
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           # Shallow clone for faster checkout
           fetch-depth: 1
@@ -61,7 +64,7 @@ jobs:
       - name: Upload Trivy SARIF to GitHub Code Scanning
         # Must match checkout/Trivy conditions - only run if both checkout and Trivy scan happened
         if: (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 150) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true)
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v3
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v3
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs

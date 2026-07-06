@@ -202,7 +202,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     /// <remarks>
     /// <para><b>For Beginners:</b> This turns historical returns into a volatility forecast.</para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var current = input;
         foreach (var layer in Layers)

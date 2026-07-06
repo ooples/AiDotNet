@@ -195,17 +195,15 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var cd = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: 1536,
-            numLayers: 24, numHeads: 24, patchSize: 2,
-            contextDim: CROSS_ATTENTION_DIM);
-        cd.SetParameters(_dit.GetParameters());
-        var cv = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.13025);
-        cv.SetParameters(_vae.GetParameters());
-        return new AuraFlowModel<T>(dit: cd, vae: cv, conditioner: _conditioner);
+        // Delegate to the predictor's and VAE's own Clone(), which reconstruct from their
+        // actual config fields (NOT hardcoded foundation-scale constants) and preserve
+        // materialized weights — so a caller-injected variant of any scale round-trips
+        // correctly. Rebuilding at fixed 1536/24 here would size a clone that cannot accept
+        // an injected tiny (or otherwise non-default) predictor's parameter vector.
+        return new AuraFlowModel<T>(
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     #endregion

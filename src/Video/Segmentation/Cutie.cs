@@ -446,7 +446,7 @@ public class Cutie<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return SegmentFrame(input);
     }

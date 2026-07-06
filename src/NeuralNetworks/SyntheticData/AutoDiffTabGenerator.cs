@@ -390,7 +390,7 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// </summary>
     /// <param name="input">The input tensor (noisy data concatenated with timestep embedding).</param>
     /// <returns>The predicted noise tensor.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         EnsureSizedForInput(input);
         // Deterministic noise prediction treating the input as x_t at timestep 0.

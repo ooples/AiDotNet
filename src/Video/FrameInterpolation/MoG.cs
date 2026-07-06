@@ -1,8 +1,10 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -132,10 +134,25 @@ public class MoG<T> : FrameInterpolationBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultFrameInterpolationLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w,
                 numFeatures: _options.NumFeatures));
+
+            // The shared factory's flat chain ends at 1/8 resolution (three
+            // stride-2 pyramid levels; its NOTE delegates upsampling back to
+            // the caller). MoG's generative refinement produces the
+            // intermediate frame at FULL resolution (MoG 2025 §3 — the
+            // diffusion decoder emits the frame itself, not a low-res
+            // feature map), so append a learnable coarse-to-fine ×8 decoder
+            // that returns the default Train/Predict chain to [ch, H, W].
+            for (int i = 0; i < 3; i++)
+            {
+                Layers.Add(new UpsamplingLayer<T>(2));
+                Layers.Add(new ConvolutionalLayer<T>(_options.NumFeatures, 3, 1, 1,
+                    new ReLUActivation<T>() as IActivationFunction<T>));
+            }
+            Layers.Add(new ConvolutionalLayer<T>(ch, 3, 1, 1));
         }
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode) return RunOnnxInference(input);
@@ -168,9 +185,11 @@ public class MoG<T> : FrameInterpolationBase<T>
         }
     }
 
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    // Identity: tape training runs the raw layer stack (no NormalizeFrames) and the sigmoid head
+    // emits [0,1] frames, so /255+*255 only on inference was a train/eval mismatch (MoreData).
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;
 
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
     public override ModelMetadata<T> GetModelMetadata()
     {

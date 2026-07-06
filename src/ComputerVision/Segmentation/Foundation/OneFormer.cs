@@ -238,7 +238,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// guides which type of segmentation output is produced.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }
@@ -355,7 +355,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         else
         {
             var encoderLayers = LayerHelper<T>.CreateOneFormerEncoderLayers(
-                _channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
+                _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count;
             Layers.AddRange(encoderLayers);
 

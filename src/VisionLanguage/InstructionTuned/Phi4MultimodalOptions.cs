@@ -39,7 +39,20 @@ public class Phi4MultimodalOptions : InstructionTunedVLMOptions
         EnableAudio = other.EnableAudio;
     }
 
-    public Phi4MultimodalOptions() { InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection; VisionDim = 1152; DecoderDim = 3072; ProjectionDim = 3072; NumVisionLayers = 27; NumDecoderLayers = 40; NumHeads = 32; ImageSize = 384; LanguageModelName = "Phi-4"; MaxVisualTokens = 576; }
+    public Phi4MultimodalOptions()
+    {
+        InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;
+        VisionDim = 1152;
+        DecoderDim = 3072;
+        ProjectionDim = 3072;
+        NumVisionLayers = 27;
+        NumDecoderLayers = 40;
+        NumHeads = 32;
+        ImageSize = 384;
+        LanguageModelName = "Phi-4";
+        MaxVisualTokens = 576;
+    }
+
     /// <summary>Gets or sets whether audio input is enabled alongside vision.</summary>
     public bool EnableAudio { get; set; }
 }

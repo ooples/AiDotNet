@@ -110,6 +110,22 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly int _numLayers;
 
     /// <summary>
+    /// Parameter-count floor (≈ 1B params ≈ 4 GB fp32 → 2 GB fp16) above which eval keeps the tower's
+    /// weights fp16-resident. Below this the model fits comfortably resident at fp32, so it pays nothing.
+    /// </summary>
+    private const long LowPrecisionResidentThresholdParams = 1_000_000_000L;
+
+    /// <summary>
+    /// Test-only override for <see cref="LowPrecisionResidentThresholdParams"/>, letting a unit test
+    /// exercise the fp16-resident eval path (and its clone/parameter round-trip, #1764) at small scale
+    /// without allocating a real &gt;1B-parameter model. Instance-scoped so it never leaks across tests or
+    /// threads. Null in production, where the ~1B default applies.
+    /// </summary>
+    internal long? ResidentThresholdOverrideForTests { get; set; }
+
+    private long EffectiveResidentThreshold => ResidentThresholdOverrideForTests ?? LowPrecisionResidentThresholdParams;
+
+    /// <summary>
     /// Number of attention heads.
     /// </summary>
     private readonly int _numHeads;
@@ -133,6 +149,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// Latent spatial size (height = width) for computing patch count.
     /// </summary>
     private readonly int _latentSpatialSize;
+    // Seed used for weight init. Threaded into Clone so any lazy weight path the clone probe does not
+    // materialize (and which therefore re-initializes on the clone's first forward) uses the SAME RNG
+    // seed as the source and matches it deterministically — mirrors SiTPredictor._sitSeed (#1764).
+    private readonly int? _seed;
 
     /// <summary>
     /// The neural network architecture configuration, if provided.
@@ -182,6 +202,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly object _initLock = new();
 
     /// <summary>
+    /// Whether this predictor's lazy weight tensors have been materialized yet
+    /// (i.e. a forward pass, <see cref="GetParameters"/>, or
+    /// <see cref="SetParameters"/> has run). While <c>false</c> the predictor
+    /// holds no resident weights — its parameters are fully determined by its
+    /// construction config — so a clone can be produced by re-running the same
+    /// construction rather than copying a flat parameter vector. That matters
+    /// for foundation-scale configs (e.g. WanVideo-14B ≈ 15 B params) where the
+    /// flat <see cref="Vector{T}"/> copy path is both int.MaxValue-bounded and
+    /// far larger than host RAM. Callers that need a true deep copy of resolved
+    /// weights use <see cref="CopyParametersFrom"/> instead.
+    /// </summary>
+    public bool AreLayersInitialized => _layersInitialized;
+
+    /// <summary>
     /// Position embeddings (learnable).
     /// </summary>
     private Tensor<T>? _posEmbed;
@@ -190,6 +224,42 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// Cached input for backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // #1672 destination-buffer scratch for the AdaLN / gate broadcasts.
+    //
+    // Each DiT block runs strictly sequentially, and within a block the AdaLN
+    // attn-branch output is fully consumed (by the attention projection) before the
+    // mlp-branch AdaLN runs. The AddWithGate `gated` intermediate is consumed by the
+    // immediately-following residual add. So a single predictor-level buffer per role,
+    // reused across all blocks and the final layer, never aliases a still-live tensor.
+    // Reallocated whenever the [B, seq, hidden] shape changes. Used only on the no-tape
+    // inference forward (ForwardScratchGate.Enabled). Bit-identical to the allocating path.
+    // ──────────────────────────────────────────────────────────────────────────
+    private Tensor<T>? _adaLnScaledScratch;   // TensorBroadcastMultiply(x, 1+scale)
+    private Tensor<T>? _adaLnOutScratch;       // TensorBroadcastAdd(scaled, shift)
+    private Tensor<T>? _gateScratch;           // TensorBroadcastMultiply(residual, gate)
+
+    /// <summary>Element-wise shape-array equality for the #1672 scratch-reuse decision.</summary>
+    private static bool ShapeMatches(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+            if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// True when the #1672 scratch gate is ON and no gradient tape is recording (inference).
+    /// The scratch reuse is safe only on the eager no-tape forward.
+    /// </summary>
+    private static bool UseForwardScratch()
+    {
+        if (!AiDotNet.Helpers.ForwardScratchGate.AdaLn) return false;
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        return !tapeActive;
+    }
 
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
@@ -285,6 +355,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _contextDim = contextDim;
         _mlpRatio = mlpRatio;
         _latentSpatialSize = latentSpatialSize;
+        _seed = seed;
 
         // Class-conditional DiT is fully wired end-to-end per Peebles & Xie 2022
         // §3.2: when numClasses > 0, _labelEmbed projects one-hot class labels
@@ -355,7 +426,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         List<DiTBlock>? customBlocks)
     {
         var patchDim = _inputChannels * _patchSize * _patchSize;
-        var timeEmbedDim = _hiddenSize * 4;
+        // Faithful DiT (Peebles & Xie 2023): the timestep MLP outputs hidden_size and the AdaLN
+        // modulation is Linear(hidden_size, 6*hidden_size). The conditioning vector fed to every block's
+        // AdaLN therefore has width = hidden_size. An earlier 4*hidden_size here inflated the dominant
+        // AdaLN weight 4x (e.g. [12288,18432] instead of [3072,18432]) — over half a foundation DiT's
+        // parameters — and was the primary driver of the foundation-scale OOM (issue #1672).
+        var timeEmbedDim = _hiddenSize;
 
         // Always create patch embedding, time embedding, and final layers. Use
         // LazyDense so weight tensors stay unallocated until the first Forward()
@@ -470,16 +546,49 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// True when this forward runs the foundation-scale fp16-resident eval path (no active tape,
+    /// params over the resident threshold). In that mode the disk-backed streaming scope is bypassed
+    /// (its release sweep re-inflates evicted weights → OOM) and the compiled replay is bypassed (it
+    /// captures the per-forward-mutated weight tensors → stale references); the eager Forward upcasts
+    /// each layer's fp16 weights to fp32 transiently and drops them, keeping only fp16 resident.
+    /// </summary>
+    private bool UseLowPrecisionResidentEval()
+    {
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        return !tapeActive && ParameterCount > EffectiveResidentThreshold;
+    }
+
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
         _lastInput = noisySample;
 
-        // Get timestep embedding
+        // Get timestep embedding (cheap MLP; computed eagerly each step so the per-step
+        // timestep stays a LIVE input the compiled plan re-binds rather than bakes).
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        return Forward(noisySample, timeEmbed, conditioning);
+        // Foundation-scale eval: eager fp16-resident forward — NOT the disk-streaming scope (its
+        // release sweep re-inflates evicted weights → OOM) and NOT the compiled replay (captures the
+        // per-forward-mutated weights). See UseLowPrecisionResidentEval.
+        if (UseLowPrecisionResidentEval())
+        {
+            return Forward(noisySample, timeEmbed, conditioning);
+        }
+
+        using var streaming = BeginWeightStreamingForward();
+        // Compile the (expensive) DiT forward ONCE and replay it across the denoising loop,
+        // re-binding every per-step leaf — noisy sample, timestep embedding, optional
+        // conditioning — so a changing timestep is never baked (#1620 / AiDotNet.Tensors#616).
+        // Conditioning is declared as an input only when present, so an unconditional model
+        // never declares a leaf its forward doesn't read (which would fail closed to eager).
+        var inputs = conditioning is not null
+            ? new[] { noisySample, timeEmbed, conditioning }
+            : new[] { noisySample, timeEmbed };
+        return streaming.Complete(
+            PredictCompiledMulti(inputs, () => Forward(noisySample, timeEmbed, conditioning)));
     }
 
     /// <inheritdoc />
@@ -487,7 +596,27 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         EnsureLayersInitialized();
         _lastInput = noisySample;
-        return Forward(noisySample, timeEmbedding, conditioning);
+
+        // See PredictNoise: foundation-scale eval uses the eager fp16-resident forward, bypassing the
+        // disk-streaming scope and compiled replay.
+        if (UseLowPrecisionResidentEval())
+        {
+            return Forward(noisySample, timeEmbedding, conditioning);
+        }
+
+        using var streaming = BeginWeightStreamingForward();
+        // Multi-input compiled replay: every per-step leaf — noisy sample, timestep embedding,
+        // optional conditioning — is re-bound each step, so a changing timestep embedding is
+        // never baked as a constant. The single-input PredictCompiled marks only the noisy
+        // sample as mutable and bakes the rest, which would replay step 0's embedding for the
+        // whole denoising loop (silent corruption — #1620). The multi-input compile
+        // (AiDotNet.Tensors#616) compiles the expensive forward once while keeping all per-step
+        // inputs live; the verify-then-trust gate keeps the output numerically identical to eager.
+        var inputs = conditioning is not null
+            ? new[] { noisySample, timeEmbedding, conditioning }
+            : new[] { noisySample, timeEmbedding };
+        return streaming.Complete(
+            PredictCompiledMulti(inputs, () => Forward(noisySample, timeEmbedding, conditioning)));
     }
 
     /// <summary>
@@ -559,10 +688,28 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
         // Process through transformer blocks — every block's AdaLN reads
         // `adaLnEmbed` (= timeEmbed + classEmbed when class-conditional).
-        foreach (var block in _blocks)
+        // G4 (#1624): checkpoint each block (recompute activations in backward) — gradient-equivalent.
+        // Each closure is a pure function of the residual stream; the AdaLN/cross-attn conditioning is
+        // captured as a constant and its gradient is propagated correctly by the checkpoint recompute.
+        // Foundation-scale eval: keep each block's large weight matrices fp16-resident (DenseLayer
+        // upcasts to fp32 transiently per matmul). Halves the tower's resident weight memory so a
+        // multi-GB DiT fits a 16 GB host without disk paging or slow Half arithmetic. Flagged here,
+        // before the blocks' first forward, so DenseLayer downcasts its fp32 weights on first use.
+        // Gated OFF while a tape is active (training needs the fp32 master for backward).
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (!tapeActive && ParameterCount > EffectiveResidentThreshold)
         {
-            hidden = ForwardBlock(hidden, adaLnEmbed, crossAttnCond, block);
+            foreach (var b in _blocks) b.EnableLowPrecisionResident();
         }
+
+        var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_blocks.Count];
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            var block = _blocks[i];
+            blockForwards[i] = h => ForwardBlock(h, adaLnEmbed, crossAttnCond, block);
+        }
+        hidden = CheckpointBlocks(blockForwards, hidden);
 
         // Final norm and projection with AdaLN (also uses the combined embedding)
         hidden = FinalLayerWithAdaLN(hidden, adaLnEmbed);
@@ -655,7 +802,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> CreatePositionEmbedding(int numPatches)
     {
-        var posEmbed = TensorAllocator.Rent<T>(new[] { 1, numPatches, _hiddenSize });
+        // GC-owned (NOT TensorAllocator.Rent): _posEmbed is cached across forwards and must survive the
+        // diffusion denoise loop's per-step arena Reset(), which recycles arena-rented scratch. Renting it
+        // aliased recycled scratch -> the cached posEmbed corrupted between steps -> non-deterministic Predict.
+        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
         var span = posEmbed.AsWritableSpan();
 
         for (int pos = 0; pos < numPatches; pos++)
@@ -763,6 +913,25 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyAdaLN(Tensor<T> x, Tensor<T> scaleView, Tensor<T> shiftView)
     {
         var scalePlusOne = Engine.TensorAddScalar<T>(scaleView, NumOps.One);
+
+        // #1672 destination-buffer path: reuse per-predictor scratch for the two big
+        // [B, seq, hidden] broadcasts instead of allocating each step. Same SIMD trailing-
+        // repeat kernel → bit-identical. The `scaled` buffer is consumed by the very next
+        // broadcast-add; the output buffer is consumed by the caller (attention / MLP /
+        // final projection) before the next AdaLN call. See scratch field comments.
+        if (UseForwardScratch())
+        {
+            var needShape = x._shape;
+            if (_adaLnScaledScratch == null || !ShapeMatches(_adaLnScaledScratch._shape, needShape))
+                _adaLnScaledScratch = new Tensor<T>((int[])needShape.Clone());
+            if (_adaLnOutScratch == null || !ShapeMatches(_adaLnOutScratch._shape, needShape))
+                _adaLnOutScratch = new Tensor<T>((int[])needShape.Clone());
+
+            Engine.TensorBroadcastMultiplyInto<T>(_adaLnScaledScratch, x, scalePlusOne);
+            Engine.TensorBroadcastAddInto<T>(_adaLnOutScratch, _adaLnScaledScratch, shiftView);
+            return _adaLnOutScratch;
+        }
+
         var scaled = Engine.TensorBroadcastMultiply<T>(x, scalePlusOne);
         return Engine.TensorBroadcastAdd<T>(scaled, shiftView);
     }
@@ -816,8 +985,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var kReshaped = ReshapeForHeads(k, batch, condSeqLen, _numHeads, headDim);
         var vReshaped = ReshapeForHeads(v, batch, condSeqLen, _numHeads, headDim);
 
-        // Compute attention scores: Q * K^T using batched matmul [batch*heads, seqLen, condSeqLen]
-        var kTransposed = Engine.TensorTranspose<T>(kReshaped);
+        // Compute attention scores: Q * K^T using batched matmul.
+        // K is batched [batch*heads, condSeqLen, headDim], so transpose only
+        // the last two dimensions to [batch*heads, headDim, condSeqLen].
+        var kTransposed = Engine.TensorPermute(kReshaped, new[] { 0, 2, 1 });
         var scores = Engine.TensorBatchMatMul<T>(qReshaped, kTransposed);
 
         // Scale scores
@@ -875,6 +1046,18 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, Tensor<T> gateView)
     {
+        // #1672: reuse scratch for the `gated` intermediate (consumed immediately by the
+        // following add). The RESULT is the persistent residual stream, so it stays a fresh
+        // allocation — never scratch. Same SIMD kernel → bit-identical.
+        if (UseForwardScratch())
+        {
+            var needShape = residual._shape;
+            if (_gateScratch == null || !ShapeMatches(_gateScratch._shape, needShape))
+                _gateScratch = new Tensor<T>((int[])needShape.Clone());
+            Engine.TensorBroadcastMultiplyInto<T>(_gateScratch, residual, gateView);
+            return Engine.TensorAdd<T>(x, _gateScratch);
+        }
+
         var gated = Engine.TensorBroadcastMultiply<T>(residual, gateView);
         return Engine.TensorAdd<T>(x, gated);
     }
@@ -1151,6 +1334,71 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         target.SetParameters(source.GetParameters());
     }
 
+    private IEnumerable<ILayer<T>?> EnumerateAllLayers()
+    {
+        // ORDER IS LOAD-BEARING: GetParameterChunks/SetParameterChunks walk this sequence, so it MUST
+        // match GetParameters/SetParameters element-for-element (PredictorParameterStreamingTests'
+        // *_Chunks_IndexIdentical contract). The model-level _adaln_modulation is serialized near the
+        // END (after _finalNorm, before _outputProj) by GetParameters/SetParameters — emit it there,
+        // NOT after _labelEmbed, or the chunk concatenation desyncs from the flat vector.
+        yield return _patchEmbed;
+        yield return _timeEmbed1;
+        yield return _timeEmbed2;
+        yield return _labelEmbed;
+        foreach (var block in _blocks)
+        {
+            yield return block.Norm1;
+            yield return block.Attention;
+            yield return block.Norm2;
+            yield return block.MLP1;
+            yield return block.MLP2;
+            yield return block.AdaLNModulation;
+            yield return block.CrossAttnNorm;
+            yield return block.CrossAttnQ;
+            yield return block.CrossAttnK;
+            yield return block.CrossAttnV;
+            yield return block.CrossAttnOut;
+        }
+        yield return _finalNorm;
+        yield return _adaln_modulation;
+        yield return _outputProj;
+    }
+
+    private bool HasMaterializedParameters()
+    {
+        if (!_layersInitialized) return false;
+
+        foreach (var layer in EnumerateAllLayers())
+        {
+            if (HasMaterializedParameters(layer))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) return false;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter.Length > 0)
+                    return true;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            if (HasMaterializedParameters(subLayer))
+                return true;
+        }
+
+        return false;
+    }
+
     /// <inheritdoc />
     public override long ParameterCount
     {
@@ -1202,11 +1450,97 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             patchSize: _patchSize,
             contextDim: _contextDim,
             mlpRatio: _mlpRatio,
-            latentSpatialSize: _latentSpatialSize);
+            latentSpatialSize: _latentSpatialSize,
+            seed: _seed);
 
-        // Preserve trained weights
-        clone.SetParameters(GetParameters());
+        // Carry the test-only resident-threshold override so the clone's probe forward takes the same
+        // (fp16-resident vs fp32) path as the source — otherwise a small test clone would materialize fp32
+        // while the source is resident, masking the resident clone round-trip under test (#1764). Null in
+        // production, so this is a no-op there.
+        clone.ResidentThresholdOverrideForTests = ResidentThresholdOverrideForTests;
+
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
+    }
+
+    /// <summary>
+    /// Materializes <paramref name="clone"/> through the FORWARD path and copies this predictor's
+    /// trained weights into it. Shared by <see cref="Clone"/> and every derived predictor's
+    /// <c>Clone</c> (e.g. <c>SiTPredictor</c>) so they all get the correct clone semantics.
+    /// </summary>
+    /// <remarks>
+    /// Preserve trained/materialized weights without forcing a foundation-scale default
+    /// constructor to allocate and copy billions of random parameters (HasMaterializedParameters
+    /// gates the copy to a source that genuinely has allocated weights).
+    /// <para>
+    /// The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
+    /// the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
+    /// STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
+    /// the clone would re-initialize those tensors with a fresh RNG on its first real forward
+    /// and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
+    /// Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
+    /// on the clone first (weight dims are fixed by config, so the probe's spatial size is
+    /// irrelevant), then copy the source's trained values. The probe must materialize exactly the
+    /// paths the source has materialized so CopyParametersFrom finds a target for every source
+    /// weight. A null-conditioned probe only touches the unconditional path, so if the source was
+    /// used WITH conditioning its class-embedding (_labelEmbed) and/or cross-attention K/V/Out
+    /// projections are materialized — leaving the clone's equivalents lazy would let them re-init
+    /// with fresh RNG on the first conditioned forward and diverge from the source.
+    /// BuildProbeConditioning returns representative conditioning whenever a conditioned path is
+    /// materialized on the source (and null otherwise, keeping those layers lazy on both).
+    /// </para>
+    /// </remarks>
+    protected void ProbeMaterializeAndCopyInto(DiTNoisePredictor<T> clone)
+    {
+        Guard.NotNull(clone);
+        if (!HasMaterializedParameters()) return;
+
+        var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
+        clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
+        clone.CopyParametersFrom(this);
+        // The probe forward traced a compiled plan over the clone's random init; drop it so
+        // the next real forward re-traces against the copied weights.
+        clone.InvalidateCompiledPlans();
+    }
+
+    /// <summary>
+    /// Builds a representative conditioning tensor for the <see cref="Clone"/> probe forward,
+    /// matching whichever conditioned path the source has materialized so that path is allocated on
+    /// the clone before <see cref="CopyParametersFrom"/> runs. Returns <c>null</c> when no conditioned
+    /// path is materialized — the source's conditioned layers are lazy, so the clone's stay lazy too.
+    /// </summary>
+    private Tensor<T>? BuildProbeConditioning()
+    {
+        // Class-conditional DiT: a one-hot [1, numClasses] label materializes _labelEmbed.
+        if (_numClasses > 0 && _labelEmbed is { IsInitialized: true })
+        {
+            return new Tensor<T>(new[] { 1, _numClasses });
+        }
+
+        // Text/cross-attention DiT: a [1, 1, contextDim] context tensor materializes the per-block
+        // cross-attention K/V/Out projections.
+        if (_contextDim > 0 && HasMaterializedCrossAttention())
+        {
+            return new Tensor<T>(new[] { 1, 1, _contextDim });
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// True when any transformer block's cross-attention key projection has materialized its weights,
+    /// i.e. the source ran at least one conditioned (text/context) forward.
+    /// </summary>
+    private bool HasMaterializedCrossAttention()
+    {
+        foreach (var block in _blocks)
+        {
+            if (block.CrossAttnK is { IsInitialized: true })
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <inheritdoc />
@@ -1219,59 +1553,91 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override bool SupportsCrossAttention => true;
 
     /// <summary>
-    /// Streams DiT's trainable weights per-layer, yielding from
-    /// <c>_patchEmbed</c>, the time-embedding MLPs, the AdaLN modulation
-    /// projection, every transformer block's sub-layers, and the final
-    /// norm + projection. Per-tensor streaming dodges the foundation-scale
-    /// buffer-allocation path in <see cref="GetParameters"/> that overflows
-    /// when total parameter count gets close to (or above) int.MaxValue —
-    /// each chunk is a single layer's parameter vector, well within the
-    /// per-tensor int contract documented in
-    /// <see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>.
+    /// Streams DiT's materialized trainable tensors directly from each layer,
+    /// matching the PyTorch <c>nn.Module.parameters()</c> contract: yielded
+    /// tensors are the same objects used by forward/training, not flat copies.
+    /// Lazy paper-scale defaults may report a structural
+    /// <see cref="ParameterCount"/> before their tensors have been allocated;
+    /// in that state this iterator yields only already-materialized tensors
+    /// instead of forcing a multi-billion-parameter allocation.
     /// </summary>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
-        // Mirror ParameterCount's enumeration exactly — including
-        // EnsureLayersInitialized() to materialize lazy layers — so
-        // sum-of-chunks always equals ParameterCount.
+        // #1715: engage full-precision weight streaming before initializing/iterating so foundation-scale
+        // DiT predictors (e.g. SiT) route their weight allocation through the streaming pool (bounded
+        // resident set + lossless write-back) instead of accumulating the full set via RentPinned → OOM.
+        // No-op below the param-count/memory threshold; full-precision so the round-trip is exact.
+        MaybeEngageWeightStreaming();
         EnsureLayersInitialized();
-
-        IEnumerable<ILayer<T>?> EnumerateAllLayers()
-        {
-            yield return _patchEmbed;
-            yield return _timeEmbed1;
-            yield return _timeEmbed2;
-            yield return _labelEmbed;
-            yield return _adaln_modulation;
-            foreach (var block in _blocks)
-            {
-                yield return block.Norm1;
-                yield return block.Attention;
-                yield return block.Norm2;
-                yield return block.MLP1;
-                yield return block.MLP2;
-                yield return block.AdaLNModulation;
-                yield return block.CrossAttnNorm;
-                yield return block.CrossAttnQ;
-                yield return block.CrossAttnK;
-                yield return block.CrossAttnV;
-                yield return block.CrossAttnOut;
-            }
-            yield return _finalNorm;
-            yield return _outputProj;
-        }
 
         foreach (var layer in EnumerateAllLayers())
         {
-            if (layer is null) continue;
-            int len = layer.ParameterCount > int.MaxValue
-                ? throw new InvalidOperationException(
-                    $"Layer '{layer.GetType().Name}' has {layer.ParameterCount} parameters, " +
-                    $"exceeding int.MaxValue. Single-layer chunks must fit in int per the " +
-                    $"Vector.Length contract.")
-                : (int)layer.ParameterCount;
-            if (len == 0) continue;
-            yield return new Tensor<T>(new[] { len }, layer.GetParameters());
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    /// <summary>
+    /// #1715: per-tensor counterpart to <see cref="GetParameterChunks"/> — copies each incoming chunk
+    /// IN PLACE into the corresponding resident weight, in the same EnumerateAllLayers ×
+    /// EnumerateMaterializedParameters order, instead of the base implementation that buffers every
+    /// chunk into one flat list + Vector (which re-materializes the whole foundation-scale weight set
+    /// at once → OOM). Engages full-precision streaming first so the writes round-trip losslessly and
+    /// the resident set stays bounded.
+    /// </summary>
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        MaybeEngageWeightStreaming();
+        EnsureLayersInitialized();
+
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var dst in EnumerateMaterializedParameters(layer))
+            {
+                if (!e.MoveNext())
+                    throw new System.ArgumentException(
+                        "SetParameterChunks received fewer chunks than the predictor has parameter tensors.",
+                        nameof(chunks));
+                var src = e.Current;
+                if (src is null)
+                    throw new System.ArgumentException("SetParameterChunks received a null chunk.", nameof(chunks));
+                if (src.Length != dst.Length)
+                    throw new System.ArgumentException(
+                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.Length}.",
+                        nameof(chunks));
+                src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
+            }
+        }
+
+        // Symmetric with the "fewer chunks" guard above: every parameter tensor has now been filled,
+        // so any remaining chunk means the caller supplied more than the predictor consumes. Reject it
+        // instead of silently dropping it — an over-long chunk stream is a caller bug, and the base
+        // implementation likewise consumes exactly one chunk per parameter tensor.
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than the predictor has parameter tensors.",
+                nameof(chunks));
+    }
+
+    private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) yield break;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                yield return parameter;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(subLayer))
+                yield return parameter;
         }
     }
 
@@ -1370,5 +1736,23 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         public DenseLayer<T>? CrossAttnV { get; set; }
         public DenseLayer<T>? CrossAttnOut { get; set; }
         public LayerNormalizationLayer<T>? CrossAttnNorm { get; set; }
+
+        /// <summary>
+        /// Flags this block's large weight matrices (MLP + AdaLN + cross-attention projections) for
+        /// fp16-resident inference: each is stored at half precision and upcast to fp32 transiently
+        /// per forward (see <see cref="DenseLayer{T}"/>), halving resident weight memory. Norm layers
+        /// are tiny and left full precision. Must be called before the block's first forward.
+        /// </summary>
+        internal void EnableLowPrecisionResident()
+        {
+            if (MLP1 is not null) MLP1.LowPrecisionResident = true;
+            if (MLP2 is not null) MLP2.LowPrecisionResident = true;
+            if (AdaLNModulation is not null) AdaLNModulation.LowPrecisionResident = true;
+            if (CrossAttnQ is not null) CrossAttnQ.LowPrecisionResident = true;
+            if (CrossAttnK is not null) CrossAttnK.LowPrecisionResident = true;
+            if (CrossAttnV is not null) CrossAttnV.LowPrecisionResident = true;
+            if (CrossAttnOut is not null) CrossAttnOut.LowPrecisionResident = true;
+            if (Attention is not null) Attention.LowPrecisionResident = true;
+        }
     }
 }

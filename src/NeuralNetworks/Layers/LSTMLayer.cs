@@ -1061,6 +1061,15 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Until the gate weights are actually allocated (_isInitialized), the real input
+        // width is authoritative. A stale _inputSize — copied by Clone (or a parameter-load
+        // that recorded a width without allocating the matching gate weights) — would
+        // otherwise drive EnsureInitialized, which runs BEFORE OnFirstForward, to allocate
+        // [_hiddenSize, staleWidth] gate weights, and the per-timestep matmul then fails
+        // against the actual input width (ooples/AiDotNet#1589: LSTM-CRF predict path threw
+        // "Matrix dimensions incompatible: [B,realWidth] x [4*hidden,staleWidth]").
+        if (!_isInitialized && input.Shape.Length >= 1)
+            _inputSize = input.Shape[input.Shape.Length - 1];
         // Resolve _inputSize from input.Shape[^1] and allocate weights on first call.
         // Idempotent — gated by _isInitialized.
         EnsureInitializedFromInput(input);
@@ -1107,7 +1116,11 @@ public partial class LSTMLayer<T> : LayerBase<T>
             input3D = Engine.Reshape(input, [flatBatch, timeSteps, _inputSize]);
         }
 
-        _lastInput = input3D;
+        // #1668: _lastInput is a manual-backward cache; gate it (and the per-timestep BPTT
+        // caches below) on ShouldCacheForBackward so inference/tape/eval keeps no arena-backed
+        // activation alive across a TensorArena.Reset().
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input3D : null;
 
         // AIsEval inference fast path: route the entire sequence through
         // AiDotNet.Tensors.Engines.CpuEngine.LstmSequenceForward<T> — the
@@ -1193,8 +1206,11 @@ public partial class LSTMLayer<T> : LayerBase<T>
         // non-CpuEngine, or an active autograd tape).
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
-        _cachedHiddenStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
-        _cachedCellStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        // #1668: the per-timestep BPTT caches are read only by the manual Backward; skip
+        // renting+populating them when no eager Backward will run (cacheBwd computed above),
+        // so an arena loop holds no per-step references across a Reset.
+        _cachedHiddenStates = cacheBwd ? TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize }) : null;
+        _cachedCellStates = cacheBwd ? TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize }) : null;
 
         var currentH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
         var currentC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
@@ -1224,9 +1240,14 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
         for (int t = 0; t < timeSteps; t++)
         {
-            // Slice along the time dimension (dim 1), keeping batch dimension
-            // For input [batchSize, timeSteps, inputSize], this returns [batchSize, inputSize]
-            var xt = input3D.GetSliceAlongDimension(t, 1);
+            // Slice along the time dimension (dim 1), keeping batch dimension.
+            // For input [batchSize, timeSteps, inputSize], this returns [batchSize, inputSize].
+            // Use the tape-tracked Engine.TensorSliceAxis (NOT the raw Tensor.GetSliceAlongDimension):
+            // the raw slice is not an autodiff node, so gradient never flowed from xt back into
+            // input3D — severing every trainable layer UPSTREAM of the LSTM (embeddings, char
+            // encoder, stacked lower BiLSTMs). Routing the per-timestep slice through the tape lets
+            // the LSTM propagate gradient to its input, so upstream layers train end-to-end.
+            var xt = Engine.TensorSliceAxis(input3D, axis: 1, index: t);
 
             // Forget Gate - using TensorBroadcastAdd for bias (supports [batch, hidden] + [hidden] broadcasting)
             var f = Engine.TensorMatMul(xt, WfiT);
@@ -1264,8 +1285,8 @@ public partial class LSTMLayer<T> : LayerBase<T>
             // Collect the hidden state for the tape-connected output concat below.
             hiddenStatesList.Add(Engine.Reshape(currentH, new[] { batchSize, 1, _hiddenSize }));
             // Caches for the manual backward path (not on the tape).
-            _cachedHiddenStates.SetSlice(1, t, currentH);
-            _cachedCellStates.SetSlice(1, t, currentC);
+            _cachedHiddenStates?.SetSlice(1, t, currentH);
+            _cachedCellStates?.SetSlice(1, t, currentC);
         }
 
         // Assemble the [batch, timeSteps, hiddenSize] output on the tape so gradients
@@ -2431,10 +2452,18 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (!_isInitialized || _inputSize <= 0)
+        // The parameter vector's length is authoritative for the gate-weight layout. Re-infer
+        // _inputSize from it whenever the layer hasn't resolved a width yet OR the current
+        // _inputSize disagrees with the vector (e.g. a clone copied a stale width without
+        // allocating the matching gate weights — ooples/AiDotNet#1589: LSTM-CRF Clone tests
+        // threw "Expected 91600 parameters, but got 80400" because the clone's LSTM carried
+        // _inputSize=128 while the source params encode input=100).
+        int expectedForCurrent = _inputSize > 0
+            ? 4 * (_hiddenSize * _inputSize) + 4 * (_hiddenSize * _hiddenSize) + 4 * _hiddenSize
+            : -1;
+        if (!_isInitialized || _inputSize <= 0 || parameters.Length != expectedForCurrent)
         {
-            // Lazy LSTM with no resolved input width — try to recover by inferring
-            // _inputSize from parameters.Length. The flat layout is:
+            // Recover by inferring _inputSize from parameters.Length. The flat layout is:
             //   4 * (hidden*input) + 4 * (hidden*hidden) + 4 * hidden
             // → input = (params - 4*hidden*hidden - 4*hidden) / (4*hidden)
             int hidden4 = 4 * _hiddenSize;
@@ -2445,13 +2474,12 @@ public partial class LSTMLayer<T> : LayerBase<T>
                 if (inferredInput > 0)
                 {
                     _inputSize = inferredInput;
-                    // Allocate weight tensors now (we know hiddenSize and inferredInput),
-                    // but DO NOT call ResolveFromShape with a synthetic shape — that would
-                    // bake a fake rank-2 [1, inferredInput] into InputShape/OutputShape and
-                    // override the real rank-3 [B, T, F] sequence shape on the first
-                    // actual Forward(...). Leaving _isInitialized true (set inside
-                    // EnsureInitialized) but IsShapeResolved false defers shape resolution
-                    // to OnFirstForward, which receives the real input tensor.
+                    // Force EnsureInitialized to (re)allocate the gate weights at the inferred
+                    // width — without clearing the flag it would early-return and leave stale
+                    // [_hiddenSize, oldWidth] weights that the copy loop below then overflows.
+                    // IsShapeResolved stays false so OnFirstForward still binds the real rank-3
+                    // [B, T, F] sequence shape on the first actual Forward(...).
+                    _isInitialized = false;
                     EnsureInitialized();
                 }
                 else
@@ -2562,6 +2590,31 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// influenced by the previous one.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Invalidates the cached CPU pre-packed stacked weights on any training-mode
+    /// TRANSITION. The fused inference fast path (<see cref="TryFusedLstmForward"/>) packs
+    /// the eight per-gate weight tensors into <c>_cpuStackedWeightsIh/Hh/BiasIh</c> ONCE and
+    /// reuses them while <c>_cpuStackedWeightsValid</c> stays set. Tape-based training
+    /// updates the per-gate weights IN PLACE (the optimizer writes the tensors' backing
+    /// buffers directly; it never routes through SetParameters / UpdateParameters, the only
+    /// sites that call <see cref="InvalidateCpuStackedWeights"/>), so a stacked pack built
+    /// before/during training survives into the post-training inference and feeds STALE
+    /// input weights + biases to the fused primitive — a trained model then predicts
+    /// differently from a fresh deserialize of itself with bit-identical weights
+    /// (Clone_AfterTraining_ShouldPreserveLearnedWeights, #1623; verified: at the
+    /// LstmSequenceForward call site the orig's stacked Wih/Bih differed from the clone's
+    /// while the gate weights themselves were identical). A training↔eval transition is the
+    /// authoritative "weights may have changed" signal the layer CAN observe, so we drop the
+    /// pack here; the next inference rebuilds it from the current (final) weights. Only
+    /// transitions invalidate, so repeated same-mode inference still reuses the pack.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        if (isTraining != IsTrainingMode)
+            InvalidateCpuStackedWeights();
+        base.SetTrainingMode(isTraining);
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

@@ -5,13 +5,13 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class OccupancyNeuralNetworkTests : NeuralNetworkModelTestBase
+public class OccupancyNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [3];
     protected override int[] OutputShape => [1];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new OccupancyNeuralNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new OccupancyNeuralNetwork<float>();
 
     /// <summary>
     /// Occupancy detection is a binary task (a point is occupied or it is not),
@@ -24,11 +24,11 @@ public class OccupancyNeuralNetworkTests : NeuralNetworkModelTestBase
     /// semantically correct target type for a binary classifier, supplied via
     /// the base's documented CreateRandomTargetTensor extension point.
     /// </summary>
-    protected override Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)
+    protected override Tensor<float> CreateRandomTargetTensor(int[] shape, System.Random rng)
     {
-        var target = new Tensor<double>(shape);
+        var target = new Tensor<float>(shape);
         for (int i = 0; i < target.Length; i++)
-            target[i] = rng.NextDouble() < 0.5 ? 0.0 : 1.0;
+            target[i] = rng.NextDouble() < 0.5 ? 0.0f : 1.0f;
         return target;
     }
 }

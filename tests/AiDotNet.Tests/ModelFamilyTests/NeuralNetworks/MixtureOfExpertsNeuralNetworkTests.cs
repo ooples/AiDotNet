@@ -16,7 +16,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 ///   - HiddenExpansion = 4 (standard FFN expansion per Transformer convention)
 ///   - NumExperts = 4, TopK = 2 (paper evaluates K=2 as default sparse routing)
 /// </summary>
-public class MixtureOfExpertsNeuralNetworkTests : NeuralNetworkModelTestBase
+public class MixtureOfExpertsNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     // Paper: d_model = 1024–4096; scaled to 64 for test speed
     // InputDim == OutputDim per §3.1 (MoE replaces FFN in Transformer, residual connection)
@@ -33,9 +33,9 @@ public class MixtureOfExpertsNeuralNetworkTests : NeuralNetworkModelTestBase
     // routing stochasticity.
     protected override double MoreDataTolerance => 0.1;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var options = new MixtureOfExpertsOptions<double>
+        var options = new MixtureOfExpertsOptions<float>
         {
             NumExperts = 4,          // Paper §4: 4–4096 experts
             TopK = 2,                // Paper §3.2: noisy top-k gating with K=2
@@ -46,12 +46,12 @@ public class MixtureOfExpertsNeuralNetworkTests : NeuralNetworkModelTestBase
             LoadBalancingWeight = 0.01
         };
 
-        var architecture = new NeuralNetworkArchitecture<double>(
+        var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: 64,
             outputSize: 64);
 
-        return new MixtureOfExpertsNeuralNetwork<double>(options, architecture);
+        return new MixtureOfExpertsNeuralNetwork<float>(options, architecture);
     }
 }

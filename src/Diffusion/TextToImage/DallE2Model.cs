@@ -394,36 +394,16 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPrior = new UNetNoisePredictor<T>(
-            inputChannels: DALLE2_CLIP_DIM,
-            outputChannels: DALLE2_CLIP_DIM,
-            baseChannels: 256,
-            channelMultipliers: [1, 2, 4],
-            numResBlocks: 2,
-            attentionResolutions: [2, 1],
-            contextDim: DALLE2_CLIP_DIM);
-        clonedPrior.SetParameters(_priorUnet.GetParameters());
-
-        var clonedDecoder = new UNetNoisePredictor<T>(
-            inputChannels: DALLE2_PIXEL_CHANNELS,
-            outputChannels: DALLE2_PIXEL_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 3, 4],
-            numResBlocks: 3,
-            attentionResolutions: [4, 2, 1],
-            contextDim: DALLE2_CLIP_DIM);
-        clonedDecoder.SetParameters(_decoderUnet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: DALLE2_PIXEL_CHANNELS,
-            baseChannels: 64,
-            channelMultipliers: [1, 2, 4],
-            numResBlocksPerLevel: 1,
-            latentScaleFactor: 1.0);
-        clonedVae.SetParameters(_vae.GetParameters());
+        var clonedPrior = (UNetNoisePredictor<T>)_priorUnet.Clone();
+        var clonedDecoder = (UNetNoisePredictor<T>)_decoderUnet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
+        var options = GetOptions() is DiffusionModelOptions<T> diffusionOptions
+            ? new DiffusionModelOptions<T>(diffusionOptions)
+            : null;
 
         return new DallE2Model<T>(
+            architecture: Architecture,
+            options: options,
             priorUnet: clonedPrior,
             decoderUnet: clonedDecoder,
             vae: clonedVae,

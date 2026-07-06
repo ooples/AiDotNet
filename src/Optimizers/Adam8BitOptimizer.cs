@@ -1,10 +1,15 @@
 using AiDotNet.Helpers;
+using System.Buffers;
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using SimdVector = System.Numerics.Vector;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.MixedPrecision;
 
 namespace AiDotNet.Optimizers;
 
@@ -41,8 +46,39 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// #1745: in BFloat16 moment-storage mode the optimizer state is plain Adam
+    /// with bf16 m/v — which the fused CPU kernel now supports directly via
+    /// <c>ICompiledTrainingPlan.RequestBf16MomentStorage</c>. So this optimizer
+    /// keeps the fused fast path AND the halved moment footprint, instead of
+    /// falling back to the eager tape. The true 8-bit block-quantized mode
+    /// (UseBFloat16MomentStorage == false) has no fused kernel yet and stays on
+    /// the eager tape (returns false). Adaptive LR / AMSGrad — which the bf16
+    /// Adam/AdamW kernels don't model — also fall back.
+    /// </remarks>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        // Only BF16 moment storage maps to a fused kernel today; the int8
+        // block-quant path changes the update enough to need its own kernel.
+        if (!_options.UseBFloat16MomentStorage) return false;
+        // Adaptive LR mutates the rate between steps and AMSGrad needs the
+        // max-second-moment variant — neither is modeled by the bf16 Adam/AdamW
+        // kernels, so fall back to eager for those.
+        if (_options.UseAdaptiveLearningRate || _options.UseAMSGrad) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.Adam,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            0f, schedule)
+        { UseBf16Moments = true };
+        return true;
+    }
+
     /// <summary>
     /// Magic header for the v2 checkpoint format ("A8B1" in ASCII LE).
     /// Written immediately after the options JSON in <see cref="Serialize"/>
@@ -117,11 +153,6 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     private int _parameterLength;
 
     /// <summary>
-    /// Random number generator for stochastic rounding.
-    /// </summary>
-    private readonly Random _random;
-
-    /// <summary>
     /// Initializes a new instance of the Adam8BitOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -140,7 +171,6 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         _options = options ?? new();
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
-        _random = RandomHelper.CreateSeededRandom(42);
 
         InitializeAdaptiveParameters();
     }
@@ -203,10 +233,17 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <param name="isSigned">Whether to use signed quantization (for m) or unsigned (for v).</param>
     private void Quantize(Vector<T> values, Vector<byte> quantized, Vector<double> scales, bool isSigned)
     {
-        for (int b = 0; b < _numBlocks; b++)
+        // Blocks are independent (disjoint slices + own scale[b]) — parallelize.
+        // Stochastic rounding uses RandomHelper.ThreadSafeRandom (per-thread
+        // LockedRandom) so it stays thread-safe; exact seed reproducibility can't
+        // survive parallel work-stealing regardless, and the default path is
+        // deterministic round-to-nearest (UseStochasticRounding == false).
+        int blockSize = _options.BlockSize;
+        int length = _parameterLength;
+        CpuParallelSettings.ParallelForOrSerial(0, _numBlocks, (long)length, b =>
         {
-            int blockStart = b * _options.BlockSize;
-            int blockEnd = Math.Min(blockStart + _options.BlockSize, _parameterLength);
+            int blockStart = b * blockSize;
+            int blockEnd = Math.Min(blockStart + blockSize, length);
 
             // Find the scale for this block
             double maxAbs = 0;
@@ -221,15 +258,24 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             else
             {
-                // Use percentile-based scale (collect values, sort, take percentile)
-                var absValues = new List<double>(blockEnd - blockStart);
-                for (int i = blockStart; i < blockEnd; i++)
+                // Use percentile-based scale (collect values, sort, take percentile).
+                int count = blockEnd - blockStart;
+                var absValues = ArrayPool<double>.Shared.Rent(count);
+                try
                 {
-                    absValues.Add(Math.Abs(NumOps.ToDouble(values[i])));
+                    for (int i = blockStart; i < blockEnd; i++)
+                    {
+                        absValues[i - blockStart] = Math.Abs(NumOps.ToDouble(values[i]));
+                    }
+
+                    Array.Sort(absValues, 0, count);
+                    int percentileIdx = (int)((count - 1) * _options.QuantizationPercentile / 100.0);
+                    maxAbs = absValues[percentileIdx];
                 }
-                absValues.Sort();
-                int percentileIdx = (int)((absValues.Count - 1) * _options.QuantizationPercentile / 100.0);
-                maxAbs = absValues[percentileIdx];
+                finally
+                {
+                    ArrayPool<double>.Shared.Return(absValues);
+                }
             }
 
             // Compute scale (with small epsilon to avoid division by zero)
@@ -249,7 +295,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 {
                     double floor = Math.Floor(scaled);
                     double frac = scaled - floor;
-                    quantizedVal = (int)(floor + (_random.NextDouble() < frac ? 1 : 0));
+                    quantizedVal = (int)(floor + (RandomHelper.ThreadSafeRandom.NextDouble() < frac ? 1 : 0));
                 }
                 else
                 {
@@ -268,7 +314,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     quantized[i] = (byte)quantizedVal;
                 }
             }
-        }
+        });
     }
 
     /// <summary>
@@ -282,10 +328,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         var result = new Vector<T>(_parameterLength);
 
-        for (int b = 0; b < _numBlocks; b++)
+        // Blocks are independent (disjoint slices + own scale) — parallelize over
+        // them; the grain gate keeps small parameters serial.
+        int blockSize = _options.BlockSize;
+        int length = _parameterLength;
+        CpuParallelSettings.ParallelForOrSerial(0, _numBlocks, (long)length, b =>
         {
-            int blockStart = b * _options.BlockSize;
-            int blockEnd = Math.Min(blockStart + _options.BlockSize, _parameterLength);
+            int blockStart = b * blockSize;
+            int blockEnd = Math.Min(blockStart + blockSize, length);
             double scale = scales[b];
 
             for (int i = blockStart; i < blockEnd; i++)
@@ -302,7 +352,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
                 result[i] = NumOps.FromDouble(quantizedVal * scale);
             }
-        }
+        });
 
         return result;
     }
@@ -401,6 +451,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public Vector<double>? MScales;         // null when CompressBothMoments == false
         public Vector<double> VScales = null!;
 
+        // BF16 moment storage (UseBFloat16MomentStorage == true): 2 bytes/element, no per-block
+        // scales. Mutually exclusive with the byte-quantized fields above — only one set is allocated.
+        public ushort[]? MBf16;
+        public ushort[]? VBf16;
+
         // GPU-resident 8-bit state (AIDOTNET_GPU_ADAM=1, CUDA): int8 m/v + per-block
         // double scales kept on the device across steps so the adam8bit_update kernel
         // runs the whole dequant→Adam→requant cycle with no host download. Allocated
@@ -414,11 +469,19 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
     private readonly ConcurrentDictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<int, QuantizedTapeState> _pendingTapeStatesByParameterIndex = new();
+    // Guards _pendingTapeStatesByParameterIndex (a plain, non-concurrent Dictionary): Serialize's
+    // WriteTapeStates enumerates it while Deserialize/restore/Reset mutate it, so without this lock a
+    // checkpoint taken concurrently with training could throw "collection was modified" or snapshot a
+    // torn state.
+    private readonly object _pendingTapeStatesLock = new();
     private int _tapeStep;
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         _tapeStep++;
 
         T beta1 = _currentBeta1;
@@ -435,14 +498,22 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // absolute-max scale, deterministic rounding) is eligible; otherwise the CPU
         // path runs. Quantized state is kept GPU-resident per parameter across steps.
         bool gpu8 = typeof(T) == typeof(float)
+            && !_options.UseBFloat16MomentStorage
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
             && _options.CompressBothMoments
             && _options.QuantizationPercentile >= 100
             && !_options.UseStochasticRounding;
 
+        int parameterIndex = -1;
         foreach (var param in context.Parameters)
         {
+            parameterIndex++;
+            // Mirror PrepareTapeState: tolerate null parameter slots — skip restoring/updating their
+            // tape state but keep advancing parameterIndex so the stable parameter ordering is preserved.
+            if (param is null) continue;
+            RestorePendingTapeState(parameterIndex, param);
+
             // True sparse scatter Adam8Bit: dequant + Adam + requant only on the
             // BLOCKS that contain touched indices. The block granularity is
             // necessary because changing a block's per-block scale re-interprets
@@ -452,7 +523,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // percentile>=100, no stochastic rounding); other configs fall
             // through to the dense ToDense path so quantization semantics stay
             // bit-identical with the dense code.
-            if (!gpu8 && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (!gpu8 && !_options.UseBFloat16MomentStorage && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
                 // Lazily allocate quantized state at the parameter's actual length —
                 // mirroring the same shape-mismatch handling as the dense path below
@@ -530,6 +601,43 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 grad = Engine.Reshape(grad, param._shape);
             }
 
+            // BF16 moment storage: expand the 2-byte moments to a transient full-precision tensor,
+            // run the identical Adam recurrence + update, then re-pack to BF16. Only this parameter's
+            // moments are materialized at a time (per-parameter loop), so the resident footprint stays
+            // at 2 bytes/element while the math runs at full precision.
+            if (_options.UseBFloat16MomentStorage)
+            {
+                // Moments expanded to transient full-precision tensors; update them IN PLACE to avoid
+                // ~7 extra full-size scratch allocations per parameter (#1688 Fix 2). Math identical.
+                // AllocateTapeState always allocates both BF16 buffers when UseBFloat16MomentStorage is
+                // set, so they are non-null on this path; capture into locals (no null-forgiving operator).
+                ushort[] mBf16 = state.MBf16 ?? throw new InvalidOperationException("BF16 moment buffer M was not allocated.");
+                ushort[] vBf16 = state.VBf16 ?? throw new InvalidOperationException("BF16 moment buffer V was not allocated.");
+
+                Tensor<T> mB = Bf16ToTensor(mBf16, param._shape);
+                Tensor<T> vB = Bf16ToTensor(vBf16, param._shape);
+
+                var gradScaledB = Engine.TensorMultiplyScalar(grad, oneMinusBeta1); // (1-beta1)·g
+                Engine.TensorMultiplyScalarInPlace(mB, beta1);                      // mB *= beta1
+                Engine.TensorAddInPlace(mB, gradScaledB);                           // mB := m_t
+                var gradSqB = Engine.TensorMultiply(grad, grad);                    // g²
+                Engine.TensorMultiplyScalarInPlace(gradSqB, oneMinusBeta2);         // (1-beta2)·g²
+                Engine.TensorMultiplyScalarInPlace(vB, beta2);                      // vB *= beta2
+                Engine.TensorAddInPlace(vB, gradSqB);                               // vB := v_t
+
+                // mB/vB were updated in place above, so they hold m_t/v_t — pack them straight back into
+                // the null-safe BF16 buffers (no separate newMB/newVB tensors, no null-forgiving operator).
+                TensorToBf16(mB, mBf16);
+                TensorToBf16(vB, vBf16);
+
+                var mHatB = Engine.TensorDivideScalar(mB, biasCorrection1);
+                var vHatB = Engine.TensorDivideScalar(vB, biasCorrection2);
+                var denomB = Engine.TensorAddScalar(Engine.TensorSqrt(vHatB), epsilon);
+                var updateB = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatB, denomB), CurrentLearningRate);
+                Engine.TensorSubtractInPlace(param, updateB);
+                continue;
+            }
+
             // GPU-resident 8-bit step: lazily allocate the device quant state on
             // first sight of this parameter, then run the in-place kernel. Skips the
             // CPU dequant/quant path entirely when param/grad resolve to GPU buffers.
@@ -603,43 +711,36 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             Tensor<T> v = DequantizeTensor(state.VQuantized, state.VScales, param._shape, state.NumBlocks, isSigned: false);
 
-            // Update biased first / second moments — same recurrences the legacy
-            // UpdateSolution path uses, expressed against engine Tensor ops:
+            // Update biased first / second moments IN PLACE to minimize per-parameter transient
+            // allocations (#1688 Fix 2). Identical recurrences to the legacy path, but expressed with
+            // in-place ops so a step over a large parameter no longer allocates ~7 full-size scratch
+            // tensors for the moment update (plus it removes the prior TensorCopy):
             //     m_t = beta1·m_{t-1} + (1-beta1)·g
             //     v_t = beta2·v_{t-1} + (1-beta2)·g²
-            var newM = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1),
-                                        Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
-            var newV = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2),
-                                        Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2));
+            // `m` is either the persistent state.MFullPrecision (CompressBothMoments == false) or a
+            // transient dequant — either way updating it in place IS the moment update, so when
+            // CompressBothMoments is false no separate copy into state.MFullPrecision is needed. `v` is
+            // always a transient dequant. `grad` is tape-owned/shared, so it is never mutated.
+            var gradScaled = Engine.TensorMultiplyScalar(grad, oneMinusBeta1); // (1-beta1)·g
+            Engine.TensorMultiplyScalarInPlace(m, beta1);                      // m *= beta1
+            Engine.TensorAddInPlace(m, gradScaled);                            // m := m_t
+            var gradSq = Engine.TensorMultiply(grad, grad);                    // g²
+            Engine.TensorMultiplyScalarInPlace(gradSq, oneMinusBeta2);         // (1-beta2)·g²
+            Engine.TensorMultiplyScalarInPlace(v, beta2);                      // v *= beta2
+            Engine.TensorAddInPlace(v, gradSq);                                // v := v_t
 
-            // Re-quantize the updated moments back into the byte[] state. After
-            // this the transient newM / newV Tensors are no longer reachable
-            // and the arena will reclaim their backing memory on Step exit;
-            // only state.MQuantized, state.VQuantized, and (if applicable)
-            // state.MFullPrecision remain resident.
+            // Re-quantize the updated moments back into the byte[] state. When CompressBothMoments is
+            // false, m IS state.MFullPrecision and was updated in place above — no copy needed.
             if (_options.CompressBothMoments)
             {
-                QuantizeTensor(newM, state.MQuantized!, state.MScales!, state.NumBlocks, isSigned: true);
+                QuantizeTensor(m, state.MQuantized!, state.MScales!, state.NumBlocks, isSigned: true);
             }
-            else
-            {
-                // Copy newM's values into the persistent state.MFullPrecision
-                // tensor in place rather than replacing the reference. The
-                // engine's tensor ops (TensorAdd / TensorMultiplyScalar) return
-                // arena-allocated tensors that the arena will reclaim on Step
-                // exit — assigning newM to state.MFullPrecision would either
-                // (a) retain a tensor backed by reclaimed memory, or (b) keep
-                // the arena allocation alive across Step calls and bypass the
-                // arena's per-iteration recycling. TensorCopy keeps the
-                // long-lived state on a stable backing buffer.
-                Engine.TensorCopy(newM, state.MFullPrecision!);
-            }
-            QuantizeTensor(newV, state.VQuantized, state.VScales, state.NumBlocks, isSigned: false);
+            QuantizeTensor(v, state.VQuantized, state.VScales, state.NumBlocks, isSigned: false);
 
             // Apply the bias-corrected Adam update directly to the parameter.
             //     update = lr · (m_t / (1 - beta1^t)) / (sqrt(v_t / (1 - beta2^t)) + eps)
-            var mHat = Engine.TensorDivideScalar(newM, biasCorrection1);
-            var vHat = Engine.TensorDivideScalar(newV, biasCorrection2);
+            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
+            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
             var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon);
             var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, update);
@@ -655,6 +756,18 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </summary>
     private QuantizedTapeState AllocateTapeState(int paramLength)
     {
+        if (_options.UseBFloat16MomentStorage)
+        {
+            // BF16 moments: 2 bytes/element, zero-initialized (BF16 0x0000 == +0.0), no scales/blocks.
+            return new QuantizedTapeState
+            {
+                Length = paramLength,
+                NumBlocks = 0,
+                MBf16 = new ushort[paramLength],
+                VBf16 = new ushort[paramLength],
+            };
+        }
+
         int blockSize = _options.BlockSize;
         int numBlocks = (paramLength + blockSize - 1) / blockSize;
 
@@ -727,80 +840,80 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         int blockSize = _options.BlockSize;
         int totalLength = values.Length;
 
-        // Reuse a single rented buffer across all blocks for the percentile
-        // path. Previously each block allocated a fresh List<double> and
-        // fully sorted it — at default QuantizationPercentile=99.9 with a
-        // foundation-scale model (300 M params, blockSize=64 → ~4.7 M
-        // blocks per Step) this was the dominant allocator hotspot. ArrayPool
-        // amortizes the allocation across the whole tensor; we still pay a
-        // sort per block but no GC pressure for the buffer itself.
-        double[]? rentedBuffer = null;
-        try
-        {
-        for (int b = 0; b < numBlocks; b++)
-        {
-            int blockStart = b * blockSize;
-            int blockEnd = Math.Min(blockStart + blockSize, totalLength);
-
-            double maxAbs = 0;
-            if (_options.QuantizationPercentile >= 100)
+        // Blocks are independent — parallelize over them (grain-gated for small
+        // tensors). The percentile path needs a per-block sort scratch; rather
+        // than allocate one List per block (the dominant allocator hotspot at
+        // foundation scale), each worker lazily rents ONE ArrayPool buffer via
+        // localInit and reuses it across the blocks it processes, returning it in
+        // localFinally. Stochastic rounding uses the thread-safe per-thread RNG.
+        CpuParallelSettings.ParallelForOrSerial<double[]?>(
+            0, numBlocks, (long)totalLength,
+            () => null,
+            (b, _, rentedBuffer) =>
             {
+                int blockStart = b * blockSize;
+                int blockEnd = Math.Min(blockStart + blockSize, totalLength);
+
+                double maxAbs = 0;
+                if (_options.QuantizationPercentile >= 100)
+                {
+                    for (int i = blockStart; i < blockEnd; i++)
+                    {
+                        double val = Math.Abs(NumOps.ToDouble(values[i]));
+                        if (val > maxAbs) maxAbs = val;
+                    }
+                }
+                else
+                {
+                    int blockLen = blockEnd - blockStart;
+                    rentedBuffer ??= System.Buffers.ArrayPool<double>.Shared.Rent(blockSize);
+                    for (int i = 0; i < blockLen; i++)
+                        rentedBuffer[i] = Math.Abs(NumOps.ToDouble(values[blockStart + i]));
+                    Array.Sort(rentedBuffer, 0, blockLen);
+                    int percentileIdx = (int)((blockLen - 1) * _options.QuantizationPercentile / 100.0);
+                    maxAbs = rentedBuffer[percentileIdx];
+                }
+
+                double scale = maxAbs / (isSigned ? 127.0 : 255.0);
+                if (scale < 1e-10) scale = 1e-10;
+                scales[b] = scale;
+
                 for (int i = blockStart; i < blockEnd; i++)
                 {
-                    double val = Math.Abs(NumOps.ToDouble(values[i]));
-                    if (val > maxAbs) maxAbs = val;
+                    double val = NumOps.ToDouble(values[i]);
+                    double scaled = val / scale;
+
+                    int quantizedVal;
+                    if (_options.UseStochasticRounding)
+                    {
+                        double floor = Math.Floor(scaled);
+                        double frac = scaled - floor;
+                        quantizedVal = (int)(floor + (RandomHelper.ThreadSafeRandom.NextDouble() < frac ? 1 : 0));
+                    }
+                    else
+                    {
+                        quantizedVal = (int)Math.Round(scaled);
+                    }
+
+                    if (isSigned)
+                    {
+                        quantizedVal = MathHelper.Clamp(quantizedVal, -127, 127);
+                        quantized[i] = (byte)(quantizedVal + 128);
+                    }
+                    else
+                    {
+                        quantizedVal = MathHelper.Clamp(quantizedVal, 0, 255);
+                        quantized[i] = (byte)quantizedVal;
+                    }
                 }
-            }
-            else
+
+                return rentedBuffer;
+            },
+            rentedBuffer =>
             {
-                int blockLen = blockEnd - blockStart;
-                rentedBuffer ??= System.Buffers.ArrayPool<double>.Shared.Rent(blockSize);
-                for (int i = 0; i < blockLen; i++)
-                    rentedBuffer[i] = Math.Abs(NumOps.ToDouble(values[blockStart + i]));
-                Array.Sort(rentedBuffer, 0, blockLen);
-                int percentileIdx = (int)((blockLen - 1) * _options.QuantizationPercentile / 100.0);
-                maxAbs = rentedBuffer[percentileIdx];
-            }
-
-            double scale = maxAbs / (isSigned ? 127.0 : 255.0);
-            if (scale < 1e-10) scale = 1e-10;
-            scales[b] = scale;
-
-            for (int i = blockStart; i < blockEnd; i++)
-            {
-                double val = NumOps.ToDouble(values[i]);
-                double scaled = val / scale;
-
-                int quantizedVal;
-                if (_options.UseStochasticRounding)
-                {
-                    double floor = Math.Floor(scaled);
-                    double frac = scaled - floor;
-                    quantizedVal = (int)(floor + (_random.NextDouble() < frac ? 1 : 0));
-                }
-                else
-                {
-                    quantizedVal = (int)Math.Round(scaled);
-                }
-
-                if (isSigned)
-                {
-                    quantizedVal = MathHelper.Clamp(quantizedVal, -127, 127);
-                    quantized[i] = (byte)(quantizedVal + 128);
-                }
-                else
-                {
-                    quantizedVal = MathHelper.Clamp(quantizedVal, 0, 255);
-                    quantized[i] = (byte)quantizedVal;
-                }
-            }
-        }
-        }
-        finally
-        {
-            if (rentedBuffer is not null)
-                System.Buffers.ArrayPool<double>.Shared.Return(rentedBuffer);
-        }
+                if (rentedBuffer is not null)
+                    System.Buffers.ArrayPool<double>.Shared.Return(rentedBuffer);
+            });
     }
 
     /// <summary>
@@ -814,7 +927,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var result = new Tensor<T>(paramShape);
         int blockSize = _options.BlockSize;
         int totalLength = result.Length;
-        for (int b = 0; b < numBlocks; b++)
+        // Blocks are independent — parallelize (grain-gated for small tensors).
+        CpuParallelSettings.ParallelForOrSerial(0, numBlocks, (long)totalLength, b =>
         {
             int blockStart = b * blockSize;
             int blockEnd = Math.Min(blockStart + blockSize, totalLength);
@@ -825,9 +939,161 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 double quantizedVal = isSigned ? (int)quantized[i] - 128 : (int)quantized[i];
                 result[i] = NumOps.FromDouble(quantizedVal * scale);
             }
+        });
+        return result;
+    }
+
+    /// <summary>
+    /// Expands a BF16 (2 bytes/element) moment buffer into a freshly-allocated full-precision tensor of
+    /// the given shape. Transient — consumed within a single Step iteration and released to the arena.
+    /// </summary>
+    private Tensor<T> Bf16ToTensor(ushort[] bf16, int[] paramShape)
+    {
+        var result = new Tensor<T>(paramShape);
+        int length = result.Length;
+        // Raw-array dequant (no Tensor/Vector indexer, no NumOps dispatch on the float fast path).
+        // Profiled as ~half the NN-training managed hot path (ViT) before this; the typeof(T) branch
+        // folds at JIT. BF16→float is a pure widening, no scale.
+        var dst = result.GetCpuData();
+        if (typeof(T) == typeof(float))
+        {
+            var f = (float[])(object)dst;
+            // Chunked range loop (not per-element delegate) so the inner loop is tight and can run a
+            // SIMD bulk widen on NET7+. Bit-identical to BitConverterHelper.Bf16BitsToFloat (the scalar
+            // tail uses it directly, and the SIMD body reproduces the same high-16-bits placement).
+            CpuParallelSettings.ParallelForChunks(length, Bf16BulkChunkGrain, (chunkStart, chunkCount) =>
+            {
+                int i = chunkStart;
+                int chunkEnd = chunkStart + chunkCount;
+#if NET7_0_OR_GREATER
+                i = ConvertBf16ToFloatSimd(bf16, f, chunkStart, chunkCount);
+#endif
+                for (; i < chunkEnd; i++)
+                    f[i] = BitConverterHelper.Bf16BitsToFloat(bf16[i]);
+            });
+        }
+        else
+        {
+            CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i => dst[i] = NumOps.FromDouble(BitConverterHelper.Bf16BitsToFloat(bf16[i])));
         }
         return result;
     }
+
+    /// <summary>
+    /// Packs a full-precision tensor's values back into a pre-allocated BF16 (2 bytes/element) buffer
+    /// with round-to-nearest-even. BF16 keeps the float32 exponent, so no scale factor is needed.
+    /// </summary>
+    private void TensorToBf16(Tensor<T> values, ushort[] bf16)
+    {
+        int length = values.Length;
+        // Raw-array quant (no Tensor/Vector indexer, no NumOps dispatch on the float fast path).
+        var src = values.GetCpuData();
+        if (typeof(T) == typeof(float))
+        {
+            var f = (float[])(object)src;
+            // Chunked range loop + SIMD bulk round-to-nearest-even on NET7+. Bit-identical to
+            // BitConverterHelper.FloatToBf16Bits (the scalar tail calls it; the SIMD body reproduces
+            // the same RNE add + NaN-preserving path lane-for-lane).
+            CpuParallelSettings.ParallelForChunks(length, Bf16BulkChunkGrain, (chunkStart, chunkCount) =>
+            {
+                int i = chunkStart;
+                int chunkEnd = chunkStart + chunkCount;
+#if NET7_0_OR_GREATER
+                i = ConvertFloatToBf16Simd(f, bf16, chunkStart, chunkCount);
+#endif
+                for (; i < chunkEnd; i++)
+                    bf16[i] = BitConverterHelper.FloatToBf16Bits(f[i]);
+            });
+        }
+        else
+        {
+            CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i => bf16[i] = BitConverterHelper.FloatToBf16Bits((float)NumOps.ToDouble(src[i])));
+        }
+    }
+
+    /// <summary>
+    /// Minimum elements per parallel chunk for the BF16 bulk conversions. Below this the work runs
+    /// serially (single chunk); above it the work is split across cores, and within each chunk the
+    /// inner loop runs a SIMD bulk convert (NET7+) followed by a scalar tail.
+    /// </summary>
+    private const int Bf16BulkChunkGrain = 8192;
+
+#if NET7_0_OR_GREATER
+    /// <summary>
+    /// SIMD bulk float→BF16 with round-to-nearest-even, bit-identical to
+    /// <see cref="BitConverterHelper.FloatToBf16Bits(float)"/>. Processes whole <see cref="Vector{T}"/>
+    /// blocks in <paramref name="src"/>[<paramref name="start"/>, start+count); returns the first index
+    /// not covered (the caller finishes the &lt; one-vector tail with the scalar helper).
+    /// </summary>
+    private static int ConvertFloatToBf16Simd(float[] src, ushort[] dst, int start, int count)
+    {
+        int laneU = System.Numerics.Vector<uint>.Count;        // == Vector<float>.Count
+        int stride = System.Numerics.Vector<ushort>.Count;     // == 2 * laneU ushorts produced per iteration
+        var c7fff = new System.Numerics.Vector<uint>(0x7FFFu);
+        var cInf = new System.Numerics.Vector<uint>(0x7F800000u);
+        var cAbs = new System.Numerics.Vector<uint>(0x7FFFFFFFu);
+        var cNan = new System.Numerics.Vector<uint>(0x0040u);
+        var cOne = new System.Numerics.Vector<uint>(1u);
+        int i = start;
+        int end = start + count;
+        for (; i + stride <= end; i += stride)
+        {
+            System.Numerics.Vector<uint> lo = FloatLaneToBf16(new System.Numerics.Vector<float>(src, i), c7fff, cInf, cAbs, cNan, cOne);
+            System.Numerics.Vector<uint> hi = FloatLaneToBf16(new System.Numerics.Vector<float>(src, i + laneU), c7fff, cInf, cAbs, cNan, cOne);
+            SimdVector.Narrow(lo, hi).CopyTo(dst, i);
+        }
+        return i;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static System.Numerics.Vector<uint> FloatLaneToBf16(System.Numerics.Vector<float> value,
+        System.Numerics.Vector<uint> c7fff, System.Numerics.Vector<uint> cInf,
+        System.Numerics.Vector<uint> cAbs, System.Numerics.Vector<uint> cNan, System.Numerics.Vector<uint> cOne)
+    {
+        System.Numerics.Vector<uint> bits = SimdVector.AsVectorUInt32(value);
+        System.Numerics.Vector<uint> high = SimdVector.ShiftRightLogical(bits, 16);
+        System.Numerics.Vector<uint> isNan = SimdVector.GreaterThan(bits & cAbs, cInf);   // (bits & 0x7FFFFFFF) > 0x7F800000
+        System.Numerics.Vector<uint> nanResult = high | cNan;                              // (bits>>16) | 0x40
+        System.Numerics.Vector<uint> lsb = high & cOne;                                    // (bits>>16) & 1
+        System.Numerics.Vector<uint> rounded = SimdVector.ShiftRightLogical(bits + c7fff + lsb, 16);
+        // Narrow takes the low 16 bits, matching the scalar (ushort) truncation.
+        return SimdVector.ConditionalSelect(isNan, nanResult, rounded);
+    }
+
+    /// <summary>
+    /// SIMD bulk BF16→float (pure widening, bit-identical to
+    /// <see cref="BitConverterHelper.Bf16BitsToFloat(ushort)"/>). Returns the first index not covered.
+    /// </summary>
+    private static int ConvertBf16ToFloatSimd(ushort[] src, float[] dst, int start, int count)
+    {
+        int laneU = System.Numerics.Vector<uint>.Count;
+        int stride = System.Numerics.Vector<ushort>.Count;
+        int i = start;
+        int end = start + count;
+        for (; i + stride <= end; i += stride)
+        {
+            SimdVector.Widen(new System.Numerics.Vector<ushort>(src, i), out System.Numerics.Vector<uint> lo, out System.Numerics.Vector<uint> hi);
+            SimdVector.AsVectorSingle(SimdVector.ShiftLeft(lo, 16)).CopyTo(dst, i);
+            SimdVector.AsVectorSingle(SimdVector.ShiftLeft(hi, 16)).CopyTo(dst, i + laneU);
+        }
+        return i;
+    }
+
+    /// <summary>
+    /// Test-only hook: runs the exact production float→BF16→float path (SIMD block + scalar tail) over
+    /// whole arrays so a unit test can assert bit-identity against the scalar
+    /// <see cref="BitConverterHelper"/> reference. Not part of the optimizer's runtime behavior.
+    /// </summary>
+    internal static void Bf16RoundTripForTest(float[] src, ushort[] bf16, float[] back)
+    {
+        int i = ConvertFloatToBf16Simd(src, bf16, 0, src.Length);
+        for (; i < src.Length; i++)
+            bf16[i] = BitConverterHelper.FloatToBf16Bits(src[i]);
+        int j = ConvertBf16ToFloatSimd(bf16, back, 0, bf16.Length);
+        for (; j < bf16.Length; j++)
+            back[j] = BitConverterHelper.Bf16BitsToFloat(bf16[j]);
+    }
+#endif
 
     /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
@@ -1065,7 +1331,17 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // a fresh Reset() leaves stale per-parameter moments + bias-
         // correction step counter in place — the next training run
         // would resume from old state instead of cold-starting.
-        _tapeStates.Clear();
+        // Clear BOTH maps under _pendingTapeStatesLock so this reset is atomic
+        // with RestorePendingTapeState (which does its pending lookup and the
+        // matching _tapeStates insert under the same lock). Otherwise a restore
+        // running concurrently could read a pending entry, we clear both maps,
+        // and the restore then writes a stale checkpoint moment back into the
+        // freshly-reset optimizer.
+        lock (_pendingTapeStatesLock)
+        {
+            _tapeStates.Clear();
+            _pendingTapeStatesByParameterIndex.Clear();
+        }
         _tapeStep = 0;
     }
 
@@ -1138,9 +1414,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             tapeStateCount++;
             tapeParameterLength += tapeState.Length;
             if (tapeState.MQuantized != null) quantizedStateMemory += tapeState.MQuantized.Length;
-            quantizedStateMemory += tapeState.VQuantized.Length;
+            // VQuantized/VScales are null after a BF16 run (UseBFloat16MomentStorage) — the V moment
+            // lives in VBf16 instead — so guard the deref to avoid a NullReferenceException, and
+            // attribute the BF16 buffers (2 bytes/element, no per-block scales) so the savings math
+            // stays correct regardless of which storage mode the run used.
+            if (tapeState.VQuantized != null) quantizedStateMemory += tapeState.VQuantized.Length;
             if (tapeState.MScales != null) scalesMemory += tapeState.MScales.Length * 8;
-            scalesMemory += tapeState.VScales.Length * 8;
+            if (tapeState.VScales != null) scalesMemory += tapeState.VScales.Length * 8;
+            if (tapeState.MBf16 != null) quantizedStateMemory += tapeState.MBf16.Length * 2;
+            if (tapeState.VBf16 != null) quantizedStateMemory += tapeState.VBf16.Length * 2;
             if (tapeState.MFullPrecision != null)
             {
                 fullPrecisionMemory += tapeState.MFullPrecision.Length * bytesPerElement;
@@ -1219,11 +1501,425 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 MScalesLength = s.MScales?.Length ?? 0,
                 HasMFullPrecision = s.MFullPrecision is not null,
                 MFullPrecisionLength = s.MFullPrecision?.Length ?? 0,
-                VQuantizedLength = s.VQuantized.Length,
-                VScalesLength = s.VScales.Length,
+                // Null after a BF16 run (the V moment is in VBf16) — guard so the test snapshot
+                // doesn't throw a NullReferenceException.
+                VQuantizedLength = s.VQuantized?.Length ?? 0,
+                VScalesLength = s.VScales?.Length ?? 0,
             };
         }
         return snapshot;
+    }
+
+    private void WriteTapeStates(BinaryWriter writer)
+    {
+        var entries = new SortedDictionary<int, QuantizedTapeState>();
+
+        // Snapshot the pending map under the lock so a concurrent Deserialize/restore/Reset can't mutate
+        // it mid-enumeration (see _pendingTapeStatesLock).
+        lock (_pendingTapeStatesLock)
+        {
+            foreach (var entry in _pendingTapeStatesByParameterIndex)
+            {
+                entries[entry.Key] = entry.Value;
+            }
+        }
+
+        foreach (var entry in _tapeStates)
+        {
+            if (TryGetTapeParameterIndex(entry.Key, out int parameterIndex))
+            {
+                entries[parameterIndex] = entry.Value;
+            }
+        }
+
+        writer.Write(entries.Count);
+        foreach (var entry in entries)
+        {
+            writer.Write(entry.Key);
+            WriteTapeState(writer, entry.Value);
+        }
+    }
+
+    private void ReadTapeStates(BinaryReader reader)
+    {
+        // Parse into a LOCAL map first so the stream I/O runs outside _pendingTapeStatesLock, then swap the
+        // contents in atomically under the lock (WriteTapeStates snapshots the shared map under the same
+        // lock, so a concurrent Serialize sees either the old or the new full state, never a torn one).
+        var pending = new Dictionary<int, QuantizedTapeState>();
+
+        int count = reader.ReadInt32();
+        // Each entry is at minimum a 4-byte parameter index, so a valid count can't exceed the bytes
+        // remaining. This rejects a negative count (which would silently restore zero entries) and an
+        // absurd positive count before the loop.
+        ValidateDeclaredCount(reader, count, sizeof(int), "tape-state table");
+        for (int i = 0; i < count; i++)
+        {
+            int parameterIndex = reader.ReadInt32();
+            if (parameterIndex < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: invalid tape-state parameter index {parameterIndex}.");
+            }
+            // ContainsKey (not Dictionary.TryAdd, which is unavailable on net471) before reading the
+            // state, so a duplicate index throws instead of silently overwriting an earlier entry.
+            if (pending.ContainsKey(parameterIndex))
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: duplicate tape-state parameter index {parameterIndex} in checkpoint.");
+            }
+            pending[parameterIndex] = ReadTapeState(reader);
+        }
+
+        lock (_pendingTapeStatesLock)
+        {
+            _pendingTapeStatesByParameterIndex.Clear();
+            foreach (var entry in pending)
+                _pendingTapeStatesByParameterIndex[entry.Key] = entry.Value;
+        }
+    }
+
+    private void WriteTapeState(BinaryWriter writer, QuantizedTapeState state)
+    {
+        // The GPU 8-bit step (AIDOTNET_GPU_ADAM=1) updates GpuMQ/GpuVQ (and the device scale buffers) in
+        // place and never writes back to the host MQuantized/VQuantized/scale fields this method serializes.
+        // Persisting a GPU-resident state here would therefore checkpoint STALE host moments — silent
+        // corruption that resumes with wrong optimizer state. The device->host readback belongs in the
+        // Tensors GpuOptimizer layer (which owns the device buffers) and has to be validated on real GPU
+        // hardware, so it is a tracked enhancement rather than something this diffusion-training PR ships
+        // unvalidated. Until then we fail fast with actionable guidance instead of writing wrong data:
+        // to checkpoint an 8-bit Adam run, train with AIDOTNET_GPU_ADAM unset (or CompressBothMoments off)
+        // so the moments stay host-resident and serialize correctly. Higher-level checkpoint code may catch
+        // this to degrade to a model-only save with a clear status.
+        if (state.GpuResident)
+        {
+            throw new InvalidOperationException(
+                "Adam8BitOptimizer: cannot serialize a GPU-resident 8-bit tape state — the device moment " +
+                "buffers have no host-readback path yet, so persisting would checkpoint stale host moments. " +
+                "To checkpoint, run without AIDOTNET_GPU_ADAM (host-resident moments serialize normally), or " +
+                "handle this exception at the checkpoint layer to save model-only.");
+        }
+
+        writer.Write(state.Length);
+        writer.Write(state.NumBlocks);
+        WriteByteVector(writer, state.MQuantized);
+        WriteTensor(writer, state.MFullPrecision);
+        WriteByteVector(writer, state.VQuantized);
+        WriteDoubleVector(writer, state.MScales);
+        WriteDoubleVector(writer, state.VScales);
+        WriteUShortArray(writer, state.MBf16);
+        WriteUShortArray(writer, state.VBf16);
+    }
+
+    private QuantizedTapeState ReadTapeState(BinaryReader reader)
+    {
+        var state = new QuantizedTapeState
+        {
+            Length = reader.ReadInt32(),
+            NumBlocks = reader.ReadInt32(),
+            MQuantized = ReadByteVector(reader),
+            MFullPrecision = ReadTensor(reader),
+            VQuantized = ReadByteVector(reader) ?? null!,
+            MScales = ReadDoubleVector(reader),
+            VScales = ReadDoubleVector(reader) ?? null!,
+            MBf16 = ReadUShortArray(reader),
+            VBf16 = ReadUShortArray(reader),
+            GpuResident = false
+        };
+
+        if (state.Length < 0)
+        {
+            throw new InvalidOperationException($"Adam8BitOptimizer: invalid tape-state length {state.Length}.");
+        }
+
+        // Validate that each payload buffer is not just PRESENT but the RIGHT length for this state's
+        // element count — a malformed checkpoint with a short/long moment buffer would otherwise crash
+        // later or silently apply partial moment data. Quantized moments are one byte per element;
+        // per-block scales are one double per block; BF16 moments are one ushort per element.
+        int expectedBlocks = state.Length == 0 ? 0 : (state.Length + _options.BlockSize - 1) / _options.BlockSize;
+
+        if (_options.UseBFloat16MomentStorage)
+        {
+            if (state.MBf16 is null || state.VBf16 is null)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: BF16 tape-state payload is incomplete.");
+            }
+            if (state.MBf16.Length != state.Length || state.VBf16.Length != state.Length)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: BF16 tape-state payload has inconsistent lengths.");
+            }
+        }
+        else
+        {
+            if (state.VQuantized is null || state.VScales is null)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: V tape-state payload is incomplete.");
+            }
+            if (state.VQuantized.Length != state.Length || state.VScales.Length != expectedBlocks)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: V tape-state payload has inconsistent lengths.");
+            }
+
+            if (_options.CompressBothMoments)
+            {
+                if (state.MQuantized is null || state.MScales is null)
+                {
+                    throw new InvalidOperationException("Adam8BitOptimizer: quantized M tape-state payload is incomplete.");
+                }
+                if (state.MQuantized.Length != state.Length || state.MScales.Length != expectedBlocks)
+                {
+                    throw new InvalidOperationException("Adam8BitOptimizer: quantized M tape-state payload has inconsistent lengths.");
+                }
+            }
+            else if (state.MFullPrecision is null)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: full-precision M tape-state payload is incomplete.");
+            }
+            else if (state.MFullPrecision.Length != state.Length)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: full-precision M tape-state payload has inconsistent length.");
+            }
+        }
+
+        if (!_options.UseBFloat16MomentStorage)
+        {
+            if (state.NumBlocks != expectedBlocks)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: tape-state block count {state.NumBlocks} does not match " +
+                    $"length {state.Length} and BlockSize {_options.BlockSize} (expected {expectedBlocks}).");
+            }
+        }
+
+        return state;
+    }
+
+    private void RestorePendingTapeState(int parameterIndex, Tensor<T> parameter)
+    {
+        // Do the pending lookup, the _tapeStates insert, and the pending remove
+        // all under _pendingTapeStatesLock (and Reset() clears both maps under the
+        // same lock). Releasing the lock between the lookup and the insert let a
+        // concurrent Reset() clear both maps in the gap, after which this method
+        // wrote a stale checkpoint moment back into the freshly-reset optimizer.
+        lock (_pendingTapeStatesLock)
+        {
+            if (!_pendingTapeStatesByParameterIndex.TryGetValue(parameterIndex, out var state))
+            {
+                return;
+            }
+
+            if (state.Length != parameter.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer checkpoint tape state for parameter {parameterIndex} has length " +
+                    $"{state.Length}, but the current parameter has length {parameter.Length}.");
+            }
+
+            if (state.MFullPrecision is not null && !state.MFullPrecision._shape.SequenceEqual(parameter._shape))
+            {
+                var reshaped = new Tensor<T>(parameter._shape);
+                state.MFullPrecision.AsSpan().CopyTo(reshaped.AsWritableSpan());
+                state.MFullPrecision = reshaped;
+            }
+
+            _tapeStates[parameter] = state;
+            _pendingTapeStatesByParameterIndex.Remove(parameterIndex);
+        }
+    }
+
+    private static void WriteByteVector(BinaryWriter writer, Vector<byte>? vector)
+    {
+        writer.Write(vector is not null);
+        if (vector is null) return;
+
+        writer.Write(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            writer.Write(vector[i]);
+        }
+    }
+
+    // Reject a stream-declared element count that is negative OR larger than the bytes physically
+    // remaining in the (seekable) checkpoint stream, BEFORE allocating. A malformed/truncated payload
+    // could otherwise declare billions of elements and force a multi-GB allocation (OOM) before the
+    // read loop ever fails. elementSize is the on-wire bytes per element.
+    private static void ValidateDeclaredCount(BinaryReader reader, int length, int elementSize, string what)
+    {
+        if (length < 0)
+        {
+            throw new InvalidOperationException($"Adam8BitOptimizer: invalid {what} length {length}.");
+        }
+
+        var stream = reader.BaseStream;
+        if (stream.CanSeek)
+        {
+            long remaining = stream.Length - stream.Position;
+            if ((long)length * elementSize > remaining)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: {what} declares {length} elements ({(long)length * elementSize} bytes) " +
+                    $"but only {remaining} bytes remain in the checkpoint stream.");
+            }
+        }
+    }
+
+    private static Vector<byte>? ReadByteVector(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+
+        int length = reader.ReadInt32();
+        ValidateDeclaredCount(reader, length, sizeof(byte), "byte-vector");
+
+        var vector = new Vector<byte>(length);
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = reader.ReadByte();
+        }
+
+        return vector;
+    }
+
+    private static void WriteDoubleVector(BinaryWriter writer, Vector<double>? vector)
+    {
+        writer.Write(vector is not null);
+        if (vector is null) return;
+
+        writer.Write(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            writer.Write(vector[i]);
+        }
+    }
+
+    private static Vector<double>? ReadDoubleVector(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+
+        int length = reader.ReadInt32();
+        ValidateDeclaredCount(reader, length, sizeof(double), "double-vector");
+
+        var vector = new Vector<double>(length);
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = reader.ReadDouble();
+        }
+
+        return vector;
+    }
+
+    private void WriteTensor(BinaryWriter writer, Tensor<T>? tensor)
+    {
+        writer.Write(tensor is not null);
+        if (tensor is null) return;
+
+        writer.Write(tensor._shape.Length);
+        foreach (int dimension in tensor._shape)
+        {
+            writer.Write(dimension);
+        }
+
+        var span = tensor.AsSpan();
+        writer.Write(span.Length);
+        for (int i = 0; i < span.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(span[i]));
+        }
+    }
+
+    private Tensor<T>? ReadTensor(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+
+        int rank = reader.ReadInt32();
+        // Each rank dimension is a 4-byte int on the wire; reject an absurd rank before allocating shape.
+        ValidateDeclaredCount(reader, rank, sizeof(int), "tensor rank");
+
+        var shape = new int[rank];
+        long declaredElements = rank == 0 ? 0 : 1;
+        for (int i = 0; i < rank; i++)
+        {
+            shape[i] = reader.ReadInt32();
+            if (shape[i] < 0)
+            {
+                throw new InvalidOperationException($"Adam8BitOptimizer: invalid tensor dimension {shape[i]} at axis {i}.");
+            }
+            // checked: an unchecked long product can silently overflow/wrap for a malicious shape,
+            // producing a small count that bypasses the byte-remaining guard and forces a huge alloc.
+            try
+            {
+                declaredElements = checked(declaredElements * shape[i]);
+            }
+            catch (OverflowException)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: tensor shape overflows its element count at axis {i}. Checkpoint is corrupted or malicious.");
+            }
+        }
+
+        // A single in-memory tensor cannot exceed int.MaxValue elements (Tensor.Length is Int32); reject
+        // an out-of-range count so a wrapped/absurd shape can't slip past the byte-bound check.
+        if (declaredElements > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: tensor shape declares {declaredElements} elements, exceeding the maximum supported tensor size.");
+        }
+
+        // Bound the element count (each element is an 8-byte double on the wire) against the bytes that
+        // physically remain BEFORE allocating the tensor, so a malformed shape can't force an OOM.
+        var stream = reader.BaseStream;
+        if (stream.CanSeek)
+        {
+            long remaining = stream.Length - stream.Position;
+            if (declaredElements * sizeof(double) > remaining)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: tensor shape declares {declaredElements} elements " +
+                    $"({declaredElements * sizeof(double)} bytes) but only {remaining} bytes remain in the checkpoint stream.");
+            }
+        }
+
+        int length = reader.ReadInt32();
+        var tensor = new Tensor<T>(shape);
+        if (tensor.Length != length)
+        {
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: serialized tensor length {length} does not match shape length {tensor.Length}.");
+        }
+
+        var span = tensor.AsWritableSpan();
+        for (int i = 0; i < length; i++)
+        {
+            span[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        return tensor;
+    }
+
+    private static void WriteUShortArray(BinaryWriter writer, ushort[]? values)
+    {
+        writer.Write(values is not null);
+        if (values is null) return;
+
+        writer.Write(values.Length);
+        for (int i = 0; i < values.Length; i++)
+        {
+            writer.Write(values[i]);
+        }
+    }
+
+    private static ushort[]? ReadUShortArray(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+
+        int length = reader.ReadInt32();
+        ValidateDeclaredCount(reader, length, sizeof(ushort), "ushort-array");
+
+        var values = new ushort[length];
+        for (int i = 0; i < length; i++)
+        {
+            values[i] = reader.ReadUInt16();
+        }
+
+        return values;
     }
 
     /// <summary>
@@ -1325,30 +2021,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 }
             }
 
-            // Tape-state checkpoint partial: persist the global step counter
-            // (_tapeStep) so bias-correction terms resume correctly after
-            // load. Per-parameter tape moments (_tapeStates) are NOT
-            // persisted because the dictionary is keyed by Tensor<T>
-            // reference — those references don't survive a process restart,
-            // and there's no stable parameter-id mapping to re-key them on
-            // load. Warn loudly so users know mid-training Adam-state
-            // checkpoint/resume is partial: the bias-correction step
-            // counter resumes (so update magnitudes match), but per-
-            // parameter moments cold-start (first few steps after resume
-            // see a small spike before momentum re-accumulates). Full
-            // tape-state checkpoint is a larger architectural change
-            // tracked separately.
-            if (_tapeStates.Count > 0)
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"Adam8BitOptimizer.Serialize: {_tapeStates.Count} per-parameter " +
-                    $"tape Adam moments are NOT persisted (dictionary keyed by Tensor " +
-                    $"reference, not stable across serialize/deserialize). The global " +
-                    $"step counter _tapeStep={_tapeStep} IS persisted for bias-correction " +
-                    $"continuity. Mid-training resume will cold-start moments but match " +
-                    $"the bias-correction trajectory.");
-            }
+            // Tape-state checkpoint: persist both the bias-correction step
+            // counter and the per-parameter quantized moments by parameter
+            // order. The runtime dictionary is still keyed by Tensor<T>
+            // reference for hot-path lookup, but the serialized form uses
+            // the stable TapeStepContext parameter index and rebinds to the
+            // next model's tensor references on the first resumed Step.
             writer.Write(_tapeStep);
+            WriteTapeStates(writer);
 
             return ms.ToArray();
         }
@@ -1607,33 +2287,50 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 _vScales = null;
             }
 
-            // Tape-state checkpoint partial (matches Serialize): read the
-            // global step counter so bias-correction continues from the
-            // saved trajectory. Per-parameter tape moments cold-start —
-            // _tapeStates is left empty and the next tape Step lazily
-            // re-allocates entries on first touch.
-            //
-            // Defensive try/catch: a valid v2 payload always contains
-            // _tapeStep (the magic-header check above already rejects v1
-            // payloads, so format-migration is not the concern here).
-            // The catch handles a different failure mode — a v2 payload
-            // truncated mid-write (disk full, process killed during
-            // serialize, partial network transfer). Falling back to
-            // _tapeStep=0 lets the optimizer resume with cold-started
-            // bias correction rather than throwing on a recoverable
-            // truncation. Cold-start matches the contract of an
-            // optimizer that was checkpointed before any training had
-            // run, so the resumed run sees one step's worth of slightly-
-            // overconfident updates before bias correction stabilizes.
-            try
+            // Tape-state checkpoint (matches Serialize): read the global
+            // step counter plus per-parameter quantized moments. Some older
+            // v2 payloads ended before any tape-step data existed; those
+            // remain readable and resume with cold-started tape moments.
+            _tapeStates.Clear();
+            lock (_pendingTapeStatesLock)
             {
-                _tapeStep = reader.ReadInt32();
+                _pendingTapeStatesByParameterIndex.Clear();
             }
-            catch (EndOfStreamException)
+            long tapePayloadBytes = reader.BaseStream.Length - reader.BaseStream.Position;
+            if (tapePayloadBytes == 0)
             {
                 _tapeStep = 0;
+                InitializeAdaptiveParameters();
+                return;
             }
-            _tapeStates.Clear();
+
+            if (tapePayloadBytes < sizeof(int))
+            {
+                throw new InvalidOperationException(
+                    "Adam8BitOptimizer: truncated tape-state payload before the tape-step header.");
+            }
+
+            _tapeStep = reader.ReadInt32();
+            // A negative step would make the next Step()'s bias-correction (1 - beta^t) invalid, and a
+            // step of -1 incrementing to 0 divides by zero. Reject it rather than corrupt training.
+            if (_tapeStep < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: invalid tape-step counter {_tapeStep} in checkpoint.");
+            }
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+            {
+                try
+                {
+                    ReadTapeStates(reader);
+                }
+                catch (EndOfStreamException ex)
+                {
+                    throw new InvalidOperationException(
+                        "Adam8BitOptimizer: truncated tape-state payload after the tape-step header.",
+                        ex);
+                }
+            }
 
             InitializeAdaptiveParameters();
         }

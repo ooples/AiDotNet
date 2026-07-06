@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
@@ -97,6 +98,10 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly GraphPooling _poolingType;
     private Tensor<T>? _cachedAdjacencyMatrix;
+    // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
+    // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a
+    // missing graph); when enabled, Predict/Train build an identity sized to the input.
+    private bool _implicitIdentityWhenUnset;
     // Tracks whether _cachedAdjacencyMatrix came from EnsureDefaultAdjacencyForInput
     // (auto-inferred identity) vs an explicit SetAdjacencyMatrix call. Explicit
     // matrices are sticky — caller knows the graph; auto-inferred ones must be
@@ -209,17 +214,16 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0)
-        // PR #1404 review (CodeRabbit): GraphClassificationModel.Train applies
-        // Softmax to the raw logits BEFORE handing them to the loss function
-        // (line ~635 below: `var probs = Softmax(predictions)`).
-        // CrossEntropyWithLogitsLoss internally applies LogSoftmax to its
-        // input expecting raw logits — feeding it already-softmaxed
-        // probabilities double-applies the activation and produces incorrect
-        // gradients. Keep CrossEntropyLoss (probability-input variant) here
-        // so the Train softmax-then-loss pipeline stays internally
-        // consistent. Callers wanting the numerically-stable logits variant
-        // should also remove the explicit Softmax from Train.
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), maxGradNorm)
+        // The classification head emits RAW LOGITS (PredictCore returns Forward(input) with no
+        // Softmax), so the numerically-stable, industry-standard pairing is CrossEntropyWithLogitsLoss
+        // — it applies LogSoftmax internally (matching PyTorch nn.CrossEntropyLoss, which also takes
+        // logits). Train feeds raw logits straight to the loss with NO explicit Softmax (a separate
+        // Softmax would double-apply the activation and produce wrong gradients). Exposing it as the
+        // model's loss also lets the test harness's MeasureLoss measure the model's own cross-entropy
+        // objective (which DECREASES as training sharpens the correct-class logits) instead of
+        // MSE-against-a-random-target (which GROWS as logits sharpen, mis-reading healthy training as
+        // "loss increased"). This is the logits variant the prior comment said callers should adopt.
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), maxGradNorm)
     {
         InputFeatures = architecture.InputSize;
         NumClasses = architecture.OutputSize;
@@ -229,7 +233,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
         DropoutRate = dropoutRate;
         _poolingType = poolingType;
 
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -620,7 +624,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor containing node features.</param>
     /// <returns>The prediction tensor with class probabilities.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         EnsureDefaultAdjacencyForInput(input);
 
@@ -631,6 +635,25 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 
         return Forward(input);
     }
+    /// <summary>
+    /// Enables implicit self-loops-only (identity) tolerance for this model and its graph layers —
+    /// the model-level analogue of GraphConvolutionalLayer's implicitIdentityWhenUnset ctor flag.
+    /// Default is strict (Predict/Train throw on a missing graph); this is an explicit opt-in for
+    /// scaffold / clone / deserialize paths, propagated to the GCN layers so direct-layer paths
+    /// (e.g. GetNamedLayerActivations) tolerate too.
+    /// </summary>
+    public void EnableImplicitIdentityAdjacency()
+    {
+        _implicitIdentityWhenUnset = true;
+        foreach (var layer in Layers)
+        {
+            if (layer is NeuralNetworks.Layers.GraphConvolutionalLayer<T> gcn)
+            {
+                gcn.EnableImplicitIdentityAdjacency();
+            }
+        }
+    }
+
 
     /// <summary>
     /// Auto-creates an identity adjacency matrix when none has been set,
@@ -647,6 +670,17 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     private void EnsureDefaultAdjacencyForInput(Tensor<T> input)
     {
+        if (_cachedAdjacencyMatrix is null && !_implicitIdentityWhenUnset)
+        {
+            // PyTorch-Geometric contract: the graph is REQUIRED — call SetAdjacencyMatrix() with
+            // the real structure before Predict/Train. Implicit-identity tolerance is opt-in
+            // (EnableImplicitIdentityAdjacency / the layer's implicitIdentityWhenUnset), never a
+            // silent default that would let a GCN ignore all graph structure unnoticed.
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set before Predict/Train: call SetAdjacencyMatrix() with " +
+                "the graph structure. Graph neural networks have no meaningful default graph.");
+        }
+
         if (input.Rank < 1) return; // can't infer; let Forward throw with a clear shape error
         int numNodes = input.Shape[0];
 
@@ -681,28 +715,40 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
             layer.SetTrainingMode(true);
         }
 
-        var predictions = Forward(input);
-        var probs = Softmax(predictions);
-
-        var flattenedProbs = probs.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        LastLoss = _lossFunction.CalculateLoss(flattenedProbs, flattenedExpected);
-
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedProbs, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
+        // ILayer.Backward was removed in favour of GradientTape autodiff. The previous code computed a
+        // loss derivative but NEVER ran a backward pass — it read GetParameterGradients() (stale zeros)
+        // straight away — so the optimizer applied a zero step and training was a silent no-op: the loss
+        // stayed flat (2.4452 -> 2.4452) and not a single parameter moved. Record the GNN + pooling
+        // forward (raw logits) and the cross-entropy-with-logits loss on the tape, compute real gradients for every
+        // trainable parameter, then drive the update through the model's configured optimizer
+        // (default Adam) — NOT a hardcoded SGD step — so the loss actually converges on a memorization
+        // task. The loss takes raw logits (it applies LogSoftmax internally) and aligns the target
+        // shape itself, so there is no explicit Softmax (which would double-apply it) and no reshape.
+        // Match LinkPredictionModel: require a tape-differentiable loss rather than silently swapping a
+        // caller-supplied non-tape loss for CrossEntropyWithLogitsLoss (which would train a different
+        // objective than configured). The default loss is already a LossFunctionBase<T>, so this only
+        // fires when a caller passes a non-tape ILossFunction<T>.
+        if (_lossFunction is not LossFunctionBase<T> tapeLoss)
+            throw new InvalidOperationException(
+                $"GraphClassificationModel tape-based training requires a LossFunctionBase<T> (one that "
+                + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
+                + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as CrossEntropyWithLogitsLoss.");
+        using (var tape = new GradientTape<T>())
         {
-            gradOutput = gradOutput.Reshape(predictions._shape);
+            var logits = Forward(input);
+            var lossTensor = tapeLoss.ComputeTapeLoss(logits, expectedOutput);
+            // Always record the loss that was computed, even when there are no trainable parameters to
+            // step — LastLoss must reflect the most recent Train call for consistent telemetry.
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
+            if (trainableParameters.Count > 0)
+            {
+                var gradients = tape.ComputeGradients(lossTensor, trainableParameters);
+                var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
+                _optimizer.Step(context);
+            }
+            LastLoss = lossValue;
         }
-
-
-        Vector<T> parameterGradients = GetParameterGradients();
-        Vector<T> currentParameters = GetParameters();
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        UpdateParameters(updatedParameters);
     }
 
     /// <summary>
@@ -765,13 +811,25 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new GraphClassificationModel<T>(
+        var clone = new GraphClassificationModel<T>(
             architecture: Architecture,
             hiddenDim: HiddenDim,
             embeddingDim: EmbeddingDim,
             numGnnLayers: NumGnnLayers,
             dropoutRate: DropoutRate,
             poolingType: _poolingType);
+        // Graph STATE is model state in this stateful-adjacency design, so a clone of a configured
+        // model must stay usable: carry the implicit-identity opt-in and any explicit adjacency.
+        if (_implicitIdentityWhenUnset)
+        {
+            clone.EnableImplicitIdentityAdjacency();
+        }
+        else if (_cachedAdjacencyMatrix is not null)
+        {
+            clone.SetAdjacencyMatrix(_cachedAdjacencyMatrix);
+        }
+
+        return clone;
     }
 
     #endregion

@@ -102,7 +102,18 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount
+    {
+        get
+        {
+            // Lazy-init fix pattern (SDXLTurbo/DDPM/RealESRGAN/EDiffI/DiffEdit/SUPIR).
+            // ControlNetXS has 3 sub-models (UNet + control encoder + VAE); resolve all.
+            _unet.TriggerLazyShapeResolution();
+            _controlEncoder.TriggerLazyShapeResolution();
+            _vae.TriggerLazyShapeResolution();
+            return _unet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
+        }
+    }
 
     /// <summary>Gets the lightweight control encoder.</summary>
     public UNetNoisePredictor<T> ControlEncoder => _controlEncoder;
@@ -184,6 +195,10 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Lazy-init fix pattern (see ParameterCount comment).
+        _unet.TriggerLazyShapeResolution();
+        _controlEncoder.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var up = _unet.GetParameters();
         var cp = _controlEncoder.GetParameters();
         var vp = _vae.GetParameters();
@@ -198,6 +213,9 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        _unet.TriggerLazyShapeResolution();
+        _controlEncoder.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         int uc = checked((int)_unet.ParameterCount), cc = checked((int)_controlEncoder.ParameterCount), vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != uc + cc + vc)
             throw new ArgumentException($"Expected {uc + cc + vc}, got {parameters.Length}.", nameof(parameters));
@@ -219,24 +237,19 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var cu = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
-            baseChannels: 320, channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2, attentionResolutions: [4, 2, 1],
-            contextDim: CROSS_ATTENTION_DIM);
-        cu.SetParameters(_unet.GetParameters());
-        var cc = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
-            baseChannels: 32, channelMultipliers: [1, 2, 4],
-            numResBlocks: 1, attentionResolutions: [4],
-            contextDim: CROSS_ATTENTION_DIM);
-        cc.SetParameters(_controlEncoder.GetParameters());
-        var cv = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.18215);
-        cv.SetParameters(_vae.GetParameters());
-        return new ControlNetXSModel<T>(unet: cu, controlEncoder: cc, vae: cv, conditioner: _conditioner);
+        // Delegate to sub-Clones — same lazy-init fix pattern as
+        // SDXLTurbo / RealESRGAN / EDiffI / DiffEdit / DDPM / SUPIR.
+        // Preserve outer configuration (architecture / options / scheduler) so
+        // a model created with custom diffusion settings doesn't clone back
+        // to constructor defaults (CodeRabbit PR #1562).
+        var cu = (UNetNoisePredictor<T>)_unet.Clone();
+        var cc = (UNetNoisePredictor<T>)_controlEncoder.Clone();
+        var cv = (StandardVAE<T>)_vae.Clone();
+        return new ControlNetXSModel<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
+            unet: cu, controlEncoder: cc, vae: cv, conditioner: _conditioner);
     }
 
     #endregion

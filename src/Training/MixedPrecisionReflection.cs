@@ -32,6 +32,7 @@ internal static class MixedPrecisionReflection
     private static Type? _scalerType;
     private static Type? _configType;
     private static MethodInfo? _traceMethod;
+    private static int _traceParameterCount;
     private static MethodInfo? _stepMethod;
     private static MethodInfo? _stepAdamMethod;
     private static MethodInfo? _computeGradientsMethod;
@@ -101,14 +102,53 @@ internal static class MixedPrecisionReflection
         if (planType is null) return;
 
         // Cache the method handles we'll dispatch through.
+        // Tensors 0.92.x exposed Trace(Func<Tensor<float>>); current builds
+        // expose Trace(Func<Tensor<float>>, IEngine) so callers can pin the
+        // compilation engine. Bind both to keep AiDotNet compatible across the
+        // published package range.
         _traceMethod = planType.GetMethod(
             "Trace",
             BindingFlags.Public | BindingFlags.Static,
             binder: null,
             types: new[] { typeof(Func<Tensor<float>>) },
             modifiers: null);
+        _traceParameterCount = _traceMethod is null ? 0 : 1;
+        if (_traceMethod is null)
+        {
+            Type? engineType = Type.GetType(
+                "AiDotNet.Tensors.Engines.IEngine, AiDotNet.Tensors",
+                throwOnError: false);
+            if (engineType is not null)
+            {
+                _traceMethod = planType.GetMethod(
+                    "Trace",
+                    BindingFlags.Public | BindingFlags.Static,
+                    binder: null,
+                    types: new[] { typeof(Func<Tensor<float>>), engineType },
+                    modifiers: null);
+                _traceParameterCount = _traceMethod is null ? 0 : 2;
+            }
+        }
 
-        _stepMethod = planType.GetMethod(
+        // Step has historically had two shapes: the original 2-arg
+        // Step(IReadOnlyList<Tensor<float>>, float) and — from Tensors 0.102.0
+        // (PR #650) — the loss-scaled Step(IReadOnlyList<Tensor<float>>, float,
+        // GradScaler? scaler = null). Reflection's exact-type GetMethod won't
+        // resolve the 3-param overload from a 2-type signature, so prefer the
+        // 3-param form (by name + first-two-param types; GradScaler isn't
+        // expressible as typeof here) and fall back to the legacy 2-arg form for
+        // older packages. StepSgd dispatches on the resolved parameter count.
+        foreach (var m in planType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (m.Name != "Step") continue;
+            var ps = m.GetParameters();
+            if (ps.Length != 3) continue;
+            if (ps[0].ParameterType != typeof(IReadOnlyList<Tensor<float>>)) continue;
+            if (ps[1].ParameterType != typeof(float)) continue;
+            _stepMethod = m;
+            break;
+        }
+        _stepMethod ??= planType.GetMethod(
             "Step",
             BindingFlags.Public | BindingFlags.Instance,
             binder: null,
@@ -157,16 +197,25 @@ internal static class MixedPrecisionReflection
         if (!IsAvailable) return null;
         MethodInfo? trace = _traceMethod;
         if (trace is null) return null;
-        return trace.Invoke(null, new object[] { forwardAndLoss });
+        return _traceParameterCount == 2
+            ? trace.Invoke(null, new object?[] { forwardAndLoss, null })
+            : trace.Invoke(null, new object[] { forwardAndLoss });
     }
 
-    /// <summary>Replay an SGD step against a previously-traced plan; returns the loss.</summary>
-    public static float StepSgd(object plan, IReadOnlyList<Tensor<float>> parameters, float learningRate)
+    /// <summary>Replay an SGD step against a previously-traced plan; returns the loss.
+    /// When <paramref name="gradScaler"/> is supplied and the resolved <c>Step</c> accepts
+    /// one (Tensors 0.102.0+), the backward seed is loss-scaled and grads are unscaled in
+    /// FP32 master space with skip-on-overflow — so FP16 gradients don't underflow to zero.
+    /// Falls back to the legacy 2-arg (unscaled) <c>Step</c> on older packages.</summary>
+    public static float StepSgd(object plan, IReadOnlyList<Tensor<float>> parameters, float learningRate, object? gradScaler = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         MethodInfo? step = _stepMethod;
         if (step is null) throw new InvalidOperationException("Mixed-precision API not available.");
-        object? result = step.Invoke(plan, new object[] { parameters, learningRate });
+        object?[] args = step.GetParameters().Length == 3
+            ? new object?[] { parameters, learningRate, gradScaler }
+            : new object?[] { parameters, learningRate };
+        object? result = step.Invoke(plan, args);
         return ExtractLoss(result);
     }
 
@@ -199,10 +248,21 @@ internal static class MixedPrecisionReflection
         if (gradScaler is null) throw new ArgumentNullException(nameof(gradScaler));
         MethodInfo? stepAdam = _stepAdamMethod;
         if (stepAdam is null) throw new InvalidOperationException("Mixed-precision API not available.");
-        object? result = stepAdam.Invoke(plan, new object[]
+
+        // The hyperparameters were `double` in the original mixed-precision API but are `float` in the
+        // public StepAdam published from Tensors 0.96.0 (PR #606). Invoke() does not implicitly narrow
+        // double->float, so coerce each numeric argument to the RESOLVED method's parameter type —
+        // version-tolerant across both signatures (otherwise reflection throws "Object of type
+        // 'System.Double' cannot be converted to type 'System.Single'" and the entire Adam FP16 path
+        // silently falls back to the eager tape).
+        var args = new object[] { parameters, learningRate, beta1, beta2, eps, weightDecay, gradScaler };
+        var ps = stepAdam.GetParameters();
+        for (int i = 0; i < args.Length && i < ps.Length; i++)
         {
-            parameters, learningRate, beta1, beta2, eps, weightDecay, gradScaler
-        });
+            if (args[i] is double d && ps[i].ParameterType == typeof(float))
+                args[i] = (float)d;
+        }
+        object? result = stepAdam.Invoke(plan, args);
         return ExtractLoss(result);
     }
 

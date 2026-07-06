@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 
@@ -43,6 +44,42 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// compilation is disabled or fails.
     /// </summary>
     private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost;
+
+    /// <summary>
+    /// Verify-then-trust gate (#1622 L3b) shared with <c>NeuralNetworkBase</c>: the per-step
+    /// <see cref="PredictCompiled"/> call a diffusion denoising loop makes runs eager once per shape to
+    /// confirm the compiled plan matches, then replays the trusted plan for the remaining 50+ steps —
+    /// the dominant inference cost of a foundation-scale diffusion model. Output stays numerically
+    /// identical to eager (rejected/unverified shapes fall back to eager). Only consulted when the
+    /// compiled inference path is opted in (see <see cref="s_autoCompiledInferenceEnabled"/>); the
+    /// default-eager path never constructs a verdict.
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.VerifiedInferenceGate<T> _inferenceGate = new();
+
+    /// <summary>
+    /// Auto-compiled inference replay (#1622) is OPT-IN for noise predictors and OFF by default.
+    /// </summary>
+    /// <remarks>
+    /// The AiDotNet.Tensors compiled lazy-graph executor (through 0.101.7) shares process-global
+    /// scratch buffers with the eager executor. The verify-then-trust gate MUST execute a compiled
+    /// plan once to compare it against eager — and that single compiled execution leaves the shared
+    /// scratch in a state that makes EVERY subsequent eager forward for a REJECTED shape oscillate
+    /// with period 2: non-deterministic across calls, and numerically wrong on half of them. Model
+    /// parameters and inputs are provably untouched (hashed identical across calls) and dropping the
+    /// cached plan does not help, so the corruption is in the package's global scratch, not anything
+    /// this layer owns. Diffusion noise predictors fall back to eager for any shape whose compiled
+    /// plan does not match (which is the common case for these architectures), so the previously
+    /// default-on path silently corrupted inference and broke <c>Predict_ShouldBeDeterministic</c>.
+    /// <para>
+    /// Until the package isolates the two executors' scratch buffers, the compiled inference replay
+    /// is opt-in via <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c> (set only after verifying a given model's
+    /// compiled path is both correct and side-effect-free). This does NOT affect #1624 foundation-scale
+    /// TRAINING: <see cref="PredictCompiledMulti"/> runs eager whenever a gradient tape is active, so
+    /// training never touches the compiled inference path regardless of this flag.
+    /// </para>
+    /// </remarks>
+    private static readonly bool s_autoCompiledInferenceEnabled =
+        string.Equals(System.Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "1", System.StringComparison.Ordinal);
 
     /// <summary>
     /// Monotonic layer-graph version. Concrete predictors bump this via
@@ -115,21 +152,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         if (!visited.Add(root)) yield break;
         stack.Push(root);
 
-        const System.Reflection.BindingFlags fieldFlags =
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.Public |
-            System.Reflection.BindingFlags.NonPublic;
-
         while (stack.Count > 0)
         {
             var current = stack.Pop();
             var currentType = current.GetType();
             for (var t = currentType; t != null && t != typeof(object); t = t.BaseType)
             {
-                foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
+                // Cached, pre-filtered reference-type declared fields for this type — see
+                // GetDeclaredWalkableFields. Skips the per-field value-type/string probe
+                // (RuntimeType.IsPrimitiveImpl) that dominated the forward (#1646).
+                foreach (var field in GetDeclaredWalkableFields(t))
                 {
-                    if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
-
                     object? value;
                     try { value = field.GetValue(current); }
                     catch (Exception ex)
@@ -175,9 +208,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                     }
                     else if (value is System.Collections.IEnumerable enumerable && value is not string)
                     {
+                        // We MUST enumerate the whole sequence: enumerating a streaming-placeholder
+                        // weight tensor (Tensor<T> as IEnumerable<float>) rehydrates it, and the
+                        // forward relies on that side effect (NoisePredictorWeightStreamingTests).
+                        // But value-type elements — the millions of boxed floats in a Tensor<T> /
+                        // float[] / double[] buffer — can never be, or own, a layer, so skip the
+                        // `visited` bookkeeping for them: hashing every boxed element
+                        // (RuntimeHelpers.GetHashCode) was the dominant walk cost (#1646). `continue`
+                        // still advances the enumerator, so rehydration is preserved.
                         foreach (var item in enumerable)
                         {
-                            if (item is null || !visited.Add(item)) continue;
+                            if (item is null || item is ValueType) continue;
+                            if (!visited.Add(item)) continue;
                             if (item is ILayer<T> nestedLayer)
                             {
                                 yield return nestedLayer;
@@ -209,16 +251,50 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// bounded; wrappers inside this assembly's namespaces are fair game.
     /// </summary>
     private static bool IsWalkableWrapper(Type type)
-    {
-        if (type.IsPrimitive || type.IsEnum) return false;
-        var ns = type.Namespace ?? string.Empty;
-        if (ns.StartsWith("System", StringComparison.Ordinal)) return false;
-        // Avoid recursing into low-level numeric containers — their fields are arrays
-        // of T, not layers, and walking them adds noise for no benefit.
-        if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)) return false;
-        if (type.Name == "Vector`1" || type.Name == "Matrix`1" || type.Name == "Tensor`1") return false;
-        return true;
-    }
+        => s_walkableWrapperCache.GetOrAdd(type, static t =>
+        {
+            if (t.IsPrimitive || t.IsEnum) return false;
+            var ns = t.Namespace ?? string.Empty;
+            if (ns.StartsWith("System", StringComparison.Ordinal)) return false;
+            // Avoid recursing into low-level numeric containers — their fields are arrays
+            // of T, not layers, and walking them adds noise for no benefit.
+            if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)) return false;
+            if (t.Name == "Vector`1" || t.Name == "Matrix`1" || t.Name == "Tensor`1") return false;
+            // Only walk types within known AiDotNet namespaces — caller-injected objects
+            // (custom ILossFunction implementations, etc.) are not walked.
+            if (!ns.StartsWith("AiDotNet", StringComparison.Ordinal)) return false;
+            return true;
+        });
+
+    // Per-type reflection-metadata caches. GetFields and "is this a walkable wrapper" are
+    // pure functions of the Type, so resolve each once across every instance and every
+    // forward instead of re-probing runtime type handles on the hot streaming path (#1646).
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, System.Reflection.FieldInfo[]> s_walkableFieldCache = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> s_walkableWrapperCache = new();
+
+    /// <summary>
+    /// Reference-type, non-string instance fields declared directly on <paramref name="declaringType"/>.
+    /// Value-type and string fields are filtered out at cache-build time — they can never be,
+    /// or own, an <see cref="ILayer{T}"/> — so the walk never re-checks them. The walk calls
+    /// this once per type in the base chain (the caller iterates <c>BaseType</c>).
+    /// </summary>
+    private static System.Reflection.FieldInfo[] GetDeclaredWalkableFields(Type declaringType)
+        => s_walkableFieldCache.GetOrAdd(declaringType, static t =>
+        {
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.DeclaredOnly;
+            var fields = new List<System.Reflection.FieldInfo>();
+            foreach (var f in t.GetFields(flags))
+            {
+                var ft = f.FieldType;
+                if (ft.IsValueType || ft == typeof(string)) continue;
+                fields.Add(f);
+            }
+            return fields.ToArray();
+        });
 
     /// <summary>
     /// Runs <paramref name="eagerFallback"/> under the compile host — traces on
@@ -229,8 +305,73 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     /// <param name="input">Shape key for the compile cache.</param>
     /// <param name="eagerFallback">The eager forward pass (traced, replayed, or fallback).</param>
-    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback) =>
-        _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback)
+    {
+        // Compiled inference replay is opt-in (see s_autoCompiledInferenceEnabled): the verify pass
+        // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
+        // eager, which is correct and bit-identical across calls.
+        if (!s_autoCompiledInferenceEnabled)
+            return eagerFallback();
+
+        // #1622 L3b: front the compile host with the verify-then-trust gate so a compiled plan is
+        // adopted for a shape only after it matches the eager forward — then replayed for the rest of
+        // the denoising loop. Output stays numerically identical to eager (rejected shapes stay eager).
+        return _inferenceGate.Run(
+            input,
+            _layerStructureVersion,
+            eager: eagerFallback,
+            compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerFallback),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NoisePredictorBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+    }
+
+    /// <summary>
+    /// Multi-input compiled replay for a forward that reads SEVERAL per-call-varying leaves —
+    /// the diffusion per-step <see cref="Forward"/> reads the noisy sample, the per-step timestep
+    /// embedding, and optional conditioning. The single-input <see cref="PredictCompiled"/> bakes
+    /// every leaf but the first as a constant, so it would replay step 0's timestep embedding for
+    /// the whole denoising loop (silent corruption); this overload marks EVERY tensor in
+    /// <paramref name="inputs"/> as a mutable slot the compiled plan re-binds each step
+    /// (AiDotNet.Tensors#616), compiling the expensive forward once while keeping the per-step
+    /// inputs live. The verify-then-trust gate still adopts the compiled plan for a shape only
+    /// after it matches eager, so output stays numerically identical to eager.
+    /// </summary>
+    /// <param name="inputs">The per-step mutable input leaves, in a stable order. Each must be a
+    /// tensor the forward reads directly; otherwise compile fails closed and this falls back to eager.</param>
+    /// <param name="eagerFallback">The eager forward pass (traced, replayed, verified, or fallback).</param>
+    protected Tensor<T> PredictCompiledMulti(Tensor<T>[] inputs, Func<Tensor<T>> eagerFallback)
+    {
+        // Under an active gradient tape (TRAINING), run eager directly. The compiled/lazy-graph
+        // host is an INFERENCE replay optimization; building + realizing the lazy graph while a
+        // tape is recording is pure overhead — measured ~14% of a foundation-scale diffusion
+        // train step (CompiledModelHost.Predict + LazyNode.Realize) — on top of the eager op
+        // record the backward needs anyway. Eager records the identical ops on the tape, so the
+        // gradients are unchanged; inference (no tape / NoGradScope) still gets the fast replay.
+        if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
+            return eagerFallback();
+
+        // Compiled inference replay is opt-in (see s_autoCompiledInferenceEnabled): the verify pass
+        // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
+        // eager, which is correct and bit-identical across the denoising loop and across calls.
+        if (!s_autoCompiledInferenceEnabled)
+            return eagerFallback();
+
+        return _inferenceGate.Run(
+            inputs,
+            _layerStructureVersion,
+            eager: eagerFallback,
+            compiled: () => _compileHost.Predict(inputs, _layerStructureVersion, eagerFallback),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NoisePredictorBase", feature: "AutoCompiledMultiInputInference", enabled: enabled, reason: reason));
+    }
+
+    /// <summary>
+    /// Count of successful multi-input compiled-plan executions on this predictor's compile
+    /// host (the per-step denoising path). Test/diagnostic hook: a test can assert this grew
+    /// to confirm the compiled plan actually ran rather than silently falling back to eager.
+    /// </summary>
+    internal long CompiledMultiInputReplays => _compileHost.MultiInputReplays;
 
     /// <summary>
     /// Async overload of <see cref="PredictCompiled"/> — routes through
@@ -264,6 +405,40 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // immediately — important when the caller is invalidating because the
         // old graph holds memory we want to reclaim now.
         _compileHost.Invalidate();
+        // The gate's verdicts/memo are version-scoped (stale entries are ignored after the bump), but
+        // clear eagerly so the memo's retained input/output clones are released now too.
+        _inferenceGate.Clear();
+    }
+
+    /// <summary>
+    /// Wraps a layer's flat parameter vector in a 1-D <see cref="Tensor{T}"/> chunk for the streaming
+    /// <c>GetParameterChunks</c> contract (#1624). The chunk's flat order matches <c>GetParameters</c>.
+    /// </summary>
+    /// <param name="layer">The layer whose parameters become one chunk.</param>
+    /// <returns>A 1-D tensor holding the layer's parameters.</returns>
+    protected static Tensor<T> ChunkOf(DenseLayer<T> layer)
+    {
+        var p = layer.GetParameters();
+        return new Tensor<T>(new[] { p.Length }, p);
+    }
+
+    /// <summary>
+    /// Pulls the next chunk from <paramref name="e"/> and assigns it to <paramref name="layer"/>, used by
+    /// streaming <c>SetParameterChunks</c> (#1624). Throws if the sequence is exhausted early so a short
+    /// chunk stream fails loudly instead of leaving later layers silently un-set.
+    /// </summary>
+    /// <param name="e">Enumerator positioned before the chunk for <paramref name="layer"/>.</param>
+    /// <param name="layer">The layer to assign the next chunk to.</param>
+    protected static void SetChunk(IEnumerator<Tensor<T>> e, DenseLayer<T> layer)
+    {
+        if (e is null) throw new System.ArgumentNullException(nameof(e));
+        if (layer is null) throw new System.ArgumentNullException(nameof(layer));
+        if (!e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received fewer chunks than the predictor has parameter groups.", nameof(e));
+        if (e.Current is null)
+            throw new System.ArgumentException("SetParameterChunks received a null chunk.", nameof(e));
+        layer.SetParameters(e.Current.ToVector());
     }
 
     /// <summary>
@@ -315,16 +490,125 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()
     {
-        // Default: single chunk wrapping GetParameters(). Concrete predictors
-        // with tractable per-block weight stores SHOULD override to yield
-        // per-tensor chunks so foundation-scale models avoid materialising a
-        // flat aggregate that overflows Vector.Length's int contract. The
-        // single-chunk default keeps ParameterCount == sum-of-chunk-lengths
-        // exact, which is the contract test (#1237's acceptance criterion)
-        // depends on.
+        // Foundation-scale (#1715): the param-materialization path must engage weight streaming just
+        // like the forward path (BeginWeightStreamingForward), otherwise materializing every layer's
+        // lazy weights here routes through TensorAllocator.RentPinned and accumulates the full weight
+        // set in the pinned heap → OOM for billion-parameter predictors (Flux2/SiT). Engaging streaming
+        // flags the layers so AllocateLazyWeight routes to WeightRegistry.AllocateStreaming, which
+        // pre-evicts competing weights to disk and keeps the resident set bounded. No-op below the
+        // param-count/memory threshold, so tractable predictors stay fully resident.
+        MaybeEngageWeightStreaming();
+
+        // Flat-free default: when reflection sees the FULL parameter set — every trainable weight
+        // lives in a reflectable LayerBase field and is already resolved, so the reflected lengths
+        // sum EXACTLY to ParameterCount — yield each weight tensor per-tensor, so a foundation-scale
+        // predictor that didn't override this still avoids materialising the flat aggregate that
+        // overflows Vector.Length's int contract / OOMs. When completeness can't be verified
+        // (non-LayerBase weight storage, or lazy weights not yet resolved) fall back to the legacy
+        // single flat chunk — correct (keeps ParameterCount == sum-of-chunk-lengths, the #1237
+        // contract), though not flat-free; such a predictor SHOULD override to be flat-free.
+        if (TryCollectReflectedParameterTensors(out var tensors))
+        {
+            foreach (var t in tensors) yield return t;
+            yield break;
+        }
         var p = GetParameters();
         if (p.Length == 0) yield break;
         yield return new Tensor<T>(new[] { p.Length }, p);
+    }
+
+    /// <summary>
+    /// Collects this predictor's reflectable trainable weight tensors (skipping null / empty),
+    /// summing their lengths, and reports whether that sum equals <see cref="ParameterCount"/> — i.e.
+    /// whether reflection sees the FULL parameter set. Only then is the flat-free per-tensor chunk
+    /// path (used by both <see cref="GetParameterChunks"/> and <see cref="SetParameterChunks"/>) safe;
+    /// otherwise those fall back to the legacy flat path so a predictor with non-LayerBase weight
+    /// storage (or unresolved lazy weights) round-trips correctly rather than dropping weights. Both
+    /// callers use this same walk on the same instance, so Get and Set agree on order by construction.
+    /// </summary>
+    private bool TryCollectReflectedParameterTensors(out List<Tensor<T>> tensors)
+    {
+        tensors = new List<Tensor<T>>();
+        long total = 0;
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Length == 0) continue;
+                tensors.Add(tensor);
+                total += tensor.Length;
+            }
+        }
+        return total > 0 && total == ParameterCount;
+    }
+
+    /// <summary>
+    /// Streaming counterpart to <see cref="SetParameters"/>: assigns the predictor's weights from
+    /// per-tensor chunks in <see cref="GetParameterChunks"/> order without materializing a flat
+    /// aggregate. Default buffers the chunks into one flat <see cref="Vector{T}"/> and delegates to
+    /// <see cref="SetParameters"/> (back-compatible for tractable predictors); foundation-scale
+    /// predictors override to consume one chunk per sub-block and stay flat-free.
+    /// </summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        // Public weight-mutating entry point: validate external input deterministically (null
+        // sequence / null element would otherwise surface as a NullReferenceException), and refuse
+        // to touch a disposed predictor's layer graph.
+        ThrowIfDisposed();
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+
+        // Foundation-scale (#1715): engage streaming before materializing weights — see GetParameterChunks.
+        MaybeEngageWeightStreaming();
+
+        // Flat-free in-place copy, mirroring GetParameterChunks: when reflection sees the FULL
+        // parameter set (same completeness gate → same order), consume one chunk per weight tensor and
+        // copy it in place — no flat aggregate. The over/under-run + length guards make a scrambled or
+        // mis-framed chunk stream fail loudly instead of silently corrupting weights.
+        if (TryCollectReflectedParameterTensors(out var tensors))
+        {
+            using var e = chunks.GetEnumerator();
+            // Validate the ENTIRE stream (count, null, per-tensor length) into a src/dst pair list
+            // BEFORE mutating any weights, so a scrambled or mis-framed chunk stream fails atomically
+            // instead of leaving the predictor holding a mix of old and new tensors. The list holds
+            // only tensor REFERENCES (no flat aggregate / no per-tensor data copy), so this stays
+            // flat-free — matching the buffer-then-single-SetParameters atomicity of the legacy branch
+            // and VAEModelBase/DiffusionModelBase without reintroducing the flat-vector OOM.
+            var pairs = new List<(Tensor<T> Src, Tensor<T> Dst)>(tensors.Count);
+            foreach (var dst in tensors)
+            {
+                if (!e.MoveNext())
+                    throw new ArgumentException(
+                        "SetParameterChunks received fewer chunks than the predictor has parameter tensors.",
+                        nameof(chunks));
+                var src = e.Current;
+                if (src is null)
+                    throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
+                if (src.Length != dst.Length)
+                    throw new ArgumentException(
+                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.Length}.",
+                        nameof(chunks));
+                pairs.Add((src, dst));
+            }
+            if (e.MoveNext())
+                throw new ArgumentException(
+                    "SetParameterChunks received more chunks than the predictor has parameter tensors.",
+                    nameof(chunks));
+            // All chunks validated — now copy in place. No exception can surface past this point, so
+            // the predictor is never left in a partially-written state.
+            foreach (var (src, dst) in pairs)
+                src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
+            InvalidateCompiledPlans();
+            return;
+        }
+
+        // Legacy fallback (reflection incomplete): buffer the chunks into one flat vector and delegate.
+        // Shared with DiffusionModelBase/VAEModelBase and the composite latent-diffusion models via
+        // DiffusionParameterChunkHelper (single source of truth for the framing/validation rules).
+        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+        // Weights changed — drop any plan captured against the old graph so the next compiled
+        // forward re-traces (mirrors every other in-place weight-update path).
+        InvalidateCompiledPlans();
     }
 
     /// <inheritdoc/>
@@ -360,6 +644,354 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             shapeMode: AiDotNet.NeuralNetworks.SymbolicShapeMode.BatchDynamic,
             modelIdentity: GetType().FullName ?? GetType().Name);
     }
+
+    #region Transparent Weight Streaming (Tensors #602 / issue #430)
+
+    // 0 = not engaged, 1 = engaged. Int (not bool) so the engage transition can be claimed
+    // atomically via Interlocked.CompareExchange — concurrent callers on the same instance
+    // then can't both reconfigure the process-global WeightRegistry.
+    private int _streamingEngaged;
+
+    // 0 = no successful weight registration yet, 1 = resolved lazy weights have
+    // been registered with the streaming pool at least once.
+    private int _streamingWeightsRegistered;
+
+    /// <summary>
+    /// Parameter-count threshold above which <see cref="MaybeEngageWeightStreaming"/>
+    /// engages disk-backed weight streaming for the denoising forward loop. 500 M
+    /// is the same memory-pressure inflection point <c>NeuralNetworkBase</c> uses.
+    /// </summary>
+    private const long DefaultStreamingThresholdParams = 500_000_000L;
+
+    /// <summary>
+    /// Test/diagnostic override for <see cref="DefaultStreamingThresholdParams"/> so
+    /// controlled-scale tests can exercise the streaming path without a
+    /// foundation-scale model. <c>null</c> ⇒ use the default. Process-global.
+    /// </summary>
+    internal static long? StreamingThresholdOverride { get; set; }
+
+    // G4 (#1624) activation checkpointing. Opt-in, OFF by default — same default as PyTorch's
+    // torch.utils.checkpoint, which never engages automatically and must be requested per module.
+    private bool _activationCheckpointing;
+
+    /// <summary>
+    /// Whether this predictor recomputes block activations during backward instead of storing them
+    /// (activation checkpointing — the standard transformer memory/compute trade). <b>Opt-in: OFF by
+    /// default</b>, matching PyTorch's <c>torch.utils.checkpoint</c>, which is never enabled
+    /// automatically — set this to <c>true</c> to trade ~one extra forward of recompute for ~sqrt(N)
+    /// retained activations. Implemented via the package's tape-integrated
+    /// <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing{T}"/> primitive, which
+    /// recomputes each segment in backward with a correct VJP seed (AiDotNet.Tensors#361/#643), so it
+    /// is mathematically gradient-equivalent to the non-checkpointed forward for both the input and the
+    /// weight gradients (verified by <c>PackageCheckpoint_GradientsMatchEager_ForInputAndParameters</c>).
+    /// </summary>
+    public bool ActivationCheckpointingEnabled
+    {
+        get => _activationCheckpointing;
+        set => _activationCheckpointing = value;
+    }
+
+    /// <summary>
+    /// Runs a sequence of residual-stream blocks under activation checkpointing when
+    /// <see cref="ActivationCheckpointingEnabled"/> is set, otherwise eagerly. Each entry of
+    /// <paramref name="blocks"/> is a block's forward as a pure function of the residual-stream tensor
+    /// (conditioning captured by the closure); the blocks read their LIVE trainable weights, so the
+    /// package primitive's recompute backward attributes gradients to those weights via the active tape.
+    /// Mathematically identical to running the blocks sequentially — it only changes when each segment's
+    /// activations are materialized (recomputed in backward instead of retained), which is the memory win.
+    /// </summary>
+    /// <param name="blocks">Per-block forward functions, applied in order.</param>
+    /// <param name="input">The residual-stream tensor entering the first block.</param>
+    protected Tensor<T> CheckpointBlocks(System.Func<Tensor<T>, Tensor<T>>[] blocks, Tensor<T> input)
+    {
+        if (!ActivationCheckpointingEnabled || blocks.Length == 0)
+        {
+            var x = input;
+            foreach (var b in blocks) x = b(x);
+            return x;
+        }
+
+        // sqrt(N) segment size — the classic memory/compute optimum (Chen et al. 2016, "Training Deep
+        // Nets with Sublinear Memory Cost"): the backward recomputes ONE segment at a time, so the peak
+        // activation memory is O(sqrt(N)) (sqrt(N) retained segment boundaries + one segment's worth of
+        // recomputed activations), for ~one extra forward of compute. This bounds the PEAK — the binding
+        // constraint that OOMs the 16 GiB runner in #1624. (A single segment would recompute the whole
+        // stack into one tape, spiking peak back to a full forward, so it is NOT the right trade here.)
+        // Multi-segment correctness requires AiDotNet.Tensors >= 0.101.5 (the per-segment input is
+        // detached in the recompute so a later segment can't re-enter and double-count an earlier one —
+        // ooples/AiDotNet.Tensors#645). Verified gradient-equivalent (input + weights) by the diffusion
+        // and Tensors multi-segment checkpoint tests.
+        int segmentSize = System.Math.Max(1, (int)System.Math.Sqrt(blocks.Length));
+        return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, input, segmentSize);
+    }
+
+    /// <summary>
+    /// Test/diagnostic override for the streaming pool's resident-byte cap so a
+    /// Test/diagnostic override for the streaming pool's resident-byte cap so a
+    /// small model can be forced to page (the auto-cap is sized for foundation
+    /// models). <c>null</c> ⇒ use <see cref="ComputeResidentCapBytes"/>.
+    /// </summary>
+    internal static long? StreamingResidentCapOverride { get; set; }
+
+    /// <summary>
+    /// Engages transparent weight streaming for this predictor when it is large
+    /// enough to pressure host RAM. Idempotent — runs at most once per instance.
+    /// <para>
+    /// When engaged it configures the process-wide <see cref="WeightRegistry"/> for
+    /// transparent auto-eviction and flags every owned layer to allocate its lazy
+    /// weights through the disk-backed streaming pool. Combined with
+    /// <see cref="RegisterResolvedStreamingWeights"/> (called after the first
+    /// forward resolves weights), the multi-step denoising loop then keeps only a
+    /// bounded resident set: each weight auto-rehydrates on access and the
+    /// symmetric owner-drop evicts cold ones.
+    /// </para>
+    /// <para>
+    /// <b>Safety guard.</b> The registry is process-global and
+    /// <see cref="WeightRegistry.Configure"/> throws on a pool that already has
+    /// live handles. So this only engages when the registry is empty — if another
+    /// model currently owns a streaming session, this predictor runs resident
+    /// rather than clobbering it. The common single-model inference path sees an
+    /// empty registry.
+    /// </para>
+    /// </summary>
+    protected void MaybeEngageWeightStreaming()
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
+
+        long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
+        if (ParameterCount <= threshold) return;
+
+        // Memory-aware engagement (S1): even above the parameter-count floor, only
+        // stream when the resident weight set would NOT fit comfortably in available
+        // host RAM. Streaming a model whose weights already fit can't reduce a
+        // footprint that's within budget — it only pays the per-access rehydrate /
+        // disk-IO overhead, which for a fits-in-RAM model turns a seconds-long
+        // forward into a multi-hour disk-thrash (measured: a 2.3 GB FLUX-class
+        // predictor ran ~1,670× slower and OOM'd under streaming vs resident).
+        // This mirrors PyTorch's policy: weights stay resident unless the user
+        // explicitly opts into device-map / CPU offload. The check is skipped when
+        // StreamingThresholdOverride is set, so controlled-scale tests can still
+        // force the streaming path on a small model on purpose.
+        if (StreamingThresholdOverride is null)
+        {
+            long available = GetAvailableMemoryBytesOrZero();
+            if (available > 0)
+            {
+                long weightBytes = checked(ParameterCount * (long)System.Runtime.CompilerServices.Unsafe.SizeOf<T>());
+                // Half of available RAM leaves headroom for activations, the optimizer
+                // state during training, and other live allocations on the host.
+                if (weightBytes <= available / 2) return;
+            }
+        }
+
+        // Don't reconfigure (or clobber) a registry another model is using.
+        if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0) return;
+
+        // Atomically claim engagement: if a concurrent call on this same instance already
+        // won the race, that thread owns the WeightRegistry.Configure below and this one
+        // returns (runs resident) rather than reconfiguring the process-global registry.
+        if (System.Threading.Interlocked.CompareExchange(ref _streamingEngaged, 1, 0) != 0) return;
+
+        var offloadOptions = new GpuOffloadOptions
+        {
+            StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
+            TransparentAutoEviction = true,
+            // #1715/#1719: the store must be lossless full-precision — this is unconditional, which is
+            // why there is no store-dtype parameter (a misleading one that was always ignored has been
+            // removed). The parameter-IO path (GetParameters round-trip / Clone) MUTATES rehydrated
+            // weights and reads them back, so a bf16 store would round-trip lossily and its eviction
+            // write-back (native-only) would skip, losing the mutation. Streaming also engages once and
+            // returns early on subsequent calls (and an already-occupied registry cannot be safely
+            // reconfigured — see the RegisteredEntryCount guard above), so a bf16 engagement from an
+            // earlier forward could never be upgraded when a later Clone / GetParameters needs full
+            // precision — parameter IO would be silently lossy depending on call order. Every noise
+            // predictor supports parameter round-trips, so full precision is the correct order-independent
+            // behavior; resident memory is still bounded by the resident cap.
+            StreamingStoreDtype = AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype.FullPrecision,
+        };
+        try
+        {
+            WeightRegistry.Configure(offloadOptions);
+        }
+        catch (InvalidOperationException)
+        {
+            // Configure also throws on leftover ReservedBytes — orphaned streaming
+            // reservations from a PRIOR predictor whose first forward reserved weights
+            // (AllocateStreaming) but never reached RegisterResolvedStreamingWeights
+            // (its forward threw, or the model was disposed mid-stream). The registry
+            // is process-global, so those orphans accumulate across models in one
+            // process (a test shard runs many) until every subsequent streaming model
+            // fails to engage here. We already confirmed RegisteredEntryCount == 0
+            // above, so no LIVE model owns the pool — the leftover reservations belong
+            // to a dead model and are safe to forcibly drop. Reset and reconfigure.
+            System.Diagnostics.Trace.TraceWarning(
+                "NoisePredictorBase.MaybeEngageWeightStreaming: recovering from orphaned " +
+                "streaming reservations by resetting WeightRegistry and reconfiguring.");
+            WeightRegistry.Reset();
+            WeightRegistry.Configure(offloadOptions);
+        }
+
+        // Walk owned layer fields recursively (including those inside the DiT block list)
+        // and flag each for the streaming allocator. Iterated LAZILY: each layer is flagged
+        // as the walk yields it, BEFORE the walk descends into that layer — the layer's own
+        // lazy weight allocation (triggered while descending) reads UseStreamingAllocator, so
+        // the flag must be set first. Do NOT materialize this into a list and flag afterwards.
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
+        }
+    }
+
+    /// <summary>
+    /// Starts a predictor forward that may need transparent weight streaming.
+    /// The returned scope registers resolved lazy weights on successful completion
+    /// and releases any in-flight streaming reservations if the first forward fails.
+    /// </summary>
+    protected WeightStreamingForwardScope BeginWeightStreamingForward()
+    {
+        MaybeEngageWeightStreaming();
+        return new WeightStreamingForwardScope(this);
+    }
+
+    /// <summary>
+    /// Registers this predictor's now-resolved weights with the streaming pool,
+    /// dropping their resident in-memory copies to disk-backed storage. No-op
+    /// unless <see cref="MaybeEngageWeightStreaming"/> engaged. Called after the
+    /// first forward resolves the lazy weights, so from the second forward on the
+    /// transparent auto-rehydrate + owner-drop keep the resident set bounded.
+    /// </summary>
+    protected void RegisterResolvedStreamingWeights()
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+        // The first forward runs every layer (a diffusion predictor exercises its whole graph
+        // each denoising step), so it resolves and registers all lazy weights. Skip the full
+        // graph re-walk on forwards 2..N — that per-forward walk was the dominant streaming
+        // cost on foundation models (#1646). Worst case a weight that only resolves on a later
+        // forward stays resident rather than streamed: identical output, slightly more RAM,
+        // never wrong.
+        if (System.Threading.Volatile.Read(ref _streamingWeightsRegistered) == 1) return;
+
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                // Skip placeholders (lazy weights not yet resolved) and tensors
+                // already registered (idempotent across forwards).
+                if (tensor is null || tensor.Length == 0 || tensor.StreamingPoolHandle >= 0) continue;
+                tensor.Lifetime = WeightLifetime.Streaming;
+                WeightRegistry.RegisterWeight(tensor);
+            }
+        }
+
+        System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 1);
+    }
+
+    private void ReleaseStreamingWeights(bool includeRegistered)
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Lifetime != WeightLifetime.Streaming) continue;
+                if (!includeRegistered && tensor.StreamingPoolHandle >= 0) continue;
+
+                try
+                {
+                    WeightRegistry.UnregisterWeight(tensor);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"NoisePredictorBase: failed to release streaming weight " +
+                        $"from {layer.GetType().Name}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
+        if (includeRegistered)
+        {
+            System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 0);
+        }
+    }
+
+    /// <summary>
+    /// Per-forward streaming guard used by concrete predictors. Call
+    /// <see cref="Complete"/> with the final output immediately before returning.
+    /// </summary>
+    protected sealed class WeightStreamingForwardScope : IDisposable
+    {
+        private readonly NoisePredictorBase<T> _owner;
+        private bool _completed;
+
+        internal WeightStreamingForwardScope(NoisePredictorBase<T> owner)
+        {
+            _owner = owner;
+        }
+
+        public Tensor<T> Complete(Tensor<T> result)
+        {
+            _owner.RegisterResolvedStreamingWeights();
+            _completed = true;
+            return result;
+        }
+
+        public void Dispose()
+        {
+            if (!_completed)
+            {
+                var firstForwardDidNotRegister =
+                    System.Threading.Volatile.Read(ref _owner._streamingWeightsRegistered) == 0;
+                _owner.ReleaseStreamingWeights(includeRegistered: firstForwardDidNotRegister);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resident-byte cap for the streaming pool: half the host's available managed
+    /// memory, clamped to [512 MiB, 8 GiB]. Big enough for several layers' working
+    /// set (so a single op never needs more than the cap), small enough to leave
+    /// headroom for activations and runtime on a 16 GB host.
+    /// </summary>
+    private static long ComputeResidentCapBytes()
+    {
+        long cap;
+#if NET5_0_OR_GREATER
+        long avail = 0;
+        try { avail = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes; } catch { /* fall through */ }
+        cap = avail > 0 ? avail / 2 : 4L * 1024 * 1024 * 1024;
+#else
+        // GCMemoryInfo isn't available on net471; use a conservative fixed cap.
+        cap = 4L * 1024 * 1024 * 1024;
+#endif
+        const long min = 512L * 1024 * 1024;
+        const long max = 8L * 1024 * 1024 * 1024;
+        if (cap < min) cap = min;
+        if (cap > max) cap = max;
+        return cap;
+    }
+
+    /// <summary>
+    /// Best-effort available host memory in bytes, used by the memory-aware
+    /// streaming-engagement heuristic (<see cref="MaybeEngageWeightStreaming"/>).
+    /// Returns 0 when it can't be determined (net471, or the GC info API throws),
+    /// in which case the caller falls through to its parameter-count decision.
+    /// </summary>
+    private static long GetAvailableMemoryBytesOrZero()
+    {
+#if NET5_0_OR_GREATER
+        try { return GC.GetGCMemoryInfo().TotalAvailableMemoryBytes; }
+        catch { return 0; }
+#else
+        return 0;
+#endif
+    }
+
+    #endregion
 
     #region Lazy Layer Factories
 
@@ -399,6 +1031,22 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         IVectorActivationFunction<T> vectorActivation)
     {
         var layer = new DenseLayer<T>(outputSize, vectorActivation, InitializationStrategies<T>.Lazy);
+        layer.ResolveShapesOnly(new[] { inputSize });
+        return layer;
+    }
+
+    /// <summary>
+    /// Creates a lazily-allocated <see cref="DenseLayer{T}"/> whose weights and biases zero-fill on
+    /// first resolve (the <see cref="InitializationStrategies{T}.Zero"/> strategy is non-lazy, so the
+    /// deferred <c>EnsureInitialized</c> applies it). This is the memory-safe form of adaLN-zero
+    /// (Peebles &amp; Xie 2022): it keeps the layer deferred — no weight tensor is allocated at
+    /// construction — instead of eagerly resolving a foundation-scale layer just to write zeros into
+    /// it (which OOMs the host on Flag-DiT / Lumina-scale stacks). The first forward zero-fills exactly
+    /// as eager zero-init would, so the block still begins as the identity.
+    /// </summary>
+    protected static DenseLayer<T> LazyDenseZero(int inputSize, int outputSize)
+    {
+        var layer = new DenseLayer<T>(outputSize, (IActivationFunction<T>?)null, InitializationStrategies<T>.Zero);
         layer.ResolveShapesOnly(new[] { inputSize });
         return layer;
     }
@@ -649,6 +1297,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
 
     /// <inheritdoc />
     public abstract void SetParameters(Vector<T> parameters);
+
+    /// <summary>
+    /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>
+    /// via the global <see cref="AiDotNet.Helpers.CopyOnWriteCloneHelper"/> (O(1)-until-write), instead of
+    /// the flat <c>GetParameters()</c> → <c>SetParameters()</c> round-trip that materializes the entire
+    /// predictor a second time — the source of large-predictor (DiT/UNet, hundreds of millions of params)
+    /// <c>Clone()</c> OOMs. Returns <c>false</c> (leaving this predictor untouched) if the trainable-layer
+    /// structure doesn't line up 1:1, so the caller falls back to the eager flat copy.
+    /// </summary>
+    protected bool TryShareParametersFrom(NoisePredictorBase<T> source)
+        => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this);
 
     /// <inheritdoc />
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
@@ -1064,6 +1723,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     {
         if (_disposed || !disposing) return;
         _disposed = true;
+
+        ReleaseStreamingWeights(includeRegistered: true);
 
         _compileHost.Dispose();
 

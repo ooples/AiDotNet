@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class RadialBasisFunctionNetworkTests : NeuralNetworkModelTestBase
+public class RadialBasisFunctionNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new RadialBasisFunctionNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new RadialBasisFunctionNetwork<float>();
 }

@@ -4,11 +4,20 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class FateZeroModelTests : DiffusionModelTestBase
+[Xunit.Collection("FoundationScaleSerial")]
+// HeavyTimeout (#1706): foundation-scale video-editing diffusion — verified OOM
+// (System.OutOfMemoryException under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling)
+// OS-OOM-kills the Diffusion D-I shard. Nightly heavy lane; drop once streaming fits it.
+[Xunit.Trait("Category", "HeavyTimeout")]
+public class FateZeroModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 16, 16];
     protected override int[] OutputShape => [1, 4, 16, 16];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new FateZeroModel<double>();
+    // Seed for deterministic, reproducible weight init (matches the sibling
+    // FlowVid/InstructVid2Vid tests). Without it the predictor's lazy weights fall
+    // back to the process-shared RNG, so Training_ShouldReducePredictionError becomes
+    // suite-position-dependent (passes in isolation, fails interleaved).
+    protected override IDiffusionModel<float> CreateModel()
+        => new FateZeroModel<float>(seed: 42);
 }

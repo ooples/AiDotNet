@@ -485,7 +485,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// Makes a prediction on the given input (required by NeuralNetworkBase).
     /// For Hope, this is equivalent to Forward pass.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input));
@@ -506,7 +506,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
                 layer.SetTrainingMode(false);
             }
 
-            return Forward(input);
+            return Accelerate(input, () => Forward(input));
         }
         finally
         {
@@ -561,6 +561,16 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             layer.SetParameters(layerParams);
             offset += layerParamCount;
         }
+
+        // SetParameters mutates each layer's weight tensors IN PLACE, but the
+        // CPU/GPU inference fast paths cache DERIVED weight forms (pre-packed
+        // GEMM B-panels) keyed by the weight array's object identity, not its
+        // contents. Without this flush a network loaded via UpdateParameters —
+        // notably a Clone() built through CreateNewInstance + UpdateParameters —
+        // keeps serving packs computed from its constructor-init weights and
+        // predicts differently from the source despite bit-identical parameters
+        // (Clone_AfterTraining_ShouldPreserveLearnedWeights / Issue1296 class).
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
     /// <summary>

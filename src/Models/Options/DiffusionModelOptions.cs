@@ -41,6 +41,7 @@ public class DiffusionModelOptions<T> : ModelOptions
             throw new ArgumentNullException(nameof(other));
 
         LearningRate = other.LearningRate;
+        OptimizerFactory = other.OptimizerFactory;
         TrainTimesteps = other.TrainTimesteps;
         BetaStart = other.BetaStart;
         BetaEnd = other.BetaEnd;
@@ -49,6 +50,7 @@ public class DiffusionModelOptions<T> : ModelOptions
         ClipSample = other.ClipSample;
         DefaultInferenceSteps = other.DefaultInferenceSteps;
         LossFunction = other.LossFunction;
+        UseGpuExecutionGraph = other.UseGpuExecutionGraph;
     }
 
     /// <summary>
@@ -62,6 +64,35 @@ public class DiffusionModelOptions<T> : ModelOptions
     /// The default of 0.001 is a good starting point for most diffusion models.</para>
     /// </remarks>
     public double LearningRate { get; set; } = 0.001;
+
+    /// <summary>
+    /// Gets or sets the factory used to create the gradient-based optimizer for training updates.
+    /// </summary>
+    /// <value>
+    /// A factory that creates a fresh <see cref="IGradientBasedOptimizer{T, TInput, TOutput}"/>,
+    /// or <c>null</c> (the default) to use the model's industry-standard default optimizer.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// When this is <c>null</c>, the diffusion model trains with the paper-faithful default: a plain
+    /// <b>Adam</b> optimizer (Ho et al. 2020, DDPM Algorithm 1 — Adam, <i>not</i> AdamW) configured with
+    /// the standard hyperparameters β₁ = 0.9, β₂ = 0.999, ε = 1e-8, <b>no weight decay</b>, and the
+    /// learning rate from <see cref="LearningRate"/>. The non-paper extras of the Adam implementation
+    /// (adaptive betas, adaptive learning rate, AMSGrad) are left off so the default reproduces the
+    /// paper exactly.
+    /// </para>
+    /// <para>
+    /// Set this to customize the optimizer at every level: a differently-tuned Adam (custom betas /
+    /// epsilon / AMSGrad), AdamW with decoupled weight decay, SGD with momentum, or any custom
+    /// <see cref="IGradientBasedOptimizer{T, TInput, TOutput}"/>. The factory must create a new optimizer
+    /// instance for each model so moment buffers, step counters, and checkpointed optimizer state are
+    /// never shared between copied option objects or cloned models.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer is the rule for turning each step's error signal into a
+    /// weight update. Leave this unset to use the proven DDPM default (Adam); set a factory only to take
+    /// full control of the optimizer yourself.</para>
+    /// </remarks>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; set; }
 
     /// <summary>
     /// Gets or sets the number of timesteps used during training.
@@ -158,4 +189,40 @@ public class DiffusionModelOptions<T> : ModelOptions
     /// Leave as null to use the default MSE loss.</para>
     /// </remarks>
     public ILossFunction<T>? LossFunction { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets whether each synchronous denoising-step noise prediction runs inside a GPU
+    /// deferred execution graph (device-resident, fused, multi-stream) instead of eager per-op
+    /// dispatch. Default <c>false</c> (opt-in).
+    /// </summary>
+    /// <value><c>true</c> to record each synchronous denoising step into one fused GPU deferred
+    /// execution graph (CUDA <c>DirectGpuTensorEngine</c> only); <c>false</c> (the default) to use
+    /// eager per-op dispatch.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled AND the active engine is a CUDA <c>DirectGpuTensorEngine</c>, each SYNCHRONOUS
+    /// <see cref="Diffusion.DiffusionModelBase{T}.PredictNoise"/> call (the <c>Generate</c> path, via
+    /// <c>PredictNoiseStep</c>) is recorded into one fused GPU execution graph (AiDotNet.Tensors #642)
+    /// — keeping intermediates on-device across the forward, applying kernel fusion / multi-stream
+    /// overlap / buffer reuse, and eliminating per-op host round-trips. This is the substrate a
+    /// CUDA-graph capture replays.
+    /// </para>
+    /// <para><b>Applies to synchronous generation only.</b> The asynchronous loop (<c>GenerateAsync</c>
+    /// → <c>PredictNoiseAsync</c>) routes through the compile host's async execution path and does NOT
+    /// consult this flag, so enabling it has no effect on <c>GenerateAsync</c>.</para>
+    /// <para><b>Correctness caveat — this is NOT an unconditional "never worse than eager" guarantee.</b>
+    /// A deferred forward that throws a recoverable exception transparently falls back to the eager
+    /// <see cref="Diffusion.DiffusionModelBase{T}.PredictNoise"/>, so <i>detected</i> failures are safe;
+    /// but an op that is not yet deferred-correct can silently produce wrong-but-finite output, which
+    /// the fallback CANNOT detect. <b>Requires AiDotNet.Tensors with the #642 deferred-graph correctness
+    /// fixes</b> (GroupNorm arg-order, GroupNorm/InstanceNorm recording, FusedConv2D lazy download,
+    /// GPU-resident in-place activations). Until every op a given model's forward uses is verified
+    /// deferred-correct, leave this off. Validated end-to-end for the GroupNorm→Swish→Conv ResBlock;
+    /// attention / up- &amp; down-sampling / concat / projection paths are pending the Tensors
+    /// op-coverage audit.</para>
+    /// <para><b>For Beginners:</b> a speed switch for GPU image/audio generation. Leave it off
+    /// unless you've confirmed your model + Tensors version support it; when on, it makes the GPU
+    /// do a whole denoising step as one batched job instead of hundreds of tiny ones.</para>
+    /// </remarks>
+    public bool UseGpuExecutionGraph { get; set; } = false;
 }

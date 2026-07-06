@@ -177,7 +177,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     #region Public Methods
     /// <summary>Runs a forward pass to produce segmentation logits.</summary>
     /// <param name="input">Input volume [C, D, H, W] or [B, C, D, H, W].</param>
-    public override Tensor<T> Predict(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);

@@ -58,6 +58,14 @@ public static class ActivationHelper
         if (activation == null)
             return input;
 
+        // Identity is a no-op: return the input tensor unchanged. This both avoids an
+        // allocation/element-wise copy AND preserves GPU residency — the fall-through
+        // activation.Activate(input) rebuilds the tensor on the host, which silently
+        // de-residents a buffer and breaks CUDA-graph capture for layers (e.g. diffusion
+        // Conv with IdentityActivation) whose inference fast path runs ApplyActivation.
+        if (activation is IdentityActivation<T>)
+            return input;
+
         // Use Engine methods for optimized activations (CPU SIMD / GPU kernels);
         // these are tape-connected so gradients flow through the activation.
         if (activation is TanhActivation<T>)

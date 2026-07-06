@@ -38,5 +38,17 @@ public class MoondreamOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
-    public MoondreamOptions() { InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection; VisionDim = 1024; DecoderDim = 2048; ProjectionDim = 2048; NumVisionLayers = 24; NumDecoderLayers = 24; NumHeads = 32; ImageSize = 378; LanguageModelName = "Phi-1.5"; MaxVisualTokens = 576; }
+    public MoondreamOptions()
+    {
+        InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;
+        VisionDim = 1024;
+        DecoderDim = 2048;
+        ProjectionDim = 2048;
+        NumVisionLayers = 24;
+        NumDecoderLayers = 24;
+        NumHeads = 32;
+        ImageSize = 378;
+        LanguageModelName = "Phi-1.5";
+        MaxVisualTokens = 576;
+    }
 }

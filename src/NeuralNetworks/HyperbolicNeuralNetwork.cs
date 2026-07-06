@@ -183,7 +183,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     /// represent more specific concepts.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var previousTrainingMode = IsTrainingMode;
         IsTrainingMode = false;
@@ -191,7 +191,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(HyperbolicNeuralNetwork<T>), "prediction");
 
-        var predictions = Forward(input);
+        var predictions = Accelerate(input, () => Forward(input));
 
         IsTrainingMode = previousTrainingMode;
 

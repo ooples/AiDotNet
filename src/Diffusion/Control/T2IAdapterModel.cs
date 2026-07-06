@@ -412,39 +412,10 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: ADAPTER_LATENT_CHANNELS,
-            outputChannels: ADAPTER_LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: ADAPTER_CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedAdapter = new UNetNoisePredictor<T>(
-            inputChannels: ADAPTER_CONDITION_CHANNELS,
-            outputChannels: ADAPTER_LATENT_CHANNELS,
-            baseChannels: 64,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 1,
-            attentionResolutions: [4, 2],
-            contextDim: ADAPTER_CROSS_ATTENTION_DIM);
-        clonedAdapter.SetParameters(_adapterNetwork.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: ADAPTER_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new T2IAdapterModel<T>(
-            unet: clonedUnet,
-            adapterNetwork: clonedAdapter,
-            vae: clonedVae,
+                                return new T2IAdapterModel<T>(
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            adapterNetwork: (UNetNoisePredictor<T>)_adapterNetwork.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             adapterScale: _adapterScale);
     }

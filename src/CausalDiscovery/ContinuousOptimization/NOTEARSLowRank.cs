@@ -205,14 +205,30 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                             T gB = NumOps.Zero;
                             for (int j = 0; j < d; j++)
                             {
+                                // SafeSign: the augmented Lagrangian under aggressive rho schedules
+                                // (rho *= 10 every outer iteration that fails the constraint-decrease
+                                // gate) can drive `rho * h` to overflow, propagating NaN into W. The
+                                // raw `Math.Sign(double.NaN)` throws ArithmeticException ("Function
+                                // does not accept floating point Not-a-Number values"), tearing down
+                                // L-BFGS mid-step with no chance for the outer Lagrangian schedule
+                                // to recover. Treating sign(NaN) = 0 matches the convention in
+                                // sklearn/scipy subgradient code: a NaN coordinate contributes no
+                                // L1 subgradient, the optimizer keeps stepping, and the outer
+                                // schedule's rho ceiling clamp prevents unbounded blow-up so the
+                                // run eventually settles into a meaningful structure (closes the
+                                // NOTEARSLowRank_FindsCausalStructure Integration C failure).
+                                double wij = NumOps.ToDouble(W[i, j]);
+                                double signWij = double.IsNaN(wij) ? 0.0 : Math.Sign(wij);
                                 T totalGW = NumOps.Add(
                                     NumOps.Add(lossGrad[i, j], NumOps.Multiply(augCoeff, hGrad[i, j])),
-                                    NumOps.FromDouble(Lambda1 * Math.Sign(NumOps.ToDouble(W[i, j]))));
+                                    NumOps.FromDouble(Lambda1 * signWij));
                                 gA = NumOps.Add(gA, NumOps.Multiply(totalGW, localB[j, r]));
 
+                                double wji = NumOps.ToDouble(W[j, i]);
+                                double signWji = double.IsNaN(wji) ? 0.0 : Math.Sign(wji);
                                 T totalGWT = NumOps.Add(
                                     NumOps.Add(lossGrad[j, i], NumOps.Multiply(augCoeff, hGrad[j, i])),
-                                    NumOps.FromDouble(Lambda1 * Math.Sign(NumOps.ToDouble(W[j, i]))));
+                                    NumOps.FromDouble(Lambda1 * signWji));
                                 gB = NumOps.Add(gB, NumOps.Multiply(totalGWT, localA[j, r]));
                             }
                             grad[i * rank + r] = gA;

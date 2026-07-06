@@ -182,11 +182,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
         if (NumOps.GreaterThan(currentRisk, riskBudget))
         {
             T scale = NumOps.Divide(riskBudget, currentRisk);
-            var scaledData = new T[action.Length];
-            for (int i = 0; i < action.Length; i++)
-                scaledData[i] = NumOps.Multiply(action.Data.Span[i], scale);
-            
-            return new Tensor<T>(action._shape, new Vector<T>(scaledData));
+            return Engine.TensorMultiplyScalar(action, scale);
         }
 
         return action;
@@ -204,7 +200,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
     /// <b>For Beginners:</b> In the NeuralVaR model, Predict produces predictions from input data. This is the main inference step of the NeuralVaR architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Inference mode is REQUIRED here: the stack contains
         // BatchNormalizationLayers, which in training mode normalize across the

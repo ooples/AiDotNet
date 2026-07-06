@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class MeshCNNTests : NeuralNetworkModelTestBase
+public class MeshCNNTests : NeuralNetworkModelTestBase<float>
 {
     // Default MeshCNN: InputFeatures=5, NumClasses=40, PoolTargets=[1800,1350,600]
     // Need enough edges to satisfy the first pool target (>1800)
@@ -13,9 +13,9 @@ public class MeshCNNTests : NeuralNetworkModelTestBase
     protected override int[] InputShape => [NumEdges, 5];
     protected override int[] OutputShape => [40];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var mesh = new MeshCNN<double>();
+        var mesh = new MeshCNN<float>();
         mesh.SetEdgeAdjacency(CreateTestEdgeAdjacency());
         return mesh;
     }

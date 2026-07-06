@@ -5,14 +5,14 @@ using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class SelfOrganizingMapTests : NeuralNetworkModelTestBase
+public class SelfOrganizingMapTests : NeuralNetworkModelTestBase<float>
 {
     // SOM with outputSize=64 adjusts to 10x6=60 neurons for golden ratio aspect
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [60];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new SelfOrganizingMap<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new SelfOrganizingMap<float>();
 
     /// <summary>
     /// SOM uses competitive learning with one-hot BMU output.

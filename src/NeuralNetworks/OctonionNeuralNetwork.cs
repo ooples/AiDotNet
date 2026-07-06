@@ -173,7 +173,7 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor to make a prediction for.</param>
     /// <returns>The predicted output tensor.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var previousTrainingMode = IsTrainingMode;
         IsTrainingMode = false;
@@ -183,7 +183,7 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
             TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
                 nameof(OctonionNeuralNetwork<T>), "prediction");
 
-            return Forward(input);
+            return Accelerate(input, () => Forward(input));
         }
         finally
         {

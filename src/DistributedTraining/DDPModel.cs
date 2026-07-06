@@ -149,6 +149,8 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
+        EnsureShardingInitialized();
+
         // DDP workflow with explicit gradient computation:
         //   1. ComputeGradients: Forward + backward pass to compute TRUE gradients
         //   2. AllReduce gradients (average across all processes)
@@ -192,6 +194,8 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     /// <inheritdoc/>
     public override TOutput Predict(TInput input)
     {
+        EnsureShardingInitialized();
+
         // No need to gather - we already have full parameters locally
         InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
 

@@ -1339,9 +1339,19 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         }
 
         // Validate time index
-        if (timeIndex < 0 || timeIndex >= _trend.Length)
+        if (timeIndex < 0)
         {
-            throw new ArgumentException($"Time index {timeIndex} is out of range [0, {_trend.Length - 1}].", nameof(input));
+            throw new ArgumentException($"Time index {timeIndex} must be non-negative.", nameof(input));
+        }
+
+        // Predicting beyond the fitted horizon is a legitimate forecast — extrapolate
+        // via the existing damped-slope Forecast path rather than rejecting the index.
+        // (Forecast uses ForecastTrend/Seasonal/Cycle/Irregular; it does not call back
+        // into PredictSingle, so there is no recursion.)
+        if (timeIndex >= _trend.Length)
+        {
+            int horizon = timeIndex - (_trend.Length - 1);
+            return Forecast(horizon, _trend.Length - 1)[horizon - 1];
         }
 
         // Combine components to produce the prediction

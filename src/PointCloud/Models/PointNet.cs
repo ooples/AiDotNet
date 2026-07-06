@@ -377,7 +377,7 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         }
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
         var output = ForwardWithMemory(input);

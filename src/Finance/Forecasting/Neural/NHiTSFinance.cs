@@ -413,7 +413,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the NHiTSFinance model, Predict produces predictions from input data. This is the main inference step of the NHiTSFinance architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 

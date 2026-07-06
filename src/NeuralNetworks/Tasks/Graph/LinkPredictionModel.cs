@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
@@ -76,6 +77,11 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
+// LinkPredictionModel IS a graph neural network (it requires an adjacency matrix), so it must carry the
+// GraphNetwork category like its siblings GraphClassificationModel / NodeClassificationModel. Without it the
+// test scaffold classified it as a generic NN and exercised it through the non-graph test base, which never
+// enables the implicit-identity adjacency — so every Predict/Train threw "Adjacency matrix must be set".
+[ModelCategory(ModelCategory.GraphNetwork)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
@@ -89,6 +95,10 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly LinkPredictionDecoder _decoderType;
     private Tensor<T>? _cachedAdjacencyMatrix;
+    // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
+    // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a
+    // missing graph); when enabled, Predict/Train build an identity sized to the input.
+    private bool _implicitIdentityWhenUnset;
     // Tracks whether _cachedAdjacencyMatrix came from EnsureDefaultAdjacencyForInput
     // (auto-inferred identity) vs an explicit SetAdjacencyMatrix call. Explicit
     // matrices are sticky — caller knows the graph; auto-inferred ones must be
@@ -244,6 +254,25 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
             }
         }
     }
+    /// <summary>
+    /// Enables implicit self-loops-only (identity) tolerance for this model and its graph layers —
+    /// the model-level analogue of GraphConvolutionalLayer's implicitIdentityWhenUnset ctor flag.
+    /// Default is strict (Predict/Train throw on a missing graph); this is an explicit opt-in for
+    /// scaffold / clone / deserialize paths, propagated to the GCN layers so direct-layer paths
+    /// (e.g. GetNamedLayerActivations) tolerate too.
+    /// </summary>
+    public void EnableImplicitIdentityAdjacency()
+    {
+        _implicitIdentityWhenUnset = true;
+        foreach (var layer in Layers)
+        {
+            if (layer is NeuralNetworks.Layers.GraphConvolutionalLayer<T> gcn)
+            {
+                gcn.EnableImplicitIdentityAdjacency();
+            }
+        }
+    }
+
 
     /// <summary>
     /// Default-of-last-resort adjacency: when no explicit matrix was set, fall back to the
@@ -255,6 +284,17 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     /// </summary>
     private void EnsureDefaultAdjacencyForInput(Tensor<T> input)
     {
+        if (_cachedAdjacencyMatrix is null && !_implicitIdentityWhenUnset)
+        {
+            // PyTorch-Geometric contract: the graph is REQUIRED — call SetAdjacencyMatrix() with
+            // the real structure before Predict/Train. Implicit-identity tolerance is opt-in
+            // (EnableImplicitIdentityAdjacency / the layer's implicitIdentityWhenUnset), never a
+            // silent default that would let a GCN ignore all graph structure unnoticed.
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set before Predict/Train: call SetAdjacencyMatrix() with " +
+                "the graph structure. Graph neural networks have no meaningful default graph.");
+        }
+
         if (input.Rank < 1) return; // can't infer; let Forward throw with a clear shape error
         int numNodes = input.Shape[0];
 
@@ -633,7 +673,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor containing node features.</param>
     /// <returns>The node embeddings tensor.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         EnsureDefaultAdjacencyForInput(input);
 
@@ -646,10 +686,17 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Trains the network on a single batch of data.
+    /// Trains the network on a single batch under the generic node-feature contract, consistent with
+    /// <see cref="PredictCore"/> (both operate on node EMBEDDINGS, not decoded edge scores).
     /// </summary>
     /// <param name="input">The input node features.</param>
-    /// <param name="expectedOutput">The expected output (edge scores).</param>
+    /// <param name="expectedOutput">
+    /// The target in node-embedding space (this generic overload trains the GNN encoder directly).
+    /// NOTE: this is NOT edge-level link-prediction training — actual edge scoring is a separate
+    /// decode step (<see cref="PredictEdges"/> via <see cref="ComputeEdgeScore"/>), and end-to-end
+    /// link-prediction training with real edge pairs + labels goes through the edge-aware graph path.
+    /// This overload exists for the generic model-family training contract.
+    /// </param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         EnsureDefaultAdjacencyForInput(input);
@@ -659,27 +706,41 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
             layer.SetTrainingMode(true);
         }
 
-        var predictions = Forward(input);
-
-        var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
+        // ILayer.Backward was removed in favour of GradientTape autodiff. The previous code computed a
+        // loss derivative but NEVER ran a backward pass — it read GetParameterGradients() (stale zeros)
+        // straight away — so the optimizer applied a zero step and training was a silent no-op ("No
+        // parameters changed after training — gradients may all be zero"). Record the GNN forward
+        // (node embeddings — this generic contract's output, see PredictCore; edge scoring is the
+        // separate PredictEdges decode) and the loss on the tape, compute real gradients for every
+        // trainable parameter, then drive the update through the model's configured optimizer
+        // (default Adam) so the loss actually converges.
+        // Tape-based training requires a tape-differentiable loss — a LossFunctionBase<T>, which
+        // exposes ComputeTapeLoss. Silently substituting BinaryCrossEntropyLoss for a
+        // non-LossFunctionBase<T> would train a DIFFERENT objective than the caller configured (a
+        // surprising correctness trap), so fail fast with a clear message instead. The default loss
+        // (BinaryCrossEntropyLoss, set in the ctor) is a LossFunctionBase<T>, so the default path is
+        // unaffected — this only rejects a custom non-tape loss.
+        if (_lossFunction is not LossFunctionBase<T> tapeLoss)
+            throw new InvalidOperationException(
+                $"LinkPredictionModel tape-based training requires a LossFunctionBase<T> (one that "
+                + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
+                + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as BinaryCrossEntropyLoss.");
+        using (var tape = new GradientTape<T>())
         {
-            gradOutput = gradOutput.Reshape(predictions._shape);
+            var predictions = Forward(input);
+            var lossTensor = tapeLoss.ComputeTapeLoss(predictions, expectedOutput);
+            // Always record the loss that was computed, even when there are no trainable parameters to
+            // step — LastLoss must reflect the most recent Train call for consistent telemetry.
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
+            if (trainableParameters.Count > 0)
+            {
+                var gradients = tape.ComputeGradients(lossTensor, trainableParameters);
+                var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
+                _optimizer.Step(context);
+            }
+            LastLoss = lossValue;
         }
-
-
-        Vector<T> parameterGradients = GetParameterGradients();
-        Vector<T> currentParameters = GetParameters();
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        UpdateParameters(updatedParameters);
     }
 
     /// <summary>
@@ -739,13 +800,25 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new LinkPredictionModel<T>(
+        var clone = new LinkPredictionModel<T>(
             architecture: Architecture,
             hiddenDim: HiddenDim,
             embeddingDim: EmbeddingDim,
             numLayers: NumLayers,
             dropoutRate: DropoutRate,
             decoderType: _decoderType);
+        // Graph STATE is model state in this stateful-adjacency design, so a clone of a configured
+        // model must stay usable: carry the implicit-identity opt-in and any explicit adjacency.
+        if (_implicitIdentityWhenUnset)
+        {
+            clone.EnableImplicitIdentityAdjacency();
+        }
+        else if (_cachedAdjacencyMatrix is not null)
+        {
+            clone.SetAdjacencyMatrix(_cachedAdjacencyMatrix);
+        }
+
+        return clone;
     }
 
     #endregion

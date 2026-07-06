@@ -306,7 +306,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
                 "Edge adjacency must be set via SetEdgeAdjacency before calling Forward.");
         }
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         int numEdges = input.Shape[0];
         int aggregatedFeatures = InputChannels * (1 + NumNeighbors);

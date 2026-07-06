@@ -35,114 +35,178 @@ Non-linear relationships using polynomial features.
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Prepare data (house features: sqft, bedrooms, bathrooms, age)
-var features = new double[][]
+// House features: sqft, bedrooms, bathrooms, age
+double[][] features =
 {
-    new[] { 1400.0, 3.0, 2.0, 15.0 },
-    new[] { 1600.0, 3.0, 2.0, 10.0 },
-    new[] { 1700.0, 3.0, 2.5, 5.0 },
-    new[] { 1875.0, 4.0, 3.0, 8.0 },
-    new[] { 1100.0, 2.0, 1.0, 25.0 },
-    new[] { 2200.0, 4.0, 3.0, 2.0 }
+    new[] { 1400.0, 3.0, 2.0, 15.0 }, new[] { 1600.0, 3.0, 2.0, 10.0 },
+    new[] { 1700.0, 3.0, 2.5, 5.0 },  new[] { 1875.0, 4.0, 3.0, 8.0 },
+    new[] { 1100.0, 2.0, 1.0, 25.0 }, new[] { 2200.0, 4.0, 3.0, 2.0 }
 };
-var prices = new double[] { 245000, 312000, 279000, 308000, 199000, 425000 };
+double[] prices = { 245000, 312000, 279000, 308000, 199000, 425000 };
 
-// Build and train
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RandomForestRegressor<double>(nEstimators: 100))
-    .ConfigurePreprocessing()
-    .BuildAsync(features, prices);
+var X = ToMatrix(features);
+var y = new Vector<double>(prices);
 
-// Predict
-var newHome = new double[] { 1500.0, 3.0, 2.0, 12.0 };
-var predictedPrice = result.Predict(newHome);
-Console.WriteLine($"Predicted price: ${predictedPrice:N0}");
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RandomForestRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(X, y))
+    .BuildAsync();
+
+var newHome = new Matrix<double>(1, 4);
+foreach (var (v, j) in new[] { 1500.0, 3.0, 2.0, 12.0 }.Select((v, j) => (v, j)))
+    newHome[0, j] = v;
+Console.WriteLine($"Predicted price: ${result.Predict(newHome)[0]:N0}");
+
+// Metrics come off the result — no hand-rolled math.
+var stats = result.GetDataSetStats(X, y);
+Console.WriteLine($"R²: {stats.PredictionStats.R2:F4}, RMSE: {stats.ErrorStats.RMSE:N0}");
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ---
 
 ## Available Regressors
 
+Swap the `ConfigureModel(...)` argument to change algorithm — everything else stays the same.
+
 ### Tree-Based Methods
 
-| Regressor | Description | Best For |
-|:----------|:------------|:---------|
-| `RandomForestRegressor` | Ensemble of decision trees | General purpose, robust |
-| `GradientBoostingRegression` | Boosted decision trees | High accuracy |
-| `DecisionTreeRegressor` | Single decision tree | Interpretability |
+| Regressor | Best For |
+|:----------|:---------|
+| `RandomForestRegression` | General purpose, robust |
+| `GradientBoostingRegression` | High accuracy |
+| `DecisionTreeRegression` | Interpretability |
 
 ### Linear Methods
 
-| Regressor | Description | Best For |
-|:----------|:------------|:---------|
-| `LinearRegression` | Ordinary least squares | Simple relationships |
-| `RidgeRegression` | L2-regularized linear | Multicollinearity |
-| `LassoRegression` | L1-regularized linear | Feature selection |
-| `ElasticNetRegression` | L1+L2 regularization | Best of both |
+| Regressor | Best For |
+|:----------|:---------|
+| `SimpleRegression` / `MultipleRegression` | Ordinary least squares |
+| `RidgeRegression` | Multicollinearity (L2) |
+| `LassoRegression` | Feature selection (L1) |
+| `ElasticNetRegression` | L1 + L2 |
+| `PolynomialRegression` | Non-linear relationships |
 
-### Distance-Based
+### Distance-Based & Neural
 
-| Regressor | Description | Best For |
-|:----------|:------------|:---------|
-| `KNearestNeighborsRegressor` | Instance-based learning | Non-linear, small datasets |
+| Regressor | Best For |
+|:----------|:---------|
+| `KNearestNeighborsRegression` | Non-linear, small datasets |
+| `NeuralNetworkRegression` | Complex non-linear patterns |
 
-### Neural Networks
+### Neural Network Regression
 
 ```csharp
-var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-    .ConfigureModel(new NeuralNetworkRegressor<float>(
-        inputFeatures: 10,
-        complexity: NetworkComplexity.Medium))
-    .ConfigureOptimizer(new AdamOptimizer<float>(learningRate: 0.001f))
-    .BuildAsync(features, targets);
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
+
+double[][] features =
+{
+    new[] { 1400.0, 3.0 }, new[] { 1600.0, 3.0 }, new[] { 1700.0, 3.0 },
+    new[] { 1875.0, 4.0 }, new[] { 1100.0, 2.0 }, new[] { 2200.0, 4.0 }
+};
+double[] targets = { 245000, 312000, 279000, 308000, 199000, 425000 };
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new NeuralNetworkRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, targets))
+    .BuildAsync();
+
+Console.WriteLine($"Trained: {result.TotalTrainableParameters:N0} parameters");
 ```
 
 ---
 
 ## Data Preprocessing
 
-### Automatic Preprocessing
+Pass a preprocessing pipeline to `ConfigurePreprocessing(...)` to scale or impute features before training — useful for linear and distance-based models. Regularized linear models like `RidgeRegression` pair well with feature scaling.
 
 ```csharp
-.ConfigurePreprocessing()  // Applies StandardScaler by default
-```
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-### Custom Preprocessing
-
-```csharp
-.ConfigurePreprocessing(new PreprocessingConfig
+double[][] features =
 {
-    Scaler = new MinMaxScaler<double>(),
-    ImputeStrategy = ImputeStrategy.Median,
-    HandleCategorical = true
-})
+    new[] { 1400.0, 3.0 }, new[] { 1600.0, 3.0 }, new[] { 1700.0, 3.0 }, new[] { 1875.0, 4.0 }
+};
+double[] targets = { 245000, 312000, 279000, 308000 };
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RidgeRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, targets))
+    .BuildAsync();
+
+Console.WriteLine("Trained a regularized linear model.");
 ```
 
 ---
 
 ## Evaluation Metrics
 
-```csharp
-var predictions = testSamples.Select(s => result.Predict(s)).ToArray();
+Every regression metric is computed for you and lives under `result.GetDataSetStats(X, y)`.
 
-// Common regression metrics
-Console.WriteLine($"MAE: {Metrics.MeanAbsoluteError(predictions, testTargets):F4}");
-Console.WriteLine($"MSE: {Metrics.MeanSquaredError(predictions, testTargets):F4}");
-Console.WriteLine($"RMSE: {Metrics.RootMeanSquaredError(predictions, testTargets):F4}");
-Console.WriteLine($"R2: {Metrics.RSquared(predictions, testTargets):F4}");
+```csharp
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
+
+double[][] data =
+{
+    new[] { 1400.0, 3.0 }, new[] { 1600.0, 3.0 }, new[] { 1700.0, 3.0 },
+    new[] { 1875.0, 4.0 }, new[] { 1100.0, 2.0 }, new[] { 2200.0, 4.0 }
+};
+double[] targets = { 245000, 312000, 279000, 308000, 199000, 425000 };
+
+var X = ToMatrix(data);
+var y = new Vector<double>(targets);
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new GradientBoostingRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(X, y))
+    .BuildAsync();
+
+var stats = result.GetDataSetStats(X, y);
+Console.WriteLine($"MAE:  {stats.ErrorStats.MAE:F4}");
+Console.WriteLine($"MSE:  {stats.ErrorStats.MSE:F4}");
+Console.WriteLine($"RMSE: {stats.ErrorStats.RMSE:F4}");
+Console.WriteLine($"R²:   {stats.PredictionStats.R2:F4}");
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ---
 
 ## Best Practices
 
-1. **Start simple**: Use Linear Regression as a baseline
-2. **Check for outliers**: Outliers heavily influence linear models
-3. **Feature scaling**: Most algorithms benefit from scaled features
-4. **Regularize**: Use Ridge or Lasso to prevent overfitting
-5. **Validate**: Use cross-validation for robust evaluation
+1. **Start simple**: Use `MultipleRegression` as a baseline.
+2. **Check for outliers**: Outliers heavily influence linear models.
+3. **Feature scaling**: Most algorithms benefit from `ConfigurePreprocessing()`.
+4. **Regularize**: Use `RidgeRegression` or `LassoRegression` to prevent overfitting.
+5. **Validate**: Add `ConfigureCrossValidation(...)` for robust evaluation.
 
 ---
 

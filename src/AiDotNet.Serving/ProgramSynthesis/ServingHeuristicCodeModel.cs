@@ -25,7 +25,7 @@ internal sealed class ServingHeuristicCodeModel : CodeModelBase<double>
         // Intentionally empty: Serving uses this model for structured task dispatch and heuristics.
     }
 
-    public override Tensor<double> Predict(Tensor<double> input) => input;
+    protected override Tensor<double> PredictCore(Tensor<double> input) => input;
 
     public override void UpdateParameters(Vector<double> parameters)
     {

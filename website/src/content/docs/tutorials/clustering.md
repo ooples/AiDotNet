@@ -6,361 +6,264 @@ section: "Tutorials"
 ---
 
 
-
-Learn to group similar data points with AiDotNet's clustering algorithms.
-
----
-
-
-
----
+Learn to group similar data points with AiDotNet's clustering algorithms — all through the same `AiModelBuilder` facade.
 
 ## What is Clustering?
 
-Clustering is an unsupervised learning task where the goal is to group similar data points together without predefined labels. Examples include:
-- Customer segmentation (grouping customers by behavior)
-- Document organization (grouping similar documents)
-- Anomaly detection (finding outliers)
-- Image segmentation (grouping pixels)
+Clustering is an unsupervised learning task: group similar points together without predefined labels. Examples include customer segmentation, document organization, anomaly detection, and image segmentation.
+
+Clustering uses the features-only loader `DataLoaders.FromMatrix(...)`. Cluster assignments come from `result.Predict(...)`, and quality metrics are cached on `result.Evaluation.ClusteringMetrics`.
 
 ## Types of Clustering
 
-### Partitioning Methods
-Divide data into non-overlapping clusters. Example: K-Means, K-Medoids
-
-### Hierarchical Methods
-Build a tree-like structure of clusters. Example: Agglomerative, BIRCH
-
-### Density-Based Methods
-Find clusters as dense regions separated by sparse regions. Example: DBSCAN, OPTICS
-
-### Model-Based Methods
-Assume data is generated from a mixture of distributions. Example: Gaussian Mixture Models
+- **Partitioning** (`KMeans`, `KMedoids`): non-overlapping clusters around centers.
+- **Density-based** (`DBSCAN`, `MeanShift`): dense regions separated by sparse ones; finds outliers.
+- **Hierarchical** (`AgglomerativeClustering`, `BIRCH`): a tree of clusters.
 
 ---
 
-## Quick Start
+## Quick Start (K-Means)
 
 ```csharp
 using AiDotNet;
-using AiDotNet.Clustering;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Prepare data - customer purchase patterns
-var data = new double[][]
+// Customer purchase patterns: [age, annual spend]
+double[][] customers =
 {
-    new[] { 25.0, 45000.0 },  // Age, Annual spend
-    new[] { 35.0, 67000.0 },
-    new[] { 45.0, 89000.0 },
-    new[] { 32.0, 52000.0 },
-    new[] { 28.0, 43000.0 }
+    new[] { 25.0, 45000.0 }, new[] { 35.0, 67000.0 }, new[] { 45.0, 89000.0 },
+    new[] { 32.0, 52000.0 }, new[] { 28.0, 43000.0 }, new[] { 48.0, 92000.0 },
 };
+var data = ToMatrix(customers);
 
-// Create K-Means clusterer
-var kmeans = new KMeans<double>(new KMeansOptions<double>
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new KMeans<double>(new KMeansOptions<double> { NumClusters = 3, Seed = 42 }))
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .BuildAsync();
+
+var labels = result.Predict(data);
+Console.WriteLine($"Customer 0 -> cluster {(int)labels[0]}");
+
+var metrics = result.Evaluation.ClusteringMetrics;
+if (metrics is not null)
+    Console.WriteLine($"Silhouette: {metrics.Silhouette:F4}");
+
+static Matrix<double> ToMatrix(double[][] rows)
 {
-    K = 3,
-    MaxIterations = 100,
-    Tolerance = 1e-4,
-    InitMethod = KMeansInitMethod.KMeansPlusPlus
-});
-
-// Fit the model
-kmeans.Fit(data);
-
-// Get cluster assignments
-var labels = kmeans.Labels;  // [0, 1, 2, 1, 0]
-
-// Get cluster centers
-var centers = kmeans.ClusterCenters;
-
-// Predict cluster for new data
-var newCustomer = new[] { 30.0, 55000.0 };
-var cluster = kmeans.Predict(newCustomer);
-Console.WriteLine($"Customer assigned to cluster: {cluster}");
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ---
 
 ## Available Clustering Algorithms
 
-### Partitioning Methods
-
-| Algorithm | Description | Best For |
-|:----------|:------------|:---------|
-| `KMeans` | Classic centroid-based clustering | Spherical clusters, large datasets |
-| `KMedoids` | Uses actual data points as centers | Robust to outliers |
-| `MiniBatchKMeans` | Scalable K-Means variant | Very large datasets |
-| `FuzzyCMeans` | Soft clustering (membership degrees) | Overlapping clusters |
-
-### Density-Based Methods
-
-| Algorithm | Description | Best For |
-|:----------|:------------|:---------|
-| `DBSCAN` | Density-based spatial clustering | Arbitrary shapes, outlier detection |
-| `HDBSCAN` | Hierarchical DBSCAN | Varying density clusters |
-| `OPTICS` | Ordering points for cluster structure | Varying density, visualization |
-| `MeanShift` | Mode-seeking algorithm | Unknown number of clusters |
-
-### Hierarchical Methods
-
-| Algorithm | Description | Best For |
-|:----------|:------------|:---------|
-| `AgglomerativeClustering` | Bottom-up hierarchical | Dendrogram visualization |
-| `BIRCH` | Balanced iterative reducing | Large datasets, streaming |
-| `BisectingKMeans` | Divisive hierarchical | Large datasets |
-
-### Model-Based
-
-| Algorithm | Description | Best For |
-|:----------|:------------|:---------|
-| `GaussianMixture` | Probabilistic clustering | Elliptical clusters, soft assignment |
+| Family | Algorithms |
+|:-------|:-----------|
+| Partitioning | `KMeans`, `KMedoids`, `BisectingKMeans`, `FuzzyCMeans` |
+| Density-based | `DBSCAN`, `MeanShift`, `Denclue` |
+| Hierarchical | `AgglomerativeClustering`, `BIRCH`, `CURE` |
+| Graph / other | `SpectralClustering`, `AffinityPropagation` |
 
 ---
 
-## K-Means Clustering
+## Finding the Optimal K
 
-The most popular clustering algorithm for its simplicity and speed.
-
-### Basic Usage
+There is no magic `K` — sweep candidate values and keep the best silhouette, which the facade computes for you.
 
 ```csharp
-var kmeans = new KMeans<double>(new KMeansOptions<double>
+using AiDotNet;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Tensors.LinearAlgebra;
+
+double[][] points =
 {
-    K = 3,
-    InitMethod = KMeansInitMethod.KMeansPlusPlus,
-    MaxIterations = 300,
-    Tolerance = 1e-4,
-    RandomState = 42  // For reproducibility
-});
+    new[] { 1.0, 2.0 }, new[] { 1.5, 1.8 }, new[] { 1.0, 0.6 },
+    new[] { 5.0, 8.0 }, new[] { 8.0, 8.0 }, new[] { 9.0, 11.0 },
+    new[] { 8.0, 2.0 }, new[] { 10.0, 2.0 }, new[] { 9.0, 3.0 },
+};
+var data = ToMatrix(points);
 
-kmeans.Fit(data);
-```
+int bestK = 2;
+double bestSilhouette = double.NegativeInfinity;
+for (int k = 2; k <= 5; k++)
+{
+    var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        .ConfigureModel(new KMeans<double>(new KMeansOptions<double> { NumClusters = k, Seed = 42 }))
+        .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+        .BuildAsync();
 
-### Initialization Methods
+    double silhouette = result.Evaluation.ClusteringMetrics?.Silhouette ?? double.NaN;
+    Console.WriteLine($"K={k}: Silhouette={silhouette:F4}");
+    if (silhouette > bestSilhouette) { bestSilhouette = silhouette; bestK = k; }
+}
+Console.WriteLine($"Best K: {bestK}");
 
-```csharp
-// K-Means++ (recommended)
-InitMethod = KMeansInitMethod.KMeansPlusPlus
-
-// Random initialization
-InitMethod = KMeansInitMethod.Random
-
-// Custom initial centroids
-kmeans.Fit(data, initialCentroids: myCentroids);
-```
-
-### Finding Optimal K
-
-```csharp
-// Elbow method
-var evaluator = new ClusteringEvaluator<double>();
-var elbowResult = evaluator.ElbowMethod(data, kRange: Enumerable.Range(2, 10));
-Console.WriteLine($"Optimal K: {elbowResult.OptimalK}");
-
-// Silhouette analysis
-var gapResult = evaluator.GapStatistic(data, kRange: Enumerable.Range(2, 10));
-Console.WriteLine($"Optimal K (Gap): {gapResult.OptimalK}");
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ---
 
-## DBSCAN - Density-Based Clustering
+## DBSCAN — Density-Based Clustering
 
-Excellent for clusters of arbitrary shape and automatic outlier detection.
+Finds clusters of arbitrary shape and flags outliers as `DBSCAN<double>.NoiseLabel` (`-1`).
 
 ```csharp
-var dbscan = new DBSCAN<double>(new DBSCANOptions<double>
+using AiDotNet;
+using AiDotNet.Clustering.Density;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Tensors.LinearAlgebra;
+
+double[][] points =
 {
-    Epsilon = 0.5,      // Maximum distance between neighbors
-    MinPoints = 5       // Minimum points to form a cluster
-});
+    new[] { 1.0, 2.0 }, new[] { 1.5, 1.8 }, new[] { 1.2, 2.2 }, new[] { 1.1, 1.9 },
+    new[] { 8.0, 8.0 }, new[] { 8.2, 7.8 }, new[] { 7.9, 8.1 }, new[] { 8.1, 8.3 },
+    new[] { 25.0, 80.0 },
+};
+var data = ToMatrix(points);
 
-dbscan.Fit(data);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new DBSCAN<double>(new DBSCANOptions<double> { Epsilon = 1.0, MinPoints = 3 }))
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .BuildAsync();
 
-// Labels: -1 indicates noise/outlier
-var labels = dbscan.Labels;
-var numClusters = labels.Where(l => l >= 0).Distinct().Count();
-var numOutliers = labels.Count(l => l == -1);
+var labels = result.Predict(data);
+int outliers = 0;
+for (int i = 0; i < labels.Length; i++)
+    if ((int)labels[i] == DBSCAN<double>.NoiseLabel) outliers++;
+Console.WriteLine($"Outliers: {outliers}");
 
-Console.WriteLine($"Found {numClusters} clusters and {numOutliers} outliers");
-```
-
-### Choosing Epsilon
-
-```csharp
-// Use k-distance graph
-var kDistances = dbscan.ComputeKDistances(data, k: 5);
-// Plot and find the "elbow" - that's your epsilon
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ---
 
 ## Hierarchical Clustering
 
-Build a hierarchy of clusters for deeper analysis.
-
 ```csharp
-var agglom = new AgglomerativeClustering<double>(new HierarchicalOptions<double>
+using AiDotNet;
+using AiDotNet.Clustering.Hierarchical;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Tensors.LinearAlgebra;
+
+double[][] points =
 {
-    NumClusters = 3,
-    LinkageMethod = LinkageMethod.Ward,  // Minimize variance
-    DistanceMetric = new EuclideanDistance<double>()
-});
+    new[] { 1.0, 2.0 }, new[] { 1.5, 1.8 }, new[] { 1.0, 0.6 },
+    new[] { 5.0, 8.0 }, new[] { 8.0, 8.0 }, new[] { 9.0, 11.0 },
+};
+var data = ToMatrix(points);
 
-agglom.Fit(data);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new AgglomerativeClustering<double>(new HierarchicalOptions<double>
+    {
+        NumClusters = 3,
+        Linkage = LinkageMethod.Ward
+    }))
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .BuildAsync();
 
-// Get dendrogram for visualization
-var dendrogram = agglom.GetDendrogram();
+Console.WriteLine($"Davies-Bouldin: {result.Evaluation.ClusteringMetrics?.DaviesBouldin:F4}");
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ### Linkage Methods
 
-| Method | Description | Best For |
-|:-------|:------------|:---------|
-| `Ward` | Minimizes variance increase | Compact, equal-sized clusters |
-| `Complete` | Maximum pairwise distance | Well-separated clusters |
-| `Average` | Mean pairwise distance | Balanced approach |
-| `Single` | Minimum pairwise distance | Elongated clusters |
+| Method | Best For |
+|:-------|:---------|
+| `Ward` | Compact, equal-sized clusters |
+| `Complete` | Well-separated clusters |
+| `Average` | Balanced approach |
+| `Single` | Elongated clusters |
 
 ---
 
 ## Evaluation Metrics
 
-### Internal Metrics (No Ground Truth)
+Every clustering build fills `result.Evaluation.ClusteringMetrics` with the standard internal validity measures.
 
 ```csharp
-var evaluator = new ClusteringEvaluator<double>();
+using AiDotNet;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Silhouette Score (-1 to 1, higher is better)
-var silhouette = evaluator.SilhouetteScore(data, labels);
-Console.WriteLine($"Silhouette Score: {silhouette:F4}");
-
-// Calinski-Harabasz Index (higher is better)
-var ch = evaluator.CalinskiHarabaszIndex(data, labels);
-Console.WriteLine($"Calinski-Harabasz: {ch:F4}");
-
-// Davies-Bouldin Index (lower is better)
-var db = evaluator.DaviesBouldinIndex(data, labels);
-Console.WriteLine($"Davies-Bouldin: {db:F4}");
-
-// Within-cluster sum of squares
-var wcss = evaluator.WCSS(data, labels, centers);
-Console.WriteLine($"WCSS: {wcss:F4}");
-```
-
-### External Metrics (With Ground Truth)
-
-```csharp
-// Adjusted Rand Index (0 to 1, higher is better)
-var ari = evaluator.AdjustedRandIndex(trueLabels, predictedLabels);
-
-// Normalized Mutual Information (0 to 1, higher is better)
-var nmi = evaluator.NormalizedMutualInformation(trueLabels, predictedLabels);
-
-// Fowlkes-Mallows Index
-var fmi = evaluator.FowlkesMallowsIndex(trueLabels, predictedLabels);
-```
-
----
-
-## Data Preprocessing for Clustering
-
-### Feature Scaling (Critical!)
-
-```csharp
-// StandardScaler - zero mean, unit variance
-var scaler = new StandardScaler<double>();
-var scaledData = scaler.FitTransform(data);
-
-// MinMaxScaler - scale to [0, 1]
-var minMax = new MinMaxScaler<double>();
-var normalizedData = minMax.FitTransform(data);
-```
-
-### Dimensionality Reduction
-
-```csharp
-// PCA before clustering
-var pca = new PCA<double>(numComponents: 2);
-var reducedData = pca.FitTransform(data);
-
-// Then cluster
-kmeans.Fit(reducedData);
-```
-
----
-
-## Distance Metrics
-
-Choose the right distance metric for your data:
-
-```csharp
-// Euclidean (default) - continuous features
-var euclidean = new EuclideanDistance<double>();
-
-// Manhattan - robust to outliers
-var manhattan = new ManhattanDistance<double>();
-
-// Cosine - text/document clustering
-var cosine = new CosineDistance<double>();
-
-// Custom metric
-var kmeans = new KMeans<double>(new KMeansOptions<double>
+double[][] points =
 {
-    K = 3,
-    DistanceMetric = new CosineDistance<double>()
-});
+    new[] { 1.0, 2.0 }, new[] { 1.5, 1.8 }, new[] { 1.0, 0.6 },
+    new[] { 5.0, 8.0 }, new[] { 8.0, 8.0 }, new[] { 9.0, 11.0 },
+    new[] { 8.0, 2.0 }, new[] { 10.0, 2.0 }, new[] { 9.0, 3.0 },
+};
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new KMeans<double>(new KMeansOptions<double> { NumClusters = 3, Seed = 42 }))
+    .ConfigureDataLoader(DataLoaders.FromMatrix(ToMatrix(points)))
+    .BuildAsync();
+
+var m = result.Evaluation.ClusteringMetrics;
+if (m is not null)
+{
+    Console.WriteLine($"Silhouette:        {m.Silhouette:F4}  (higher is better)");
+    Console.WriteLine($"Calinski-Harabasz: {m.CalinskiHarabasz:F2}  (higher is better)");
+    Console.WriteLine($"Davies-Bouldin:    {m.DaviesBouldin:F4}  (lower is better)");
+}
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var mtx = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            mtx[i, j] = rows[i][j];
+    return mtx;
+}
 ```
 
 ---
 
 ## Best Practices
 
-1. **Always Scale Features**: Clustering is distance-based; features on different scales will dominate
-2. **Try Multiple Algorithms**: Different algorithms find different cluster shapes
-3. **Validate K Selection**: Use multiple methods (elbow, silhouette, gap statistic)
-4. **Handle Outliers**: Consider DBSCAN or preprocessing to remove outliers
-5. **Interpret Results**: Analyze cluster centers and characteristics
-
----
-
-## Common Issues
-
-### Clusters of Different Sizes
-
-K-Means assumes equal-sized clusters. Use:
-- DBSCAN/HDBSCAN for varying densities
-- Gaussian Mixture Models with flexible covariance
-
-### High-Dimensional Data
-
-Curse of dimensionality affects distance calculations:
-- Apply PCA/UMAP before clustering
-- Use feature selection
-
-### Choosing the Right K
-
-No single best method exists:
-```csharp
-// Combine multiple approaches
-var elbow = evaluator.ElbowMethod(data, 2..15);
-var gap = evaluator.GapStatistic(data, 2..15);
-var silhouettes = Enumerable.Range(2, 14)
-    .Select(k => {
-        var km = new KMeans<double>(new KMeansOptions<double> { K = k });
-        km.Fit(data);
-        return evaluator.SilhouetteScore(data, km.Labels);
-    })
-    .ToArray();
-
-// Look for agreement across methods
-```
+1. **Scale features**: clustering is distance-based; normalize before building (`ConfigurePreprocessing(...)`).
+2. **Try multiple algorithms**: K-Means, DBSCAN, and hierarchical find different shapes.
+3. **Validate K**: sweep and compare silhouette across candidates.
+4. **Handle outliers**: prefer DBSCAN for noisy data.
+5. **Interpret results**: inspect cluster sizes and centers.
 
 ---
 
 ## Next Steps
 
-- [K-Means Sample](../../../samples/clustering/KMeans/)
-- [DBSCAN Sample](../../../samples/clustering/DBSCAN/)
-- [Customer Segmentation Example](../../../samples/clustering/CustomerSegmentation/)
-- [Clustering API Reference](../../api/)
+- [Customer Segmentation Example](/docs/examples/clustering/)
+- [Classification Tutorial](/docs/tutorials/classification/) — for labeled data

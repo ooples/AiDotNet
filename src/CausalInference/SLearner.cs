@@ -243,7 +243,7 @@ public class SLearner<T> : CausalModelBase<T>
     /// <see cref="CausalModelBase{T}.Train(Matrix{T}, Vector{T})"/> splits the
     /// input matrix into <c>features</c> (columns 1..end) and <c>treatment</c>
     /// (column 0) before fitting on the joint <c>[features ∥ treatment] → outcome</c>
-    /// regression. The standard <see cref="IFullModel{T,Matrix{T},Vector{T}}.Predict"/>
+    /// regression. The standard <see cref="IFullModel{T, TInput, TOutput}.Predict"/>
     /// contract returns predicted outcomes (so <c>R²</c> / residual / coefficient-sign
     /// invariants from <c>RegressionModelTestBase</c> are well-defined): walk each row,
     /// read its treatment from column 0, evaluate <c>bias + Σ_j w_j · feature_j +

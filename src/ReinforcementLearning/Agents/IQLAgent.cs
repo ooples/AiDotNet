@@ -261,19 +261,87 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         var batch = _offlineBuffer.Sample(_options.BatchSize);
+        int n = batch.Count;
+        if (n == 0) return _numOps.Zero;
 
-        // Tape-based training handles gradient computation
-        T valueLoss = _numOps.Zero;
-        T qLoss = _numOps.Zero;
-        T policyLoss = _numOps.Zero;
-        T totalLoss = _numOps.Add(_numOps.Add(valueLoss, qLoss), policyLoss);
+        int stateDim = _options.StateSize;
+        int actionDim = _options.ActionSize;
+        int saDim = stateDim + actionDim;
+        T gamma = _options.DiscountFactor;
+        double tau = _options.Expectile;
+
+        var valueInputs = new Tensor<T>([n, stateDim]);
+        var valueTargets = new Tensor<T>([n, 1]);
+        var saInputs = new Tensor<T>([n, saDim]);
+        var qTargets = new Tensor<T>([n, 1]);
+        var policyInputs = new Tensor<T>([n, stateDim]);
+        var policyTargets = new Tensor<T>([n, actionDim * 2]);
+
+        for (int i = 0; i < n; i++)
+        {
+            var exp = batch[i];
+            var saVec = ConcatenateStateAction(exp.State, exp.Action);
+            var saTensor = Tensor<T>.FromVector(saVec);
+            T q1 = _q1Network.Predict(saTensor).ToVector()[0];
+            T q2 = _q2Network.Predict(saTensor).ToVector()[0];
+            T qMin = _numOps.LessThan(q1, q2) ? q1 : q2;
+
+            var stateTensor = Tensor<T>.FromVector(exp.State);
+            T v = _valueNetwork.Predict(stateTensor).ToVector()[0];
+
+            // --- Expectile value regression (Kostrikov et al. 2021, eq. 5) ---
+            // The asymmetric expectile loss L2^tau(qMin − V) has gradient w·(V − qMin) with
+            // w = tau when qMin > V and (1−tau) otherwise. That is exactly the MSE gradient toward
+            // the per-sample target V + w·(qMin − V), so we realise the expectile update through the
+            // standard MSE Train without a custom loss.
+            double w = _numOps.GreaterThan(qMin, v) ? tau : (1.0 - tau);
+            for (int j = 0; j < stateDim; j++) valueInputs[i, j] = exp.State[j];
+            valueTargets[i, 0] = _numOps.Add(v, _numOps.Multiply(_numOps.FromDouble(w), _numOps.Subtract(qMin, v)));
+
+            // --- Q Bellman regression toward V of the next state (IQL bootstraps off the learned
+            // value rather than a next action): y = r + gamma·(1−done)·V'(s'). ---
+            T vNext = _targetValueNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector()[0];
+            T yQ = exp.Reward;
+            if (!exp.Done) yQ = _numOps.Add(yQ, _numOps.Multiply(gamma, vNext));
+            for (int j = 0; j < saDim; j++) saInputs[i, j] = saVec[j];
+            qTargets[i, 0] = yQ;
+
+            // --- Advantage-weighted policy extraction (IQL §4.2): pull the policy mean toward the
+            // dataset action with a weight that grows with the advantage A = qMin − V. The per-sample
+            // weighting is realised as a target blend: target_mean = mean + coef·(a − mean),
+            // coef = clamp(exp(temperature·A), 0, 1) (high-advantage actions imitated fully,
+            // low/negative-advantage ones barely). log_std targets 0. ---
+            T adv = _numOps.Subtract(qMin, v);
+            double coef = Math.Exp(_numOps.ToDouble(_numOps.Multiply(_options.Temperature, adv)));
+            if (coef > 1.0) coef = 1.0;
+            if (coef < 0.0) coef = 0.0;
+            var policyOut = _policyNetwork.Predict(stateTensor).ToVector();
+            for (int j = 0; j < stateDim; j++) policyInputs[i, j] = exp.State[j];
+            for (int k = 0; k < actionDim; k++)
+            {
+                T mean = policyOut[k];
+                policyTargets[i, k] = _numOps.Add(mean,
+                    _numOps.Multiply(_numOps.FromDouble(coef), _numOps.Subtract(exp.Action[k], mean)));
+                policyTargets[i, actionDim + k] = _numOps.Zero;
+            }
+        }
+
+        // Apply the gradient updates (each Train() is a tape-based forward/backward/step).
+        _valueNetwork.Train(valueInputs, valueTargets);
+        _q1Network.Train(saInputs, qTargets);
+        _q2Network.Train(saInputs, qTargets);
+        _policyNetwork.Train(policyInputs, policyTargets);
+
+        T totalLoss = _numOps.Add(
+            _numOps.Add(_valueNetwork.GetLastLoss(), _q1Network.GetLastLoss()),
+            _numOps.Add(_q2Network.GetLastLoss(), _policyNetwork.GetLastLoss()));
 
         // 4. Soft update target value network
         SoftUpdateTargetNetwork();
 
         _updateCount++;
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(3));
+        return _numOps.Divide(totalLoss, _numOps.FromDouble(4));
     }
 
     private T ComputeExpectileLoss(T diff, double expectile)

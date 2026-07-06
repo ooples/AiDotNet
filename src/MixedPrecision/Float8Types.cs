@@ -66,6 +66,30 @@ internal static class BitConverterHelper
         return Int32BitsToSingle(unchecked((int)truncated));
     }
 
+    /// <summary>
+    /// Packs a float into a 2-byte BF16 (the upper 16 bits of the float32 with
+    /// round-to-nearest-even on the dropped low 16 bits). Unlike FP16, BF16 keeps
+    /// the full float32 exponent, so no scale factor is needed — the dynamic range
+    /// is preserved and only mantissa precision is reduced. NaN is preserved as a
+    /// quiet NaN; ±Inf passes through. Used for half-footprint optimizer moment state.
+    /// </summary>
+    public static ushort FloatToBf16Bits(float value)
+    {
+        uint bits = unchecked((uint)SingleToInt32Bits(value));
+        if (float.IsNaN(value))
+            return (ushort)((bits >> 16) | 0x0040u); // force a mantissa bit so it stays NaN
+        // Round to nearest even: add 0x7FFF + (lsb of the surviving mantissa) then truncate.
+        uint lsb = (bits >> 16) & 1u;
+        bits += 0x7FFFu + lsb;
+        return (ushort)(bits >> 16);
+    }
+
+    /// <summary>Expands a 2-byte BF16 back to a float (BF16 occupies the high 16 bits).</summary>
+    public static float Bf16BitsToFloat(ushort bf16)
+    {
+        return Int32BitsToSingle(unchecked((int)((uint)bf16 << 16)));
+    }
+
     [StructLayout(LayoutKind.Explicit)]
     private struct SingleInt32Union
     {

@@ -2,6 +2,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -75,6 +76,14 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+
+    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions()
+        => new()
+        {
+            InitialLearningRate = 0.0002,
+            Beta1 = 0.5,
+            Beta2 = 0.999,
+        };
 
     /// <summary>
     /// The optimizer used for training the generator network.
@@ -361,10 +370,10 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         Discriminator = CreateBackboneForArchitecture(discriminatorArchitecture);
         QNetwork = CreateBackboneForArchitecture(qNetworkArchitecture);
 
-        // Initialize optimizers - use provided optimizers or create default Adam optimizers
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
-        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
-        _qNetworkOptimizer = qNetworkOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(QNetwork);
+        // Initialize optimizers - use provided optimizers or create default GAN-standard Adam optimizers.
+        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateStandardGanAdamOptions());
+        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator, CreateStandardGanAdamOptions());
+        _qNetworkOptimizer = qNetworkOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(QNetwork, CreateStandardGanAdamOptions());
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
@@ -476,15 +485,23 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         var trainableGen = (NeuralNetworkBase<T>)Generator;
         T generatorLoss = trainableGen.TrainWithCustomLoss(newGeneratorInput, genOutput =>
         {
-            // GAN loss: fool discriminator — BCE(disc(fake), real_labels)
-            var discScore = Discriminator.Predict(genOutput);
+            // GAN loss: fool discriminator — BCE(disc(fake), real_labels).
+            // Use ForwardForTraining (NOT Predict) so the discriminator's ops RECORD onto the
+            // generator's active gradient tape. Predict runs the eval/inference path (fused,
+            // non-recording), which left the tape with no edge from the loss back through the
+            // discriminator to genOutput — so d(GANloss)/d(generator) was zero and the generator
+            // never updated (GradientFlow_ShouldBeNonZeroAndFinite: "no parameters changed").
+            // Per Chen et al. 2016 (InfoGAN) the generator is trained by backpropagating the
+            // discriminator's adversarial signal AND the Q-network's mutual-information signal into
+            // the generator, which requires both subnetworks to be differentiated through here.
+            var discScore = Discriminator.ForwardForTraining(genOutput);
             var diff = Engine.TensorSubtract(discScore, allRealLabels);
             var squared = Engine.TensorMultiply(diff, diff);
             var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
             var ganLossTensor = Engine.ReduceMean(squared, allAxes, keepDims: false);
 
-            // Mutual information loss: Q(fake) should predict latent codes
-            var predictedCodes = QNetwork.Predict(genOutput);
+            // Mutual information loss: Q(fake) should predict latent codes — likewise tape-tracked.
+            var predictedCodes = QNetwork.ForwardForTraining(genOutput);
             var codeDiff = Engine.TensorSubtract(predictedCodes, capturedLatentCodes);
             var codeSq = Engine.TensorMultiply(codeDiff, codeDiff);
             var codeAxes = Enumerable.Range(0, codeSq.Shape.Length).ToArray();
@@ -838,7 +855,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         return result;
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

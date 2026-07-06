@@ -215,22 +215,131 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
     }
 
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// The shared base adapter decodes <paramref name="target"/> into a discrete one-hot action sized
+    /// to the target length, which is incompatible with DDPG's continuous critic input
+    /// (StateSize + ActionSize) — the stored experience would have the wrong action dimensionality.
+    /// We act in the state to obtain an action of the agent's own ActionSize, derive a bounded scalar
+    /// reward from the supervised target, store the transition, and run a DDPG update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        var action = SelectAction(state, training: true);
+
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        // Treat this one-shot supervised transition as terminal: nextState is fabricated as `state`, so
+        // done: false would inject a γQ'(s, μ'(s)) bootstrap and optimize against an invented target.
+        // done: true makes the critic target just the supplied reward.
+        StoreExperience(state, action, reward, state, done: true);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
     /// <inheritdoc/>
     public override T Train()
     {
         _steps++;
         TrainingSteps++;
 
-        if (_steps < _options.WarmupSteps || !_replayBuffer.CanSample(_options.BatchSize))
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _steps < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || !_replayBuffer.CanSample(effectiveBatchSize))
         {
             return NumOps.Zero;
         }
 
-        var batch = _replayBuffer.Sample(_options.BatchSize);
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
+        int n = batch.Count;
+        if (n == 0) return NumOps.Zero;
 
-        // Update critic and actor with tape-based training
-        T criticLoss = NumOps.Zero;
-        T actorLoss = NumOps.Zero;
+        int stateDim = _options.StateSize;
+        int actionDim = _options.ActionSize;
+        int saDim = stateDim + actionDim;
+        T gamma = _options.DiscountFactor;
+
+        // --- Critic update (Lillicrap et al. 2015) ---
+        // y = r + gamma*(1-done)*Q'(s', mu'(s')); regress the critic toward y.
+        var saInputs = new Tensor<T>([n, saDim]);
+        var yTargets = new Tensor<T>([n, 1]);
+        for (int i = 0; i < n; i++)
+        {
+            var exp = batch[i];
+            // Validate replay-sample shapes before any tensor write: StoreExperience() is a public
+            // input boundary, so a malformed transition would otherwise corrupt the critic inputs
+            // (saInputs) or throw deep inside the target-network forwards. Reject it with a clear message.
+            if (exp.State.Length != stateDim || exp.NextState.Length != stateDim || exp.Action.Length != actionDim)
+            {
+                throw new InvalidOperationException(
+                    $"DDPG replay experience has wrong dimensions; expected State={stateDim}, " +
+                    $"NextState={stateDim}, Action={actionDim} but got State={exp.State.Length}, " +
+                    $"NextState={exp.NextState.Length}, Action={exp.Action.Length}.");
+            }
+            var nextA = _actorTargetNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
+            var nextSA = Tensor<T>.FromVector(ConcatenateStateAction(exp.NextState, nextA));
+            T qNext = _criticTargetNetwork.Predict(nextSA).ToVector()[0];
+
+            T y = exp.Reward;
+            if (!exp.Done) y = NumOps.Add(y, NumOps.Multiply(gamma, qNext));
+
+            var saVec = ConcatenateStateAction(exp.State, exp.Action);
+            for (int j = 0; j < saDim; j++) saInputs[i, j] = saVec[j];
+            yTargets[i, 0] = y;
+        }
+        _criticNetwork.Train(saInputs, yTargets);
+        T criticLoss = _criticNetwork.GetLastLoss();
+
+        // --- Actor update via the deterministic policy gradient ---
+        // ∇θ J = E[∇a Q(s,a)|a=mu(s) · ∇θ mu(s)]. ComputeDDPGPolicyGradient returns −∇a Q (a loss
+        // gradient for gradient ASCENT on Q); the Q-ascending action target is therefore
+        // a − step·(−∇a Q) = a + step·∇a Q. Training the actor toward it realises the chain rule
+        // ∇θ mu through the network's MSE Train.
+        var actorInputs = new Tensor<T>([n, stateDim]);
+        var actorTargets = new Tensor<T>([n, actionDim]);
+        // DPG action-space ascent step for building the actor's regression target (Lillicrap et al.
+        // 2015). Named constant rather than a magic literal; deliberately distinct from the actor
+        // NETWORK's optimizer learning rate (_options.ActorLearningRate, already wired into
+        // _actorNetwork) — they play different roles and must not be conflated.
+        const double actorPolicyGradientStep = 0.05;
+        T stepSize = NumOps.FromDouble(actorPolicyGradientStep);
+        for (int i = 0; i < n; i++)
+        {
+            var s = batch[i].State;
+            var a = _actorNetwork.Predict(Tensor<T>.FromVector(s)).ToVector();
+            var negGrad = ComputeDDPGPolicyGradient(s, a);
+            for (int j = 0; j < stateDim; j++) actorInputs[i, j] = s[j];
+            for (int k = 0; k < actionDim; k++)
+                actorTargets[i, k] = MathHelper.Clamp<T>(
+                    NumOps.Subtract(a[k], NumOps.Multiply(stepSize, negGrad[k])),
+                    NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+        }
+        _actorNetwork.Train(actorInputs, actorTargets);
+        T actorLoss = _actorNetwork.GetLastLoss();
 
         // Soft update target networks
         SoftUpdateTargets();

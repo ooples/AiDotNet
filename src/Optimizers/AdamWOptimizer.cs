@@ -566,6 +566,8 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         // Global-norm gradient clipping BEFORE the AdamW update. AdamW is the
         // canonical optimizer for transformer / classifier fine-tuning, and
         // the reference recipes pair it with torch.nn.utils.clip_grad_norm_
@@ -877,24 +879,7 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         {
             int baseDataLength = reader.ReadInt32();
             byte[] baseData = reader.ReadBytes(baseDataLength);
-
-            // Read base class data manually to avoid type mismatch in UpdateOptions
-            using (MemoryStream baseMs = new MemoryStream(baseData))
-            using (BinaryReader baseReader = new BinaryReader(baseMs))
-            {
-                // Read and verify the type (same as base class)
-                string typeName = baseReader.ReadString();
-                if (typeName != this.GetType().AssemblyQualifiedName)
-                {
-                    throw new InvalidOperationException("Mismatched optimizer type during deserialization.");
-                }
-
-                // Skip the options JSON from base class - we'll read our own below
-                baseReader.ReadString();
-
-                // Read additional base class data if any
-                // (The base class DeserializeAdditionalData is empty, so nothing to do)
-            }
+            base.Deserialize(baseData);
 
             string optionsJson = reader.ReadString();
             _options = JsonConvert.DeserializeObject<AdamWOptimizerOptions<T, TInput, TOutput>>(optionsJson)

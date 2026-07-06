@@ -228,7 +228,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         bool wasSingleSample = input.Rank == 1;
 
         int batchSize;

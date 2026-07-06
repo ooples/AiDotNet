@@ -338,21 +338,12 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new EMMDiTPredictor<T>(
-            inputChannels: SANA_LATENT_CHANNELS,
-            contextDim: SANA_CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        var clonedVae = new DeepCompressionVAE<T>(
-            inputChannels: 3,
-            latentChannels: SANA_LATENT_CHANNELS,
-            downsampleFactor: SANA_DOWNSAMPLE_FACTOR,
-            baseChannels: 128);
-        clonedVae.SetParameters(_vae.GetParameters());
-
         return new SANAModel<T>(
-            predictor: clonedPredictor,
-            vae: clonedVae,
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (EMMDiTPredictor<T>)_predictor.Clone(),
+            vae: (DeepCompressionVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             variant: _variant);
     }

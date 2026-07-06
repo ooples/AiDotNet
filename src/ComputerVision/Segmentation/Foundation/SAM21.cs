@@ -207,7 +207,7 @@ public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// <summary>
     /// Runs a forward pass through SAM 2.1.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
         => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <summary>

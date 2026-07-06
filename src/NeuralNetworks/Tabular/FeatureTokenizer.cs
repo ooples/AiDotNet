@@ -322,6 +322,24 @@ public class FeatureTokenizer<T>
     }
 
     /// <summary>
+    /// Returns the tokenizer's trainable weight TENSORS (the live field instances,
+    /// not a flat copy) so a caller can register them with a <c>GradientTape</c> and
+    /// apply gradients in place. Order matches <see cref="GetParameters"/>:
+    /// numerical weights, numerical bias (if present), CLS token, then each
+    /// categorical embedding. Used by the FT-Transformer tape-based training step —
+    /// the tokenizer keeps its own manual gradient fields for the legacy path, but
+    /// tape training updates these tensors directly.
+    /// </summary>
+    internal IReadOnlyList<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>> { _numericalWeights };
+        if (_numericalBias is not null) tensors.Add(_numericalBias);
+        tensors.Add(_clsToken);
+        tensors.AddRange(_categoricalEmbeddings);
+        return tensors;
+    }
+
+    /// <summary>
     /// Sets the trainable parameters from a vector.
     /// </summary>
     public void SetParameters(Vector<T> parameters)

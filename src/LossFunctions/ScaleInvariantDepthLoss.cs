@@ -110,10 +110,16 @@ public class ScaleInvariantDepthLoss<T> : LossFunctionBase<T>
         var d = Engine.TensorSubtract(logPred, logTarget);
         var dSquared = Engine.TensorMultiply(d, d);
         var allAxes = Enumerable.Range(0, d.Shape.Length).ToArray();
-        var meanDSq = Engine.ReduceMean(dSquared, allAxes, keepDims: false);
-        var sumD = Engine.ReduceSum(d, allAxes, keepDims: false);
-        var sumDSq = Engine.TensorMultiply(sumD, sumD);
         double n = d.Length > 0 ? d.Length : 1.0;
+        var meanDSq = Engine.ReduceMean(dSquared, allAxes, keepDims: false);
+        // Σd is computed as mean(d)·n rather than ReduceSum(d): for a full reduction (all axes,
+        // keepDims=false) ReduceMean and ReduceSum can return DIFFERENT ranks (scalar [] vs [1]),
+        // and subtracting the two mismatched-rank terms threw "Tensor shapes must match. Got [1] and []".
+        // Deriving both terms from ReduceMean keeps them the same rank. Mathematically identical:
+        // (λ/n²)·(Σd)² = (λ/n²)·(n·mean(d))² and mean(d²) is unchanged.
+        var meanD = Engine.ReduceMean(d, allAxes, keepDims: false);
+        var sumD = Engine.TensorMultiplyScalar(meanD, NumOps.FromDouble(n));
+        var sumDSq = Engine.TensorMultiply(sumD, sumD);
         var scaledSumDSq = Engine.TensorMultiplyScalar(sumDSq, NumOps.FromDouble(_lambda / (n * n)));
         return Engine.TensorSubtract(meanDSq, scaledSumDSq);
     }

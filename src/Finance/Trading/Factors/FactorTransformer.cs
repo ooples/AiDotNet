@@ -339,7 +339,7 @@ public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
     /// to compute factor signals from the input data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? PredictNative(input) : PredictOnnx(input);
     }
@@ -614,6 +614,27 @@ public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
     public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         return Predict(input);
+    }
+
+    /// <summary>
+    /// Training-mode forward pass. Runs the native layer stack directly on the live gradient tape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default <see cref="FinancialModelBase{T}.ForwardNativeForTraining"/> delegates to
+    /// <see cref="Forecast"/>, which here calls <see cref="NeuralNetworks.NeuralNetworkBase{T}.Predict"/>
+    /// — the INFERENCE path. Predict runs inside a <c>TensorArena</c> inference scope that detaches its
+    /// output from the gradient tape, so during <c>TrainWithTape</c> the backward pass reaches no
+    /// parameters and every training step is a silent no-op (the GradientFlow_ShouldBeNonZeroAndFinite,
+    /// Training_ShouldReduceLoss, LossStrictlyDecreasesOnMemorizationTask and
+    /// Training_ShouldChangeParameters failures). Route training through the raw native layer loop
+    /// (<see cref="PredictNative"/>) so the forward is recorded on the tape and gradients flow to
+    /// every layer's parameters. Mirrors the NTM #1670 fix for the same tape-severance pattern.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return PredictNative(input);
     }
 
     /// <summary>

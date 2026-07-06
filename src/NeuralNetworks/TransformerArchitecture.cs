@@ -468,6 +468,16 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
             taskType: taskType,
             complexity: complexity,
             inputSize: inputSize,
+            // A 2D transformer's natural per-sample input shape is [seqLen, modelDim], NOT a square factorization
+            // of inputSize. The base infers [sqrt(N), sqrt(N)] (e.g. inputSize=64 -> [8,8]) when height/width are
+            // unset, which mismatches a continuous-input first layer declaring [maxSeqLen, modelDim] (e.g. [4,16])
+            // and trips the first-layer shape validator (#1346). Pass the real [maxSeqLen, modelDim] ONLY when they
+            // are consistent with the declared inputSize, so transformers that don't set a matching inputSize keep
+            // the existing base inference unchanged.
+            inputHeight: (inputType == InputType.TwoDimensional && maxSequenceLength > 0 && modelDimension > 0
+                          && (long)maxSequenceLength * modelDimension == inputSize) ? maxSequenceLength : 0,
+            inputWidth: (inputType == InputType.TwoDimensional && maxSequenceLength > 0 && modelDimension > 0
+                         && (long)maxSequenceLength * modelDimension == inputSize) ? modelDimension : 0,
             outputSize: outputSize,
             layers: layers)
     {

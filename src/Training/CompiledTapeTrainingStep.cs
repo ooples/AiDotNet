@@ -432,7 +432,8 @@ public static class CompiledTapeTrainingStep<T>
         out T lossValue,
         double maxGradNorm = 0.0,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null,
+        bool useBf16Moments = false)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
@@ -579,6 +580,22 @@ public static class CompiledTapeTrainingStep<T>
             var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
             if (firstCollectThisLifecycle) RememberLayerSet(layers);
 
+            // GPU-RESIDENCY (campaign M1): on the DirectGpu engine, make the parameters GPU-resident ONCE so
+            // CompiledTrainingPlan.ConfigureOptimizerFloat takes its GPU Adam branch (param.TryGetGpuBuffer()
+            // != null) — Adam/m/v run on-device and the forward reads weights from the resident buffer instead
+            // of re-uploading per op (the ~10%-util host ping-pong). .Gpu() mutates in place and no-ops when no
+            // GPU engine is available. Gated to float + Adam/AdamW/SGD (the only GPU-supported optimizer
+            // kernels; others would NotSupported on the GPU branch). Opt out with AIDOTNET_GPU_RESIDENT_PARAMS=0.
+            if (firstCollectThisLifecycle && typeof(T) == typeof(float)
+                && (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam
+                    || optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW
+                    || optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD)
+                && Environment.GetEnvironmentVariable("AIDOTNET_GPU_RESIDENT_PARAMS") != "0"
+                && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+            {
+                foreach (var p in parameters) p.Gpu();
+            }
+
             foreach (var layer in layers)
                 layer.ZeroGrad();
 
@@ -716,16 +733,29 @@ public static class CompiledTapeTrainingStep<T>
                 return true;
             }
 
-            var plan = cache.GetOrCompileTraining(
-                compositeKey,
-                () =>
-                {
-                    // Trace through the persistent tensors so plan.Step()
-                    // reads from the same refs we update each call.
-                    var predicted = forward(_persistentInput!);
-                    return computeLoss(predicted, _persistentTarget!);
-                },
-                parameters);
+            // FP16-IN-CAPTURE (Tensors task #30): when opted in (AIDOTNET_FP16_CAPTURE=1, float), trace the
+            // forward under an FP16-storage autocast so the compiled CompiledTrainingPlan captures the Half
+            // activation nodes (consumed by its heterogeneous forward/backward — device-resident FP16
+            // activation storage, ~half the activation VRAM). Distinct from AIDOTNET_FP16_ACTIVATIONS, which
+            // routes to the separate, capture-incompatible MixedPrecisionCompiledPlan handled above. The scope
+            // is active only during the (once-per-shape) trace+compile; Step() replays without it.
+            ICompiledTrainingPlan<T> plan;
+            {
+                using var _fp16Capture =
+                    (typeof(T) == typeof(float) && Environment.GetEnvironmentVariable("AIDOTNET_FP16_CAPTURE") == "1")
+                        ? new AiDotNet.Tensors.Engines.Gpu.AutocastScope(AiDotNet.Tensors.Engines.Gpu.PrecisionMode.Float16)
+                        : null;
+                plan = cache.GetOrCompileTraining(
+                    compositeKey,
+                    () =>
+                    {
+                        // Trace through the persistent tensors so plan.Step()
+                        // reads from the same refs we update each call.
+                        var predicted = forward(_persistentInput!);
+                        return computeLoss(predicted, _persistentTarget!);
+                    },
+                    parameters);
+            }
 
             // STRICT SINGLE-PLAN POLICY: optimizer state lives inside the
             // compiled plan (ConfigureOptimizer attaches m/v buffers directly
@@ -746,6 +776,12 @@ public static class CompiledTapeTrainingStep<T>
 
             if (_configuredPlan is null)
             {
+                // #1745: request bf16 moment storage BEFORE ConfigureOptimizer so the
+                // plan allocates the half-size m/v buffers. Honored only for the CPU
+                // float Adam/AdamW kernel; a safe no-op for every other configuration.
+                if (useBf16Moments)
+                    plan.RequestBf16MomentStorage(true);
+
                 // First fused call on this thread. Configure the plan and
                 // commit to single-plan semantics from here on. When the
                 // caller passed an lrSchedule, use the LrSchedule overload
@@ -943,7 +979,12 @@ public static class CompiledTapeTrainingStep<T>
         object? plan = _mpPlan;
         if (plan is null)
             throw new InvalidOperationException("MP plan cache state corrupted: key present but plan handle missing.");
-        return MixedPrecisionReflection.StepSgd(plan, parameters, learningRate);
+        // Loss-scale the SGD mixed-precision step (Tensors 0.102.0 / #650): without a GradScaler
+        // the FP16 backward grads can underflow to zero before reaching the FP32 masters. Persist
+        // one scaler (dynamic loss scale + skip-on-overflow handled inside Step) — matching the
+        // Adam/generic paths above, which already pass _mpScaler.
+        _mpScaler ??= MixedPrecisionReflection.CreateGradScaler(1024f);
+        return MixedPrecisionReflection.StepSgd(plan, parameters, learningRate, _mpScaler);
     }
 
     /// <summary>

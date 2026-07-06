@@ -1,309 +1,318 @@
 ---
-title: "Tensor Basics"
-description: "Learn the fundamentals of tensor operations."
+title: "ML Basics"
+description: "Learn the fundamentals of training models with AiModelBuilder."
 order: 1
 section: "Examples"
 ---
 
 
-This guide demonstrates the fundamentals of using AiDotNet for machine learning tasks.
+This guide demonstrates the fundamentals of using AiDotNet for machine learning tasks through the `AiModelBuilder` facade.
 
 ## Overview
 
-AiDotNet provides a simple, unified API for machine learning through the `AiModelBuilder` class. All complexity is handled internally, so you can focus on your data and results.
+Every model in AiDotNet is built the same way: `ConfigureModel(...)` + `ConfigureDataLoader(...)` + `BuildAsync()`, then `result.Predict(...)`. Metrics for the trained model are computed for you and read off the returned `AiModelResult` — through `result.GetDataSetStats(X, y)` for a specific dataset, or `result.Evaluation` for the internal train/validation/test split.
 
 ## Quick Start: Linear Regression
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Your training data
-var features = new double[][]
+// Your training data (one feature per sample).
+double[][] features =
 {
-    new[] { 1.0 },
-    new[] { 2.0 },
-    new[] { 3.0 },
-    new[] { 4.0 },
-    new[] { 5.0 }
+    new[] { 1.0 }, new[] { 2.0 }, new[] { 3.0 }, new[] { 4.0 }, new[] { 5.0 }
 };
+double[] targets = { 2.1, 4.0, 5.9, 8.1, 10.0 };
 
-var targets = new double[] { 2.1, 4.0, 5.9, 8.1, 10.0 };
+var X = ToMatrix(features);
+var y = new Vector<double>(targets);
 
-// Build and train a model
-var result = await new AiModelBuilder<double, double[][], double[]>()
-    .ConfigureRegression()
-    .ConfigurePreprocessing()
-    .BuildAsync(features, targets);
+// Build and train a model through the facade.
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new MultipleRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(X, y))
+    .BuildAsync();
 
-// Make predictions
-var prediction = result.Predict(new double[][] { new[] { 6.0 } });
-Console.WriteLine($"Prediction for x=6: {prediction[0]:F2}");
-// Output: Prediction for x=6: 12.01
+// Make a prediction for x = 6 (one-row matrix in, vector out).
+var sixInput = new Matrix<double>(1, 1);
+sixInput[0, 0] = 6.0;
+Console.WriteLine($"Prediction for x=6: {result.Predict(sixInput)[0]:F2}");
 
-// View model performance
-Console.WriteLine($"R-Squared: {result.RSquared:F4}");
-Console.WriteLine($"Mean Squared Error: {result.MeanSquaredError:F4}");
+// View model performance — no hand-rolled math.
+var stats = result.GetDataSetStats(X, y);
+Console.WriteLine($"R-Squared: {stats.PredictionStats.R2:F4}");
+Console.WriteLine($"Mean Squared Error: {stats.ErrorStats.MSE:F4}");
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
-## Multiple Features (Multivariate Regression)
+## Multiple Features (Ridge Regression)
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
 // House price prediction: [sqft, bedrooms, age]
-var houseFeatures = new double[][]
+double[][] houseFeatures =
 {
-    new[] { 1500.0, 3.0, 10.0 },
-    new[] { 2000.0, 4.0, 5.0 },
-    new[] { 1200.0, 2.0, 20.0 },
-    new[] { 1800.0, 3.0, 8.0 },
+    new[] { 1500.0, 3.0, 10.0 }, new[] { 2000.0, 4.0, 5.0 },
+    new[] { 1200.0, 2.0, 20.0 }, new[] { 1800.0, 3.0, 8.0 },
     new[] { 2500.0, 5.0, 2.0 }
 };
+double[] prices = { 300000, 450000, 200000, 380000, 550000 };
 
-var prices = new double[] { 300000, 450000, 200000, 380000, 550000 };
+var X = ToMatrix(houseFeatures);
+var y = new Vector<double>(prices);
 
-// Build model
-var result = await new AiModelBuilder<double, double[][], double[]>()
-    .ConfigureRegression(config =>
-    {
-        config.ModelType = RegressionModelType.Ridge;
-        config.RegularizationStrength = 0.1;
-    })
-    .ConfigurePreprocessing(config =>
-    {
-        config.NormalizeFeatures = true;
-        config.HandleMissingValues = true;
-    })
-    .BuildAsync(houseFeatures, prices);
+// Ridge regression adds L2 regularization; swap in LassoRegression or
+// ElasticNetRegression the same way.
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RidgeRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(X, y))
+    .BuildAsync();
 
-// Predict new house price
-var newHouse = new double[][] { new[] { 1700.0, 3.0, 12.0 } };
-var predictedPrice = result.Predict(newHouse);
-Console.WriteLine($"Estimated price: ${predictedPrice[0]:N0}");
+var newHouse = new Matrix<double>(1, 3);
+foreach (var (v, j) in new[] { 1700.0, 3.0, 12.0 }.Select((v, j) => (v, j)))
+    newHouse[0, j] = v;
+Console.WriteLine($"Estimated price: ${result.Predict(newHouse)[0]:N0}");
 
-// View feature importance
+// Feature importance is available on the result.
 Console.WriteLine("\nFeature Importance:");
-Console.WriteLine($"  Square Feet: {result.FeatureImportance[0]:F3}");
-Console.WriteLine($"  Bedrooms: {result.FeatureImportance[1]:F3}");
-Console.WriteLine($"  Age: {result.FeatureImportance[2]:F3}");
+foreach (var (name, importance) in result.GetFeatureImportance())
+    Console.WriteLine($"  {name}: {importance:F3}");
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ## Binary Classification
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Customer churn prediction
-var customerData = new double[][]
+// Customer churn: [tenure, monthly charges, has contract]
+double[][] customerData =
 {
-    new[] { 12.0, 50.0, 1.0 },   // tenure, monthly charges, has contract
-    new[] { 1.0, 80.0, 0.0 },
-    new[] { 24.0, 45.0, 1.0 },
-    new[] { 3.0, 95.0, 0.0 },
+    new[] { 12.0, 50.0, 1.0 }, new[] { 1.0, 80.0, 0.0 },
+    new[] { 24.0, 45.0, 1.0 }, new[] { 3.0, 95.0, 0.0 },
     new[] { 36.0, 40.0, 1.0 }
 };
+double[] churned = { 0, 1, 0, 1, 0 };
 
-var churned = new double[] { 0, 1, 0, 1, 0 };
+var X = ToMatrix(customerData);
+var y = new Vector<double>(churned);
 
-// Build classification model
-var result = await new AiModelBuilder<double, double[][], double[]>()
-    .ConfigureClassification(config =>
-    {
-        config.ModelType = ClassificationModelType.LogisticRegression;
-        config.ClassCount = 2;
-    })
-    .ConfigurePreprocessing()
-    .BuildAsync(customerData, churned);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RandomForestClassifier<double>(
+        new RandomForestClassifierOptions<double> { NEstimators = 100 }))
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(X, y))
+    .BuildAsync();
 
-// Predict churn probability
-var newCustomer = new double[][] { new[] { 6.0, 70.0, 0.0 } };
-var churnProbability = result.PredictProbability(newCustomer);
-Console.WriteLine($"Churn probability: {churnProbability[0]:P1}");
+// Predict churn for a new customer.
+var newCustomer = new Matrix<double>(1, 3);
+foreach (var (v, j) in new[] { 6.0, 70.0, 0.0 }.Select((v, j) => (v, j)))
+    newCustomer[0, j] = v;
+Console.WriteLine($"Predicted churn class: {(int)result.Predict(newCustomer)[0]}");
 
-// View model metrics
-Console.WriteLine($"Accuracy: {result.Accuracy:P2}");
-Console.WriteLine($"Precision: {result.Precision:P2}");
-Console.WriteLine($"Recall: {result.Recall:P2}");
-Console.WriteLine($"F1 Score: {result.F1Score:P2}");
+// Classification metrics — ErrorStats auto-selects accuracy/precision/recall/F1.
+var stats = result.GetDataSetStats(X, y);
+Console.WriteLine($"Accuracy:  {stats.ErrorStats.Accuracy:P2}");
+Console.WriteLine($"Precision: {stats.ErrorStats.Precision:P2}");
+Console.WriteLine($"Recall:    {stats.ErrorStats.Recall:P2}");
+Console.WriteLine($"F1 Score:  {stats.ErrorStats.F1Score:P2}");
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ## Multi-Class Classification
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Iris flower classification
-var irisFeatures = new double[][]
+// Iris flowers: 4 measurements, 3 species (0=setosa, 1=versicolor, 2=virginica)
+double[][] irisFeatures =
 {
-    new[] { 5.1, 3.5, 1.4, 0.2 }, // setosa
-    new[] { 4.9, 3.0, 1.4, 0.2 }, // setosa
-    new[] { 7.0, 3.2, 4.7, 1.4 }, // versicolor
-    new[] { 6.4, 3.2, 4.5, 1.5 }, // versicolor
-    new[] { 6.3, 3.3, 6.0, 2.5 }, // virginica
-    new[] { 5.8, 2.7, 5.1, 1.9 }, // virginica
+    new[] { 5.1, 3.5, 1.4, 0.2 }, new[] { 4.9, 3.0, 1.4, 0.2 },
+    new[] { 7.0, 3.2, 4.7, 1.4 }, new[] { 6.4, 3.2, 4.5, 1.5 },
+    new[] { 6.3, 3.3, 6.0, 2.5 }, new[] { 5.8, 2.7, 5.1, 1.9 }
 };
+double[] species = { 0, 0, 1, 1, 2, 2 };
 
-var species = new double[] { 0, 0, 1, 1, 2, 2 }; // 0=setosa, 1=versicolor, 2=virginica
+var X = ToMatrix(irisFeatures);
+var y = new Vector<double>(species);
 
-// Build model
-var result = await new AiModelBuilder<double, double[][], double[]>()
-    .ConfigureClassification(config =>
-    {
-        config.ModelType = ClassificationModelType.RandomForest;
-        config.ClassCount = 3;
-    })
-    .ConfigurePreprocessing()
-    .BuildAsync(irisFeatures, species);
+// The classifier infers the number of classes from the labels.
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RandomForestClassifier<double>(
+        new RandomForestClassifierOptions<double> { NEstimators = 100 }))
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(X, y))
+    .BuildAsync();
 
-// Predict species
-var newFlower = new double[][] { new[] { 5.9, 3.0, 5.1, 1.8 } };
-var predicted = result.Predict(newFlower);
-var probabilities = result.PredictProbability(newFlower);
+var newFlower = new Matrix<double>(1, 4);
+foreach (var (v, j) in new[] { 5.9, 3.0, 5.1, 1.8 }.Select((v, j) => (v, j)))
+    newFlower[0, j] = v;
+Console.WriteLine($"Predicted species: {(int)result.Predict(newFlower)[0]}");
 
-Console.WriteLine($"Predicted species: {predicted[0]}");
-Console.WriteLine($"Confidence: {probabilities.Max():P1}");
-```
-
-## Working with Data
-
-### Automatic Preprocessing
-
-```csharp
-using AiDotNet;
-
-// Data with missing values and different scales
-var rawData = new double[][]
+static Matrix<double> ToMatrix(double[][] rows)
 {
-    new[] { 1000.0, 25.0, double.NaN },
-    new[] { 2000.0, 30.0, 3.0 },
-    new[] { double.NaN, 35.0, 5.0 },
-    new[] { 1500.0, double.NaN, 4.0 }
-};
-
-var targets = new double[] { 100, 200, 180, 150 };
-
-// AiModelBuilder handles preprocessing automatically
-var result = await new AiModelBuilder<double, double[][], double[]>()
-    .ConfigureRegression()
-    .ConfigurePreprocessing(config =>
-    {
-        config.HandleMissingValues = true;         // Impute missing values
-        config.NormalizeFeatures = true;           // Scale to 0-1 range
-        config.RemoveOutliers = true;              // Remove statistical outliers
-        config.EncodeCategories = true;            // One-hot encode categories
-    })
-    .BuildAsync(rawData, targets);
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
-### Train/Test Split
+## Reading Metrics for Train, Validation, and Test
+
+The facade splits your data internally and evaluates the model on each part. Read it off `result.Evaluation` — no need to re-pass any data — to spot overfitting at a glance.
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Sample regression data
-var features = new double[][] {
-    new[] { 1.0, 2.0 }, new[] { 2.0, 3.0 },
-    new[] { 3.0, 4.0 }, new[] { 4.0, 5.0 },
-    new[] { 5.0, 6.0 }, new[] { 6.0, 7.0 }
+double[][] features =
+{
+    new[] { 1.0, 2.0 }, new[] { 2.0, 3.0 }, new[] { 3.0, 4.0 },
+    new[] { 4.0, 5.0 }, new[] { 5.0, 6.0 }, new[] { 6.0, 7.0 },
+    new[] { 7.0, 8.0 }, new[] { 8.0, 9.0 }
 };
-var targets = new double[] { 3.0, 5.0, 7.0, 9.0, 11.0, 13.0 };
+double[] targets = { 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0 };
 
-var result = await new AiModelBuilder<double, double[][], double[]>()
-    .ConfigureRegression()
-    .ConfigurePreprocessing()
-    .ConfigureValidation(config =>
-    {
-        config.ValidationSplit = 0.2;    // 20% for validation
-        config.Shuffle = true;
-        config.RandomSeed = 42;
-    })
-    .BuildAsync(features, targets);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new MultipleRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(ToMatrix(features), new Vector<double>(targets)))
+    .BuildAsync();
 
-Console.WriteLine($"Training R-Squared: {result.TrainingRSquared:F4}");
-Console.WriteLine($"Validation R-Squared: {result.ValidationRSquared:F4}");
-```
+var evaluation = result.Evaluation;
+Console.WriteLine($"Training R-Squared:   {evaluation.TrainingSet.PredictionStats.R2:F4}");
+Console.WriteLine($"Validation R-Squared: {evaluation.ValidationSet.PredictionStats.R2:F4}");
 
-### Cross-Validation
+// If you add .ConfigureCrossValidation(...), fold results land on result.CrossValidationResult.
 
-```csharp
-using AiDotNet;
-
-// Sample classification data
-var features = new double[][] {
-    new[] { 1.0, 2.0 }, new[] { 3.0, 4.0 },
-    new[] { 5.0, 6.0 }, new[] { 7.0, 8.0 }
-};
-var labels = new double[] { 0, 1, 0, 1 };
-
-var result = await new AiModelBuilder<double, double[][], double[]>()
-    .ConfigureClassification()
-    .ConfigurePreprocessing()
-    .ConfigureValidation(config =>
-    {
-        config.CrossValidationFolds = 5;
-    })
-    .BuildAsync(features, labels);
-
-Console.WriteLine($"CV Accuracy: {result.CrossValidationAccuracy:P2}");
-Console.WriteLine($"CV Std Dev: {result.CrossValidationStdDev:F4}");
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ## Saving and Loading Models
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Results;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Train and save (3 features per sample)
-var features = new double[][] {
+double[][] features =
+{
     new[] { 1.0, 2.0, 3.0 }, new[] { 4.0, 5.0, 6.0 },
     new[] { 7.0, 8.0, 9.0 }, new[] { 10.0, 11.0, 12.0 }
 };
-var targets = new double[] { 10.0, 20.0, 30.0, 40.0 };
+double[] targets = { 10.0, 20.0, 30.0, 40.0 };
 
-var result = await new AiModelBuilder<double, double[][], double[]>()
-    .ConfigureRegression()
-    .BuildAsync(features, targets);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new MultipleRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(ToMatrix(features), new Vector<double>(targets)))
+    .BuildAsync();
 
 result.SaveModel("my_model.aimodel");
 Console.WriteLine("Model saved!");
 
-// Load and predict - new data must have the same 3 features per sample
-var loadedModel = AiModelResult<double>.Load("my_model.aimodel");
-var newData = new double[][] { new[] { 1.0, 2.0, 3.0 } };
-var prediction = loadedModel.Predict(newData);
-Console.WriteLine($"Prediction: {prediction[0]}");
+// Load it back, supplying a factory that constructs the right model type.
+var loaded = AiModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
+    "my_model.aimodel",
+    metadata => new MultipleRegression<double>());
+
+var newData = new Matrix<double>(1, 3);
+foreach (var (v, j) in new[] { 1.0, 2.0, 3.0 }.Select((v, j) => (v, j)))
+    newData[0, j] = v;
+Console.WriteLine($"Prediction: {loaded.Predict(newData)[0]:F2}");
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
+}
 ```
 
 ## Batch Predictions
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Train a model first
-var trainingFeatures = new double[][] {
+double[][] trainingFeatures =
+{
     new[] { 1.0 }, new[] { 2.0 }, new[] { 3.0 }, new[] { 4.0 }, new[] { 5.0 }
 };
-var trainingTargets = new double[] { 2.0, 4.0, 6.0, 8.0, 10.0 };
+double[] trainingTargets = { 2.0, 4.0, 6.0, 8.0, 10.0 };
 
-var result = await new AiModelBuilder<double, double[][], double[]>()
-    .ConfigureRegression()
-    .BuildAsync(trainingFeatures, trainingTargets);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new MultipleRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(ToMatrix(trainingFeatures), new Vector<double>(trainingTargets)))
+    .BuildAsync();
 
-// Make predictions on multiple samples at once
-var testData = new double[][]
-{
-    new[] { 1.5 },
-    new[] { 2.5 },
-    new[] { 3.5 },
-    new[] { 4.5 }
-};
-
-var predictions = result.Predict(testData);
+// Predict many samples at once by passing a multi-row matrix.
+double[][] testData = { new[] { 1.5 }, new[] { 2.5 }, new[] { 3.5 }, new[] { 4.5 } };
+var predictions = result.Predict(ToMatrix(testData));
 
 Console.WriteLine("Batch Predictions:");
 for (int i = 0; i < predictions.Length; i++)
-{
     Console.WriteLine($"  Input {testData[i][0]}: {predictions[i]:F2}");
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
 }
 ```
 
@@ -311,47 +320,57 @@ for (int i = 0; i < predictions.Length; i++)
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Interfaces;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Sample dataset for comparison
-var features = new double[][] {
-    new[] { 1.0 }, new[] { 2.0 }, new[] { 3.0 },
-    new[] { 4.0 }, new[] { 5.0 }, new[] { 6.0 },
-    new[] { 7.0 }, new[] { 8.0 }, new[] { 9.0 }, new[] { 10.0 }
-};
-var targets = new double[] { 2.1, 4.0, 5.9, 8.1, 10.0, 12.1, 14.0, 15.9, 18.1, 20.0 };
-
-// Compare different model types
-var models = new[]
+double[][] features =
 {
-    RegressionModelType.Linear,
-    RegressionModelType.Ridge,
-    RegressionModelType.Lasso,
-    RegressionModelType.ElasticNet
+    new[] { 1.0 }, new[] { 2.0 }, new[] { 3.0 }, new[] { 4.0 }, new[] { 5.0 },
+    new[] { 6.0 }, new[] { 7.0 }, new[] { 8.0 }, new[] { 9.0 }, new[] { 10.0 }
+};
+double[] targets = { 2.1, 4.0, 5.9, 8.1, 10.0, 12.1, 14.0, 15.9, 18.1, 20.0 };
+
+var X = ToMatrix(features);
+var y = new Vector<double>(targets);
+
+// Compare different regression models by swapping the ConfigureModel argument.
+var models = new (string name, Func<IFullModel<double, Matrix<double>, Vector<double>>> make)[]
+{
+    ("Multiple",   () => new MultipleRegression<double>()),
+    ("Ridge",      () => new RidgeRegression<double>()),
+    ("Lasso",      () => new LassoRegression<double>()),
+    ("ElasticNet", () => new ElasticNetRegression<double>()),
 };
 
-Console.WriteLine("Model Comparison:");
-Console.WriteLine("Model\t\t\tR-Squared\tMSE");
-Console.WriteLine("-----\t\t\t---------\t---");
-
-foreach (var modelType in models)
+Console.WriteLine("Model Comparison (R-Squared):");
+foreach (var (name, make) in models)
 {
-    var result = await new AiModelBuilder<double, double[][], double[]>()
-        .ConfigureRegression(c => c.ModelType = modelType)
-        .ConfigurePreprocessing()
-        .ConfigureValidation(c => c.ValidationSplit = 0.2)
-        .BuildAsync(features, targets);
+    var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        .ConfigureModel(make())
+        .ConfigureDataLoader(DataLoaders.FromMatrixVector(X, y))
+        .BuildAsync();
 
-    Console.WriteLine($"{modelType}\t\t{result.ValidationRSquared:F4}\t\t{result.ValidationMse:F4}");
+    Console.WriteLine($"  {name,-12}: {result.GetDataSetStats(X, y).PredictionStats.R2:F4}");
+}
+
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    var m = new Matrix<double>(rows.Length, rows[0].Length);
+    for (int i = 0; i < rows.Length; i++)
+        for (int j = 0; j < rows[0].Length; j++)
+            m[i, j] = rows[i][j];
+    return m;
 }
 ```
 
 ## Summary
 
 AiDotNet's `AiModelBuilder` provides:
-- Simple, fluent API for all ML tasks
-- Automatic preprocessing and feature engineering
-- Built-in validation and cross-validation
-- Model saving and loading
-- Performance metrics and feature importance
 
-All complexity is handled internally. You focus on your data and business problem.
+- One fluent pattern for every model — `ConfigureModel` + `ConfigureDataLoader` + `BuildAsync`
+- Rich metrics on the result — `result.GetDataSetStats(X, y)` and `result.Evaluation`
+- Feature importance via `result.GetFeatureImportance()`
+- Model saving and loading (`SaveModel` / `LoadModel`)
+- A consistent `result.Predict(...)` for single and batch inputs

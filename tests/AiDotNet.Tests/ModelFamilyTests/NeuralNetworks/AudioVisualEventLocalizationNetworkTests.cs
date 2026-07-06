@@ -4,12 +4,12 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class AudioVisualEventLocalizationNetworkTests : NeuralNetworkModelTestBase
+public class AudioVisualEventLocalizationNetworkTests : NeuralNetworkModelTestBase<float>
 {
     // Default: inputSize=512, outputSize=1 (binary classification)
     protected override int[] InputShape => [512];
     protected override int[] OutputShape => [1];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new AudioVisualEventLocalizationNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new AudioVisualEventLocalizationNetwork<float>();
 }

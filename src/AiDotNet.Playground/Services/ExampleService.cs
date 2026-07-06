@@ -5184,8 +5184,6 @@ Console.WriteLine(""Keep only one of the highly correlated features"");
                     Difficulty = "Advanced",
                     Tags = ["agent", "reasoning", "llm"],
                     Code = @"// ReAct Agent Pattern
-using AiDotNet.Agents;
-
 Console.WriteLine(""ReAct Agent Demo"");
 Console.WriteLine(""----------------"");
 Console.WriteLine();
@@ -5209,8 +5207,6 @@ Console.WriteLine(""ReAct combines reasoning with actions"");
                     Difficulty = "Advanced",
                     Tags = ["agent", "planning", "execution"],
                     Code = @"// Plan and Execute Agent
-using AiDotNet.Agents;
-
 Console.WriteLine(""Plan and Execute Agent"");
 Console.WriteLine(""----------------------"");
 Console.WriteLine();

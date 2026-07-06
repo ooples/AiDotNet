@@ -22,6 +22,33 @@ namespace AiDotNet.Audio.SourceSeparation;
 /// </remarks>
 public class SCNetOptions : ModelOptions
 {
+    public SCNetOptions()
+    {
+    }
+
+    public SCNetOptions(SCNetOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        SampleRate = other.SampleRate;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        NumFreqBins = other.NumFreqBins;
+        NumClusters = other.NumClusters;
+        CompressionDim = other.CompressionDim;
+        NumEncoderBlocks = other.NumEncoderBlocks;
+        NumDecoderBlocks = other.NumDecoderBlocks;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardDim = other.FeedForwardDim;
+        DropoutRate = other.DropoutRate;
+        Sources = (string[])other.Sources.Clone();
+        NumStems = other.NumStems;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+    }
+
     #region Audio Preprocessing
 
     /// <summary>Gets or sets the expected audio sample rate in Hz.</summary>
@@ -62,9 +89,6 @@ public class SCNetOptions : ModelOptions
 
     #region Attention Architecture
 
-    /// <summary>Gets or sets the hidden dimension for attention layers.</summary>
-    public int AttentionDim { get; set; } = 256;
-
     /// <summary>Gets or sets the number of attention heads.</summary>
     public int NumAttentionHeads { get; set; } = 8;
 
@@ -98,11 +122,11 @@ public class SCNetOptions : ModelOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 5e-5;
+    /// <summary>Gets or sets the Adam learning rate.</summary>
+    public double LearningRate { get; set; } = 5e-4;
 
-    /// <summary>Gets or sets the weight decay.</summary>
-    public double WeightDecay { get; set; } = 1e-2;
+    /// <summary>Gets or sets the optional weight decay for custom optimizers.</summary>
+    public double WeightDecay { get; set; } = 0.0;
 
     #endregion
 }

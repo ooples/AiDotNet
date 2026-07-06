@@ -91,6 +91,10 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     private DiTNoisePredictor<T>? _dit;
     private StandardVAE<T>? _vae;
     private readonly IConditioningModule<T>? _conditioner;
+    // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
+    // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the
+    // sub-models with a null seed — dropping the requested seed and making construction non-reproducible.
+    private readonly int? _seed;
 
     #endregion
 
@@ -138,6 +142,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
         if (dit is not null || vae is not null)
             InitializeLayers(dit, vae, seed);
     }
@@ -150,7 +155,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_dit is null || _vae is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     [MemberNotNull(nameof(_dit), nameof(_vae))]
@@ -253,20 +258,15 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: 1408,
-            numLayers: 40, numHeads: 16, patchSize: 2,
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.13025);
-        clonedVae.SetParameters(_vae.GetParameters());
-
+        // Delegate to the predictor's and VAE's own Clone(), which reconstruct from their
+        // actual config fields (NOT hardcoded foundation-scale constants) and preserve
+        // materialized weights — so a caller-injected variant of any scale round-trips
+        // correctly. Rebuilding at fixed 1408/40 here would size a clone that cannot accept
+        // an injected tiny (or otherwise non-default) predictor's parameter vector.
         return new HunyuanDiTModel<T>(
-            dit: clonedDit, vae: clonedVae, conditioner: _conditioner);
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     #endregion

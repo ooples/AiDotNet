@@ -62,6 +62,10 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
     private DiTNoisePredictor<T>? _predictor;
     private TemporalVAE<T>? _temporalVAE;
     private readonly IConditioningModule<T>? _conditioner;
+    // Seed for reproducible construction, threaded to the sub-models (which honor it). Previously Wan22
+    // accepted no seed at all and its DiT/VAE were built unseeded, so every construction drew different
+    // weights from the process-global RNG — non-reproducible regardless of caller intent.
+    private readonly int? _seed;
 
     public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _predictor; } }
     public override IVAEModel<T> VAE { get { EnsureInitialized(); return _temporalVAE; } }
@@ -84,7 +88,8 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
         TemporalVAE<T>? temporalVAE = null,
         IConditioningModule<T>? conditioner = null,
         int defaultNumFrames = DEFAULT_NUM_FRAMES,
-        int defaultFPS = DEFAULT_FPS)
+        int defaultFPS = DEFAULT_FPS,
+        int? seed = null)
         : base(
             options ?? new DiffusionModelOptions<T>
             {
@@ -99,21 +104,23 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
         if (predictor is not null || temporalVAE is not null)
-            InitializeLayers(predictor, temporalVAE);
+            InitializeLayers(predictor, temporalVAE, seed);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
     private void EnsureInitialized()
     {
         if (_predictor is null || _temporalVAE is null)
-            InitializeLayers(null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
     private void InitializeLayers(
         DiTNoisePredictor<T>? predictor,
-        TemporalVAE<T>? temporalVAE)
+        TemporalVAE<T>? temporalVAE,
+        int? seed)
     {
         _predictor = predictor ?? new DiTNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS,
@@ -121,7 +128,8 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
             numLayers: 40,
             numHeads: 24,
             patchSize: 2,
-            contextDim: CONTEXT_DIM);
+            contextDim: CONTEXT_DIM,
+            seed: seed);
 
         _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
             inputChannels: 3,
@@ -131,7 +139,8 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
             numTemporalLayers: 3,
             temporalKernelSize: 3,
             causalMode: true,
-            latentScaleFactor: 0.13025);
+            latentScaleFactor: 0.13025,
+            seed: seed);
     }
 
     protected override Tensor<T> PredictVideoNoise(
@@ -175,20 +184,11 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();
-        var clonedPredictor = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: 3072,
-            numLayers: 40,
-            numHeads: 24,
-            patchSize: 2,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        return new Wan22Model<T>(
+                return new Wan22Model<T>(
             architecture: Architecture,
             options: Options as DiffusionModelOptions<T>,
             scheduler: Scheduler,
-            predictor: clonedPredictor,
+            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

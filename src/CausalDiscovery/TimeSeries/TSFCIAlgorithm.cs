@@ -107,13 +107,25 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (i == j) continue;
                 if (!NumOps.GreaterThan(skeleton[i, j], threshold)) continue;
 
-                // Test if i→j survives conditioning on each other variable's lags
+                // Test if i→j survives conditioning on each other variable's lags.
+                // Each candidate conditioning variable k that produces a CONCLUSIVE
+                // partial correlation below the threshold counts as evidence
+                // against the i→j edge. An INCONCLUSIVE result (near-singular
+                // partial-corr denominator — happens when the conditioning
+                // variable is collinear with both i and j, as on deterministic
+                // test fixtures) is skipped rather than treated as "no
+                // association", because FCI's conditional-independence rule
+                // requires a VALID test, not a vacuous one (Spirtes et al. 2000
+                // §3 "Causal Inference Algorithms" — Entner & Hoyer 2010 inherit
+                // the same convention).
                 bool survives = true;
                 for (int k = 0; k < d; k++)
                 {
                     if (k == i || k == j) continue;
-                    // Partial correlation test: does conditioning on k remove i→j?
                     T partialCorr = ComputePartialLaggedCorrelation(data, i, j, k, n);
+                    double pcVal = NumOps.ToDouble(partialCorr);
+                    if (double.IsNaN(pcVal))
+                        continue; // inconclusive — try next conditioning variable
                     if (!NumOps.GreaterThan(NumOps.Abs(partialCorr), threshold))
                     {
                         survives = false;
@@ -219,10 +231,16 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
         if (denomSq < 1e-10)
         {
-            // Both conditioning correlations are near 1.0 — the conditioning variable
-            // explains all variance. Partial correlation is undefined; return 0
-            // (no evidence of direct association beyond the conditioning variable).
-            return NumOps.Zero;
+            // Both conditioning correlations are near 1.0 — the conditioning
+            // variable is collinear with both endpoints, so the partial
+            // correlation is mathematically undefined. Return NaN as a
+            // "test inconclusive" sentinel; callers MUST recognise the NaN
+            // and skip this conditioning set rather than interpreting the
+            // result as "no association" (the latter would let collinear
+            // conditioning variables silently remove every edge in highly-
+            // correlated systems — a known FCI pathology on deterministic
+            // data; see Spirtes et al. 2000 §3 — "vacuous independence").
+            return NumOps.FromDouble(double.NaN);
         }
 
         return NumOps.FromDouble(NumOps.ToDouble(numerator) / Math.Sqrt(denomSq));

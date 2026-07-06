@@ -311,6 +311,7 @@ See [examples/configs/ai-model-builder.yaml](https://github.com/ooples/AiDotNet/
 You can generate a complete reference document and JSON Schema at runtime:
 
 ```csharp
+using System.IO;
 using AiDotNet.Configuration;
 
 // Generate markdown documentation

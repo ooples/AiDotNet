@@ -114,6 +114,14 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// True once this instance has runtime weight state that a clone must
+    /// preserve. Constructor-time eager placeholders do not count: default
+    /// paper-scale scaffolds should clone structurally until a caller forwards
+    /// data or assigns parameters.
+    /// </summary>
+    private bool _preserveMaterializedParameters;
+
+    /// <summary>
     /// Number of input channels.
     /// </summary>
     private readonly int _inputChannels;
@@ -153,6 +161,12 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private readonly NeuralNetworkArchitecture<T>? _architecture;
 
+    /// <summary>
+    /// Tracks whether the U-Net layer graph has been built. Default paper-scale
+    /// constructors defer this work so simple model construction stays cheap.
+    /// </summary>
+    private bool _layersInitialized;
+
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
 
@@ -161,6 +175,13 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <inheritdoc />
     public override int BaseChannels => _baseChannels;
+
+    /// <summary>
+    /// Gets the per-level channel multipliers of this UNet's encoder/decoder. Exposed so a paired
+    /// ControlNet control branch can mirror the base UNet's channel configuration exactly. Returns a
+    /// defensive copy so callers cannot mutate the predictor's internal architecture array.
+    /// </summary>
+    public int[] ChannelMultipliers => (int[])_channelMultipliers.Clone();
 
     /// <inheritdoc />
     public override int TimeEmbeddingDim => _timeEmbeddingDim;
@@ -262,7 +283,30 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _middleBlocks = new List<UNetBlock>();
         _decoderBlocks = new List<UNetBlock>();
 
-        InitializeLayers(architecture, encoderBlocks, middleBlocks, decoderBlocks);
+        bool hasCustomBlocks =
+            encoderBlocks is { Count: > 0 } &&
+            middleBlocks is { Count: > 0 } &&
+            decoderBlocks is { Count: > 0 };
+        bool hasCustomArchitecture = architecture?.Layers is { Count: > 0 };
+
+        if (hasCustomBlocks || hasCustomArchitecture)
+        {
+            InitializeLayers(architecture, encoderBlocks, middleBlocks, decoderBlocks);
+        }
+    }
+
+    [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
+    private void EnsureLayersInitialized()
+    {
+        if (!_layersInitialized)
+        {
+            InitializeLayers(_architecture, null, null, null);
+        }
+
+        if (_inputConv is null || _outputConv is null || _timeEmbedMlp1 is null || _timeEmbedMlp2 is null)
+        {
+            throw new InvalidOperationException("U-Net layer initialization completed without required projection layers.");
+        }
     }
 
     /// <summary>
@@ -281,13 +325,17 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// 3. Otherwise, create industry-standard layers from the Stable Diffusion paper
     /// </para>
     /// </remarks>
-    [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
     private void InitializeLayers(
         NeuralNetworkArchitecture<T>? architecture,
         List<UNetBlock>? customEncoderBlocks,
         List<UNetBlock>? customMiddleBlocks,
         List<UNetBlock>? customDecoderBlocks)
     {
+        if (_layersInitialized)
+        {
+            return;
+        }
+
         // Create input/output convolutions and time embedding MLP via LayerHelper
         var baseLayers = LayerHelper<T>.CreateUNetNoisePredictorEncoderLayers(
             _inputChannels, _baseChannels, _channelMultipliers, _numResBlocks,
@@ -297,6 +345,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _inputConv = (ConvolutionalLayer<T>)baseLayers[0];
         _timeEmbedMlp1 = (DenseLayer<T>)baseLayers[1];
         _timeEmbedMlp2 = (DenseLayer<T>)baseLayers[2];
+
+        // input/output convs are left fully lazy; the predictor's shape-only forward
+        // (ResolveShapesViaForward) resolves their true InputDepth from the topology.
 
         // Output conv from decoder layers
         var decoderBaseLayers = LayerHelper<T>.CreateUNetNoisePredictorDecoderLayers(
@@ -311,6 +362,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             _encoderBlocks.AddRange(customEncoderBlocks);
             _middleBlocks.AddRange(customMiddleBlocks);
             _decoderBlocks.AddRange(customDecoderBlocks);
+            _layersInitialized = true;
             return;
         }
 
@@ -323,6 +375,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             }
             CreateDefaultMiddleBlocks(_baseChannels * _channelMultipliers[^1]);
             CreateDefaultDecoderBlocks();
+            _layersInitialized = true;
             return;
         }
 
@@ -330,6 +383,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         CreateDefaultEncoderBlocks();
         CreateDefaultMiddleBlocks(_baseChannels * _channelMultipliers[^1]);
         CreateDefaultDecoderBlocks();
+        _layersInitialized = true;
     }
 
     /// <summary>
@@ -430,31 +484,108 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
 
-    /// <summary>
-    /// Per-instance compile cache for the UNet forward pass. Lazy-allocated
-    /// on first <see cref="PredictNoise"/> call when
-    /// <see cref="AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.EnableCompilation"/>
-    /// is on. Keyed by noisy-sample input shape — different shapes compile
-    /// different plans. Dropped when <see cref="ResetState"/> runs.
-    /// </summary>
-    private AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>? _compiledInferenceCache;
-
     /// <inheritdoc />
+    // #1650/#638 diffusion CUDA-graph capture (opt-in AIDOTNET_DIFFUSION_CUDA_GRAPH=1):
+    // captures the eager ForwardUNet into a CUDA graph once (warmup) and replays it per
+    // denoising step — collapsing the UNet's hundreds of kernel launches into one
+    // cuGraphLaunch. Per-instance; lazily created on first GPU forward.
+    private AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph? _residentGraph;
+    // Read live each call (expression-bodied property), NOT cached at type-load — mirrors
+    // DiffusionModelBase.PredictorStreamCapture so a test/harness that sets AIDOTNET_DIFFUSION_CUDA_GRAPH
+    // after startup isn't stuck with a stale mutual-exclusion decision. A per-call env read is negligible.
+    private static bool DiffusionCudaGraphEnabled =>
+        System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
+
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        EnsureLayersInitialized();
+        using var streaming = BeginWeightStreamingForward();
+        _preserveMaterializedParameters = true;
         _lastInput = noisySample;
+
+        // #638/#1650: genuine inference runs in eval mode so every Conv / Dense layer takes
+        // its zero-allocation, GPU-resident inference fast path (Conv2DInto + in-place bias,
+        // resident FusedLinear) instead of the allocating tape/training Forward branch
+        // (Conv2D + host TensorBroadcastAdd, which de-residents the buffer). That residency
+        // is what lets the resident inference graph capture the whole UNet forward as one
+        // CUDA graph. This UNet contains no Dropout / eval-dependent layers, so eval is
+        // numerically identical to training mode here. Skipped when a gradient tape is
+        // active (training-time sampling) so eager backward state is retained. Restored in
+        // the finally so the model's steady-state (training) is preserved for the next step.
+        bool evalForInference =
+            AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+            || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (evalForInference) SetAllLayersTrainingMode(false);
+        try
+        {
 
         // Compute timestep embedding (already cached per-timestep in the base class).
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        // Compiled fast path — only when TensorCodecOptions.EnableCompilation is on.
-        // First call traces the eager ForwardUNet and compiles the plan; subsequent
-        // calls at the same shape replay the compiled plan.
-        var output = PredictCompiledForward(noisySample, timeEmbed, conditioning);
+        Tensor<T> output;
+        // #1650/#638 speedup: when enabled and the active engine is a capture-capable CUDA
+        // DirectGpuTensorEngine, run the forward through the resident inference graph — it runs
+        // ForwardUNet on its own STABLE input copies (capture-address-stable across steps), captures
+        // the kernel stream once, then replays via cuGraphLaunch. Any non-capturable op disables it
+        // and falls back to eager, so correctness is never affected.
+        var captureEngine = DiffusionCudaGraphEnabled
+            ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+            : null;
+        if (captureEngine is not null && captureEngine.SupportsInferenceGraphCapture)
+        {
+            _residentGraph ??= new AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph(captureEngine);
+            var capInputs = conditioning is not null
+                ? new[] { noisySample, timeEmbed, conditioning }
+                : new[] { noisySample, timeEmbed };
+            output = _residentGraph.Forward(capInputs, fwd =>
+                ForwardUNet(fwd[0], fwd[1], conditioning is not null ? fwd[2] : null));
+        }
+        else
+        {
+            // Compiled fast path — only when TensorCodecOptions.EnableCompilation is on.
+            // First call traces the eager ForwardUNet and compiles the plan; subsequent
+            // calls at the same shape replay the compiled plan.
+            output = PredictCompiledForward(noisySample, timeEmbed, conditioning);
+        }
 
         _lastOutput = output;
-        return output;
+        return streaming.Complete(output);
+
+        }
+        finally
+        {
+            if (evalForInference) SetAllLayersTrainingMode(true);
+        }
+    }
+
+    /// <summary>
+    /// Releases the lazily-created resident GPU execution graph (which holds device allocations / capture
+    /// buffers) before delegating to the base cleanup. The base only disposes <see cref="ILayer{T}"/>
+    /// members, so without this the graph's GPU resources would leak until finalization (or indefinitely
+    /// for a long-lived predictor). Null-out makes a second Dispose a no-op.
+    /// </summary>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _residentGraph?.Dispose();
+            _residentGraph = null;
+        }
+        base.Dispose(disposing);
+    }
+
+    /// <summary>
+    /// Sets the training/eval mode on every layer in the UNet (input/output convs, time
+    /// MLPs, and every encoder/middle/decoder block sublayer). NoisePredictorBase is not a
+    /// LayerBase, so there is no inherited recursive SetTrainingMode — this walks the same
+    /// layer set used for parameter collection. Composite blocks (ResBlock / Attention)
+    /// override SetTrainingMode to forward the flag to their own private sublayers.
+    /// </summary>
+    private void SetAllLayersTrainingMode(bool isTraining)
+    {
+        foreach (var layer in EnumerateAllLayers())
+            layer?.SetTrainingMode(isTraining);
     }
 
     /// <summary>
@@ -481,22 +612,19 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
         try
         {
+            EnsureLayersInitialized();
             var timeEmbed = GetTimestepEmbedding(sampleTimestep);
             timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
-            // Key includes conditioning presence so null-vs-present paths
-            // don't share plans (different traced graphs).
-            var key = BuildCompileKey(sampleNoisy, conditioning);
-            var plan = cache.GetOrCompileInference(
-                key,
-                () => ForwardUNet(sampleNoisy, timeEmbed, conditioning));
-            // Execute once to validate the plan replays correctly and warm
-            // workspace buffers. Dispose the output to avoid leaking the
-            // pooled tensor allocation from the warm-up.
-            var warmupOutput = plan.Execute();
-            if (warmupOutput is IDisposable disposableOutput)
-                disposableOutput.Dispose();
+            // Warm the SAME multi-input compiled path PredictNoise replays: one gated
+            // forward at the representative shapes traces + compiles the plan and records
+            // the verify-then-trust verdict, so the first real inference skips the trace
+            // cost. Conditioning is declared as an input only when present, matching the
+            // production call's leaf set (#1620 / AiDotNet.Tensors#616 multi-input compile).
+            var inputs = conditioning is not null
+                ? new[] { sampleNoisy, timeEmbed, conditioning }
+                : new[] { sampleNoisy, timeEmbed };
+            _ = PredictCompiledMulti(inputs, () => ForwardUNet(sampleNoisy, timeEmbed, conditioning));
             return true;
         }
         catch (Exception ex) when (
@@ -518,61 +646,26 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> PredictCompiledForward(Tensor<T> noisySample, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
-        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
-            return ForwardUNet(noisySample, timeEmbed, conditioning);
-
-        try
-        {
-            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
-            // Key includes conditioning presence so null-vs-present paths
-            // don't share plans (different traced graphs).
-            var key = BuildCompileKey(noisySample, conditioning);
-            var plan = cache.GetOrCompileInference(
-                key,
-                () => ForwardUNet(noisySample, timeEmbed, conditioning));
-            return plan.Execute();
-        }
-        catch (Exception ex) when (
-            ex is not OutOfMemoryException &&
-            ex is not StackOverflowException &&
-            ex is not AccessViolationException)
-        {
-            System.Diagnostics.Trace.TraceWarning(
-                $"UNetNoisePredictor.PredictCompiledForward fallback: " +
-                $"{ex.GetType().Name}: {ex.Message}");
-            return ForwardUNet(noisySample, timeEmbed, conditioning);
-        }
-    }
-
-    /// <summary>
-    /// Builds a composite cache key that includes BOTH the noisy-sample
-    /// shape AND the conditioning shape (or a sentinel for null). This
-    /// prevents a plan traced with conditioning=null from being replayed
-    /// with a conditioning tensor (different graph) or vice versa.
-    /// </summary>
-    private static int[] BuildCompileKey(Tensor<T> noisySample, Tensor<T>? conditioning)
-    {
-        var inputShape = noisySample._shape;
-        if (conditioning is null)
-        {
-            // Append a single -1 sentinel so "no conditioning" has a
-            // distinct key from any real conditioning shape.
-            var key = new int[inputShape.Length + 1];
-            Array.Copy(inputShape, key, inputShape.Length);
-            key[^1] = -1;
-            return key;
-        }
-        var condShape = conditioning._shape;
-        var compositeKey = new int[inputShape.Length + 1 + condShape.Length];
-        Array.Copy(inputShape, 0, compositeKey, 0, inputShape.Length);
-        compositeKey[inputShape.Length] = -1; // separator
-        Array.Copy(condShape, 0, compositeKey, inputShape.Length + 1, condShape.Length);
-        return compositeKey;
+        // Multi-input compiled replay: mark the noisy sample, the per-step timestep
+        // embedding, and optional conditioning as mutable input slots the plan re-binds
+        // every step (AiDotNet.Tensors#616), so the changing timestep is never baked as a
+        // constant. The single-input path re-bound only the noisy sample and baked the rest,
+        // which replayed step 0's timeEmbed for the whole denoising loop (silent corruption —
+        // #1620). The expensive ForwardUNet is compiled once; the verify-then-trust gate
+        // adopts the plan for a shape only after it matches eager, so output is numerically
+        // identical to eager (rejected shapes stay eager).
+        var inputs = conditioning is not null
+            ? new[] { noisySample, timeEmbed, conditioning }
+            : new[] { noisySample, timeEmbed };
+        return PredictCompiledMulti(inputs, () => ForwardUNet(noisySample, timeEmbed, conditioning));
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
+        EnsureLayersInitialized();
+        using var streaming = BeginWeightStreamingForward();
+        _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
         // Project time embedding
@@ -583,7 +676,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         SaveForwardState(skips, timeEmbed);
 
         _lastOutput = output;
-        return output;
+        return streaming.Complete(output);
     }
 
     /// <summary>
@@ -693,9 +786,15 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
         var sink = ForwardProfilingSink;
         var sw = sink is null ? null : System.Diagnostics.Stopwatch.StartNew();
+        // When profiling GPU compute (not host enqueue), block on the stream before each stamp so the elapsed
+        // captures that section's actual GPU time (AIDOTNET_PROFILE_SYNC=1). Off by default — adds a sync/section.
+        var syncEngine = sink is not null
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_PROFILE_SYNC") == "1"
+            ? Engine as AiDotNet.Tensors.Engines.DirectGpuTensorEngine : null;
         void Tick(string section)
         {
             if (sw is null || sink is null) return;
+            syncEngine?.SynchronizeStream();
             sw.Stop();
             sink.Enqueue((section, sw.Elapsed.TotalMilliseconds));
             sw.Restart();
@@ -914,6 +1013,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             _concatPool[key] = output;
         }
 
+        // #638/#1650: on the resident-capture path do the channel concat device-to-device into the pooled
+        // output's resident buffer (no host span-copy → the decoder skip-concat stays GPU-resident and the
+        // whole UNet forward remains CUDA-graph-capturable). Returns false off the resident step, so plain
+        // eager inference keeps the host span-copy below unchanged.
+        if (Engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine dgConcat
+            && dgConcat.TryConcatenateChannelsResidentInto(output, a, b))
+        {
+            return output;
+        }
+
         // Manual NCHW channel-axis concat. For each batch b, layout is
         // [cA channels of A, then cB channels of B], all contiguous in the
         // C × H × W slab. Per-batch stride in the output = totalC * spatial.
@@ -980,6 +1089,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private ILayer<T> CreateDownsample(int channels, int spatialSize)
     {
         // LazyConv2D: kernel tensor stays unallocated until first Forward() call.
+        // Fully lazy: the predictor's ResolveShapesViaForward resolves this conv's
+        // true InputDepth through the forward topology (no construction-time estimate).
         return LazyConv2D(
             inputDepth: channels,
             inputHeight: spatialSize,
@@ -993,7 +1104,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateUpsample(int channels, int spatialSize)
     {
-        // spatialSize here is the current (smaller) spatial size before upsampling
+        // spatialSize here is the current (smaller) spatial size before upsampling.
+        // Fully lazy: shape resolved by the predictor's shape-only forward.
         return new DeconvolutionalLayer<T>(
             outputDepth: channels,
             kernelSize: 4,
@@ -1008,6 +1120,15 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
+        EnsureLayersInitialized();
+        // Resolve every lazy layer's TRUE shape via a shape-only forward (single source
+        // of truth) — NO weight materialisation, so this stays cheap on a foundation-scale
+        // U-Net (the Unit-03b construction OOM was the old materialising dummy forward).
+        // Using the forward topology (not a per-construction estimate) guarantees this
+        // count equals GetParameters().Length and the real forward's resolution, including
+        // decoder skip concatenation.
+        ResolveShapesViaForward();
+
         // Walk the same layers GetParameters walks and sum their actual ParameterCount.
         // Must match GetParameters().Length exactly — the previous "approximate" formula
         // diverged from the real count and broke contract tests asserting equality.
@@ -1039,6 +1160,13 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureLayersInitialized();
+        // Resolve all layer shapes via the shape-only forward (single source of truth,
+        // no materialisation) so the returned vector's length matches ParameterCount
+        // exactly. Each layer.GetParameters() below then materialises just that layer's
+        // weights on demand.
+        ResolveShapesViaForward();
+
         // Collect all sublayer parameter vectors first (each layer allocates its own)
         var layerParams = new List<Vector<T>>();
         int totalCount = 0;
@@ -1087,8 +1215,155 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Emits one chunk per layer in the SAME canonical order as <see cref="GetParameters"/> /
+    /// <see cref="SetParameters"/> (EnumerateAllLayers), so the flat concatenation of the chunks is
+    /// index-identical to GetParameters() — the load-bearing per-index streaming contract (#1624) — without
+    /// ever materializing the full aggregate. The earlier per-tensor walk (GetTrainableParameters +
+    /// sub-layer recursion) produced a DIFFERENT intra-layer order than GetParameters, so a chunked clone
+    /// mis-mapped weights (#1758); this mirrors the per-layer pattern the DiT/U-ViT predictors already use.
+    /// </remarks>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        EnsureLayersInitialized();
+        // Resolve shapes exactly as GetParameters does (shape-only, no weight materialization) so each
+        // layer's chunk is sized identically to its slice of the flat vector.
+        ResolveShapesViaForward();
+        foreach (var (_, p) in EnumerateParameterizedLayers())
+            yield return new Tensor<T>(new[] { p.Length }, p);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Consumes one chunk per parameterized layer in the SAME canonical order <see cref="GetParameterChunks"/>
+    /// emits them and <see cref="SetParameters"/> applies them, so a chunked round-trip restores each layer
+    /// exactly. The base <see cref="NoisePredictorBase{T}"/> SetParameterChunks walks a REFLECTION order
+    /// (ReflectInstanceLayers) that differs from this predictor's explicit layer order, which mis-mapped UNet
+    /// tensors when a clone restored from chunks (this predictor's Clone, and FluxSchnellModel's, which
+    /// round-trips the predictor's chunks directly). One chunk in flight at a time — never a flat aggregate.
+    /// </remarks>
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        ThrowIfDisposed();
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        EnsureLayersInitialized();
+        // Size lazy layers to their real ParameterCount first (mirrors SetParameters) so each layer's slice
+        // lands instead of being dropped into a still-zero-sized layer.
+        TriggerLazyShapeResolution();
+        // Foundation-scale (#1715): engage streaming before touching weights — see GetParameterChunks.
+        MaybeEngageWeightStreaming();
+        _preserveMaterializedParameters = true;
+
+        using var e = chunks.GetEnumerator();
+        foreach (var (layer, p) in EnumerateParameterizedLayers())
+        {
+            if (!e.MoveNext())
+                throw new ArgumentException(
+                    "SetParameterChunks received fewer chunks than the predictor has parameterized layers.",
+                    nameof(chunks));
+            var incoming = e.Current.ToVector();
+            // The participation gate is shared with GetParameterChunks (same materialized
+            // GetParameters().Length source), so a well-formed round-trip lines up 1:1; verify the per-layer
+            // length as well so any future ILayer whose ParameterCount disagrees with GetParameters().Length
+            // fails loudly here instead of silently shifting every subsequent layer's restored weights.
+            if (incoming.Length != p.Length)
+                throw new ArgumentException(
+                    $"SetParameterChunks chunk length {incoming.Length} does not match layer parameter length {p.Length}.",
+                    nameof(chunks));
+            layer.SetParameters(incoming);
+        }
+        if (e.MoveNext())
+            throw new ArgumentException(
+                "SetParameterChunks received more chunks than the predictor has parameterized layers.",
+                nameof(chunks));
+        InvalidateCompiledPlans();
+    }
+
+    /// <summary>
+    /// Single source of truth for WHICH layers participate in the chunked parameter API and in WHAT order.
+    /// Both <see cref="GetParameterChunks"/> and <see cref="SetParameterChunks"/> iterate this, so their skip
+    /// predicate can never diverge: a layer participates iff its materialized <c>GetParameters().Length &gt; 0</c>
+    /// (the gate the flat GetParameters/SetParameters walk uses), NOT the <c>ParameterCount</c> property, which
+    /// an ill-behaved <see cref="ILayer{T}"/> could report inconsistently. Yields the layer with its
+    /// already-materialized vector so GetParameterChunks reuses it (no second GetParameters call); peak stays
+    /// one layer in flight, never a flat aggregate.
+    /// </summary>
+    private IEnumerable<(ILayer<T> Layer, Vector<T> Parameters)> EnumerateParameterizedLayers()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            if (layer is null) continue;
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return (layer, p);
+        }
+    }
+
+    private IEnumerable<ILayer<T>?> EnumerateAllLayers()
+    {
+        yield return _inputConv;
+        yield return _timeEmbedMlp1;
+        yield return _timeEmbedMlp2;
+
+        foreach (var block in _encoderBlocks)
+        {
+            foreach (var layer in EnumerateBlockLayers(block))
+                yield return layer;
+        }
+
+        foreach (var block in _middleBlocks)
+        {
+            foreach (var layer in EnumerateBlockLayers(block))
+                yield return layer;
+        }
+
+        foreach (var block in _decoderBlocks)
+        {
+            foreach (var layer in EnumerateBlockLayers(block))
+                yield return layer;
+        }
+
+        yield return _outputConv;
+    }
+
+    private static IEnumerable<ILayer<T>?> EnumerateBlockLayers(UNetBlock block)
+    {
+        yield return block.ResBlock;
+        yield return block.AttentionBlock;
+        yield return block.CrossAttentionBlock;
+        yield return block.Downsample;
+        yield return block.Upsample;
+    }
+
+    private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) yield break;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                yield return parameter;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(subLayer))
+                yield return parameter;
+        }
+    }
+
+    /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureLayersInitialized();
+        // Resolve lazy layer shapes first so each layer's slice is sized to its
+        // real ParameterCount; otherwise lazy layers size to 0 and the incoming
+        // values are silently dropped (the SetParameters/GetParameters round-trip bug).
+        TriggerLazyShapeResolution();
+        _preserveMaterializedParameters = true;
+
         var index = 0;
 
         SetLayerParameters(_inputConv, parameters, ref index);
@@ -1142,6 +1417,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override INoisePredictor<T> Clone()
     {
         var clone = new UNetNoisePredictor<T>(
+            architecture: _architecture,
             inputChannels: _inputChannels,
             outputChannels: _outputChannels,
             baseChannels: _baseChannels,
@@ -1153,28 +1429,72 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             inputHeight: _inputHeight,
             lossFunction: LossFunction);
 
-        // Eager-init BOTH source and clone before snapshotting/setting
-        // parameters. PyTorch-style lazy shape inference makes the
-        // DenseLayer time-embedding MLPs report ParameterCount=0 (live
-        // arch-derived) vs GetParameters().Length=0 (lazy storage)
-        // until their first forward.
-        //
-        //   * The clone needs resolution BEFORE SetParameters(),
-        //     otherwise SetLayerParameters sizes every slice to 0 and
-        //     writes nothing, leaving the clone with fresh random
-        //     weights.
-        //
-        //   * The source ALSO needs resolution BEFORE GetParameters(),
-        //     otherwise the snapshot vector under-counts the time-
-        //     embedding MLP params. Downstream diffusion-model
-        //     SetParameters checks (ImprovedConsistencyModel etc.) compare
-        //     parameters.Length to the resolved clone's ParameterCount
-        //     and throw — surfacing as Clone_CreatesIndependentCopy
-        //     failures.
-        TriggerLazyShapeResolution();
-        clone.TriggerLazyShapeResolution();
-        clone.SetParameters(GetParameters());
+        // Keep default paper-scale lazy constructors lazy. Already-materialized
+        // eager tensors are still copied, but lazy tensors are resolved only
+        // after a forward pass or explicit SetParameters has established
+        // runtime weight state.
+        if (_preserveMaterializedParameters)
+        {
+            clone.TriggerLazyShapeResolution();
+            if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        }
+        else
+        {
+            if (_layersInitialized)
+            {
+                clone.EnsureLayersInitialized();
+            }
+
+            CopyMaterializedParametersTo(clone);
+        }
         return clone;
+    }
+
+    private void CopyMaterializedParametersTo(UNetNoisePredictor<T> clone)
+    {
+        using var source = EnumerateMaterializedModelParameters().GetEnumerator();
+        using var target = clone.EnumerateMaterializedModelParameters().GetEnumerator();
+
+        while (source.MoveNext())
+        {
+            if (!target.MoveNext())
+            {
+                throw new InvalidOperationException(
+                    "Clone has fewer materialized tensors than the source U-Net. " +
+                    "Architectures may differ or a lazy tensor was materialized without " +
+                    "marking runtime state.");
+            }
+
+            CopyTensorData(source.Current, target.Current);
+        }
+
+        if (target.MoveNext())
+        {
+            throw new InvalidOperationException(
+                "Clone has more materialized tensors than the source U-Net. " +
+                "Architectures may differ.");
+        }
+    }
+
+    private IEnumerable<Tensor<T>> EnumerateMaterializedModelParameters()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private static void CopyTensorData(Tensor<T> source, Tensor<T> target)
+    {
+        if (source.Length != target.Length)
+        {
+            throw new InvalidOperationException(
+                $"Cannot copy tensor with {source.Length} elements into tensor " +
+                $"with {target.Length} elements.");
+        }
+
+        source.Data.Span.CopyTo(target.Data.Span);
     }
 
     /// <summary>
@@ -1187,13 +1507,75 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// manually (instead of delegating to <see cref="Clone"/>) can
     /// force lazy shape resolution on both sides too.
     /// </summary>
+    private bool _lazyShapesResolved;
+
     internal void TriggerLazyShapeResolution()
     {
-        var dummy = new Tensor<T>(new[] { 1, _inputChannels, _inputHeight, _inputHeight });
+        EnsureLayersInitialized();
+        // Idempotent: a single dummy forward resolves every lazy layer's weight
+        // shapes; shapes never change afterwards (SetParameters overwrites values,
+        // not shapes), so cache it. The guard is set BEFORE the forward so any
+        // re-entrant parameter access during resolution short-circuits instead of
+        // recursing. Without this, GetParameters / SetParameters / ParameterCount
+        // disagreed before the first real forward — the lazy layers reported their
+        // architectural ParameterCount but an empty GetParameters() vector — which
+        // broke the parameter round-trip, count-equality, Clone, and SaveState
+        // contracts (the whole DDPM parameter-management test cluster).
+        if (_lazyShapesResolved) return;
+        _lazyShapesResolved = true;
+
+        // Resolve at the SMALLEST valid spatial size, not the model's native
+        // _inputHeight. Weight shapes are channel-based (conv kernels
+        // [outC,inC,kH,kW], dense [in,out], attention [embed,embed]) and are
+        // INDEPENDENT of spatial H/W — but the forward compute (conv/attention)
+        // scales with H×W. On a foundation-scale UNet a native-resolution
+        // resolve forward costs minutes purely to allocate weights; resolving at
+        // the minimum spatial extent that still survives every downsampling
+        // stage (2^stages, doubled so the bottleneck stays >= 2) allocates the
+        // identical weight tensors with trivial compute. Cap at _inputHeight so
+        // models whose native size is already small aren't enlarged.
+        int numDownsamples = System.Math.Max(0, _channelMultipliers.Length - 1);
+        int safeSpatial = System.Math.Max(2, (1 << numDownsamples) * 2);
+        int resolveSpatial = System.Math.Min(_inputHeight, safeSpatial);
+        if (resolveSpatial < 1) resolveSpatial = _inputHeight;
+
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, resolveSpatial, resolveSpatial });
         Tensor<T>? dummyCtx = _contextDim > 0
             ? new Tensor<T>(new[] { 1, 1, _contextDim })
             : null;
         _ = PredictNoise(dummy, timestep: 0, conditioning: dummyCtx);
+    }
+
+    private bool _shapesResolvedViaForward;
+
+    /// <summary>
+    /// Single-source-of-truth shape resolution: runs the real forward topology under
+    /// <see cref="LayerBase{T}.RunShapeInference"/> so every lazy layer resolves its TRUE
+    /// shape exactly as the forward would — including decoder skip concatenation — WITHOUT
+    /// allocating any weights. This makes <c>ParameterCount</c>, <see cref="GetParameters"/>,
+    /// <see cref="SetParameters"/>, and the real forward all agree, which a per-construction
+    /// shape estimate cannot guarantee (the estimate diverged from the forward's actual
+    /// decoder concat). Unlike <see cref="TriggerLazyShapeResolution"/> this materialises
+    /// nothing, so it is safe to call from metadata accessors on a foundation-scale model.
+    /// Idempotent; the guard is set before the forward so re-entrant accessor calls during
+    /// resolution short-circuit instead of recursing.
+    /// </summary>
+    internal void ResolveShapesViaForward()
+    {
+        EnsureLayersInitialized();
+        if (_shapesResolvedViaForward) return;
+        _shapesResolvedViaForward = true;
+
+        int numDownsamples = System.Math.Max(0, _channelMultipliers.Length - 1);
+        int safeSpatial = System.Math.Max(2, (1 << numDownsamples) * 2);
+        int resolveSpatial = System.Math.Min(_inputHeight, safeSpatial);
+        if (resolveSpatial < 1) resolveSpatial = _inputHeight;
+
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, resolveSpatial, resolveSpatial });
+        Tensor<T>? dummyCtx = _contextDim > 0
+            ? new Tensor<T>(new[] { 1, 1, _contextDim })
+            : null;
+        LayerBase<T>.RunShapeInference(() => { _ = PredictNoise(dummy, timestep: 0, conditioning: dummyCtx); });
     }
 
     /// <inheritdoc />

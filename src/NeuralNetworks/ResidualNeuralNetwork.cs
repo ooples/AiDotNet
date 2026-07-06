@@ -491,20 +491,24 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// - The output tells you what the image contains
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // CPU path: perform forward pass through all layers sequentially
-        var current = input;
-        foreach (var layer in Layers)
+        // CPU path: perform forward pass through all layers sequentially (wrapped in the #1622
+        // verify-then-trust compiled gate; no-op unless acceleration is engaged).
+        return Accelerate(input, () =>
         {
-            current = layer.Forward(current);
-        }
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
 
-        return current;
+            return current;
+        });
     }
 
     /// <summary>

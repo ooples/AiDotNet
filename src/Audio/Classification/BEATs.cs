@@ -1011,7 +1011,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// sigmoid activation, thresholding, and event merging automatically.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
 

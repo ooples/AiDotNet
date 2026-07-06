@@ -13,9 +13,8 @@
 // Then open: http://localhost:5001
 // =============================================================================
 
-using AiDotNet.Audio;
-using AiDotNet.Audio.SpeechRecognition;
-using AiDotNet.Audio.TextToSpeech;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,7 +32,7 @@ var assistant = app.Services.GetRequiredService<SpeechAssistantService>();
 await assistant.InitializeAsync();
 
 // Serve static HTML UI
-app.MapGet("/", () => Results.Content(GetHtmlUI(), "text/html"));
+app.MapGet("/", () => Results.Content(HtmlContent.GetHtmlUI(), "text/html"));
 
 // Speech Recognition endpoints
 app.MapPost("/api/transcribe", async (HttpRequest request, SpeechAssistantService service) =>
@@ -111,57 +110,64 @@ app.Run("http://localhost:5001");
 
 public class SpeechAssistantService
 {
-    private WhisperModel<float>? _whisper;
-    private TextToSpeechModel<float>? _tts;
+    private ISpeechRecognizer<float>? _whisper;
+    private ITextToSpeech<float>? _tts;
     private int _transcriptionCount;
     private int _synthesisCount;
     private double _totalAudioProcessed;
+    private readonly object _statsLock = new();   // this singleton serves concurrent requests
 
     public async Task InitializeAsync()
     {
-        Console.WriteLine("Loading Whisper model...");
-        _whisper = await WhisperModel<float>.LoadAsync(
-            model: "whisper-base",
-            language: "en");
-
-        Console.WriteLine("Loading TTS model...");
-        _tts = await TextToSpeechModel<float>.LoadAsync(
-            model: "tts-1",
-            voice: "alloy");
-
-        Console.WriteLine("Speech assistant initialized.");
+        // A real deployment configures a pretrained recognizer/synthesizer through the
+        // facade, e.g.:
+        //   builder.ConfigureSpeechRecognizer(new WhisperModel<float>(arch, encoderPath, decoderPath));
+        //   builder.ConfigureTextToSpeech(new TtsModel<float>(arch, acousticModelPath));
+        // Those require ONNX weight files, so this sample leaves them unset and the
+        // endpoints report that weights are required to enable transcription/synthesis.
+        _whisper = null;
+        _tts = null;
+        Console.WriteLine("Speech assistant ready (load Whisper/TTS ONNX weights to enable transcription/synthesis).");
+        await Task.CompletedTask;
     }
 
     public async Task<TranscriptionResult> TranscribeAsync(byte[] audioData, string filename)
     {
-        if (_whisper == null)
-            throw new InvalidOperationException("Whisper model not initialized");
-
-        _transcriptionCount++;
-
         var startTime = DateTime.UtcNow;
 
-        // Decode audio and transcribe
+        // Decode audio
         var audioSamples = DecodeAudio(audioData, filename);
         var duration = audioSamples.Length / 16000.0; // 16kHz sample rate
-        _totalAudioProcessed += duration;
+        lock (_statsLock) { _transcriptionCount++; _totalAudioProcessed += duration; }
 
-        var transcription = await _whisper.TranscribeAsync(audioSamples);
+        if (_whisper == null)
+        {
+            return new TranscriptionResult
+            {
+                Text = "[load a Whisper ONNX model to enable transcription]",
+                Language = "en",
+                Duration = duration,
+                ProcessingTime = (DateTime.UtcNow - startTime).TotalSeconds
+            };
+        }
 
-        var processingTime = (DateTime.UtcNow - startTime).TotalSeconds;
+        // Transcribe through the recognizer (ISpeechRecognizer takes an audio tensor).
+        var audio = new Tensor<float>([audioSamples.Length]);
+        for (int i = 0; i < audioSamples.Length; i++) audio[[i]] = audioSamples[i];
+        var transcription = await _whisper.TranscribeAsync(audio, language: "en", includeTimestamps: true);
 
         return new TranscriptionResult
         {
             Text = transcription.Text,
             Language = transcription.Language,
-            Duration = duration,
-            ProcessingTime = processingTime,
+            Duration = transcription.DurationSeconds > 0 ? transcription.DurationSeconds : duration,
+            ProcessingTime = (DateTime.UtcNow - startTime).TotalSeconds,
             Segments = transcription.Segments.Select(s => new TranscriptionSegment
             {
-                Start = s.Start,
-                End = s.End,
+                Start = s.StartTime,
+                End = s.EndTime,
                 Text = s.Text,
-                Confidence = s.Confidence
+                Confidence = Convert.ToDouble(s.Confidence)
             }).ToList()
         };
     }
@@ -180,23 +186,19 @@ public class SpeechAssistantService
 
     public async Task<byte[]> SynthesizeAsync(string text, string? voice = null, float speed = 1.0f)
     {
+        lock (_statsLock) { _synthesisCount++; }
+
         if (_tts == null)
-            throw new InvalidOperationException("TTS model not initialized");
-
-        _synthesisCount++;
-
-        var config = new TTSConfig
         {
-            Voice = voice ?? "alloy",
-            Speed = speed,
-            Format = AudioFormat.WAV,
-            SampleRate = 24000
-        };
+            // No TTS weights loaded — return a short silent clip so the endpoint stays valid.
+            return EncodeToWav(new float[24000], 24000);
+        }
 
-        var audioSamples = await _tts.SynthesizeAsync(text, config);
-
-        // Encode to WAV format
-        return EncodeToWav(audioSamples, 24000);
+        // Synthesize through the TTS model (returns an audio waveform tensor).
+        var audioTensor = await _tts.SynthesizeAsync(text, voiceId: voice, speakingRate: speed);
+        var samples = new float[audioTensor.Length];
+        for (int i = 0; i < samples.Length; i++) samples[i] = audioTensor[[i]];
+        return EncodeToWav(samples, 24000);
     }
 
     public List<VoiceInfo> GetAvailableVoices()
@@ -214,11 +216,14 @@ public class SpeechAssistantService
 
     public SpeechStats GetStats()
     {
+        int transcriptions, syntheses;
+        double totalAudio;
+        lock (_statsLock) { transcriptions = _transcriptionCount; syntheses = _synthesisCount; totalAudio = _totalAudioProcessed; }
         return new SpeechStats
         {
-            TranscriptionCount = _transcriptionCount,
-            SynthesisCount = _synthesisCount,
-            TotalAudioProcessed = _totalAudioProcessed,
+            TranscriptionCount = transcriptions,
+            SynthesisCount = syntheses,
+            TotalAudioProcessed = totalAudio,
             WhisperModel = "whisper-base",
             TTSModel = "tts-1"
         };
@@ -393,7 +398,9 @@ public enum AudioFormat { WAV, MP3, OGG }
 // HTML UI
 // =============================================================================
 
-static string GetHtmlUI() => """
+static class HtmlContent
+{
+    public static string GetHtmlUI() => """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -813,3 +820,4 @@ static string GetHtmlUI() => """
 </body>
 </html>
 """;
+}

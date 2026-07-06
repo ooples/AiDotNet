@@ -29,6 +29,7 @@ namespace AiDotNet.Interfaces;
 /// - Clarity: Separate prompt logic from data
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PromptTemplate")]
 public interface IPromptTemplate
 {
     /// <summary>

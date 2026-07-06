@@ -131,12 +131,18 @@ public class TurboFillModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new TurboFillModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        // Field-by-field clone — bypasses the int-bounded flat
-        // Vector<T> that GetParameters/SetParameters round-trip would
-        // require.
-        clone._predictor.SetParameters(_predictor.GetParameters());
-        clone._vae.SetParameters(_vae.GetParameters());
+        // Clone the resolved predictor/VAE via their own Clone() (+ same architecture/options/scheduler).
+        // The sub-model Clone()s already deep-copy the weights, so no field-by-field
+        // SetParameters(GetParameters()) is needed — which also avoids the int-bounded flat Vector<T>
+        // round-trip that a foundation-scale predictor would overflow / OOM.
+        var clone = new TurboFillModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: null); // predictor+vae are cloned & passed, so InitializeLayers ignores seed — do not advance the source RNG
         return clone;
     }
 

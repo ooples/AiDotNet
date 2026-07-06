@@ -154,9 +154,15 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override T Train()
     {
-        if (ReplayBuffer.Count < TradingOptions.BatchSize) return NumOps.Zero;
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration batch
+        // gate and trains on the samples gathered so far (clamped to the buffer); autonomous stepping
+        // still requires a full minibatch before updating.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(TradingOptions.BatchSize, ReplayBuffer.Count)
+            : TradingOptions.BatchSize;
+        if (effectiveBatchSize <= 0 || ReplayBuffer.Count < effectiveBatchSize) return NumOps.Zero;
 
-        var batch = ReplayBuffer.Sample(TradingOptions.BatchSize);
+        var batch = ReplayBuffer.Sample(effectiveBatchSize);
         int n = batch.Count;
         if (n == 0) return NumOps.Zero;
 

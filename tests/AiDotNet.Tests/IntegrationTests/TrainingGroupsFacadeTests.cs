@@ -26,6 +26,10 @@ public sealed class TrainingGroupsFacadeTests
     private const int N = 100;          // total rows fed to the loader
     private const int TrainRows = 70;   // facade's internal split: 0.7 train
 
+    // Reproducible init seed — see BuildNet for why this is set on the architecture (not a
+    // [ThreadStatic] ambient seed).
+    private const int InitSeed = 1675;
+
     private static (Tensor<double> X, Tensor<double> Y) BuildLinearData()
     {
         // y = 2x + 1 — trivially learnable, but ONLY if the grouped slices keep each row paired
@@ -44,12 +48,26 @@ public sealed class TrainingGroupsFacadeTests
             new Tensor<double>(new[] { N }, new Vector<double>(y)));
     }
 
-    private static NeuralNetwork<double> BuildNet() => new(new NeuralNetworkArchitecture<double>(
-        inputType: InputType.OneDimensional,
-        taskType: NeuralNetworkTaskType.Regression,
-        complexity: NetworkComplexity.Simple,
-        inputSize: 1,
-        outputSize: 1));
+    private static NeuralNetwork<double> BuildNet()
+    {
+        // Pin per-layer weight init so the "grouped loop genuinely trains" convergence assertions are
+        // reproducible. The net is otherwise built from a non-reproducible, order-dependent init
+        // (RandomHelper.ThreadSafeRandom, advanced by sibling tests on the same worker thread); a
+        // poorly-conditioned draw fails to converge in the optimizer's bounded iteration budget, so the
+        // test flaked under parallel scheduling (#1675). The seed lives on the architecture object
+        // (not a [ThreadStatic] ambient seed) because the facade builds the net via an async pipeline
+        // whose continuation may run on a different thread — the architecture carries the seed across it.
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1,
+            outputSize: 1)
+        {
+            RandomSeed = InitSeed,
+        };
+        return new NeuralNetwork<double>(architecture);
+    }
 
     private static IReadOnlyList<IReadOnlyList<int>> PartitionTrainingRows(int groupSize)
     {

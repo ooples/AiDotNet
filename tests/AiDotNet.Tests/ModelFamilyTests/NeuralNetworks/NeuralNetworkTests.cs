@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class NeuralNetworkTests : NeuralNetworkModelTestBase
+public class NeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     // NeuralNetwork default: inputSize=128, outputSize=1
     protected override int[] InputShape => [128];
@@ -19,6 +19,6 @@ public class NeuralNetworkTests : NeuralNetworkModelTestBase
     // explosion still trip the check because they push loss above the floor.
     protected override double MemorizationTaskAbsoluteLossFloor => 1e-4;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new NeuralNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new NeuralNetwork<float>();
 }

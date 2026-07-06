@@ -179,7 +179,7 @@ public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 dropoutRate: _options.DropoutRate));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
@@ -222,7 +222,8 @@ public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Name = _useNativeMode ? "FireRedASR-Native" : "FireRedASR-ONNX",
         Description = "FireRedASR: dual-pass industrial ASR (2025)",
         FeatureCount = _options.NumMels,
-        Complexity = _options.NumEncoderLayers
+        Complexity = _options.NumEncoderLayers,
+        AdditionalInfo = BaseAudioMetadataInfo()
     };
 
     protected override void SerializeNetworkSpecificData(BinaryWriter w)

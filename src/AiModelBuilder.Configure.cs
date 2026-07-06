@@ -1145,6 +1145,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return result;
         }
 
+        // SELF-SUPERVISED / GENERATIVE TRAINING PATH - the model owns its objective
+        // (e.g. diffusion noise prediction), so the supervised optimizer path (which fits
+        // Predict(X) ≈ Y) cannot train it. Route it to a per-sample epoch loop that calls
+        // the model's own Train. Detected by capability (ISelfSupervisedModel), not by type.
+        if (_model is Interfaces.ISelfSupervisedModel)
+        {
+            result = await BuildSelfSupervisedInternalAsync(cancellationToken);
+            await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
+            return result;
+        }
+
         // DATA LOADER PATH - check if data loader is configured and provides input/output data
         if (_dataLoader is IInputOutputDataLoader<T, TInput, TOutput> inputOutputLoader)
         {
@@ -1178,7 +1189,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             cancellationToken.ThrowIfCancellationRequested();
 
             // True streaming training - train on batches without materializing all data
-            result = await BuildStreamingSupervisedAsync(streamingLoader);
+            result = await BuildStreamingSupervisedAsync(streamingLoader, cancellationToken);
             await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
             return result;
         }
@@ -1687,6 +1698,284 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="verbose">Whether to print training progress.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
 #pragma warning disable CS1998
+    // ── SELF-SUPERVISED / GENERATIVE TRAINING ────────────────────────────────
+    // Trains a model that owns its objective (ISelfSupervisedModel, e.g. diffusion).
+    // Runs epochs over the data calling model.Train(sample, sample) per sample — the model
+    // turns each sample into its own learning signal (diffusion: add noise at a random
+    // timestep, learn to predict it). Epochs come from the configured optimizer's
+    // MaxIterations, else a sensible default.
+    private async Task<AiModelResult<T, TInput, TOutput>> BuildSelfSupervisedInternalAsync(
+        CancellationToken cancellationToken)
+    {
+        var profilerSession = CreateProfilerSession();
+        using var _ = profilerSession?.Scope("BuildSelfSupervisedInternalAsync");
+
+        ApplyGpuConfiguration();
+        ApplyMemoryConfiguration();
+
+        if (_model is not IFullModel<T, TInput, TOutput> model)
+        {
+            throw new InvalidOperationException(
+                "Self-supervised training requires a model configured via ConfigureModel(...).");
+        }
+        if (!typeof(TOutput).IsAssignableFrom(typeof(TInput)))
+        {
+            throw new InvalidOperationException(
+                $"Self-supervised training requires TInput to be assignable to TOutput (got {typeof(TInput).Name}/{typeof(TOutput).Name}); " +
+                "the model derives its training target from the input sample.");
+        }
+
+        var samples = await GatherSelfSupervisedSamplesAsync(cancellationToken);
+        if (samples.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Self-supervised training has no data. Provide samples via ConfigureDataLoader(...).");
+        }
+
+        var firstSample = samples.FirstOrDefault(sample => sample is not null);
+        if (firstSample is null)
+        {
+            throw new InvalidOperationException(
+                "Self-supervised training data contains only null samples.");
+        }
+
+        if (_preprocessingPipeline is not null)
+        {
+            if (!_preprocessingPipeline.IsFitted)
+            {
+                if (samples.Count > 1
+                    && samples[0] is Tensor<T>
+                    && samples.All(sample => sample is Tensor<T>)
+                    && TryStackTensorBatch(samples.Cast<Tensor<T>>().ToArray(), out var batchedForFit)
+                    && batchedForFit is TInput typedBatch)
+                {
+                    _preprocessingPipeline.Fit(typedBatch);
+                }
+                else
+                {
+                    _preprocessingPipeline.Fit(firstSample);
+                }
+            }
+
+            for (int i = 0; i < samples.Count; i++)
+            {
+                if (samples[i] is null) continue;
+                samples[i] = _preprocessingPipeline.Transform(samples[i]);
+            }
+        }
+
+        var targets = new List<TOutput>(samples.Count);
+        foreach (var sample in samples)
+        {
+            if (sample is null)
+            {
+                throw new InvalidOperationException(
+                    "Self-supervised training data contains a null sample.");
+            }
+
+            targets.Add((TOutput)(object)sample);
+        }
+
+        if (_targetPipeline is not null)
+        {
+            if (!_targetPipeline.IsFitted)
+            {
+                if (targets.Count > 1
+                    && targets[0] is Tensor<T>
+                    && targets.All(target => target is Tensor<T>)
+                    && TryStackTensorBatch(targets.Cast<Tensor<T>>().ToArray(), out var batchedTargets)
+                    && batchedTargets is TOutput typedTargets)
+                {
+                    _targetPipeline.Fit(typedTargets);
+                }
+                else
+                {
+                    _targetPipeline.Fit(targets[0]);
+                }
+            }
+
+            for (int i = 0; i < targets.Count; i++)
+            {
+                targets[i] = _targetPipeline.Transform(targets[i]);
+            }
+        }
+
+        var preprocessingInfo = _preprocessingPipeline is not null || _targetPipeline is not null
+            ? new PreprocessingInfo<T, TInput, TOutput>
+            {
+                Pipeline = _preprocessingPipeline,
+                TargetPipeline = _targetPipeline,
+            }
+            : null;
+
+        int epochs = _optimizer is not null
+            ? Math.Max(1, _optimizer.GetOptions().MaxIterations)
+            : 100;
+
+        var rng = _allowNondeterminism ? new Random() : new Random(42);
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (int index in Enumerable.Range(0, samples.Count).OrderBy(_ => rng.Next()))
+            {
+                var sample = samples[index];
+                if (sample is null) continue;
+                // Self-supervised: the target is ignored — the model derives its own objective
+                // from the input (e.g. diffusion adds noise and predicts it). Self-supervised
+                // models use compatible input/output types, so the input-derived target doubles
+                // as the expected-output argument.
+                model.Train(sample, targets[index]);
+            }
+        }
+
+        var optimizationResult = new OptimizationResult<T, TInput, TOutput>
+        {
+            BestSolution = model,
+            Iterations = epochs * samples.Count
+        };
+
+        QuantizationInfo? quantizationInfo = null;
+        if (_quantizationConfig != null && _quantizationConfig.Mode != QuantizationMode.None)
+        {
+            try
+            {
+                int calibrationSampleCount = _quantizationConfig?.CalibrationSamples ?? 100;
+                var calibrationData = samples.Take(Math.Min(calibrationSampleCount, samples.Count));
+                var (quantizedModel, quantizationInfoResult) = ApplyQuantizationIfConfigured(
+                    optimizationResult.BestSolution,
+                    _quantizationConfig,
+                    calibrationData);
+
+                if (quantizedModel != null && quantizationInfoResult != null)
+                {
+                    optimizationResult.BestSolution = quantizedModel;
+                    quantizationInfo = quantizationInfoResult;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: Quantization failed: {ex.Message}. Model will use original precision.");
+            }
+        }
+
+        var postprocessingTrainingInput = samples[0];
+        if (samples.Count > 1
+            && samples[0] is Tensor<T>
+            && samples.All(sample => sample is Tensor<T>)
+            && TryStackTensorBatch(samples.Cast<Tensor<T>>().ToArray(), out var batchedPostprocessingInput)
+            && batchedPostprocessingInput is TInput typedPostprocessingInput)
+        {
+            postprocessingTrainingInput = typedPostprocessingInput;
+        }
+
+        FitPostprocessingIfNeeded(
+            optimizationResult.BestSolution,
+            postprocessingTrainingInput,
+            nameof(BuildSelfSupervisedInternalAsync));
+
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig,
+            _gpuAccelerationConfig,
+            _compressionConfig,
+            _profilingConfig);
+
+        var options = new AiModelResultOptions<T, TInput, TOutput>
+        {
+            OptimizationResult = optimizationResult,
+            TextVectorizer = _configuredTextVectorizer,
+            PreprocessingInfo = preprocessingInfo,
+            PostprocessingPipeline = _postprocessingPipeline,
+            KnowledgeDistillationOptions = _knowledgeDistillationOptions,
+            QuantizationInfo = quantizationInfo,
+            BiasDetector = _biasDetector,
+            FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
+            RagRetriever = _ragRetriever,
+            RagReranker = _ragReranker,
+            RagGenerator = _ragGenerator,
+            QueryProcessors = _queryProcessors,
+            LoRAConfiguration = _loraConfiguration,
+            DeploymentConfiguration = deploymentConfig,
+            InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            JitCompilationConfig = _jitCompilationConfig,
+            JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
+            AllowNondeterminism = _allowNondeterminism,
+            AugmentationConfig = _augmentationConfig,
+            ReasoningConfig = _reasoningConfig,
+            KnowledgeGraph = _knowledgeGraph,
+            GraphStore = _graphStore,
+            HybridGraphRetriever = _hybridGraphRetriever,
+            Tokenizer = _tokenizer,
+            TokenizationConfig = _tokenizationConfig,
+            ProgramSynthesisModel = _programSynthesisModel,
+            ProgramSynthesisServingClient = _programSynthesisServingClient,
+            ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            PromptTemplate = null,
+            PromptOptimizer = null,
+            FewShotExampleSelector = null,
+            PromptAnalyzer = null,
+            PromptCompressor = null,
+            ProfilingReport = profilerSession?.GetReport(),
+            WeightStreamingReport = BuildWeightStreamingReport(),
+            MemoryConfig = _memoryConfig
+        };
+
+        var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
+        result.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
+        ProcessKnowledgeGraphOptions(result);
+        AttachSafetyPipeline(result);
+        AttachAdversarialRobustness(result);
+
+        return result;
+    }
+
+    // Materialize per-sample inputs from the configured data loader for self-supervised
+    // training, splitting a batched tensor along its leading (batch) dimension.
+    private async Task<List<TInput>> GatherSelfSupervisedSamplesAsync(CancellationToken cancellationToken)
+    {
+        var samples = new List<TInput>();
+        if (_dataLoader is IInputOutputDataLoader<T, TInput, TOutput> loader)
+        {
+            if (!_dataLoader.IsLoaded)
+            {
+                await _dataLoader.LoadAsync(cancellationToken);
+            }
+            SplitBatchedSamples(loader.Features, samples);
+        }
+        return samples;
+    }
+
+    // Split a batched TInput into per-sample TInputs: Tensor<T> [N, …] → N × [1, …];
+    // otherwise treat the value as a single sample.
+    private static void SplitBatchedSamples(TInput features, List<TInput> into)
+    {
+        if (features is Tensor<T> t && t.Shape.Length >= 2 && t.Shape[0] > 0)
+        {
+            int n = t.Shape[0];
+            int stride = 1;
+            for (int d = 1; d < t.Shape.Length; d++) stride *= t.Shape[d];
+            var data = t.ToVector();
+            var sampleShape = new int[t.Shape.Length];
+            sampleShape[0] = 1;
+            for (int d = 1; d < t.Shape.Length; d++) sampleShape[d] = t.Shape[d];
+            for (int k = 0; k < n; k++)
+            {
+                var v = new Vector<T>(stride);
+                for (int j = 0; j < stride; j++) v[j] = data[k * stride + j];
+                if (new Tensor<T>(sampleShape, v) is TInput ti) into.Add(ti);
+            }
+        }
+        else if (features is not null)
+        {
+            into.Add(features);
+        }
+    }
+
     private async Task<AiModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
         // RL TRAINING PATH

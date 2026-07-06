@@ -421,6 +421,51 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
+    /// Enforces stationarity of the autoregressive operator so multi-step forecasts stay bounded.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The additive AR + seasonal-AR forecast recursion
+    /// <c>y[t] = c + Σ φ_j·y[t-j] + Σ Φ_k·y[t-k·m]</c> has characteristic polynomial
+    /// <c>1 - Σ a_i·z^i</c>. A sufficient condition for every root to lie strictly OUTSIDE the unit
+    /// disk — i.e. a stable, non-explosive recursion — is <c>Σ|a_i| &lt; 1</c> (for |z| ≤ 1,
+    /// |Σ a_i z^i| ≤ Σ|a_i| &lt; 1, so the polynomial has no root in the closed unit disk).
+    /// Plain least-squares estimation on a series with a near-unit-root seasonal cycle (where
+    /// <c>y[t] ≈ y[t-m]</c>) drives the seasonal coefficient Φ → 1 and makes the recursion explode,
+    /// so when the combined absolute weight reaches 1 we shrink ALL coefficients uniformly back into
+    /// the stable region. This mirrors <c>enforce_stationarity</c> in standard ARIMA libraries
+    /// (e.g. statsmodels) and runs before the MA and constant terms are estimated so they stay
+    /// consistent with the bounded operator.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> An AR model predicts the next value from recent values. If the learned
+    /// weights are too large, each forecast step amplifies the previous one and the prediction blows
+    /// up to ±infinity instead of settling down. This method gently scales the weights down just
+    /// enough to keep forecasts stable, which is what professional forecasting tools do by default.
+    /// </para>
+    /// </remarks>
+    private void EnforceStationarity()
+    {
+        T absSum = NumOps.Zero;
+        for (int i = 0; i < _arCoefficients.Length; i++)
+            absSum = NumOps.Add(absSum, NumOps.Abs(_arCoefficients[i]));
+        for (int i = 0; i < _sarCoefficients.Length; i++)
+            absSum = NumOps.Add(absSum, NumOps.Abs(_sarCoefficients[i]));
+
+        // Stable-region cap (< 1, with a small margin so forecasts settle toward the series mean
+        // rather than persisting a borderline-unit-root cycle indefinitely).
+        T cap = NumOps.FromDouble(0.99);
+        if (NumOps.GreaterThan(absSum, cap))
+        {
+            T scale = NumOps.Divide(cap, absSum);
+            for (int i = 0; i < _arCoefficients.Length; i++)
+                _arCoefficients[i] = NumOps.Multiply(_arCoefficients[i], scale);
+            for (int i = 0; i < _sarCoefficients.Length; i++)
+                _sarCoefficients[i] = NumOps.Multiply(_sarCoefficients[i], scale);
+        }
+    }
+
+    /// <summary>
     /// Generates predictions using the trained SARIMA model.
     /// </summary>
     /// <param name="input">The input features matrix for which predictions are to be made.</param>
@@ -646,6 +691,11 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Step 3: Estimate seasonal AR coefficients
         _sarCoefficients = EstimateSeasonalARCoefficients(diffY);
+
+        // Step 3b: Enforce stationarity so the additive AR + seasonal-AR forecast recursion cannot
+        // explode (a strong period-m seasonal cycle drives the seasonal AR toward a unit root).
+        // Done before residual/MA/constant estimation so those stay consistent with the bounded operator.
+        EnforceStationarity();
 
         // Step 4: Calculate residuals after AR and SAR
         Vector<T> arResiduals = CalculateARSARResiduals(diffY);

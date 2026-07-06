@@ -64,7 +64,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
     "https://arxiv.org/abs/1511.06581",
     Year = 2016,
     Authors = "Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas, N.")]
-public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
     private DuelingDQNOptions<T> _options;
 
@@ -151,6 +151,9 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
+    Vector<T> IActionValueProvider<T>.GetActionValues(Vector<T> state) => _qNetwork.Forward(state);
+
+    /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
@@ -162,12 +165,20 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         _steps++;
         TrainingSteps++;
 
-        if (_steps < _options.WarmupSteps || !_replayBuffer.CanSample(_options.BatchSize))
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _steps < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || !_replayBuffer.CanSample(effectiveBatchSize))
         {
             return NumOps.Zero;
         }
 
-        var batch = _replayBuffer.Sample(_options.BatchSize);
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
         T totalLoss = NumOps.Zero;
 
         foreach (var experience in batch)

@@ -285,6 +285,18 @@ public abstract class CausalDiscoveryTestBase
         if (!CanRecoverLinearStructure) return;
 
         var algo = CreateAlgorithm();
+
+        // Time-series causal discovery algorithms detect causation via
+        // temporal lags (e.g. TCDF's causal convolution reads x_i[t-K..t-1]
+        // to predict x_j[t]). The synthetic data in CreateKnownStructureData
+        // generates each row as an i.i.d. draw with the same per-row
+        // structural equation — there is no temporal autocorrelation and no
+        // lag-based causation for a time-series algorithm to find. Skip the
+        // invariant for algorithms whose contract is explicitly temporal;
+        // their lag-discovery is exercised by the integration-level tests
+        // that feed actually-autocorrelated data.
+        if (algo.SupportsTimeSeries) return;
+
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
         var adj = graph.AdjacencyMatrix;
 

@@ -87,6 +87,10 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private Tensor<T>? _cachedAdjacencyMatrix;
+    // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
+    // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a
+    // missing graph); when enabled, Predict/Train build an identity sized to the input.
+    private bool _implicitIdentityWhenUnset;
     // Tracks whether _cachedAdjacencyMatrix came from EnsureDefaultAdjacencyForInput
     // (auto-inferred identity) vs an explicit SetAdjacencyMatrix call. Explicit
     // matrices are sticky — caller knows the graph; auto-inferred ones must be
@@ -240,6 +244,54 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Tape-recorded training forward pass. Wires the graph structure into every
+    /// graph-convolutional layer BEFORE the base forward runs, so the autodiff
+    /// tape records the message-passing path and gradients can flow back to the
+    /// layer weights. Without this the default base forward could run against a
+    /// stale/absent adjacency and sever the gradient path.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureDefaultAdjacencyForInput(input);
+        return base.ForwardForTraining(input);
+    }
+
+    /// <summary>
+    /// Runs one gradient-descent training step over the full node-feature batch
+    /// using this model's own optimizer through the GradientTape path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This override is required because the base <see cref="NeuralNetworkBase{T}.Train"/>
+    /// default did not update this model's graph-convolutional layer parameters:
+    /// it resolved a fresh base optimizer rather than the model's configured
+    /// optimizer and did not wire the adjacency for the training forward, so
+    /// every step was a no-op (loss flat, weights unchanged). Mirroring
+    /// <c>GraphNeuralNetwork</c>, we wire the graph and drive the update with the
+    /// model's optimizer via <see cref="NeuralNetworkBase{T}.TrainWithTape"/>.
+    /// </para>
+    /// <para>
+    /// For semi-supervised node classification, pass an <paramref name="expectedOutput"/>
+    /// whose rows are one-hot for the labeled training nodes and all-zeros for the
+    /// unlabeled nodes: the log-softmax cross-entropy loss multiplies the target in,
+    /// so all-zero rows contribute zero gradient and only the labeled nodes drive
+    /// learning while every node still participates in message passing.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!IsTrainingMode)
+        {
+            SetTrainingMode(true);
+        }
+
+        EnsureDefaultAdjacencyForInput(input);
+        TrainWithTape(input, expectedOutput, _optimizer);
+
+        SetTrainingMode(false);
+    }
+
+    /// <summary>
     /// Updates the parameters of all layers in the network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -290,6 +342,18 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
 
         SetAdjacencyMatrix(task.Graph.AdjacencyMatrix);
 
+        // Semi-supervised masking. Keep the one-hot rows for the labeled TRAINING
+        // nodes and zero out every other row. The log-softmax cross-entropy loss
+        // multiplies the target in, so all-zero rows contribute exactly zero
+        // gradient — only the labeled nodes drive learning, while ALL nodes
+        // (including unlabeled val/test nodes) still participate in message
+        // passing during the forward pass.
+        int numNodes = task.Graph.NodeFeatures.Shape[0];
+        var maskedLabels = new Tensor<T>([numNodes, task.NumClasses]);
+        foreach (int n in task.TrainIndices)
+            for (int c = 0; c < task.NumClasses; c++)
+                maskedLabels[n, c] = task.Labels[n, c];
+
         var history = new Dictionary<string, List<double>>
         {
             ["train_loss"] = new List<double>(),
@@ -297,45 +361,26 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
             ["val_accuracy"] = new List<double>()
         };
 
-        var lr = NumOps.FromDouble(learningRate);
-
         for (int epoch = 0; epoch < epochs; epoch++)
         {
-            // Set all layers to training mode
-            foreach (var layer in Layers)
-            {
-                layer.SetTrainingMode(true);
-            }
+            // One gradient-descent step over all nodes via the GradientTape
+            // autodiff path and the model's own optimizer. (learningRate is
+            // retained for API compatibility; the configured optimizer governs
+            // the actual step size.)
+            Train(task.Graph.NodeFeatures, maskedLabels);
 
-            // Forward pass on all nodes
+            // Record metrics from a clean inference-mode forward pass.
+            SetTrainingMode(false);
             var logits = Forward(task.Graph.NodeFeatures);
-
-            // Compute loss and accuracy on training nodes
             var (loss, trainAcc) = ComputeLossAndAccuracy(logits, task.Labels, task.TrainIndices, task.NumClasses);
-
-            // Validation accuracy
             double valAcc = EvaluateAccuracy(logits, task.Labels, task.ValIndices, task.NumClasses);
 
             history["train_loss"].Add(loss);
             history["train_accuracy"].Add(trainAcc);
             history["val_accuracy"].Add(valAcc);
-
-            // Compute gradient and backward pass
-            var gradient = ComputeGradient(logits, task.Labels, task.TrainIndices, task.NumClasses);
-
-            // Update parameters
-            foreach (var layer in Layers)
-            {
-                layer.UpdateParameters(lr);
-            }
         }
 
-        // Set layers back to inference mode
-        foreach (var layer in Layers)
-        {
-            layer.SetTrainingMode(false);
-        }
-
+        SetTrainingMode(false);
         return history;
     }
 
@@ -381,14 +426,31 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
             }
         }
 
-        // Vectorized cross-entropy loss: -sum(labels * log(clamp(logits, epsilon, 1)))
-        T epsilon = NumOps.FromDouble(1e-10);
-        T one = NumOps.One;
-        var clampedLogits = Engine.TensorClamp(subsetLogits, epsilon, one);
-        var logLogits = Engine.TensorLog(clampedLogits);
-        var labelLogProduct = Engine.TensorMultiply(subsetLabels, logLogits);
-        T negSumLoss = Engine.TensorSum(labelLogProduct);
-        double totalLoss = -NumOps.ToDouble(negSumLoss);
+        // Cross-entropy on the raw logits via numerically-stable log-softmax:
+        //   CE = -Σ labels · logSoftmax(logits),  logSoftmax = z - max - log Σ exp(z - max).
+        // The final GCN layer emits RAW logits (no softmax activation), so the metric
+        // must apply the softmax itself — matching the CrossEntropyWithLogitsLoss used
+        // for the actual training gradient. (The previous version treated the logits as
+        // if they were already probabilities, which made this reported loss meaningless.)
+        double totalLoss = 0.0;
+        for (int i = 0; i < indices.Length; i++)
+        {
+            double max = NumOps.ToDouble(subsetLogits[i, 0]);
+            for (int c = 1; c < numClasses; c++)
+                max = Math.Max(max, NumOps.ToDouble(subsetLogits[i, c]));
+
+            double sumExp = 0.0;
+            for (int c = 0; c < numClasses; c++)
+                sumExp += Math.Exp(NumOps.ToDouble(subsetLogits[i, c]) - max);
+            double logSumExp = Math.Log(sumExp) + max;
+
+            for (int c = 0; c < numClasses; c++)
+            {
+                double yc = NumOps.ToDouble(subsetLabels[i, c]);
+                if (yc != 0.0)
+                    totalLoss += -yc * (NumOps.ToDouble(subsetLogits[i, c]) - logSumExp);
+            }
+        }
         double avgLoss = totalLoss / indices.Length;
 
         // Compute accuracy: compare argmax of logits vs argmax of labels
@@ -468,47 +530,6 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
         return 0;
     }
 
-    private Tensor<T> ComputeGradient(Tensor<T> logits, Tensor<T> labels, int[] trainIndices, int numClasses)
-    {
-        // Initialize gradient tensor (zeros)
-        var gradient = new Tensor<T>(logits._shape);
-        Engine.TensorFill(gradient, NumOps.Zero);
-
-        if (trainIndices.Length == 0)
-        {
-            return gradient;
-        }
-
-        // Gather logits and labels for the subset of training nodes
-        var subsetLogits = new Tensor<T>([trainIndices.Length, numClasses]);
-        var subsetLabels = new Tensor<T>([trainIndices.Length, numClasses]);
-        for (int i = 0; i < trainIndices.Length; i++)
-        {
-            int nodeIdx = trainIndices[i];
-            for (int c = 0; c < numClasses; c++)
-            {
-                subsetLogits[i, c] = logits[nodeIdx, c];
-                subsetLabels[i, c] = labels[nodeIdx, c];
-            }
-        }
-
-        // Vectorized gradient computation: (logits - labels) / n
-        var diff = Engine.TensorSubtract<T>(subsetLogits, subsetLabels);
-        var scaledDiff = Engine.TensorDivideScalar(diff, NumOps.FromDouble(trainIndices.Length));
-
-        // Scatter gradients back to the full gradient tensor
-        for (int i = 0; i < trainIndices.Length; i++)
-        {
-            int nodeIdx = trainIndices[i];
-            for (int c = 0; c < numClasses; c++)
-            {
-                gradient[nodeIdx, c] = scaledDiff[i, c];
-            }
-        }
-
-        return gradient;
-    }
-
     /// <summary>
     /// Gets all parameters as a vector.
     /// </summary>
@@ -533,7 +554,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor containing node features.</param>
     /// <returns>The prediction tensor with class probabilities for each node.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         EnsureDefaultAdjacencyForInput(input);
 
@@ -544,6 +565,25 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
 
         return Forward(input);
     }
+    /// <summary>
+    /// Enables implicit self-loops-only (identity) tolerance for this model and its graph layers —
+    /// the model-level analogue of GraphConvolutionalLayer's implicitIdentityWhenUnset ctor flag.
+    /// Default is strict (Predict/Train throw on a missing graph); this is an explicit opt-in for
+    /// scaffold / clone / deserialize paths, propagated to the GCN layers so direct-layer paths
+    /// (e.g. GetNamedLayerActivations) tolerate too.
+    /// </summary>
+    public void EnableImplicitIdentityAdjacency()
+    {
+        _implicitIdentityWhenUnset = true;
+        foreach (var layer in Layers)
+        {
+            if (layer is NeuralNetworks.Layers.GraphConvolutionalLayer<T> gcn)
+            {
+                gcn.EnableImplicitIdentityAdjacency();
+            }
+        }
+    }
+
 
     /// <summary>
     /// Auto-creates an identity adjacency matrix when none has been set —
@@ -555,6 +595,17 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     private void EnsureDefaultAdjacencyForInput(Tensor<T> input)
     {
+        if (_cachedAdjacencyMatrix is null && !_implicitIdentityWhenUnset)
+        {
+            // PyTorch-Geometric contract: the graph is REQUIRED — call SetAdjacencyMatrix() with
+            // the real structure before Predict/Train. Implicit-identity tolerance is opt-in
+            // (EnableImplicitIdentityAdjacency / the layer's implicitIdentityWhenUnset), never a
+            // silent default that would let a GCN ignore all graph structure unnoticed.
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set before Predict/Train: call SetAdjacencyMatrix() with " +
+                "the graph structure. Graph neural networks have no meaningful default graph.");
+        }
+
         if (input.Rank < 1) return;
         int numNodes = input.Shape[0];
 
@@ -573,43 +624,6 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
             identity[i, i] = NumOps.One;
         SetAdjacencyMatrix(identity);
         _usesFallbackAdjacency = true;
-    }
-
-    /// <summary>
-    /// Trains the network on a single batch of data.
-    /// </summary>
-    /// <param name="input">The input node features.</param>
-    /// <param name="expectedOutput">The expected output (labels).</param>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        EnsureDefaultAdjacencyForInput(input);
-
-        foreach (var layer in Layers)
-        {
-            layer.SetTrainingMode(true);
-        }
-
-        var predictions = Forward(input);
-
-        var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
-        {
-            gradOutput = gradOutput.Reshape(predictions._shape);
-        }
-
-
-        Vector<T> parameterGradients = GetParameterGradients();
-        Vector<T> currentParameters = GetParameters();
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        UpdateParameters(updatedParameters);
     }
 
     /// <summary>
@@ -666,11 +680,23 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new NodeClassificationModel<T>(
+        var clone = new NodeClassificationModel<T>(
             architecture: Architecture,
             hiddenDim: HiddenDim,
             numLayers: NumLayers,
             dropoutRate: DropoutRate);
+        // Graph STATE is model state in this stateful-adjacency design, so a clone of a configured
+        // model must stay usable: carry the implicit-identity opt-in and any explicit adjacency.
+        if (_implicitIdentityWhenUnset)
+        {
+            clone.EnableImplicitIdentityAdjacency();
+        }
+        else if (_cachedAdjacencyMatrix is not null)
+        {
+            clone.SetAdjacencyMatrix(_cachedAdjacencyMatrix);
+        }
+
+        return clone;
     }
 
     #endregion

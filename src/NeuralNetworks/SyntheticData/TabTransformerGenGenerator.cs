@@ -563,7 +563,7 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
     #region NeuralNetworkBase Overrides
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // The column-token transformer reconstructs the full row from its input.
         // A default column layout is always built in InitializeLayers, so the

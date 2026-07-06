@@ -70,6 +70,15 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    // Cached tape-training optimizer (see GetOrCreateBaseOptimizer): a cosine-annealed Adam so the
+    // ResNet backbone trains with a decaying learning rate (He et al. 2016), the same schedule that
+    // keeps longer training from degrading the loss (MoreData_ShouldNotDegrade).
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
+    // True only when the caller explicitly passed an optimizer (so GetOrCreateBaseOptimizer honors it
+    // instead of the scheduled default — the ctor always assigns _optimizer, so its type alone can't
+    // distinguish a user-supplied one from the built-in default).
+    private readonly bool _hasUserSuppliedOptimizer;
     private readonly int _backboneChannels;
     private readonly int _numClasses;
     private readonly int _hiddenDim;
@@ -165,6 +174,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         _numClasses = numClasses;
         _hiddenDim = 256;
         _useTextFeatures = useTextFeatures;
+        _hasUserSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
@@ -214,6 +224,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;
         _useTextFeatures = useTextFeatures;
+        _hasUserSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
@@ -641,10 +652,58 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        if (!_useNativeMode) return RunOnnxInference(preprocessed);
+        return RunBackbone(preprocessed);
+    }
+
+    /// <summary>
+    /// Runs the convolutional backbone directly over the (rank-3 [C,H,W]) page image. The base
+    /// NeuralNetworkBase.Forward normalizes/reshapes the input for its accelerated path, which mangles
+    /// the conv feature-map layout into a flattened [H*W, C] rank-2 tensor for this ResNet backbone
+    /// (residual blocks then re-throw on the rank). Driving the layers directly keeps the [C,H,W]
+    /// layout intact — the same approach the frame-interpolation / audio models use for their custom
+    /// dataflow. Every layer's Forward is tape-aware, so this serves both inference and training.
+    /// </summary>
+    private Tensor<T> RunBackbone(Tensor<T> x)
+    {
+        var c = x;
+        foreach (var layer in Layers) c = layer.Forward(c);
+        return c;
+    }
+
+    /// <summary>Training forward — the same direct backbone pass as inference (tape-aware).</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunBackbone(PreprocessDocument(input));
+
+    /// <summary>
+    /// The optimizer the tape-training path (TrainWithTape) actually uses. ResNet training decays the
+    /// learning rate (He et al. 2016); with a constant rate the batch-1 smoke-test schedule overshoots
+    /// after the initial descent, so the loss creeps up with more iterations (MoreData_ShouldNotDegrade).
+    /// A cosine-annealed Adam lets the model converge early then anneals the LR toward zero, so longer
+    /// training does not degrade the loss. Stepped PER BATCH (once per Train() call) — the default
+    /// per-epoch mode would leave the rate pinned. Honors a caller-supplied optimizer if given.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        if (_hasUserSuppliedOptimizer && _optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> userOpt)
+            return userOpt;
+
+        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = false,
+                InitialLearningRate = 0.001,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                // MONOTONIC exponential decay (cosine oscillates back up past T_max). The learning
+                // rate falls from 1e-3 to ~1e-7 by ~step 50, so the model converges in the early,
+                // high-LR steps and the long tail is effectively frozen — 200-iteration loss stays
+                // at the 50-iteration value instead of drifting up (MoreData_ShouldNotDegrade).
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(
+                    baseLearningRate: 0.001, gamma: 0.85, minLearningRate: 1e-8),
+            });
     }
 
     /// <inheritdoc/>
@@ -656,39 +715,34 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         }
 
         SetTrainingMode(true);
-
+        // TrainWithTape runs the full tape-based forward/backward AND the optimizer's parameter
+        // update. The previous code then ran a SECOND, manual SGD step (CollectParameterGradients +
+        // a hand-rolled params -= grads*lr in UpdateParameters), double-updating the weights with
+        // inconsistent gradients — the cause of the training divergence (loss exploding to ~4e7).
+        // Tape-based training with the registered optimizer is the industry-standard path.
         TrainWithTape(input, expectedOutput);
-        var paramGradients = CollectParameterGradients();
-        UpdateParameters(paramGradients);
-        SetTrainingMode(false);}
+        SetTrainingMode(false);
+    }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.0001);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectParameterGradients()
-    {
-        var gradients = new List<T>();
-
+        // Standard contract: distribute the flat parameter vector back into the layers (SET, not a
+        // gradient step). Framework clone/DeepCopy relies on this — the old override treated the
+        // argument as gradients and SUBTRACTED them, corrupting any copy.
+        int idx = 0;
         foreach (var layer in Layers)
         {
-            var layerGradients = layer.GetParameterGradients();
-            gradients.AddRange(layerGradients);
+            int count = checked((int)layer.ParameterCount);
+            if (count == 0) continue;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
         }
-
-        return new Vector<T>([.. gradients]);
     }
 
     #endregion

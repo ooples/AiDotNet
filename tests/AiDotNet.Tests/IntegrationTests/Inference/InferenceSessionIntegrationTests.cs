@@ -477,6 +477,16 @@ public class InferenceSessionIntegrationTests
         const int outputSize = FlatSize;
 
         var baseDense = new DenseLayer<float>(outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
+        // Resolve the lazy DenseLayer to its concrete (in=inputSize, out=outputSize)
+        // shape BEFORE wrapping in MultiLoRAAdapter. Without this, the adapter's
+        // input-shape probe sees `inputShape=[-1]`, falls back to LoRAAdapterBase's
+        // `inputSize = outputSize * 2 = 16` heuristic (originally a Dense(5) ⇒ [10]
+        // convention from LoRA-only tests), and the resulting [16]-input adapter
+        // then fails NeuralNetwork's layer-compatibility check against the
+        // [outputSize]-output InputLayer. Forcing shape resolution here gives the
+        // adapter the actual (in=inputSize, out=outputSize) shape it should be
+        // built around.
+        baseDense.ResolveFromShape(new[] { inputSize });
         var multi = new AiDotNet.LoRA.Adapters.MultiLoRAAdapter<float>(baseDense, defaultTaskName: "taskA", defaultRank: 1, alpha: 1.0, freezeBaseLayer: true);
         multi.AddTask("taskB", rank: 1, alpha: 1.0);
 
@@ -533,6 +543,16 @@ public class InferenceSessionIntegrationTests
         const int outputSize = FlatSize;
 
         var baseDense = new DenseLayer<float>(outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
+        // Resolve the lazy DenseLayer to its concrete (in=inputSize, out=outputSize)
+        // shape BEFORE wrapping in MultiLoRAAdapter. Without this, the adapter's
+        // input-shape probe sees `inputShape=[-1]`, falls back to LoRAAdapterBase's
+        // `inputSize = outputSize * 2 = 16` heuristic (originally a Dense(5) ⇒ [10]
+        // convention from LoRA-only tests), and the resulting [16]-input adapter
+        // then fails NeuralNetwork's layer-compatibility check against the
+        // [outputSize]-output InputLayer. Forcing shape resolution here gives the
+        // adapter the actual (in=inputSize, out=outputSize) shape it should be
+        // built around.
+        baseDense.ResolveFromShape(new[] { inputSize });
         var multi = new AiDotNet.LoRA.Adapters.MultiLoRAAdapter<float>(baseDense, defaultTaskName: "taskA", defaultRank: 1, alpha: 1.0, freezeBaseLayer: true);
         multi.AddTask("taskB", rank: 1, alpha: 1.0);
 
@@ -606,6 +626,29 @@ public class InferenceSessionIntegrationTests
             layers: layers);
 
         var model = new NeuralNetwork<float>(architecture);
+
+        // Warmup forward to materialize MultiHeadAttention's lazy Q/K/V/O weights
+        // before GetParameters / UpdateParameters runs. Without this, GetParameters
+        // returns a vector that excludes the un-resolved MHA weights, UpdateParameters
+        // writes the deterministic values only into the materialized layers, and the
+        // MHA layer retains its non-deterministic lazy random init.
+        //
+        // The InferenceOptimizer then clones the source ONCE PER SEQUENCE for KV-cache
+        // isolation (see AiModelResult.InferenceSequence.EnsureSequenceOptimizationsInitialized
+        // -> InferenceOptimizer.OptimizeForInference, which calls model.Clone() when
+        // EnableKVCache is true). Each clone calls ResolveLazyLayers AFTER cloning, so
+        // each clone's MHA picks up an INDEPENDENT random init from the SimdRandom
+        // non-deterministic seed — producing different outputs for the same input.
+        // The result was BeginInferenceSession_SequencesAreIndependent failing because
+        // seqA.Predict(t), seqB.Predict(t), seqFresh.Predict(t) all produced different
+        // numbers even though the test fixture was supposedly deterministic.
+        //
+        // Running a probe Predict here materializes the MHA on the SOURCE model BEFORE
+        // GetParameters is called, so the deterministic UpdateParameters then writes
+        // into the resolved weights, and the per-sequence clones inherit those exact
+        // weights via the serialize/deserialize path.
+        var probeInput = new Tensor<float>(new[] { 1, FlatSize });
+        _ = model.Predict(probeInput);
 
         var p = model.GetParameters();
         var deterministic = new float[p.Length];

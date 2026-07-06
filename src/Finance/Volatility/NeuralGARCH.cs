@@ -205,7 +205,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     /// <para><b>For Beginners:</b> This is how the model turns input returns into
     /// predicted volatility.</para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var current = input;
         foreach (var layer in Layers)

@@ -354,7 +354,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     /// <param name="input">Input audio tensor [batch, samples] or [samples].</param>
     /// <returns>Separated sources tensor [batch, sources, samples] or [sources, samples].</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessAudio(input);
 

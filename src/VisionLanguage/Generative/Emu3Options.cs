@@ -35,9 +35,19 @@ public class Emu3Options : GenerativeVLMOptions
         NumRegressionLayers = other.NumRegressionLayers;
     }
 
-    public Emu3Options() { ArchitectureType = GenerativeArchitectureType.UnifiedGeneration; VisionDim = 1408; DecoderDim = 4096; NumVisionLayers = 39; NumDecoderLayers = 32; NumHeads = 32; }
+    public Emu3Options()
+    {
+        ArchitectureType = GenerativeArchitectureType.UnifiedGeneration;
+        VisionDim = 1408;
+        DecoderDim = 4096;
+        NumVisionLayers = 39;
+        NumDecoderLayers = 32;
+        NumHeads = 32;
+    }
+
     /// <summary>Gets or sets the visual regression head dimension.</summary>
     public int RegressionDim { get; set; } = 1408;
+
     /// <summary>Gets or sets the number of regression head layers.</summary>
     public int NumRegressionLayers { get; set; } = 2;
 }

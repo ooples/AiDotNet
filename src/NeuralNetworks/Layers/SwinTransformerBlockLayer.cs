@@ -41,6 +41,13 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
     private readonly int _shiftSize;
     private readonly double _scale;
     private readonly int _mlpRatio;
+    // Stochastic depth (DropPath) rate per Swin (Liu et al. 2021): each residual branch is dropped
+    // per-sample with this probability during training and scaled by 1/(1-rate) so the expected
+    // activation is preserved; at inference it is the identity. 0 (default) keeps the block unchanged.
+    private readonly double _dropPathRate;
+    // Forward-call counter so RandomSeed-seeded drop masks are bit-identical across reruns at the
+    // same step (mirrors DropoutLayer's determinism contract).
+    private long _dropPathForwardCounter;
 
     // Pre-norm layer normalizations
     private readonly LayerNormalizationLayer<T> _norm1;
@@ -103,11 +110,14 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         int numHeads,
         int windowSize = 7,
         int shiftSize = 0,
-        int mlpRatio = 4)
+        int mlpRatio = 4,
+        double dropPathRate = 0.0)
         : base([dim], [dim])
     {
         if (dim % numHeads != 0)
             throw new ArgumentException($"Dimension ({dim}) must be divisible by number of heads ({numHeads}).", nameof(dim));
+        if (dropPathRate < 0.0 || dropPathRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(dropPathRate), "Drop-path rate must be in [0, 1).");
 
         _dim = dim;
         _numHeads = numHeads;
@@ -115,6 +125,7 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         _windowSize = windowSize;
         _shiftSize = shiftSize;
         _mlpRatio = mlpRatio;
+        _dropPathRate = dropPathRate;
         _scale = 1.0 / Math.Sqrt(_headDim);
 
         // Layer normalizations (pre-norm architecture)
@@ -226,7 +237,8 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         var attnOut = WindowAttention(normed1, h, w, batch);
         _cachedAttnOutput = attnOut;
 
-        var residual1 = AddTensors(input, attnOut);
+        // Stochastic depth on the attention residual branch (Swin, Liu et al. 2021).
+        var residual1 = AddTensors(input, DropPath(attnOut, batch));
         _cachedResidual1 = residual1;
 
         // Pre-norm + MLP + residual
@@ -234,7 +246,8 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         _cachedNorm2Output = normed2;
 
         var mlpOut = ApplyMLP(normed2);
-        var output = AddTensors(residual1, mlpOut);
+        // Stochastic depth on the MLP residual branch (independent draw from the attention branch).
+        var output = AddTensors(residual1, DropPath(mlpOut, batch));
 
         return output;
     }
@@ -593,6 +606,47 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return Engine.TensorAdd(a, b);
+    }
+
+    /// <summary>
+    /// Stochastic depth (drop-path), as used by the Swin Transformer (Liu et al. 2021, following
+    /// Huang et al. 2016). During training each sample's entire residual <paramref name="branch"/> is
+    /// dropped with probability <c>_dropPathRate</c> and the survivors are scaled by <c>1/(1-rate)</c>
+    /// so the expected contribution is preserved; at inference (or when the rate is 0) it is the
+    /// identity. The per-sample keep/drop mask is applied with the tape-recorded
+    /// <see cref="IEngine.TensorMultiply{T}"/> so the gradient flows back through it automatically
+    /// (grad·mask), exactly like Dropout. The mask is constant w.r.t. the parameters, so the attention
+    /// and MLP sub-layers see their gradients scaled by the same factor that scaled their forward output.
+    /// </summary>
+    private Tensor<T> DropPath(Tensor<T> branch, int batch)
+    {
+        if (_dropPathRate <= 0.0 || !IsTrainingMode)
+            return branch;
+
+        double keepProb = 1.0 - _dropPathRate;
+        T scale = NumOps.FromDouble(1.0 / keepProb);
+
+        // Per-call seed derived from RandomSeed + a forward counter so identically-seeded models
+        // produce bit-identical drop masks at the same step (matches DropoutLayer's determinism
+        // contract). With no seed, fall back to a cryptographically secure RNG (production default).
+        // long (not ulong): .NET Framework 4.7.1 has no Interlocked.Increment(ref ulong) overload.
+        long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
+        var rng = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
+            : RandomHelper.CreateSecureRandom();
+
+        int seqLen = branch.Shape[1];
+        int dim = branch.Shape[2];
+        var mask = new Tensor<T>([batch, seqLen, dim]);
+        for (int b = 0; b < batch; b++)
+        {
+            // One keep/drop decision per sample — the whole branch survives or vanishes together.
+            T v = rng.NextDouble() < _dropPathRate ? NumOps.Zero : scale;
+            for (int s = 0; s < seqLen; s++)
+                for (int d = 0; d < dim; d++)
+                    mask[b, s, d] = v;
+        }
+        return Engine.TensorMultiply(branch, mask);
     }
 
     /// <inheritdoc/>

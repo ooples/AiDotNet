@@ -88,10 +88,14 @@ public class CalibratedProbabilityFitDetectorIssue1186Tests
 
     /// <summary>
     /// Non-integer-multiple mismatches (e.g. predicted length 100, actual length 23)
-    /// should surface as a clear InvalidOperationException — not an opaque OOR.
+    /// must NOT throw — #1322's contract (PR #1561) is that the detector never throws
+    /// inside the optimizer's per-iteration loop. Calibration is undefined for
+    /// irreconcilable shapes, so the detector emits a Trace warning, returns empty
+    /// calibration, and routes to the explicit "cannot evaluate" verdict:
+    /// MaxCalibrationError → Overfit with zero confidence.
     /// </summary>
     [Fact]
-    public void Issue1186_ShapeMismatch_ThrowsClearError()
+    public void Issue1186_ShapeMismatch_RoutesToCannotEvaluateVerdict()
     {
         var predTensor = new Tensor<double>(new[] { 100 });
         var actualTensor = new Tensor<double>(new[] { 23 });
@@ -99,9 +103,12 @@ public class CalibratedProbabilityFitDetectorIssue1186Tests
         for (int i = 0; i < 23; i++) actualTensor[i] = 1.0;
 
         var detector = new CalibratedProbabilityFitDetector<double, Tensor<double>, Tensor<double>>();
-        var ex = Assert.Throws<InvalidOperationException>(
-            () => detector.DetectFit(BuildEvalData(predTensor, actualTensor)));
-        Assert.Contains("incompatible", ex.Message);
+        var result = detector.DetectFit(BuildEvalData(predTensor, actualTensor));
+
+        Assert.NotNull(result);
+        Assert.Equal(AiDotNet.Enums.FitType.Overfit, result.FitType);
+        Assert.Equal(0.0, Convert.ToDouble(result.ConfidenceLevel));
+        Assert.NotEmpty(result.Recommendations);
     }
 
     /// <summary>

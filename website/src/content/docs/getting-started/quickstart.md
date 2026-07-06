@@ -13,32 +13,37 @@ cd MyFirstAiModel
 dotnet add package AiDotNet
 ```
 
+Every model is built the same way: `ConfigureModel(...)` + `ConfigureDataLoader(...)` + `BuildAsync()`, then `result.Predict(...)`.
+
 ## Example 1: Classification
 
 Classify iris flowers into species:
 
 ```csharp
 using AiDotNet;
-using AiDotNet.Classification;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var features = new double[][]
+double[][] features =
 {
-    new[] { 5.1, 3.5, 1.4, 0.2 },  // Setosa
-    new[] { 4.9, 3.0, 1.4, 0.2 },
-    new[] { 7.0, 3.2, 4.7, 1.4 },  // Versicolor
-    new[] { 6.4, 3.2, 4.5, 1.5 },
-    new[] { 6.3, 3.3, 6.0, 2.5 },  // Virginica
-    new[] { 5.8, 2.7, 5.1, 1.9 }
+    new[] { 5.1, 3.5, 1.4, 0.2 }, new[] { 4.9, 3.0, 1.4, 0.2 },  // Setosa
+    new[] { 7.0, 3.2, 4.7, 1.4 }, new[] { 6.4, 3.2, 4.5, 1.5 },  // Versicolor
+    new[] { 6.3, 3.3, 6.0, 2.5 }, new[] { 5.8, 2.7, 5.1, 1.9 }   // Virginica
 };
-var labels = new double[] { 0, 0, 1, 1, 2, 2 };
+double[] labels = { 0, 0, 1, 1, 2, 2 };
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RandomForestClassifier<double>(
+        new RandomForestClassifierOptions<double> { NEstimators = 100 }))
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, labels))
+    .BuildAsync();
 
-var prediction = result.Predict(new[] { 5.9, 3.0, 5.1, 1.8 });
-Console.WriteLine($"Predicted species: {prediction}");  // Output: 2 (Virginica)
+var newFlower = new Matrix<double>(1, 4);
+foreach (var (v, j) in new[] { 5.9, 3.0, 5.1, 1.8 }.Select((v, j) => (v, j)))
+    newFlower[0, j] = v;
+Console.WriteLine($"Predicted species: {(int)result.Predict(newFlower)[0]}");
 ```
 
 ## Example 2: Regression
@@ -47,77 +52,97 @@ Predict house prices:
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
 using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var features = new double[][]
+double[][] features =
 {
-    new[] { 1500.0, 3.0, 2.0 },
-    new[] { 2000.0, 4.0, 2.5 },
-    new[] { 1200.0, 2.0, 1.0 },
-    new[] { 2500.0, 4.0, 3.0 }
+    new[] { 1500.0, 3.0, 2.0 }, new[] { 2000.0, 4.0, 2.5 },
+    new[] { 1200.0, 2.0, 1.0 }, new[] { 2500.0, 4.0, 3.0 }
 };
-var prices = new double[] { 300000, 450000, 200000, 550000 };
+double[] prices = { 300000, 450000, 200000, 550000 };
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new GradientBoostingRegression<double>(nEstimators: 100))
-    .ConfigurePreprocessing()
-    .BuildAsync(features, prices);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new GradientBoostingRegression<double>(
+        new GradientBoostingRegressionOptions { NumberOfTrees = 100 }))
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, prices))
+    .BuildAsync();
 
-var predictedPrice = result.Predict(new[] { 1800.0, 3.0, 2.0 });
-Console.WriteLine($"Predicted price: ${predictedPrice:N0}");
+var newHouse = new Matrix<double>(1, 3);
+foreach (var (v, j) in new[] { 1800.0, 3.0, 2.0 }.Select((v, j) => (v, j)))
+    newHouse[0, j] = v;
+Console.WriteLine($"Predicted price: ${result.Predict(newHouse)[0]:N0}");
 ```
 
 ## Example 3: Neural Network
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var features = new double[][]
+// 6 iris samples, 4 features, one-hot labels for 3 species.
+var trainX = new Tensor<double>(new[] { 6, 4 });
+var trainY = new Tensor<double>(new[] { 6, 3 });
+double[][] rows =
 {
     new[] { 5.1, 3.5, 1.4, 0.2 }, new[] { 4.9, 3.0, 1.4, 0.2 },
     new[] { 7.0, 3.2, 4.7, 1.4 }, new[] { 6.4, 3.2, 4.5, 1.5 },
     new[] { 6.3, 3.3, 6.0, 2.5 }, new[] { 5.8, 2.7, 5.1, 1.9 }
 };
-var labels = new double[] { 0, 0, 1, 1, 2, 2 };
+int[] species = { 0, 0, 1, 1, 2, 2 };
+for (int i = 0; i < 6; i++)
+{
+    for (int j = 0; j < 4; j++) trainX[new[] { i, j }] = rows[i][j];
+    trainY[new[] { i, species[i] }] = 1.0;
+}
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new NeuralNetwork<double>(
-        inputSize: 4, hiddenSize: 16, outputSize: 3))
-    .ConfigureOptimizer(new AdamOptimizer<double>())
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+    inputFeatures: 4, numClasses: 3, complexity: NetworkComplexity.Simple));
 
-var newSample = new double[] { 5.1, 3.5, 1.4, 0.2 };
-var prediction = result.Predict(newSample);
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+    .ConfigureModel(model)
+    .ConfigureOptimizer(new AdamOptimizer<double, Tensor<double>, Tensor<double>>(model))
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine($"Output shape: [{string.Join(", ", result.Predict(trainX).Shape)}]");
 ```
 
 ## Example 4: With Cross-Validation
 
 ```csharp
 using AiDotNet;
-using AiDotNet.Classification;
-using AiDotNet.CrossValidation;
+using AiDotNet.CrossValidators;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var features = new double[][]
+double[][] features =
 {
-    new[] { 5.1, 3.5, 1.4, 0.2 }, new[] { 4.9, 3.0, 1.4, 0.2 },
-    new[] { 7.0, 3.2, 4.7, 1.4 }, new[] { 6.4, 3.2, 4.5, 1.5 },
-    new[] { 6.3, 3.3, 6.0, 2.5 }, new[] { 5.8, 2.7, 5.1, 1.9 }
+    new[] { 1500.0, 3.0 }, new[] { 2000.0, 4.0 }, new[] { 1200.0, 2.0 },
+    new[] { 2500.0, 4.0 }, new[] { 1800.0, 3.0 }, new[] { 2200.0, 4.0 },
+    new[] { 1400.0, 2.0 }, new[] { 2600.0, 5.0 }, new[] { 1700.0, 3.0 }, new[] { 2100.0, 4.0 }
 };
-var labels = new double[] { 0, 0, 1, 1, 2, 2 };
+double[] prices = { 300000, 450000, 200000, 550000, 380000, 480000, 240000, 600000, 360000, 470000 };
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
-    .ConfigurePreprocessing()
-    .ConfigureCrossValidation(new KFoldCrossValidator<double>(k: 5))
-    .BuildAsync(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new GradientBoostingRegression<double>(
+        new GradientBoostingRegressionOptions { NumberOfTrees = 50 }))
+    .ConfigureCrossValidation(new KFoldCrossValidator<double, Matrix<double>, Vector<double>>())
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, prices))
+    .BuildAsync();
 
-if (result.CrossValidationResult != null)
+if (result.CrossValidationResult is not null)
 {
-    Console.WriteLine($"Mean Accuracy: {result.CrossValidationResult.MeanScore:P2}");
-    Console.WriteLine($"Std Dev: {result.CrossValidationResult.StandardDeviation:P2}");
+    Console.WriteLine($"Mean R²:  {result.CrossValidationResult.R2Stats.Mean:F4}");
+    Console.WriteLine($"Std Dev:  {result.CrossValidationResult.R2Stats.StandardDeviation:F4}");
 }
 ```
 
@@ -125,17 +150,30 @@ if (result.CrossValidationResult != null)
 
 ```csharp
 using AiDotNet;
-using AiDotNet.Optimizers;
-using AiDotNet.ComputerVision;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var cnnModel = new ResNet18<float>();
+var rng = new Random(0);
+var trainX = new Tensor<float>(new[] { 64, 32 });
+var trainY = new Tensor<float>(new[] { 64, 4 });
+for (int i = 0; i < 64; i++)
+{
+    for (int j = 0; j < 32; j++) trainX[new[] { i, j }] = (float)rng.NextDouble();
+    trainY[new[] { i, i % 4 }] = 1f;
+}
+
+var model = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+    inputFeatures: 32, numClasses: 4, complexity: NetworkComplexity.Simple));
+
+// ConfigureGpuAcceleration enables the GPU path when a device is available
+// and transparently falls back to CPU otherwise.
 var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-    .ConfigureModel(cnnModel)
-    .ConfigureOptimizer(new AdamOptimizer<float>())
-    .ConfigureGpuAcceleration(new GpuAccelerationConfig
-    {
-        Enabled = true,
-        DeviceId = 0
-    })
-    .BuildAsync(trainImages, trainLabels);
+    .ConfigureModel(model)
+    .ConfigureGpuAcceleration()
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine($"Trained; output shape [{string.Join(", ", result.Predict(trainX).Shape)}]");
 ```

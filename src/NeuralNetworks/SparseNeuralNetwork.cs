@@ -179,14 +179,14 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor to make a prediction for.</param>
     /// <returns>The predicted output tensor.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         IsTrainingMode = false;
 
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(SparseNeuralNetwork<T>), "prediction");
 
-        var predictions = Forward(input);
+        var predictions = Accelerate(input, () => Forward(input));
 
         IsTrainingMode = true;
 

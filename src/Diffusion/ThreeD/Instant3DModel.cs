@@ -260,18 +260,8 @@ public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var cu = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2],
-            contextDim: CROSS_ATTENTION_DIM);
-        cu.SetParameters(_unet.GetParameters());
-
-        return new Instant3DModel<T>(
-            unet: cu,
+                return new Instant3DModel<T>(
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
             vae: new StandardVAE<T>(
                 inputChannels: 3,
                 latentChannels: LATENT_CHANNELS,

@@ -44,7 +44,8 @@ public class QuantizationConfig
     /// <list type="bullet">
     /// <item><description>None: Full precision, no compression</description></item>
     /// <item><description>Float16: Half precision, good balance</description></item>
-    /// <item><description>Int8: Maximum compression, slight accuracy loss</description></item>
+    /// <item><description>Int8: 4x compression, slight accuracy loss</description></item>
+    /// <item><description>Int4: 8x compression (16 levels) — pair with a LoRA adapter (QLoRA)</description></item>
     /// </list>
     /// </remarks>
     public QuantizationMode Mode { get; set; } = QuantizationMode.None;
@@ -185,6 +186,23 @@ public class QuantizationConfig
             UseQuantizationAwareTraining = UseQuantizationAwareTraining,
             QATMethod = QATMethod,
             QATWarmupEpochs = QATWarmupEpochs
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration for simple 4-bit (INT4) weight quantization via MinMax — the low-bit
+    /// base used by QLoRA (~8x smaller than FP32). Pair with a LoRA adapter so the trainable delta
+    /// stays full precision. For higher 4-bit accuracy, use <see cref="ForGPTQ(int)"/>.
+    /// </summary>
+    public static QuantizationConfig ForInt4()
+    {
+        return new QuantizationConfig
+        {
+            Mode = QuantizationMode.Int4,
+            Strategy = QuantizationStrategy.Dynamic,
+            Granularity = QuantizationGranularity.PerChannel,
+            CalibrationMethod = CalibrationMethod.MinMax,
+            UseSymmetricQuantization = true
         };
     }
 

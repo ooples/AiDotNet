@@ -37,6 +37,7 @@ namespace AiDotNet.Interfaces;
 /// - Measurable performance gains
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PromptOptimizer")]
 public interface IPromptOptimizer<T>
 {
     /// <summary>

@@ -227,7 +227,7 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// that provide multi-scale spatial features, then through the decoder for per-pixel predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }

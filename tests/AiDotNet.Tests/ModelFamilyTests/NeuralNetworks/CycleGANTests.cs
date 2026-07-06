@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class CycleGANTests : GANModelTestBase
+public class CycleGANTests : GANModelTestBase<float>
 {
     // CycleGAN's parameterless ctor (src/NeuralNetworks/CycleGAN.cs:246)
     // instantiates four 784-unit generator/discriminator architectures
@@ -15,6 +15,6 @@ public class CycleGANTests : GANModelTestBase
     protected override int[] InputShape => [784];
     protected override int[] OutputShape => [784];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new CycleGAN<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new CycleGAN<float>();
 }

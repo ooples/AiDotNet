@@ -133,7 +133,7 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
@@ -174,6 +174,9 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "Branchformer-Native" : "Branchformer-ONNX",
             Description = "Branchformer: Parallel MLP-Attention Architectures (Peng et al., 2022)",
+            FeatureCount = _options.NumMels,
+            Complexity = _options.NumEncoderLayers,
+            AdditionalInfo = BaseAudioMetadataInfo()
         };
     }
 

@@ -11,7 +11,8 @@ public class EmotiVoiceOptions : EndToEndTtsOptions
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public EmotiVoiceOptions(EmotiVoiceOptions other) : base(other)
+    public EmotiVoiceOptions(EmotiVoiceOptions other)
+        : base(other)
     {
         // base(other) runs before this body and throws ArgumentNullException
         // if other is null, so a local null-check here is unreachable.

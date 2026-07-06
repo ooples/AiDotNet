@@ -155,6 +155,60 @@ public class CompiledInferenceParityTests : IDisposable
     }
 
     // ---------------------------------------------------------------------
+    // Value-aware replay: a plan traced on input A, then replayed on a DIFFERENT
+    // same-shape input B, must produce eager(B) — NOT the stale eager(A) (the
+    // reverted "compiled returns first call's output for any same-shape input"
+    // bug that forced Predict back to eager-by-default). This is the gate for
+    // re-enabling compiled-by-default (#1622 L3).
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public void Mlp_CompiledReplay_DifferentSameShapeInput_IsNotStale()
+    {
+        var network = BuildAisEvalMlp();
+        var inputA = MakeInput(new[] { 1, 784 }, seed: 101);
+        var inputB = MakeInput(new[] { 1, 784 }, seed: 202); // different values, same shape
+
+        // Eager oracles for both inputs (compilation disabled around them).
+        var eagerA = PredictEagerOracle(network, inputA);
+        var eagerB = PredictEagerOracle(network, inputB);
+        // Sanity: the two inputs genuinely produce different outputs, so "stale" is detectable.
+        double aVsB = 0; var ea = eagerA.AsSpan(); var eb = eagerB.AsSpan();
+        for (int i = 0; i < ea.Length; i++) aVsB = Math.Max(aVsB, Math.Abs(ea[i] - eb[i]));
+        Assert.True(aVsB > 1e-3, "test inputs must produce distinct outputs for staleness to be observable");
+
+        // Trace on A, then replay on B.
+        Assert.True(network.CompileForward(inputA), "CompileForward(A) did not produce a plan.");
+        _ = network.PredictCompiled(inputA);              // prime the hot plan on A
+        var compiledB = network.PredictCompiled(inputB);  // replay with B
+
+        // Replay must reflect B, not the stale A.
+        AssertParity(eagerB, compiledB, "MLP replay on different same-shape input B");
+    }
+
+    [Fact]
+    public void Cnn_CompiledReplay_DifferentSameShapeInput_IsNotStale()
+    {
+        var network = BuildAisEvalCnn();
+        var inputA = MakeInput(new[] { 2, 1, 28, 28 }, seed: 303);
+        var inputB = MakeInput(new[] { 2, 1, 28, 28 }, seed: 404);
+
+        var eagerA = PredictEagerOracle(network, inputA);
+        var eagerB = PredictEagerOracle(network, inputB);
+        // Sanity: the two inputs genuinely produce different outputs, so "stale" is detectable
+        // (mirrors the MLP test — without this the parity assert could false-pass if A≈B).
+        double aVsB = 0; var ea = eagerA.AsSpan(); var eb = eagerB.AsSpan();
+        for (int i = 0; i < ea.Length; i++) aVsB = Math.Max(aVsB, Math.Abs(ea[i] - eb[i]));
+        Assert.True(aVsB > 1e-3, "test inputs must produce distinct outputs for staleness to be observable");
+
+        Assert.True(network.CompileForward(inputA), "CompileForward(A) did not produce a plan.");
+        _ = network.PredictCompiled(inputA);
+        var compiledB = network.PredictCompiled(inputB);
+
+        AssertParity(eagerB, compiledB, "CNN replay on different same-shape input B");
+    }
+
+    // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
 

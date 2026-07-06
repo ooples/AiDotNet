@@ -10,6 +10,11 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// paper defaults allocates ≈12.3 GB at FP64 standalone, OOMs in the shared
 /// diffusion-test process.
 /// </summary>
+// Foundation-scale-at-default: the model's full-scale default config has a Training peak (weights +
+// gradients + Adam state + activations) that OOMs the 16 GB CI runner (fits only on a larger box).
+// Moved to the HeavyTimeout nightly lane so the default PR-gate shard fits and passes (#1706/#1305).
+[Xunit.Trait("Category", "HeavyTimeout")]
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class IDMVTONModelTests : DiffusionModelTestBase<float>
 {
     // SD-based latent diffusion: 4 channels, 64x64 latent (512x512 images / 8x VAE)

@@ -466,7 +466,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TimeLLM model, Predict produces predictions from input data. This is the main inference step of the TimeLLM architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : ForecastOnnx(input);
     }
@@ -847,7 +847,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         current = DenormalizeForecast(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
     }

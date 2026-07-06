@@ -163,20 +163,11 @@ public class HunyuanVideo15Model<T> : VideoDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: 3072,
-            numLayers: 38,
-            numHeads: 24,
-            patchSize: 2,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        return new HunyuanVideo15Model<T>(
+                return new HunyuanVideo15Model<T>(
             architecture: Architecture,
             options: Options as DiffusionModelOptions<T>,
             scheduler: Scheduler,
-            predictor: clonedPredictor,
+            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

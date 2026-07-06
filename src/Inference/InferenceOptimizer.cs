@@ -58,9 +58,14 @@ internal class InferenceOptimizer<T>
     public InferenceOptimizationConfig Config => _config;
 
     /// <summary>
-    /// Gets the KV cache if enabled and initialized.
+    /// Gets the contiguous KV cache if enabled and initialized (non-paged path).
     /// </summary>
     public KVCache<T>? KVCache => _kvCache;
+
+    /// <summary>
+    /// Gets the paged KV cache if enabled and initialized (the default <see cref="InferenceOptimizationConfig.EnablePagedKVCache"/> path).
+    /// </summary>
+    public PagedKVCache<T>? PagedKVCache => _pagedKVCache;
 
     /// <summary>
     /// Gets whether the optimizer has been initialized with a model.

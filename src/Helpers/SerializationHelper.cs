@@ -412,7 +412,15 @@ public static class SerializationHelper<T>
         writer.Write(vector.Length);
         for (int i = 0; i < vector.Length; i++)
         {
-            writer.Write(Convert.ToDouble(vector[i]));
+            // Use the type-specific WriteValue so this writer-based serialize is the
+            // exact inverse of DeserializeVector(reader)/(reader, length), both of
+            // which read with the type-specific ReadValue. The previous
+            // Convert.ToDouble always wrote 8-byte doubles, which only round-tripped
+            // for T = double; for float (or any non-double T) the reader consumed a
+            // different element width and the stream desynchronized (e.g. GAN Clone
+            // failing with "Serialized data cannot be empty"). For T = double this is
+            // byte-identical to the previous format (WriteValue writes Convert.ToDouble).
+            WriteValue(writer, vector[i]);
         }
     }
 
@@ -440,7 +448,10 @@ public static class SerializationHelper<T>
         Vector<T> vector = new Vector<T>(length);
         for (int i = 0; i < length; i++)
         {
-            vector[i] = _numOps.FromDouble(reader.ReadDouble());
+            // Read with the type-specific ReadValue so this stays the exact inverse of
+            // SerializeVector(writer, ...) (which now writes via WriteValue). For
+            // T = double this is byte-identical to the previous reader.ReadDouble().
+            vector[i] = ReadValue(reader);
         }
 
         return vector;

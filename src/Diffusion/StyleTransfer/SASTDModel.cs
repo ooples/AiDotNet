@@ -73,7 +73,14 @@ public class SASTDModel<T> : LatentDiffusionModelBase<T>
     private void InitializeLayers(UNetNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
         _predictor = predictor ?? new UNetNoisePredictor<T>(
-            architecture: Architecture, inputChannels: 5, outputChannels: LATENT_CHANNELS,
+            // Style Aligned (Hertz et al. 2023) is an inference-time shared-attention
+            // technique over a STANDARD Stable Diffusion U-Net: the noise predictor
+            // consumes the 4-channel latent and emits a 4-channel noise estimate — it
+            // does NOT add an input channel. inputChannels was 5 (a copy-paste from a
+            // latent+mask inpainting predictor), so the UNet's input conv expected 5
+            // channels while the diffusion latent (and every sibling StyleTransfer
+            // model) is 4 → shape mismatch on every forward/output/training test.
+            architecture: Architecture, inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
             baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2, attentionResolutions: new[] { 4, 2, 1 }, contextDim: 768, seed: seed);
         _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
@@ -108,9 +115,21 @@ public class SASTDModel<T> : LatentDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new SASTDModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        // Fast path: O(1) copy-on-write share when the default clone is structurally identical
+        // (the common foundation-scale case the COW lever targets — no re-materialization/OOM).
+        var clone = new SASTDModel<T>(conditioner: _conditioner, seed: null);
+        if (clone.TryShareParametersFrom(this)) return clone;
+        // Structure mismatch ⇒ custom architecture/predictor/VAE the default clone can't reproduce;
+        // rebuild faithfully from this instance's configuration so the clone is observationally
+        // identical instead of throwing on a parameter-count mismatch.
+        return new SASTDModel<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)Options,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: null);
     }
 
     public override ModelMetadata<T> GetModelMetadata()

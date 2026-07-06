@@ -318,28 +318,15 @@ public class LEDITSPPModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
+        // Lazy-preserving Clone: delegate weights to the submodules' own Clone(), and carry through the
+        // caller-provided runtime configuration (architecture / options / scheduler) so the clone is a
+        // faithful copy rather than a defaults-rebuild.
         return new LEDITSPPModel<T>(
-            unet: clonedUnet,
-            vae: clonedVae,
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
     }
 

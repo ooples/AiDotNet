@@ -27,7 +27,11 @@ public interface IInstructionTunedVLM<T> : IGenerativeVisionLanguageModel<T>
     /// <param name="conversationHistory">Previous turns as (role, content) pairs.</param>
     /// <param name="userMessage">The new user message/instruction.</param>
     /// <returns>Output tensor of token logits for the assistant's response.</returns>
-    Tensor<T> Chat(Tensor<T> image, IEnumerable<(string Role, string Content)> conversationHistory, string userMessage);
+    Tensor<T> Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage
+    );
 
     /// <summary>
     /// Gets the name of the language model backbone (e.g., "LLaMA", "Vicuna", "Qwen2", "InternLM2").

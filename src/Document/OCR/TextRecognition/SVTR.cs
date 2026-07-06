@@ -495,7 +495,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessTextImage(input);
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);

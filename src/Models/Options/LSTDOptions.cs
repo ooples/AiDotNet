@@ -35,9 +35,12 @@ namespace AiDotNet.Models.Options;
 public class LSTDOptions<T> : ReinforcementLearningOptions<T>
 {
     /// <summary>
-    /// Number of features in the state representation.
+    /// Number of features in the state representation. LSTD uses raw-state features
+    /// (phi(s) = s), so this must match the length of the state vectors fed in. Defaults
+    /// to 4 (matching the documented StateSize = 4 example) so a default-constructed agent
+    /// has a non-empty weight matrix; callers with a different state dimension set it explicitly.
     /// </summary>
-    public int FeatureSize { get; init; }
+    public int FeatureSize { get; init; } = 4;
 
     /// <summary>
     /// Size of the action space (number of possible actions).

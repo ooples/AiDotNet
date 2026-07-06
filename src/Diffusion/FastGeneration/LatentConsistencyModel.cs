@@ -377,28 +377,12 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
             _ => LCM_CROSS_ATTENTION_DIM
         };
 
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LCM_LATENT_CHANNELS,
-            outputChannels: LCM_LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: contextDim);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LCM_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
         return new LatentConsistencyModel<T>(
-            unet: clonedUnet,
-            vae: clonedVae,
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             baseModel: _baseModel);
     }

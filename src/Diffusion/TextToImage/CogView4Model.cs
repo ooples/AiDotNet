@@ -314,20 +314,9 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
     {
         // Clone must preserve the latent channel count so SetParameters lines
         // up with the original predictor's weight layout.
-        var clonedPredictor = new SiTPredictor<T>(inputChannels: COGVIEW_LATENT_CHANNELS);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: COGVIEW_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new CogView4Model<T>(
-            predictor: clonedPredictor,
-            vae: clonedVae,
+                        return new CogView4Model<T>(
+            predictor: (SiTPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
     }
 

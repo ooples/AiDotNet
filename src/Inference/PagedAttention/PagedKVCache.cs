@@ -240,29 +240,37 @@ internal class PagedKVCache<T> : IDisposable
     /// </summary>
     public void WriteKey(long sequenceId, int tokenPosition, int layer, ReadOnlySpan<T> keyData)
     {
-        var table = _blockTableManager.GetBlockTable(sequenceId);
-        if (table == null)
-            throw new InvalidOperationException($"No block table for sequence {sequenceId}");
-
-        var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-
-        // Check for copy-on-write
-        if (_blockManager.GetReferenceCount(blockId) > 1)
+        // Serialize against the allocators (AllocateSequence/ExtendSequence/ForkSequence/FreeSequence)
+        // which mutate the shared block-table/block-manager structures under the same lock. Without
+        // this, concurrent serving sessions (distinct sequence ids on one shared cache) race on the
+        // block-table dictionary + ref-count/COW state — corrupting the first decode token while two
+        // forwards overlap. Monitor is reentrant, so the COW path below is safe.
+        lock (_lock)
         {
-            _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
-            table = _blockTableManager.GetBlockTable(sequenceId)
-                ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
-            (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-        }
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
 
-        // Write key data for all heads
-        var blockStorage = _kvBlocks[blockId];
-        for (int head = 0; head < _config.NumHeads; head++)
-        {
-            int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
-            int dataOffset = head * _config.HeadDimension;
-            keyData.Slice(dataOffset, _config.HeadDimension).CopyTo(
-                blockStorage.AsSpan(storageOffset, _config.HeadDimension));
+            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+            // Check for copy-on-write
+            if (_blockManager.GetReferenceCount(blockId) > 1)
+            {
+                _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
+                table = _blockTableManager.GetBlockTable(sequenceId)
+                    ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
+                (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+            }
+
+            // Write key data for all heads
+            var blockStorage = _kvBlocks[blockId];
+            for (int head = 0; head < _config.NumHeads; head++)
+            {
+                int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
+                int dataOffset = head * _config.HeadDimension;
+                keyData.Slice(dataOffset, _config.HeadDimension).CopyTo(
+                    blockStorage.AsSpan(storageOffset, _config.HeadDimension));
+            }
         }
     }
 
@@ -271,29 +279,33 @@ internal class PagedKVCache<T> : IDisposable
     /// </summary>
     public void WriteValue(long sequenceId, int tokenPosition, int layer, ReadOnlySpan<T> valueData)
     {
-        var table = _blockTableManager.GetBlockTable(sequenceId);
-        if (table == null)
-            throw new InvalidOperationException($"No block table for sequence {sequenceId}");
-
-        var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-
-        // Check for copy-on-write
-        if (_blockManager.GetReferenceCount(blockId) > 1)
+        // See WriteKey: serialize shared block-table/COW access against the allocators.
+        lock (_lock)
         {
-            _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
-            table = _blockTableManager.GetBlockTable(sequenceId)
-                ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
-            (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-        }
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
 
-        // Write value data for all heads
-        var blockStorage = _kvBlocks[blockId];
-        for (int head = 0; head < _config.NumHeads; head++)
-        {
-            int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
-            int dataOffset = head * _config.HeadDimension;
-            valueData.Slice(dataOffset, _config.HeadDimension).CopyTo(
-                blockStorage.AsSpan(storageOffset, _config.HeadDimension));
+            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+            // Check for copy-on-write
+            if (_blockManager.GetReferenceCount(blockId) > 1)
+            {
+                _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
+                table = _blockTableManager.GetBlockTable(sequenceId)
+                    ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
+                (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+            }
+
+            // Write value data for all heads
+            var blockStorage = _kvBlocks[blockId];
+            for (int head = 0; head < _config.NumHeads; head++)
+            {
+                int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
+                int dataOffset = head * _config.HeadDimension;
+                valueData.Slice(dataOffset, _config.HeadDimension).CopyTo(
+                    blockStorage.AsSpan(storageOffset, _config.HeadDimension));
+            }
         }
     }
 
@@ -302,19 +314,24 @@ internal class PagedKVCache<T> : IDisposable
     /// </summary>
     public void ReadKey(long sequenceId, int tokenPosition, int layer, Span<T> keyData)
     {
-        var table = _blockTableManager.GetBlockTable(sequenceId);
-        if (table == null)
-            throw new InvalidOperationException($"No block table for sequence {sequenceId}");
-
-        var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-
-        var blockStorage = _kvBlocks[blockId];
-        for (int head = 0; head < _config.NumHeads; head++)
+        // See WriteKey: serialize shared block-table access against the allocators so a concurrent
+        // sequence's allocation/COW cannot tear the block-table lookup mid-read.
+        lock (_lock)
         {
-            int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
-            int dataOffset = head * _config.HeadDimension;
-            blockStorage.AsSpan(storageOffset, _config.HeadDimension).CopyTo(
-                keyData.Slice(dataOffset, _config.HeadDimension));
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+            var blockStorage = _kvBlocks[blockId];
+            for (int head = 0; head < _config.NumHeads; head++)
+            {
+                int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
+                int dataOffset = head * _config.HeadDimension;
+                blockStorage.AsSpan(storageOffset, _config.HeadDimension).CopyTo(
+                    keyData.Slice(dataOffset, _config.HeadDimension));
+            }
         }
     }
 
@@ -323,19 +340,23 @@ internal class PagedKVCache<T> : IDisposable
     /// </summary>
     public void ReadValue(long sequenceId, int tokenPosition, int layer, Span<T> valueData)
     {
-        var table = _blockTableManager.GetBlockTable(sequenceId);
-        if (table == null)
-            throw new InvalidOperationException($"No block table for sequence {sequenceId}");
-
-        var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-
-        var blockStorage = _kvBlocks[blockId];
-        for (int head = 0; head < _config.NumHeads; head++)
+        // See WriteKey: serialize shared block-table access against the allocators.
+        lock (_lock)
         {
-            int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
-            int dataOffset = head * _config.HeadDimension;
-            blockStorage.AsSpan(storageOffset, _config.HeadDimension).CopyTo(
-                valueData.Slice(dataOffset, _config.HeadDimension));
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+            var blockStorage = _kvBlocks[blockId];
+            for (int head = 0; head < _config.NumHeads; head++)
+            {
+                int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
+                int dataOffset = head * _config.HeadDimension;
+                blockStorage.AsSpan(storageOffset, _config.HeadDimension).CopyTo(
+                    valueData.Slice(dataOffset, _config.HeadDimension));
+            }
         }
     }
 
@@ -344,7 +365,46 @@ internal class PagedKVCache<T> : IDisposable
     /// </summary>
     public int[]? GetBlockTable(long sequenceId)
     {
-        return _blockTableManager.GetBlockTableArray(sequenceId);
+        // GetBlockTableArray returns a fresh copy; take the lock so the snapshot is consistent with a
+        // concurrent allocator mutating the same sequence's block table.
+        lock (_lock)
+        {
+            return _blockTableManager.GetBlockTableArray(sequenceId);
+        }
+    }
+
+    /// <summary>
+    /// Rolls a sequence's logical length back to <paramref name="newLength"/>, discarding the KV at
+    /// positions <c>newLength .. CurrentLength-1</c>. Used by speculative decoding to drop the KV of
+    /// rejected draft tokens so the corrected token can be (re)written at <paramref name="newLength"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only the logical length is lowered; the already-allocated blocks are retained (the sequence will
+    /// regrow into them and <see cref="WriteKey"/>/<see cref="WriteValue"/> overwrite the stale slots,
+    /// while the paged attention kernel only attends over <see cref="GetSequenceLength"/> positions, so
+    /// the discarded slots are never read). This keeps rollback O(1) with no block churn for the small
+    /// speculation windows typical of decoding.
+    /// </remarks>
+    /// <param name="sequenceId">The sequence to truncate.</param>
+    /// <param name="newLength">The new logical length (0 ≤ newLength ≤ current length).</param>
+    /// <returns>True if the sequence exists and was truncated; false if it is unknown.</returns>
+    public bool TruncateSequence(long sequenceId, int newLength)
+    {
+        if (newLength < 0)
+            throw new ArgumentOutOfRangeException(nameof(newLength), "New length must be non-negative.");
+
+        lock (_lock)
+        {
+            if (!_sequenceMetadata.TryGetValue(sequenceId, out var metadata))
+                return false;
+
+            if (newLength > metadata.CurrentLength)
+                throw new ArgumentOutOfRangeException(nameof(newLength),
+                    $"Cannot truncate sequence {sequenceId} to {newLength}; current length is {metadata.CurrentLength}. Truncation only shrinks.");
+
+            metadata.CurrentLength = newLength;
+            return true;
+        }
     }
 
     /// <summary>

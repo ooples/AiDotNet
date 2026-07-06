@@ -265,26 +265,13 @@ public class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var cu = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2],
-            contextDim: CROSS_ATTENTION_DIM);
-        cu.SetParameters(_unet.GetParameters());
-
-        var cv = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.13025);
-        cv.SetParameters(_vae.GetParameters());
-
-        return new PhotoMakerModel<T>(unet: cu, vae: cv, conditioner: _conditioner);
+        return new PhotoMakerModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     #endregion

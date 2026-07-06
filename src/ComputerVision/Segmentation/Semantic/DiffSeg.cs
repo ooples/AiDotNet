@@ -209,7 +209,7 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// to produce coherent semantic segments without any training labels.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }

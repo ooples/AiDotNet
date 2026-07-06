@@ -142,6 +142,17 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private Tensor<T> _outputBias;
 
     /// <summary>
+    /// fp16-resident copies of the Q/K/V weight matrices, used only when
+    /// <see cref="LayerBase{T}.LowPrecisionResident"/> is set (foundation-scale inference). Each is the
+    /// resident master once populated; the full-precision <see cref="_queryWeights"/> etc. are freed after
+    /// the first forward downcasts them. Upcast transiently per forward via
+    /// <see cref="LayerBase{T}.UpcastResidentWeight"/> (shared SIMD scratch). Null on the normal fp32 path.
+    /// </summary>
+    private Tensor<Half>? _queryWeightsHalf;
+    private Tensor<Half>? _keyWeightsHalf;
+    private Tensor<Half>? _valueWeightsHalf;
+
+    /// <summary>
     /// True once <see cref="EnsureInitialized"/> has allocated and populated the
     /// Q/K/V weight tensors and the output bias. The lazy-init path leaves these at
     /// [0,0] until the first Forward / GetParameters / SetParameters call demands
@@ -163,6 +174,56 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Reusable per-layer scratch for the scaled-dot-product-attention OUTPUT
+    /// ([batch, heads, seqQ, headDim]), used only on the #1672
+    /// <see cref="ForwardScratchGate"/> inference path. SDPA's output tensor is the
+    /// single largest per-call allocation in a DiT block; reusing this buffer across
+    /// denoising steps of the same shape removes it from the per-step allocation churn.
+    /// Reallocated whenever the required shape changes. Never aliased by any other live
+    /// tensor: the SDPA <c>*Into</c> kernel fully overwrites every element each call, and
+    /// the result is immediately consumed (permuted + copied) before the next SDPA call,
+    /// so reuse is safe across the multi-step denoise loop. NOT used while a gradient
+    /// tape is active (training needs the recorded allocating op).
+    /// </summary>
+    private Tensor<T>? _sdpaOutScratch;
+
+    /// <summary>
+    /// Cached horizontally-concatenated Q/K/V projection weight <c>[embedDim, 3*embedDim]</c>
+    /// = (qWeights | kWeights | vWeights) column-wise, used only on the #1672
+    /// <see cref="ForwardScratchGate"/> FusedQKV inference path. Built once (weights are constant in
+    /// inference) and reused across forwards; rebuilt only when one of the source weight tensor
+    /// identities changes (see <see cref="_fusedQkvSrcQ"/> etc.). One <c>[seq, D] @ [D, 3D]</c> GEMM
+    /// against this replaces the three separate <c>[seq, D] @ [D, D]</c> projection matmuls, and each
+    /// output row is <c>[q | k | v]</c> so column slicing recovers Q/K/V bit-identically. Null until
+    /// the first FusedQKV-gated forward (placeholder <c>[0,0]</c> until built; <see cref="_fusedQkvBuilt"/>
+    /// gates use). On the fp16-resident (foundation) path this is reduced back to <c>[0,0]</c> by
+    /// <see cref="LayerBase{T}.UpcastResidentWeight"/> and <see cref="_fusedQkvWeightsHalf"/> holds the
+    /// resident master instead.
+    /// </summary>
+    private Tensor<T> _fusedQkvWeights = new Tensor<T>([0, 0]);
+
+    /// <summary>True once <see cref="_fusedQkvWeights"/> / <see cref="_fusedQkvWeightsHalf"/> has been built.</summary>
+    private bool _fusedQkvBuilt;
+
+    /// <summary>
+    /// fp16-resident master for the fused QKV weight <c>[embedDim, 3*embedDim]</c>, populated only
+    /// when <see cref="LayerBase{T}.LowPrecisionResident"/> is set. Built from the same downcast the
+    /// per-projection path produces, then upcast transiently per forward via
+    /// <see cref="LayerBase{T}.UpcastResidentWeight"/> (shared SIMD scratch). Null on the normal fp32 path.
+    /// </summary>
+    private Tensor<Half>? _fusedQkvWeightsHalf;
+
+    /// <summary>
+    /// Identities of the source Q/K/V weight tensors captured when <see cref="_fusedQkvWeights"/> /
+    /// <see cref="_fusedQkvWeightsHalf"/> was last built. If any differs from the current weight tensor
+    /// the fused weight is stale (weights were replaced by SetParameters / a training step / Clone) and
+    /// is rebuilt. Null until first build.
+    /// </summary>
+    private Tensor<T>? _fusedQkvSrcQ;
+    private Tensor<T>? _fusedQkvSrcK;
+    private Tensor<T>? _fusedQkvSrcV;
 
     /// <summary>
     /// Stores the output tensor from the most recent forward pass for use in backpropagation.
@@ -616,10 +677,60 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         var input2D = Engine.Reshape(input3D, new[] { batchSize * sequenceLength, _embeddingDimension });
 
         // Compute Projections: [B*S, E] @ [E, E] -> [B*S, E]
-        // Using Engine.TensorMatMul for GPU acceleration
-        var Q_flat = Engine.TensorMatMul(input2D, _queryWeights);
-        var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
-        var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
+        // Using Engine.TensorMatMul for GPU acceleration.
+        // fp16-resident (foundation inference): upcast each weight from its fp16 master into a shared
+        // reused scratch immediately before its matmul. Each matmul fully consumes the upcast weight
+        // before the next call overwrites the (same-shape) scratch, so one buffer serves Q, K and V.
+        Tensor<T> Q_flat, K_flat, V_flat;
+
+        // #1672 FusedQKV fast path: when the gate is ON and we are NOT recording a gradient tape
+        // (inference), do ONE [B*S, E] @ [E, 3E] GEMM against a cached horizontally-concatenated
+        // weight, then slice the [B*S, 3E] result into Q/K/V — one engine dispatch (+ two fewer
+        // weight matmuls) instead of three. The fused weight column layout is [qW | kW | vW], so
+        // output columns [0,E)/[E,2E)/[2E,3E) reproduce the three separate GEMMs bit-identically.
+        // The custom backward never runs without a tape, so the unfused weights are not needed here.
+        bool qkvTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (ForwardScratchGate.FusedQkv && !qkvTapeActive)
+        {
+            int threeE = 3 * _embeddingDimension;
+            Tensor<T> fusedW = GetOrBuildFusedQkvWeights();
+            int rows = batchSize * sequenceLength;
+
+            // ONE GEMM via the SAME Engine.TensorMatMul op the unfused path uses, so the fused
+            // [rows, 3E] result is bit-identical to the three [rows, E] results column-for-column
+            // (same GEMM tier / accumulation order; the wider N does not change per-element math).
+            Tensor<T> qkvFlat = Engine.TensorMatMul(input2D, fusedW);
+
+            // Slice the [rows, 3E] fused output into three contiguous [rows, E] tensors. Each fused
+            // row is [q(E) | k(E) | v(E)] (row-major), so a per-row block copy reproduces the three
+            // separate projection outputs exactly. Still one GEMM dispatch; the copy is a cheap memcpy.
+            Q_flat = new Tensor<T>([rows, _embeddingDimension]);
+            K_flat = new Tensor<T>([rows, _embeddingDimension]);
+            V_flat = new Tensor<T>([rows, _embeddingDimension]);
+            var src = qkvFlat.AsSpan();
+            var qDst = Q_flat.AsWritableSpan();
+            var kDst = K_flat.AsWritableSpan();
+            var vDst = V_flat.AsWritableSpan();
+            int e = _embeddingDimension;
+            for (int r = 0; r < rows; r++)
+            {
+                int srcRow = r * threeE;
+                int dstRow = r * e;
+                src.Slice(srcRow, e).CopyTo(qDst.Slice(dstRow, e));
+                src.Slice(srcRow + e, e).CopyTo(kDst.Slice(dstRow, e));
+                src.Slice(srcRow + 2 * e, e).CopyTo(vDst.Slice(dstRow, e));
+            }
+        }
+        else
+        {
+            Tensor<T> qWeights = LowPrecisionResident ? UpcastResidentWeight(ref _queryWeights, ref _queryWeightsHalf) : _queryWeights;
+            Q_flat = Engine.TensorMatMul(input2D, qWeights);
+            Tensor<T> kWeights = LowPrecisionResident ? UpcastResidentWeight(ref _keyWeights, ref _keyWeightsHalf) : _keyWeights;
+            K_flat = Engine.TensorMatMul(input2D, kWeights);
+            Tensor<T> vWeights = LowPrecisionResident ? UpcastResidentWeight(ref _valueWeights, ref _valueWeightsHalf) : _valueWeights;
+            V_flat = Engine.TensorMatMul(input2D, vWeights);
+        }
 
         // Reshape to [Batch, Seq, HeadCount, HeadDim]
         var queries = Engine.Reshape(Q_flat, new[] { batchSize, sequenceLength, _headCount, _headDimension });
@@ -636,14 +747,38 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // ScaledDotProductAttention computes: softmax(Q @ K^T / scale) @ V
         // Input shapes: [batch, heads, seq, head_dim]
         // Output shape: [batch, heads, seq, head_dim]
-        var output4D = Engine.ScaledDotProductAttention(
-            Q, K, V,
-            mask: null,
-            scale: 1.0 / Math.Sqrt(_headDimension),
-            out var attentionWeights4D);
+        Tensor<T> output4D;
+        // #1672 destination-buffer fast path: when the scratch gate is ON and we are NOT
+        // recording a gradient tape (inference), compute SDPA straight into a reused
+        // per-layer buffer instead of allocating the scores/weights/output tensors. The
+        // attention-weight matrix is only needed by this layer's custom backward, which
+        // never runs without a tape — so discarding it here is safe. Bit-identical math.
+        bool sdpaTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (ForwardScratchGate.Sdpa && !sdpaTapeActive)
+        {
+            int sq = Q.Shape[2];
+            var needShape = new[] { batchSize, _headCount, sq, _headDimension };
+            if (_sdpaOutScratch == null || !ShapeMatches(_sdpaOutScratch._shape, needShape))
+                _sdpaOutScratch = new Tensor<T>(needShape);
+            Engine.ScaledDotProductAttentionInto(
+                _sdpaOutScratch, Q, K, V,
+                scale: 1.0 / Math.Sqrt(_headDimension));
+            output4D = _sdpaOutScratch;
+            // No attention-weight cache: inference-only path, no backward.
+            _lastAttentionScores = null;
+        }
+        else
+        {
+            output4D = Engine.ScaledDotProductAttention(
+                Q, K, V,
+                mask: null,
+                scale: 1.0 / Math.Sqrt(_headDimension),
+                out var attentionWeights4D);
 
-        // Cache attention weights for backward pass
-        _lastAttentionScores = attentionWeights4D;
+            // Cache attention weights for backward pass
+            _lastAttentionScores = attentionWeights4D;
+        }
 
         // 3. Reshape and Project Output
         var outputTransposed = Engine.TensorPermute(output4D, new[] { 0, 2, 1, 3 });
@@ -966,10 +1101,19 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     {
         // Force lazy tensors to materialize before copying their data.
         EnsureInitialized();
-        // Calculate total number of parameters using tensor shape
-        int qRows = _queryWeights.Shape[0], qCols = _queryWeights.Shape[1];
-        int kRows = _keyWeights.Shape[0], kCols = _keyWeights.Shape[1];
-        int vRows = _valueWeights.Shape[0], vCols = _valueWeights.Shape[1];
+
+        // fp16-resident (#1764): on the separate-projection resident path the fp32 _queryWeights/_keyWeights/
+        // _valueWeights are freed to [0,0] and the fp16 half masters are authoritative. Reading _queryWeights
+        // directly would return a zero-length (or stale) vector, so clone/serialize silently drops the
+        // attention weights. Read the effective full-precision weights (half master upcast when resident,
+        // fp32 tensor otherwise — the latter also covers the fused-QKV path, where the projections stay fp32).
+        Tensor<T> qEff = _queryWeightsHalf is not null ? _queryWeightsHalf.Cast<T>() : _queryWeights;
+        Tensor<T> kEff = _keyWeightsHalf is not null ? _keyWeightsHalf.Cast<T>() : _keyWeights;
+        Tensor<T> vEff = _valueWeightsHalf is not null ? _valueWeightsHalf.Cast<T>() : _valueWeights;
+
+        int qRows = qEff.Shape[0], qCols = qEff.Shape[1];
+        int kRows = kEff.Shape[0], kCols = kEff.Shape[1];
+        int vRows = vEff.Shape[0], vCols = vEff.Shape[1];
         int biasLen = _outputBias.Shape[0];
 
         int totalParams = qRows * qCols + kRows * kCols + vRows * vCols + biasLen;
@@ -982,7 +1126,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         {
             for (int j = 0; j < qCols; j++)
             {
-                parameters[index++] = _queryWeights[i, j];
+                parameters[index++] = qEff[i, j];
             }
         }
 
@@ -991,7 +1135,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         {
             for (int j = 0; j < kCols; j++)
             {
-                parameters[index++] = _keyWeights[i, j];
+                parameters[index++] = kEff[i, j];
             }
         }
 
@@ -1000,7 +1144,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         {
             for (int j = 0; j < vCols; j++)
             {
-                parameters[index++] = _valueWeights[i, j];
+                parameters[index++] = vEff[i, j];
             }
         }
 
@@ -1047,53 +1191,47 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // Force lazy tensors to materialize so the shape reads below report the
         // real dimensions rather than 0.
         EnsureInitialized();
-        // Calculate total number of parameters using tensor shape
-        int qRows = _queryWeights.Shape[0], qCols = _queryWeights.Shape[1];
-        int kRows = _keyWeights.Shape[0], kCols = _keyWeights.Shape[1];
-        int vRows = _valueWeights.Shape[0], vCols = _valueWeights.Shape[1];
+
+        // fp16-resident (#1764): on the separate-projection resident path the fp32 _queryWeights/_keyWeights/
+        // _valueWeights are freed to [0,0] and the fp16 half masters are authoritative — writing into the
+        // fp32 tensors would be silently discarded on the next forward (which re-upcasts the STALE half),
+        // so a clone/deserialize keeps the resident master's old (e.g. random probe-init) values. Downcast
+        // straight into the half master when resident; write the fp32 tensor otherwise (which also covers
+        // the fused-QKV path, where the projections stay fp32). Dimensions come from whichever is live.
+        bool qResident = _queryWeightsHalf is not null;
+        bool kResident = _keyWeightsHalf is not null;
+        bool vResident = _valueWeightsHalf is not null;
+
+        int qRows, qCols, kRows, kCols, vRows, vCols;
+        (qRows, qCols) = qResident ? (_queryWeightsHalf!.Shape[0], _queryWeightsHalf!.Shape[1]) : (_queryWeights.Shape[0], _queryWeights.Shape[1]);
+        (kRows, kCols) = kResident ? (_keyWeightsHalf!.Shape[0], _keyWeightsHalf!.Shape[1]) : (_keyWeights.Shape[0], _keyWeights.Shape[1]);
+        (vRows, vCols) = vResident ? (_valueWeightsHalf!.Shape[0], _valueWeightsHalf!.Shape[1]) : (_valueWeights.Shape[0], _valueWeights.Shape[1]);
         int biasLen = _outputBias.Shape[0];
 
-        int totalParams = qRows * qCols + kRows * kCols + vRows * vCols + biasLen;
+        int qLen = qRows * qCols, kLen = kRows * kCols, vLen = vRows * vCols;
+        int totalParams = qLen + kLen + vLen + biasLen;
 
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        int index = 0;
+        var span = parameters.AsSpan();
+        if (qResident) NumOps.ToHalfSpan(span.Slice(0, qLen), _queryWeightsHalf!.AsWritableSpan());
+        else span.Slice(0, qLen).CopyTo(_queryWeights.Data.Span);
 
-        // Set query weights
-        for (int i = 0; i < qRows; i++)
-        {
-            for (int j = 0; j < qCols; j++)
-            {
-                _queryWeights[i, j] = parameters[index++];
-            }
-        }
+        if (kResident) NumOps.ToHalfSpan(span.Slice(qLen, kLen), _keyWeightsHalf!.AsWritableSpan());
+        else span.Slice(qLen, kLen).CopyTo(_keyWeights.Data.Span);
 
-        // Set key weights
-        for (int i = 0; i < kRows; i++)
-        {
-            for (int j = 0; j < kCols; j++)
-            {
-                _keyWeights[i, j] = parameters[index++];
-            }
-        }
+        if (vResident) NumOps.ToHalfSpan(span.Slice(qLen + kLen, vLen), _valueWeightsHalf!.AsWritableSpan());
+        else span.Slice(qLen + kLen, vLen).CopyTo(_valueWeights.Data.Span);
 
-        // Set value weights
-        for (int i = 0; i < vRows; i++)
-        {
-            for (int j = 0; j < vCols; j++)
-            {
-                _valueWeights[i, j] = parameters[index++];
-            }
-        }
+        span.Slice(qLen + kLen + vLen, biasLen).CopyTo(_outputBias.Data.Span);
 
-        // Set output bias
-        for (int i = 0; i < biasLen; i++)
-        {
-            _outputBias[i] = parameters[index++];
-        }
+        // The cached fused-QKV weight was built from the OLD projection weights; force a rebuild so the
+        // fused path (when enabled) reflects the new values instead of a stale concatenation.
+        _fusedQkvBuilt = false;
+        _fusedQkvWeightsHalf = null;
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_queryWeights);
@@ -1161,6 +1299,97 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _gpuK = null;
         _gpuV = null;
         _gpuAttentionWeights = null;
+
+        // #1672: drop the reusable SDPA-output scratch so a fresh forward reallocates it.
+        // The cached fused QKV weight (_fusedQkvWeights / _fusedQkvWeightsHalf) is keyed by source
+        // weight identity and rebuilt lazily, so it does not need clearing here.
+        _sdpaOutScratch = null;
+    }
+
+    /// <summary>
+    /// Returns the cached fused QKV projection weight, building it on first use (or rebuilding it if
+    /// any source weight tensor identity has changed since the last build). The fused weight is the
+    /// horizontal (column-wise) concatenation <c>[qW | kW | vW]</c> of the three <c>[E, E]</c>
+    /// projection weights into one <c>[E, 3E]</c> matrix, so a single
+    /// <c>input[rows, E] @ fused[E, 3E]</c> GEMM produces <c>[rows, 3E]</c> rows of <c>[q | k | v]</c>.
+    /// </summary>
+    /// <remarks>
+    /// On the fp16-resident (foundation-scale) path the fp32 fused matrix is downcast into a resident
+    /// <c>[E, 3E]</c> half master and freed via <see cref="LayerBase{T}.UpcastResidentWeight"/>; each
+    /// forward then transiently upcasts that master through the shared SIMD scratch. The downcast is
+    /// element-wise, so the concatenated-then-downcast weight equals the per-projection
+    /// downcast-then-concatenated weight — the fused GEMM stays bit-identical to the three separate ones.
+    /// </remarks>
+    private Tensor<T> GetOrBuildFusedQkvWeights()
+    {
+        // Rebuild when stale: a SetParameters call, an in-place training step, or a Clone replaces the
+        // backing weight tensors, changing their identity. On the fp16-resident path the fp32 weights
+        // are freed to [0,0] after the first build, so identity is pinned by the half master instead
+        // (which only this method ever creates) — the captured-identity guard below still holds.
+        bool needRebuild =
+            !_fusedQkvBuilt
+            || !ReferenceEquals(_fusedQkvSrcQ, _queryWeights)
+            || !ReferenceEquals(_fusedQkvSrcK, _keyWeights)
+            || !ReferenceEquals(_fusedQkvSrcV, _valueWeights);
+
+        if (!needRebuild)
+        {
+            return LowPrecisionResident
+                ? UpcastResidentWeight(ref _fusedQkvWeights, ref _fusedQkvWeightsHalf)
+                : _fusedQkvWeights;
+        }
+
+        int e = _embeddingDimension;
+        int threeE = 3 * e;
+
+        // Build the fp32 fused [E, 3E] = [qW | kW | vW] column-wise. Each weight is [E, E] row-major;
+        // fused row k holds qW[k,:] then kW[k,:] then vW[k,:].
+        var fused = new Tensor<T>([e, threeE]);
+        var fusedSpan = fused.AsWritableSpan();
+        var qSpan = _queryWeights.AsSpan();
+        var kSpan = _keyWeights.AsSpan();
+        var vSpan = _valueWeights.AsSpan();
+        for (int k = 0; k < e; k++)
+        {
+            int dstRow = k * threeE;
+            int srcRow = k * e;
+            qSpan.Slice(srcRow, e).CopyTo(fusedSpan.Slice(dstRow, e));
+            kSpan.Slice(srcRow, e).CopyTo(fusedSpan.Slice(dstRow + e, e));
+            vSpan.Slice(srcRow, e).CopyTo(fusedSpan.Slice(dstRow + 2 * e, e));
+        }
+
+        // Capture source identities BEFORE UpcastResidentWeight frees the fp32 weights (resident path).
+        _fusedQkvSrcQ = _queryWeights;
+        _fusedQkvSrcK = _keyWeights;
+        _fusedQkvSrcV = _valueWeights;
+
+        _fusedQkvWeights = fused;
+        _fusedQkvWeightsHalf = null;
+        _fusedQkvBuilt = true;
+
+        if (LowPrecisionResident)
+        {
+            // Downcast the fused fp32 matrix into the resident half master and free the fp32 fused
+            // copy, matching the per-projection fp16 handling; returns the transient upcast for this
+            // matmul. (The unfused _queryWeights/_keyWeights/_valueWeights stay resident here rather
+            // than being freed, so SetParameters keeps working; their identities pin the rebuild guard.)
+            return UpcastResidentWeight(ref _fusedQkvWeights, ref _fusedQkvWeightsHalf);
+        }
+
+        return fused;
+    }
+
+    /// <summary>
+    /// Returns true when two shape arrays are element-wise equal. Used by the #1672
+    /// scratch-reuse fast path to decide whether the cached SDPA-output buffer still
+    /// matches the current call's shape.
+    /// </summary>
+    private static bool ShapeMatches(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+            if (a[i] != b[i]) return false;
+        return true;
     }
 
     /// <summary>

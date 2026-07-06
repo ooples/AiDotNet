@@ -362,139 +362,156 @@ public class TabularDataTransformer<T>
             values[i] = NumOps.ToDouble(data[i, colIndex]);
         }
 
-        // Fit Gaussian mixture using simplified EM algorithm
+        // Variational Bayesian Gaussian Mixture (Bishop PRML §10.2) — this is the
+        // "V" in VGM. The CTGAN paper (Xu et al. 2019 §4.2) and the official
+        // implementation fit a *Bayesian* GMM whose Dirichlet weight-concentration
+        // prior drives unused components' weights toward zero, so the number of
+        // active modes is discovered from the data rather than fixed. Plain EM
+        // (the previous code) keeps all K components alive and relies on a post-hoc
+        // 0.01 threshold, which mis-estimates mode structure on real multimodal
+        // columns. Here we run mean-field VB with a symmetric Dirichlet prior on the
+        // weights and a Normal-Gamma conjugate prior on each component's
+        // (mean, precision), then keep the components whose posterior weight is
+        // non-negligible.
         int k = Math.Min(_vgmModes, Math.Max(1, n / 5));
-        var means = new double[k];
-        var stds = new double[k];
-        var weights = new double[k];
 
-        // Initialize: spread modes evenly across the data range
         Array.Sort(values);
         double valMin = values[0];
         double valMax = values[n - 1];
         double range = valMax - valMin;
         if (range < 1e-10) range = 1.0;
 
+        double dataMean = 0;
+        for (int i = 0; i < n; i++) dataMean += values[i];
+        dataMean /= n;
+        double dataVar = 0;
+        for (int i = 0; i < n; i++) { double d = values[i] - dataMean; dataVar += d * d; }
+        dataVar = Math.Max(dataVar / Math.Max(1, n), 1e-6);
+
+        // Prior hyperparameters. A small Dirichlet concentration (alpha0 << 1) gives
+        // the sparse, automatic-pruning behaviour of a Dirichlet-process mixture —
+        // the regime the official CTGAN BayesianGaussianMixture runs in.
+        double alpha0 = 1e-3;                 // symmetric Dirichlet weight prior
+        double beta0 = 1.0;                   // mean prior strength
+        double m0 = dataMean;                 // mean prior location
+        double a0 = 1.0;                      // Gamma (precision) prior shape
+        double b0 = dataVar;                  // Gamma (precision) prior rate
+
+        // Posterior parameters, initialized by spreading component means across the
+        // data range (k-means-style seeding) with broad precision.
+        var alpha = new double[k];
+        var betap = new double[k];
+        var mp = new double[k];
+        var ap = new double[k];
+        var bp = new double[k];
         for (int m = 0; m < k; m++)
         {
-            means[m] = valMin + range * (m + 0.5) / k;
-            stds[m] = range / k;
-            weights[m] = 1.0 / k;
+            alpha[m] = alpha0 + (double)n / k;
+            betap[m] = beta0 + (double)n / k;
+            mp[m] = valMin + range * (m + 0.5) / k;
+            ap[m] = a0 + 0.5 * n / k;
+            bp[m] = b0 + 0.5 * dataVar * n / k;
         }
 
-        // EM iterations
-        int maxIter = 25;
-        var responsibilities = new double[n, k];
-
+        var r = new double[n, k];
+        const int maxIter = 100;
         for (int iter = 0; iter < maxIter; iter++)
         {
-            // E-step: compute responsibilities
+            // --- Variational E-step: responsibilities from expected log-likelihoods.
+            double alphaSum = 0;
+            for (int m = 0; m < k; m++) alphaSum += alpha[m];
+            double psiAlphaSum = Digamma(alphaSum);
+
             for (int i = 0; i < n; i++)
             {
-                double totalResp = 0;
+                double maxLog = double.NegativeInfinity;
                 for (int m = 0; m < k; m++)
                 {
-                    double diff = values[i] - means[m];
-                    double s = Math.Max(stds[m], 1e-10);
-                    double logProb = -0.5 * (diff * diff) / (s * s) - Math.Log(s) + Math.Log(Math.Max(weights[m], 1e-10));
-                    responsibilities[i, m] = Math.Exp(logProb);
-                    totalResp += responsibilities[i, m];
+                    double eLnPi = Digamma(alpha[m]) - psiAlphaSum;           // E[ln π_k]
+                    double eLnTau = Digamma(ap[m]) - Math.Log(bp[m]);          // E[ln τ_k]
+                    double eTau = ap[m] / bp[m];                              // E[τ_k]
+                    double diff = values[i] - mp[m];
+                    // E[τ_k (x-μ_k)^2] = 1/β_k + E[τ_k](x-m_k)^2
+                    double eTauSq = 1.0 / betap[m] + eTau * diff * diff;
+                    double logRho = eLnPi + 0.5 * eLnTau - 0.5 * eTauSq - 0.5 * Math.Log(2 * Math.PI);
+                    r[i, m] = logRho;
+                    if (logRho > maxLog) maxLog = logRho;
                 }
-
-                if (totalResp > 1e-10)
-                {
-                    for (int m = 0; m < k; m++)
-                    {
-                        responsibilities[i, m] /= totalResp;
-                    }
-                }
-                else
-                {
-                    // Assign to nearest mode
-                    int nearest = 0;
-                    double minDist = double.MaxValue;
-                    for (int m = 0; m < k; m++)
-                    {
-                        double dist = Math.Abs(values[i] - means[m]);
-                        if (dist < minDist)
-                        {
-                            minDist = dist;
-                            nearest = m;
-                        }
-                    }
-                    responsibilities[i, nearest] = 1.0;
-                }
+                // log-sum-exp normalize
+                double sum = 0;
+                for (int m = 0; m < k; m++) { r[i, m] = Math.Exp(r[i, m] - maxLog); sum += r[i, m]; }
+                if (sum <= 1e-300) { for (int m = 0; m < k; m++) r[i, m] = 1.0 / k; }
+                else { for (int m = 0; m < k; m++) r[i, m] /= sum; }
             }
 
-            // M-step: update parameters
+            // --- Variational M-step: update posteriors from sufficient statistics.
             for (int m = 0; m < k; m++)
             {
-                double sumResp = 0;
-                double sumVal = 0;
+                double Nk = 0, xbar = 0;
+                for (int i = 0; i < n; i++) { Nk += r[i, m]; xbar += r[i, m] * values[i]; }
+                if (Nk > 1e-12) xbar /= Nk;
+                double sk = 0;
+                for (int i = 0; i < n; i++) { double d = values[i] - xbar; sk += r[i, m] * d * d; }
+                if (Nk > 1e-12) sk /= Nk;
 
-                for (int i = 0; i < n; i++)
-                {
-                    sumResp += responsibilities[i, m];
-                    sumVal += responsibilities[i, m] * values[i];
-                }
-
-                if (sumResp > 1e-10)
-                {
-                    means[m] = sumVal / sumResp;
-
-                    double sumSqDiff = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        double diff = values[i] - means[m];
-                        sumSqDiff += responsibilities[i, m] * diff * diff;
-                    }
-
-                    stds[m] = Math.Sqrt(sumSqDiff / sumResp);
-                    if (stds[m] < 1e-10) stds[m] = 1e-10;
-                    weights[m] = sumResp / n;
-                }
-                else
-                {
-                    weights[m] = 0;
-                }
-            }
-
-            // Normalize weights
-            double totalWeight = 0;
-            for (int m = 0; m < k; m++) totalWeight += weights[m];
-            if (totalWeight > 1e-10)
-            {
-                for (int m = 0; m < k; m++) weights[m] /= totalWeight;
+                alpha[m] = alpha0 + Nk;
+                betap[m] = beta0 + Nk;
+                mp[m] = (beta0 * m0 + Nk * xbar) / betap[m];
+                ap[m] = a0 + 0.5 * Nk;
+                bp[m] = b0 + 0.5 * (Nk * sk + beta0 * Nk * (xbar - m0) * (xbar - m0) / betap[m]);
+                if (bp[m] < 1e-10) bp[m] = 1e-10;
             }
         }
 
-        // Keep only active modes (weight > threshold)
-        double threshold = 0.01;
-        var activeModes = new List<int>();
+        // Posterior point estimates. Component weight = E[π_k] = α_k / Σα; mode is
+        // kept when its effective count clears a small floor (the Dirichlet prior has
+        // already shrunk genuinely-empty components to ≈ alpha0/Σα).
+        double totalAlpha = 0;
+        for (int m = 0; m < k; m++) totalAlpha += alpha[m];
+
+        var activeMeans = new List<double>();
+        var activeStds = new List<double>();
+        var activeWeights = new List<double>();
         for (int m = 0; m < k; m++)
         {
-            if (weights[m] > threshold) activeModes.Add(m);
+            double w = alpha[m] / totalAlpha;
+            double effectiveCount = alpha[m] - alpha0;     // ≈ N_k assigned to this mode
+            if (effectiveCount < 1.0 || w < 1e-3) continue; // pruned by the variational prior
+            activeMeans.Add(mp[m]);
+            activeStds.Add(Math.Sqrt(Math.Max(bp[m] / ap[m], 1e-10))); // E[1/τ] ≈ b_k/a_k
+            activeWeights.Add(w);
         }
 
-        if (activeModes.Count == 0)
+        if (activeWeights.Count == 0)
         {
-            activeModes.Add(0); // Keep at least one mode
+            // Degenerate column (e.g. constant): one mode at the data mean.
+            activeMeans.Add(dataMean);
+            activeStds.Add(Math.Sqrt(dataVar));
+            activeWeights.Add(1.0);
         }
 
-        // Build compact arrays of active modes
-        var activeMeans = new double[activeModes.Count];
-        var activeStds = new double[activeModes.Count];
-        var activeWeights = new double[activeModes.Count];
+        // Renormalize the kept weights so they sum to 1.
+        double wsum = 0;
+        for (int i = 0; i < activeWeights.Count; i++) wsum += activeWeights[i];
+        for (int i = 0; i < activeWeights.Count; i++) activeWeights[i] /= wsum;
 
-        for (int i = 0; i < activeModes.Count; i++)
-        {
-            int m = activeModes[i];
-            activeMeans[i] = means[m];
-            activeStds[i] = stds[m];
-            activeWeights[i] = weights[m];
-        }
+        return new VGMColumnInfo(activeMeans.ToArray(), activeStds.ToArray(), activeWeights.ToArray());
+    }
 
-        return new VGMColumnInfo(activeMeans, activeStds, activeWeights);
+    /// <summary>
+    /// Digamma function ψ(x) = d/dx ln Γ(x), used by the variational GMM E-step.
+    /// Uses the asymptotic series with a recurrence to push the argument above 6.
+    /// </summary>
+    private static double Digamma(double x)
+    {
+        double result = 0;
+        while (x < 6.0) { result -= 1.0 / x; x += 1.0; }
+        double inv = 1.0 / x;
+        double inv2 = inv * inv;
+        // ln(x) - 1/(2x) - series in 1/x^2 (Bernoulli)
+        result += Math.Log(x) - 0.5 * inv
+                  - inv2 * (1.0 / 12.0 - inv2 * (1.0 / 120.0 - inv2 * (1.0 / 252.0)));
+        return result;
     }
 
     private static CategoricalColumnInfo FitCategoricalColumn(ColumnMetadata meta)
@@ -518,35 +535,59 @@ public class TabularDataTransformer<T>
         var info = _continuousColumnInfos[transform.Index];
         double value = NumOps.ToDouble(data[row, col]);
 
-        // Find the most likely mode for this value
-        int bestMode = 0;
-        double bestProb = double.MinValue;
+        // Mode assignment by SAMPLING from the posterior responsibilities, per
+        // Xu et al. 2019 §4.2 and the official CTGAN DataTransformer
+        // (np.random.choice with p = predict_proba). Argmax (the previous code)
+        // collapses every value onto its single most-likely mode, erasing the
+        // multimodal structure the one-hot β is meant to expose to the generator.
+        int selMode = SampleMode(info, value);
 
-        for (int m = 0; m < info.NumActiveModes; m++)
-        {
-            double diff = value - info.Means[m];
-            double s = info.Stds[m];
-            double logProb = -0.5 * (diff * diff) / (s * s) - Math.Log(s) + Math.Log(info.Weights[m]);
-            if (logProb > bestProb)
-            {
-                bestProb = logProb;
-                bestMode = m;
-            }
-        }
-
-        // Normalize value relative to selected mode: (value - mean) / (4 * std)
-        // Clipped to [-1, 1] as in CTGAN paper
-        double normalized = (value - info.Means[bestMode]) / (4.0 * info.Stds[bestMode]);
+        // Normalize value relative to selected mode: (value - mean) / (4 * std),
+        // clipped to (-1, 1) as in the paper (4σ covers ~99.99% of a Gaussian).
+        double normalized = (value - info.Means[selMode]) / (4.0 * info.Stds[selMode]);
         normalized = Math.Max(-0.99, Math.Min(0.99, normalized));
 
         int offset = transform.StartOffset;
         result[row, offset] = NumOps.FromDouble(normalized);
 
-        // One-hot mode indicator
+        // One-hot mode indicator (β).
         for (int m = 0; m < info.NumActiveModes; m++)
         {
-            result[row, offset + 1 + m] = m == bestMode ? NumOps.One : NumOps.Zero;
+            result[row, offset + 1 + m] = m == selMode ? NumOps.One : NumOps.Zero;
         }
+    }
+
+    /// <summary>
+    /// Samples a mode index for <paramref name="value"/> proportional to the
+    /// component responsibilities ρ_m ∝ w_m · N(value; μ_m, σ_m), matching the
+    /// paper's probabilistic mode assignment. Uses the transformer's seeded RNG.
+    /// </summary>
+    private int SampleMode(VGMColumnInfo info, double value)
+    {
+        int k = info.NumActiveModes;
+        if (k == 1) return 0;
+
+        Span<double> probs = k <= 64 ? stackalloc double[k] : new double[k];
+        double maxLog = double.NegativeInfinity;
+        for (int m = 0; m < k; m++)
+        {
+            double diff = value - info.Means[m];
+            double s = Math.Max(info.Stds[m], 1e-10);
+            double logp = -0.5 * (diff * diff) / (s * s) - Math.Log(s) + Math.Log(Math.Max(info.Weights[m], 1e-12));
+            probs[m] = logp;
+            if (logp > maxLog) maxLog = logp;
+        }
+        double sum = 0;
+        for (int m = 0; m < k; m++) { probs[m] = Math.Exp(probs[m] - maxLog); sum += probs[m]; }
+
+        double u = _random.NextDouble() * sum;
+        double acc = 0;
+        for (int m = 0; m < k; m++)
+        {
+            acc += probs[m];
+            if (u <= acc) return m;
+        }
+        return k - 1;
     }
 
     private void TransformCategoricalValue(Matrix<T> data, int row, int col,

@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class EchoStateNetworkTests : NeuralNetworkModelTestBase
+public class EchoStateNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
@@ -22,6 +22,6 @@ public class EchoStateNetworkTests : NeuralNetworkModelTestBase
     // producing huge weights).
     protected override double OptimizerStepL2LowerBound => 0.0;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new EchoStateNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new EchoStateNetwork<float>();
 }

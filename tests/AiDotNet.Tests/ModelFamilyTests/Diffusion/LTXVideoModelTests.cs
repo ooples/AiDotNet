@@ -4,11 +4,16 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class LTXVideoModelTests : DiffusionModelTestBase
+// HeavyTimeout: foundation-scale diffusion (video / paper-scale). Correct, but a single forward x
+// N-step Generate (and/or the full-scale Training peak: weights + grads + Adam + activations) exceeds
+// the 120 s / 16 GB PR-gate envelope, so it runs in the HeavyTimeout nightly lane (#1706/#1305/#1622).
+[Xunit.Trait("Category", "HeavyTimeout")]
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
+public class LTXVideoModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 128, 32, 32];
     protected override int[] OutputShape => [1, 128, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new LTXVideoModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new LTXVideoModel<float>(seed: 42);
 }

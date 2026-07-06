@@ -477,6 +477,43 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     }
 
     /// <summary>
+    /// Reconciles a Predict-time feature matrix with the [treatment | covariates] layout that
+    /// <see cref="Train(Matrix{T}, Vector{T})"/> consumes. Models fit through Train drop column 0
+    /// (the treatment indicator) before learning, so a later Predict handed the same matrix must
+    /// drop it too — otherwise the covariate count no longer matches the fitted parameters (the
+    /// #1713 InverseProbabilityWeighting coefficient-overrun). If <paramref name="input"/> already
+    /// has <see cref="NumFeatures"/> columns it is returned unchanged, so the covariate-only API
+    /// surface (e.g. EstimatePropensityScores called directly) keeps working.
+    /// </summary>
+    protected Matrix<T> ExtractCovariates(Matrix<T> input)
+    {
+        if (input.Columns == NumFeatures)
+        {
+            return input;
+        }
+
+        if (input.Columns == NumFeatures + 1)
+        {
+            int n = input.Rows;
+            var covariates = new Matrix<T>(n, NumFeatures);
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    covariates[i, j] = input[i, j + 1];
+                }
+            }
+            return covariates;
+        }
+
+        throw new ArgumentException(
+            $"Predict input has {input.Columns} columns but the model was fit with {NumFeatures} " +
+            $"covariates; expected {NumFeatures} (covariates only) or {NumFeatures + 1} " +
+            $"([treatment | covariates], matching Train).",
+            nameof(input));
+    }
+
+    /// <summary>
     /// Standard prediction - returns predicted outcomes.
     /// </summary>
     public abstract Vector<T> Predict(Matrix<T> input);
@@ -709,8 +746,12 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
         var estimates = new List<double>();
         int n = x.Rows;
 
-        for (int b = 0; b < numBootstraps; b++)
+        int attempts = 0;
+        int maxAttempts = numBootstraps * 5;
+        while (estimates.Count < numBootstraps && attempts < maxAttempts)
         {
+            attempts++;
+
             // Bootstrap sample
             var indices = new int[n];
             for (int i = 0; i < n; i++)
@@ -733,14 +774,35 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
                 outcomeBoot[i] = outcome[indices[i]];
             }
 
-            T estimate = estimator(xBoot, treatmentBoot, outcomeBoot);
-            estimates.Add(NumOps.ToDouble(estimate));
+            try
+            {
+                T estimate = estimator(xBoot, treatmentBoot, outcomeBoot);
+                estimates.Add(NumOps.ToDouble(estimate));
+            }
+            catch (InvalidOperationException)
+            {
+                // Some bootstrap resamples are not estimable, e.g. propensity
+                // matching can draw a sample with no treated-control overlap
+                // inside the configured caliper. Discard the invalid resample;
+                // the primary estimator already validates the original data.
+            }
+            catch (ArgumentException)
+            {
+                // Degenerate resamples can also violate estimator preconditions
+                // such as requiring both treatment groups. They do not
+                // invalidate the original estimate.
+            }
+        }
+
+        if (estimates.Count < 2)
+        {
+            return NumOps.Zero;
         }
 
         // Calculate standard deviation of estimates
         double mean = estimates.Average();
         double sumSqDiff = estimates.Sum(e => (e - mean) * (e - mean));
-        double variance = sumSqDiff / (numBootstraps - 1);
+        double variance = sumSqDiff / (estimates.Count - 1);
         double se = Math.Sqrt(variance);
 
         return NumOps.FromDouble(se);

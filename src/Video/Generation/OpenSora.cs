@@ -343,7 +343,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">Input latent tensor [B, C, H, W].</param>
     /// <returns>Predicted denoised output.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Create default time embedding at t=0.5 (mid-point)
         var timeEmbed = CreateTimeEmbedding(0.5);

@@ -398,6 +398,8 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         T rho = NumOps.FromDouble(_options.Rho);
         T oneMinusRho = NumOps.FromDouble(1 - _options.Rho);
         T epsilon = NumOps.FromDouble(_options.Epsilon);

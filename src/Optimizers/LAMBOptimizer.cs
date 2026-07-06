@@ -533,6 +533,8 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         _tapeStep++;
 
         T beta1 = NumOps.FromDouble(_options.Beta1);
@@ -853,17 +855,7 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         int baseDataLength = reader.ReadInt32();
         byte[] baseData = reader.ReadBytes(baseDataLength);
-
-        using (var baseMs = new MemoryStream(baseData))
-        using (var baseReader = new BinaryReader(baseMs))
-        {
-            string typeName = baseReader.ReadString();
-            if (typeName != this.GetType().AssemblyQualifiedName)
-            {
-                throw new InvalidOperationException("Mismatched optimizer type during deserialization.");
-            }
-            baseReader.ReadString();
-        }
+        base.Deserialize(baseData);
 
         string optionsJson = reader.ReadString();
         _options = JsonConvert.DeserializeObject<LAMBOptimizerOptions<T, TInput, TOutput>>(optionsJson)

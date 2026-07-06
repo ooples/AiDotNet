@@ -76,6 +76,18 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
+        var result = new Vector<T>(_options.NumArms);
+
+        if (!training)
+        {
+            // Evaluation: act greedily on the learned preferences. This makes the policy
+            // deterministic (Predict called twice returns the same arm) and clone-stable
+            // (a clone with identical preferences picks the same arm). Stochastic softmax
+            // sampling below is only used while training/exploring.
+            result[ArgMax(_preferences)] = NumOps.One;
+            return result;
+        }
+
         // Compute softmax probabilities
         var probs = ComputeSoftmax(_preferences);
 
@@ -94,7 +106,6 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
 
-        var result = new Vector<T>(_options.NumArms);
         result[selectedArm] = NumOps.One;
         return result;
     }
@@ -104,7 +115,11 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         int armIndex = ArgMax(action);
         _totalSteps++;
 
-        // Update average reward baseline
+        // Update average reward baseline. Per Sutton & Barto 2018 §2.8, R̄_t is the average of all
+        // rewards up through and including time t, so it is updated before the preference step. A
+        // consequence — by design, not a bug — is that a CONSTANT reward stream produces (R − R̄) = 0
+        // and therefore no preference change: if every pull returns the same reward there is nothing
+        // to learn and the softmax policy correctly stays uniform.
         if (_options.UseBaseline)
         {
             T alpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(_totalSteps));

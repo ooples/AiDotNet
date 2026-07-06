@@ -222,19 +222,64 @@ public class ModelStartupService : IHostedService
             switch (modelConfig.NumericType)
             {
                 case NumericType.Float:
-                    LoadTypedModel<float>(modelConfig.Name, modelPath);
+                    LoadModelTyped<float>(modelConfig, modelPath);
                     break;
                 case NumericType.Decimal:
-                    LoadTypedModel<decimal>(modelConfig.Name, modelPath);
+                    LoadModelTyped<decimal>(modelConfig, modelPath);
                     break;
                 case NumericType.Double:
                 default:
-                    LoadTypedModel<double>(modelConfig.Name, modelPath);
+                    LoadModelTyped<double>(modelConfig, modelPath);
                     break;
             }
         });
 
         _logger.LogInformation("Successfully loaded model '{Name}'", modelConfig.Name);
+    }
+
+    /// <summary>
+    /// Routes a startup model to the generation loader (token-to-logits LMs) or the ordinary
+    /// prediction loader (regression/classification) based on its configuration.
+    /// </summary>
+    private void LoadModelTyped<T>(StartupModel modelConfig, string path)
+    {
+        if (modelConfig.EnableTextGeneration)
+        {
+            LoadGenerativeModel<T>(modelConfig.Name, path, modelConfig.QuantizeKvCacheWeights);
+            return;
+        }
+
+        LoadTypedModel<T>(modelConfig.Name, path);
+    }
+
+    /// <summary>
+    /// Loads a tensor-to-tensor (token-to-logits) language model and registers it for serving with
+    /// the KV-cached incremental generation path enabled (paged KV cache, per-request session
+    /// isolation, and prompt-prefix sharing).
+    /// </summary>
+    private void LoadGenerativeModel<T>(string name, string path, bool quantizeKvCacheWeights)
+    {
+        using var _ = Helpers.ModelPersistenceGuard.InternalOperation();
+
+        var servableModel = ServableModelWrapper<T>.LoadServable(
+            path,
+            name,
+            enableBatching: true,
+            enableSpeculativeDecoding: false,
+            licenseKey: null,
+            decryptionToken: null,
+            enableTextGeneration: true,
+            quantizeKvCacheWeights: quantizeKvCacheWeights);
+
+        var success = _modelRepository.LoadModel(name, servableModel, path);
+        if (!success)
+        {
+            throw new InvalidOperationException($"A model with name '{name}' already exists");
+        }
+
+        _logger.LogDebug(
+            "Generative model '{Name}' registered (incremental generation: {Incremental}, quantized KV: {Quantized})",
+            name, servableModel.SupportsIncrementalGeneration, quantizeKvCacheWeights);
     }
 
     /// <summary>

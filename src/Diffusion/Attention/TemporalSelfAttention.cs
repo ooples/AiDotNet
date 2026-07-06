@@ -104,7 +104,8 @@ public class TemporalSelfAttention<T> : LayerBase<T>
     /// <returns>Output tensor with temporal information mixed, same shape as input.</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
+        _lastInput = ShouldCacheForBackward ? input : null;
         return _temporalAttention.Forward(input);
     }
 

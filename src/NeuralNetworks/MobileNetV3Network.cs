@@ -207,7 +207,7 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Set eval mode on all layers for inference (BN uses running stats)
         foreach (var layer in Layers)
@@ -228,7 +228,8 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         // the per-sample inference contract.
         bool promoted = input.Rank == 3;
         var processed = promoted ? PromoteToBatchedTensor(input) : input;
-        var output = Forward(processed);
+        // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        var output = Accelerate(processed, () => Forward(processed));
         if (promoted && output.Rank > 1 && output.Shape[0] == 1)
         {
             var squeezed = new int[output.Rank - 1];

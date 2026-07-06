@@ -392,6 +392,21 @@ public class TSMixer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// Opts out of the base linear lazy-shape pre-resolution (#1712). The base
+    /// <c>ResolveLazyLayerShapes</c> walks <see cref="NeuralNetworkBase{T}.Layers"/> in order with no
+    /// transpose, but <see cref="Forward"/> applies per-block time-mixing TRANSPOSES
+    /// (<c>Engine.TensorPermute [0,2,1]</c> around the time-mixing Dense layers). The linear walk
+    /// therefore runs the time-mixing <c>Dense(sequenceLength)</c> WITHOUT the transpose, so its output
+    /// last dim becomes the sequence length, and the following feature-mixing lazy
+    /// <c>LayerNormalizationLayer</c> binds its gamma to that value instead of the hidden dimension the
+    /// real forward feeds it — "Gamma shape (8) does not match the last 1 dimensions of input shape
+    /// (1, 8, 24)". Returning null skips the walk and lets every layer resolve on the first real Forward,
+    /// which models the transposes correctly (the Dense layers auto-adapt; the LayerNorms bind to the
+    /// hidden dim). TSMixer is small, so deferring per-layer ParameterCount to the first forward is fine.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
+    /// <summary>
     /// Extracts references to specific layers for the TSMixer architecture.
     /// </summary>
     /// <remarks>
@@ -490,7 +505,7 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// It automatically chooses between native and ONNX execution based on how the model was created.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : ForecastOnnx(input);
     }
@@ -885,10 +900,14 @@ public class TSMixer<T> : ForecastingModelBase<T>
 
             if (isTimeMixingLayer && layer is not LayerNormalizationLayer<T> && layer is not DropoutLayer<T>)
             {
-                // Time-mixing Dense layers: transpose to [batch, features, seq], apply, transpose back
-                current = current.Transpose([0, 2, 1]);  // [batch, seq, features] -> [batch, features, seq]
+                // Time-mixing Dense layers: transpose to [batch, features, seq], apply, transpose back.
+                // Issue #1678: Engine.TensorPermute (tape-safe), NOT tensor.Transpose. The raw
+                // Tensor<T>.Transpose returns a stride-only view with no autodiff-tape link, severing the
+                // gradient around layer.Forward so the time-mixing layers (and everything upstream) never
+                // train. Engine.TensorPermute records the permutation on the tape (PermuteBackward).
+                current = Engine.TensorPermute(current, [0, 2, 1]);  // [batch, seq, features] -> [batch, features, seq]
                 current = layer.Forward(current);
-                current = current.Transpose([0, 2, 1]);  // [batch, features, seq] -> [batch, seq, features]
+                current = Engine.TensorPermute(current, [0, 2, 1]);  // [batch, features, seq] -> [batch, seq, features]
             }
             else
             {

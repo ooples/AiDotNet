@@ -1,4 +1,5 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
+
 /// <summary>Options for VALL-E (neural codec language model with AR + NAR transformers for zero-shot TTS).</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the VALLE model. Default values follow the original paper settings.</para>

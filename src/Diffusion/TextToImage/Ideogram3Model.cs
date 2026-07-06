@@ -316,20 +316,9 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new SiTPredictor<T>(inputChannels: IDEOGRAM_LATENT_CHANNELS);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: IDEOGRAM_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new Ideogram3Model<T>(
-            predictor: clonedPredictor,
-            vae: clonedVae,
+                        return new Ideogram3Model<T>(
+            predictor: (SiTPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
     }
 

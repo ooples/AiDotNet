@@ -443,7 +443,7 @@ public class RegularizationIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task NoRegularization_RegularizeMatrix_ReturnsOriginalValues()
+    public async Task NoRegularization_RegularizeMatrix_ReturnsZeroPenalty()
     {
         // Arrange
         var noReg = new NoRegularization<double, Vector<double>, Vector<double>>();
@@ -456,11 +456,23 @@ public class RegularizationIntegrationTests
         // Act
         var result = noReg.Regularize(matrix);
 
-        // Assert - no regularization should return unchanged values
-        Assert.Equal(1.0, result[0, 0], Tolerance);
-        Assert.Equal(2.0, result[0, 1], Tolerance);
-        Assert.Equal(3.0, result[1, 0], Tolerance);
-        Assert.Equal(4.0, result[1, 1], Tolerance);
+        // Assert: NoRegularization.Regularize(Matrix) returns a ZERO-valued
+        // matrix of the same shape, NOT the input echoed back. Closed-form
+        // ridge/multiple/polynomial/GAM solvers use this additively
+        // (`xTx.Add(Regularize(xTx))`), so the no-regularization penalty must
+        // be zero — returning the input would compute `xTx + xTx = 2·xTx`,
+        // corrupting every closed-form fit (this was the regression CodeRabbit
+        // blocked when the `return data` variant was tried). The earlier
+        // version of this test asserted the input-echo behaviour, which
+        // contradicted the actual additive-penalty contract documented at
+        // NoRegularization.Regularize(Matrix); this assertion now documents
+        // the correct contract.
+        Assert.Equal(2, result.Rows);
+        Assert.Equal(2, result.Columns);
+        Assert.Equal(0.0, result[0, 0], Tolerance);
+        Assert.Equal(0.0, result[0, 1], Tolerance);
+        Assert.Equal(0.0, result[1, 0], Tolerance);
+        Assert.Equal(0.0, result[1, 1], Tolerance);
     }
 
     [Fact(Timeout = 120000)]

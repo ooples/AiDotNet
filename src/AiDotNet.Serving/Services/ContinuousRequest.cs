@@ -11,6 +11,12 @@ internal sealed class ContinuousRequest
     public string ModelName { get; set; } = string.Empty;
     public string NumericType { get; set; } = string.Empty;
     public object? Input { get; set; }
+
+    /// <summary>
+    /// Length of the input vector. Used to group same-shape requests so each batched forward
+    /// pass produces a well-formed matrix (rows of equal width).
+    /// </summary>
+    public int InputLength { get; set; }
     public object? CompletionSource { get; set; }
     public RequestPriority Priority { get; set; } = RequestPriority.Normal;
     public DateTime EnqueueTime { get; set; }

@@ -301,7 +301,7 @@ public class FlowFormer<T> : OpticalFlowBase<T>
         return NumOps.FromDouble(value);
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

@@ -364,7 +364,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         int? seed)
     {
         var videoLatentShape = new[] { 1, numFrames, LatentChannels, latentHeight, latentWidth };
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(videoLatentShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);
@@ -398,7 +398,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         int numInferenceSteps,
         int? seed)
     {
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
 
         // Initialize latents for all frames
         var videoLatentShape = new[] { 1, totalFrames, LatentChannels, latentHeight, latentWidth };
@@ -752,7 +752,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         var videoLatentShape = new[] { 1, effectiveNumFrames, LatentChannels, latentHeight, latentWidth };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(videoLatentShape, rng);
 
         // Copy first frame from image latent (with noise aug)

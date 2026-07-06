@@ -66,6 +66,20 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
     public bool IsOnnxMode => OnnxEncoder is not null || OnnxDecoder is not null || OnnxModel is not null;
 
     /// <summary>
+    /// Builds the common audio-model metadata entries (sample rate, mel-bin count, and
+    /// inference mode) for <see cref="ModelMetadata{T}.AdditionalInfo"/>. Audio models call
+    /// this from <c>GetModelMetadata</c> so their reported metadata contains concrete
+    /// configuration rather than an empty <c>AdditionalInfo</c> dictionary.
+    /// </summary>
+    /// <returns>A populated key/value dictionary of audio configuration.</returns>
+    protected Dictionary<string, object> BaseAudioMetadataInfo() => new()
+    {
+        ["SampleRate"] = SampleRate,
+        ["NumMels"] = NumMels,
+        ["Mode"] = IsOnnxMode ? "ONNX" : "Native"
+    };
+
+    /// <summary>
     /// Gets or sets the ONNX encoder model (for encoder-decoder architectures).
     /// </summary>
     protected OnnxModel<T>? OnnxEncoder { get; set; }

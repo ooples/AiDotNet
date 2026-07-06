@@ -479,7 +479,7 @@ public class CSDI<T> : ForecastingModelBase<T>
     /// denoises while keeping observed values fixed.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ImputeNative(input) : ImputeOnnx(input);
     }

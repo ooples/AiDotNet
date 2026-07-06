@@ -407,39 +407,10 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPrior = new UNetNoisePredictor<T>(
-            inputChannels: KANDINSKY_IMAGE_EMBEDDING_DIM,
-            outputChannels: KANDINSKY_IMAGE_EMBEDDING_DIM,
-            baseChannels: 384,
-            channelMultipliers: [1, 2, 4],
-            numResBlocks: 2,
-            attentionResolutions: [2, 1],
-            contextDim: KANDINSKY_CROSS_ATTENTION_DIM);
-        clonedPrior.SetParameters(_priorUnet.GetParameters());
-
-        var clonedDecoder = new UNetNoisePredictor<T>(
-            inputChannels: KANDINSKY_LATENT_CHANNELS,
-            outputChannels: KANDINSKY_LATENT_CHANNELS,
-            baseChannels: 384,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 3,
-            attentionResolutions: [4, 2, 1],
-            contextDim: KANDINSKY_CROSS_ATTENTION_DIM);
-        clonedDecoder.SetParameters(_decoderUnet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: KANDINSKY_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new KandinskyModel<T>(
-            priorUnet: clonedPrior,
-            decoderUnet: clonedDecoder,
-            vae: clonedVae,
+                                return new KandinskyModel<T>(
+            priorUnet: (UNetNoisePredictor<T>)_priorUnet.Clone(),
+            decoderUnet: (UNetNoisePredictor<T>)_decoderUnet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             version: _version);
     }

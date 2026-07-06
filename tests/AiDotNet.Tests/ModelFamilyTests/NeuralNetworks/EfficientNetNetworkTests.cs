@@ -23,11 +23,11 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// OutputShape) trains against a rank-2 target whose ranks don't
 /// match the inference output.
 /// </remarks>
-public class EfficientNetNetworkTests : NeuralNetworkModelTestBase
+public class EfficientNetNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [3, 64, 64];
     protected override int[] OutputShape => [1000];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new EfficientNetNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new EfficientNetNetwork<float>();
 }

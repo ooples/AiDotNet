@@ -83,7 +83,8 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
         TemporalVAE<T>? temporalVAE = null,
         IConditioningModule<T>? conditioner = null,
         int defaultNumFrames = DEFAULT_NUM_FRAMES,
-        int defaultFPS = DEFAULT_FPS)
+        int defaultFPS = DEFAULT_FPS,
+        int? seed = null)
         : base(
             options ?? new DiffusionModelOptions<T>
             {
@@ -98,13 +99,14 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(predictor, temporalVAE);
+        InitializeLayers(predictor, temporalVAE, seed);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
     private void InitializeLayers(
         VideoUNetPredictor<T>? predictor,
-        TemporalVAE<T>? temporalVAE)
+        TemporalVAE<T>? temporalVAE,
+        int? seed)
     {
         _predictor = predictor ?? new VideoUNetPredictor<T>(
             inputChannels: LATENT_CHANNELS,
@@ -112,7 +114,8 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2,
             numHeads: 8,
-            contextDim: CONTEXT_DIM);
+            contextDim: CONTEXT_DIM,
+            seed: seed);
 
         _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
             inputChannels: 3,
@@ -122,7 +125,8 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
             numTemporalLayers: 3,
             temporalKernelSize: 3,
             causalMode: false,
-            latentScaleFactor: 0.18215);
+            latentScaleFactor: 0.18215,
+            seed: seed);
     }
 
     protected override Tensor<T> PredictVideoNoise(
@@ -162,20 +166,11 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new VideoUNetPredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2,
-            numHeads: 8,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        return new FateZeroModel<T>(
+                return new FateZeroModel<T>(
             architecture: Architecture,
             options: Options as DiffusionModelOptions<T>,
             scheduler: Scheduler,
-            predictor: clonedPredictor,
+            predictor: (VideoUNetPredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

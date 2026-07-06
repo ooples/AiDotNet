@@ -439,19 +439,12 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var (hiddenDim, numLayers, numHeads) = GetVariantConfig(_variant);
-
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: hiddenDim,
-            numLayers: numLayers,
-            numHeads: numHeads,
-            patchSize: PATCH_SIZE,
-            contextDim: CONTEXT_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
+        // _dit.Clone() reconstructs from the predictor's own config fields and (with the
+        // lazy-layer-materializing DiTNoisePredictor.Clone) preserves its weights — so it is
+        // correct for both a caller-injected predictor and the default variant build, with no
+        // need to re-derive the variant config or round-trip a flat foundation-scale vector.
         return new WanVideoModel<T>(
-            dit: clonedDit,
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             variant: _variant,

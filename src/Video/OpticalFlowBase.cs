@@ -187,7 +187,7 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // For optical flow, input should contain two frames stacked [batch, 2*channels, height, width]
         if (input.Rank < 4)

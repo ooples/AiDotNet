@@ -487,7 +487,7 @@ public class DeepState<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the DeepState model, Predict produces predictions from input data. This is the main inference step of the DeepState architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }

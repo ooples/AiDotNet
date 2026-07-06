@@ -240,7 +240,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     /// but also remembers previous messages to provide context.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Validate input
         if (input == null)
@@ -261,13 +261,16 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             return gpuResult;
 
         // Forward pass through each layer in the network
-        Tensor<T> currentOutput = input;
-        foreach (var layer in Layers)
+        return Accelerate(input, () =>
         {
-            currentOutput = layer.Forward(currentOutput);
-        }
+            Tensor<T> currentOutput = input;
+            foreach (var layer in Layers)
+            {
+                currentOutput = layer.Forward(currentOutput);
+            }
 
-        return currentOutput;
+            return currentOutput;
+        });
     }
 
     /// <summary>

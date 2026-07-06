@@ -241,7 +241,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// by considering each word in context with the ones before it.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
@@ -255,13 +255,17 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
             layer.SetTrainingMode(false);
         }
 
-        var current = input;
-        foreach (var layer in Layers)
+        // Wrapped in the #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () =>
         {
-            current = layer.Forward(current);
-        }
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
 
-        return current;
+            return current;
+        });
     }
 
     /// <summary>

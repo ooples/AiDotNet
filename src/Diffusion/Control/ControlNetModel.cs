@@ -392,7 +392,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         var latentShape = new[] { 1, CN_LATENT_CHANNELS, latentHeight, latentWidth };
 
         // Initialize noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -552,7 +552,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         var latentShape = new[] { 1, CN_LATENT_CHANNELS, latentHeight, latentWidth };
 
         // Initialize noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -686,10 +686,20 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL baseUNet/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
+        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
+        // shapes no longer lined up 1:1 and Clone diverged. Cloning the resolved baseUNet/VAE (+ same
+        // architecture/options/scheduler) makes the clone structurally identical.
         var clone = new ControlNetModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType,
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
 
         // Create matching encoder cache in clone before setting parameters
         foreach (var controlType in _encoderCache.Keys.Where(ct => ct != _controlType))
@@ -698,7 +708,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             clone.GetOrCreateEncoder(controlType);
         }
 
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
         clone.ConditioningStrength = _conditioningStrength;
 
         return clone;
@@ -830,17 +840,28 @@ public class ControlNetEncoder<T>
     {
         int spatialSize = _imageSize;
 
+        // These convs use the lazy-default ctor (input depth resolved on first
+        // forward). Resolve each one's SHAPE ONLY at construction — sets InputDepth
+        // (so ParameterCount is exact and matches GetParameters().Length, and so the
+        // ZeroInitializeConv sizing below is correct) without allocating the kernel.
+        // Channels follow the Encode() data flow: inProj sees the control image
+        // (inputChannels), zeroProj sees inProj's output (baseChannels), each
+        // downBlock sees the previous block's output (prevChannels), and each zero
+        // conv sees its downBlock's output (channels).
+
         // Input projection: 3×3 conv, inputChannels → baseChannels, same padding
         int padding = 1; // 3×3 kernel with padding=1 preserves spatial size
         var inProj = new ConvolutionalLayer<T>(
             _baseChannels, kernelSize: 3, stride: 1, padding: padding,
             activationFunction: new SiLUActivation<T>());
+        inProj.ResolveShapesOnly([1, _inputChannels, spatialSize, spatialSize]);
         _downBlocks.Add(inProj);
 
         // Zero convolution for input: 1×1 conv initialized to zero (per paper)
         var zeroProj = new ConvolutionalLayer<T>(
             _baseChannels, kernelSize: 1, stride: 1, padding: 0,
             activationFunction: (IActivationFunction<T>?)null);
+        zeroProj.ResolveShapesOnly([1, _baseChannels, spatialSize, spatialSize]);
         ZeroInitializeConv(zeroProj);
         _zeroConvs.Add(zeroProj);
 
@@ -855,6 +876,7 @@ public class ControlNetEncoder<T>
             var downBlock = new ConvolutionalLayer<T>(
                 channels, kernelSize: 3, stride: 2, padding: 1,
                 activationFunction: new SiLUActivation<T>());
+            downBlock.ResolveShapesOnly([1, prevChannels, spatialSize, spatialSize]);
             _downBlocks.Add(downBlock);
 
             spatialSize = outSpatial;
@@ -863,6 +885,7 @@ public class ControlNetEncoder<T>
             var zc = new ConvolutionalLayer<T>(
                 channels, kernelSize: 1, stride: 1, padding: 0,
                 activationFunction: (IActivationFunction<T>?)null);
+            zc.ResolveShapesOnly([1, channels, spatialSize, spatialSize]);
             ZeroInitializeConv(zc);
             _zeroConvs.Add(zc);
 
@@ -918,23 +941,13 @@ public class ControlNetEncoder<T>
     /// </summary>
     public Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
-
-        foreach (var block in _downBlocks)
-        {
-            var p = block.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-                allParams.Add(p[i]);
-        }
-
-        foreach (var zc in _zeroConvs)
-        {
-            var p = zc.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-                allParams.Add(p[i]);
-        }
-
-        return new Vector<T>(allParams.ToArray());
+        // Single-allocation concat — avoids the List<T> + per-element Add + ToArray
+        // triple-copy. Vector<T>.Concatenate pre-sizes one result and vectorized-
+        // copies each conv's params in once.
+        var parts = new List<Vector<T>>(_downBlocks.Count + _zeroConvs.Count);
+        foreach (var block in _downBlocks) parts.Add(block.GetParameters());
+        foreach (var zc in _zeroConvs) parts.Add(zc.GetParameters());
+        return Vector<T>.Concatenate(parts.ToArray());
     }
 
     /// <summary>

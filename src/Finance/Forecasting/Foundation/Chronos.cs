@@ -70,7 +70,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// </para>
 /// <para>
 /// <b>Thread Safety:</b> This class is NOT thread-safe. Concurrent calls to
-/// <see cref="Forecast(Tensor{T}, double[]?)"/> or <see cref="Train(Tensor{T}, Tensor{T})"/>
+/// <see cref="Forecast(Tensor{T}, double[])"/> or <see cref="Train(Tensor{T}, Tensor{T})"/>
 /// will result in undefined behavior due to shared tokenization state.
 /// Create separate instances for concurrent usage scenarios.
 /// </para>
@@ -497,7 +497,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> In the Chronos model, Predict produces predictions from input data. This is the main inference step of the Chronos architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Go through Forecast (which dequantizes token logits into a scalar
         // trajectory) so Predict's output shape matches what
@@ -860,7 +860,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         // Remove batch dimension if we added it
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
         {
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
         }
 
         return current;

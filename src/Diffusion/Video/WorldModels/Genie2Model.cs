@@ -162,20 +162,11 @@ public class Genie2Model<T> : VideoDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: 2048,
-            numLayers: 28,
-            numHeads: 16,
-            patchSize: 2,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        return new Genie2Model<T>(
+                return new Genie2Model<T>(
             architecture: Architecture,
             options: Options as DiffusionModelOptions<T>,
             scheduler: Scheduler,
-            predictor: clonedPredictor,
+            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

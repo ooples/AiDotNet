@@ -5,16 +5,16 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class GraphIsomorphismNetworkTests : GraphNNModelTestBase
+public class GraphIsomorphismNetworkTests : GraphNNModelTestBase<float>
 {
     protected override int[] InputShape => [10, 128];
     protected override int[] OutputShape => [10, 7];
 
-    private static Vector<double>? _savedParams;
+    private static Vector<float>? _savedParams;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var network = new GraphIsomorphismNetwork<double>();
+        var network = new GraphIsomorphismNetwork<float>();
         if (_savedParams == null)
             _savedParams = network.GetParameters();
         else

@@ -25,6 +25,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection;
 /// - Head: Produces final predictions (boxes, classes, scores)
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ObjectDetector")]
 public abstract class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     // Engine and NumOps inherited from ModelBase

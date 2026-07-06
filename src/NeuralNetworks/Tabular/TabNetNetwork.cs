@@ -135,18 +135,22 @@ public class TabNetNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        Tensor<T> currentOutput = input;
-        foreach (var layer in Layers)
+        // Wrapped in the #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () =>
         {
-            currentOutput = layer.Forward(currentOutput);
-        }
+            Tensor<T> currentOutput = input;
+            foreach (var layer in Layers)
+            {
+                currentOutput = layer.Forward(currentOutput);
+            }
 
-        return currentOutput;
+            return currentOutput;
+        });
     }
 
     /// <inheritdoc/>

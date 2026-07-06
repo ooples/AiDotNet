@@ -597,7 +597,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessAudio(input);
         Tensor<T> output;
@@ -795,7 +795,8 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         {
             Name = "SileroVad",
             Version = "1.0",
-            Description = "Silero Voice Activity Detection neural network"
+            Description = "Silero Voice Activity Detection neural network",
+            AdditionalInfo = BaseAudioMetadataInfo()
         };
 
         metadata.SetProperty("SampleRate", SampleRate);

@@ -211,6 +211,8 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         var alpha = NumOps.FromDouble(_options.Alpha);
         var beta = NumOps.FromDouble(_options.Beta);
         var lambda1 = NumOps.FromDouble(_options.Lambda1);

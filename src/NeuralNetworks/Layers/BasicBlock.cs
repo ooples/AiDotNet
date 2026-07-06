@@ -280,7 +280,7 @@ public class BasicBlock<T> : LayerBase<T>
         // OnFirstForward observes input.Shape.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2
         _lastConv1Output = _conv1.Forward(input);

@@ -340,6 +340,18 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
+        // Residual skip. The gated linear recurrence above is computed with in-place state
+        // updates and is OFF the autodiff tape, so the gradient cannot cross it to reach the
+        // input/gate projections or any upstream layer (the model trained nothing — params
+        // never changed). The residual skip (output + input) re-attaches the block output to
+        // its input ON the tape so gradients flow to every projection and propagate down.
+        // Unlike the xLSTM covariance cell, the RG-LRU output is a convex blend of the input
+        // projection and the prior state (the gate is a sigmoid in [0, 1]), so it preserves
+        // signal scale across the stack without a per-block normalizer — adding one only damps
+        // the residual stream and slows convergence. The final pre-head LayerNorm still
+        // standardizes the stack output before the LM head.
+        output3D = Engine.TensorAdd(output3D, input3D);
+
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 

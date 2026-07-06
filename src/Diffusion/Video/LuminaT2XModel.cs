@@ -83,6 +83,10 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     private DiTNoisePredictor<T>? _dit;
     private StandardVAE<T>? _vae;
     private readonly IConditioningModule<T>? _conditioner;
+    // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
+    // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the
+    // sub-models with a null seed — dropping the requested seed and making construction non-reproducible.
+    private readonly int? _seed;
 
     #endregion
 
@@ -121,6 +125,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
         if (dit is not null || vae is not null)
             InitializeLayers(dit, vae, seed);
     }
@@ -133,7 +138,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_dit is null || _vae is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     [MemberNotNull(nameof(_dit), nameof(_vae))]
@@ -203,17 +208,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();
-        var cd = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: 1536,
-            numLayers: 30, numHeads: 16, patchSize: 2,
-            contextDim: CROSS_ATTENTION_DIM);
-        cd.SetParameters(_dit.GetParameters());
-        var cv = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.13025);
-        cv.SetParameters(_vae.GetParameters());
-        return new LuminaT2XModel<T>(dit: cd, vae: cv, conditioner: _conditioner);
+                        return new LuminaT2XModel<T>(dit: (DiTNoisePredictor<T>)_dit.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
     }
 
     #endregion

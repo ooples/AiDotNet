@@ -506,7 +506,43 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
 
-        ResolveShapes(new[] { numFeatures }, new[] { numFeatures });
+        // BatchNorm is SHAPE-PRESERVING (output shape == input shape). For image
+        // inputs (rank ≥ 3) resolve the layer's declared I/O shapes to the
+        // per-sample spatial shape [C,H,W], NOT the rank-1 [numFeatures] the
+        // learnable params use. Declaring rank-1 for an image broke the pre-forward
+        // shape-resolution walk (NeuralNetworkBase.ResolveLazyLayerShapes): a
+        // Conv→BN→Conv stack fed the BN's rank-1 GetOutputShape to the next conv,
+        // which threw ("expects rank-3/4, got rank 1"), aborting resolution for every
+        // downstream conv. Those convs then reported the InputDepth=1 PLACEHOLDER
+        // ParameterCount, making whole CNN backbones under-report their size by orders
+        // of magnitude (MaskDINO: 228K vs the real ~207M) — which in turn blinded every
+        // ParameterCount-gated decision (weight-streaming auto-detect, ShouldUseStreamingTraining,
+        // ConfigureInferenceForScale) so the memory-management stack never engaged for
+        // exactly the foundation-scale models that need it. Vector inputs (rank ≤ 2)
+        // keep the original rank-1 [numFeatures] declaration (the MLP/[B,F] convention),
+        // so this only touches the image path. The channel-sized learnable params
+        // (_gamma/_beta/_runningMean/_runningVariance) stay [numFeatures] above; only
+        // the layer's transformation shape becomes rank-preserving here. Matches
+        // ConvolutionalLayer.GetOutputShape's batch-less rank-3 [C,H,W] convention.
+        int[] fullShape = input.Shape.ToArray();
+        int[] ioShape;
+        if (rank <= 2)
+        {
+            ioShape = new[] { numFeatures };          // [F] / [B,F] → [numFeatures] (unchanged)
+        }
+        else if (rank == 3)
+        {
+            ioShape = fullShape;                      // [C,H,W] (unbatched image)
+        }
+        else
+        {
+            // [B,C,H,W,…] → [C,H,W,…] (strip the leading batch dim). Manual copy
+            // rather than the range operator fullShape[1..], which needs
+            // RuntimeHelpers.GetSubArray and does not compile on net471.
+            ioShape = new int[fullShape.Length - 1];
+            System.Array.Copy(fullShape, 1, ioShape, 0, ioShape.Length);
+        }
+        ResolveShapes(ioShape, (int[])ioShape.Clone());
     }
 
     /// <summary>
@@ -675,6 +711,50 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             }
 
             // Preserve original rank
+            if (_inputWas1D)
+            {
+                output = Engine.Reshape(output, [output.Length]);
+            }
+
+            return output;
+        }
+        else if (IsTrainingMode)
+        {
+            // #639: batch=1 TRAINING fallback. Batch variance is undefined for a single
+            // sample, so we normalize with the running statistics (same VALUE as inference)
+            // — but route it through the single differentiable BatchNormAffine engine op
+            // instead of the manual sqrt/divide/subtract/broadcast decomposition. Two wins:
+            //   1. Op-count: the compiled-plan replay records ONE op per BN layer instead of
+            //      the ~4-op cached-scale broadcast chain (the batch=1 op explosion in #639).
+            //   2. Correctness: BatchNormAffine carries an exact backward to x, gamma AND beta
+            //      every step. The cached-scale path below can DETACH the gamma/beta gradient
+            //      whenever _cachedInferenceScale/_cachedInferenceShift are reused from a prior
+            //      step (they were built off-tape), silently zeroing the affine-parameter grads.
+            // mean/variance are constant running stats here (batch=1 never updates them), so the
+            // captured references stay valid across compiled-plan replays.
+            _lastMean = _runningMean;
+            _lastVariance = _runningVariance;
+
+            // Compute the affine scale/shift ON-TAPE every step (NOT cached) so gamma and beta keep
+            // their gradients through this batch=1 training fallback — the property #639 wanted from the
+            // fused Engine.BatchNormAffine. That fused op is not yet in the referenced AiDotNet.Tensors
+            // package, so use the manual decomposition (gradient-equivalent: gamma/beta stay live, and
+            // ApplyInferenceAnyRank applies the channel-broadcast multiply-add for any rank). Bump the
+            // package and restore Engine.BatchNormAffine once it ships (#639).
+            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
+            var stdDev = Engine.TensorSqrt(Engine.TensorAdd(_runningVariance, epsilonVec));
+            var affineScale = Engine.TensorDivide(_gamma, stdDev);
+            var affineShift = Engine.TensorSubtract(
+                _beta, Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev));
+            var output = ApplyInferenceAnyRank(input, affineScale, affineShift);
+
+            // Restore pre-flatten rank for the features-last path.
+            if (flattenedFeaturesLast && preFlattenShape is not null)
+            {
+                output = Engine.Reshape(output, preFlattenShape);
+            }
+
+            // Preserve original rank.
             if (_inputWas1D)
             {
                 output = Engine.Reshape(output, [output.Length]);

@@ -190,7 +190,7 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Default: create empty mask (no inpainting needed)
         var mask = new Tensor<T>([input.Shape[0], 1, input.Shape[2], input.Shape[3]]);

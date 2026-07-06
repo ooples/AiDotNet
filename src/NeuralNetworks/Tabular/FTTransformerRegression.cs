@@ -406,7 +406,12 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        int baseCount = (int)(base.ParameterCount - _regressionHead.ParameterCount);
+        // GetParameters concatenates [base.GetParameters() (= base.ParameterCount)][head].
+        // base.ParameterCount (explicit-base call) is the backbone only, WITHOUT the head,
+        // so the base slice is exactly that. The previous
+        // `base.ParameterCount - head.ParameterCount` under-counted the base by the head
+        // size and corrupted the round-trip.
+        int baseCount = checked((int)base.ParameterCount);
         var baseParams = new Vector<T>(baseCount);
         for (int i = 0; i < baseCount; i++)
         {

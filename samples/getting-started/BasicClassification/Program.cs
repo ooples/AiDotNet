@@ -1,7 +1,9 @@
 using AiDotNet;
-using AiDotNet.Classification;
-using AiDotNet.CrossValidation;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
 using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("=== AiDotNet Basic Classification ===");
 Console.WriteLine("Classifying Iris flowers using Random Forest\n");
@@ -26,50 +28,36 @@ Console.WriteLine($"Test set: {testFeatures.Length} samples\n");
 // Build and train the classifier using the facade pattern
 Console.WriteLine("Building Random Forest classifier with AiModelBuilder...");
 Console.WriteLine("  - 100 decision trees");
-Console.WriteLine("  - StandardScaler preprocessing");
-Console.WriteLine("  - 5-fold cross-validation\n");
+Console.WriteLine("  - StandardScaler preprocessing\n");
 
 try
 {
     // Use the AiModelBuilder facade to configure and train
-    var builder = new AiModelBuilder<double, double[], double>()
-        .ConfigureModel(new RandomForestClassifier<double, double[], double>(
-            nEstimators: 100,
-            maxDepth: 10,
-            minSamplesSplit: 2))
+    var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        .ConfigureModel(new RandomForestClassifier<double>(
+            new RandomForestClassifierOptions<double>
+            {
+                NEstimators = 100,
+                MinSamplesSplit = 2
+            }))
         .ConfigurePreprocessing(pipeline => pipeline
             .Add(new StandardScaler<double>()))
-        .ConfigureCrossValidation(new KFoldCrossValidator<double, double[], double>(k: 5));
+        .ConfigureDataLoader(DataLoaders.FromArrays(trainFeatures, trainLabels));
 
-    Console.WriteLine("Training with cross-validation...\n");
+    Console.WriteLine("Training...\n");
 
-    var result = await builder.BuildAsync(trainFeatures, trainLabels);
-
-    // Display cross-validation results through the result object
-    if (result.CrossValidationResult != null)
-    {
-        Console.WriteLine("Cross-Validation Results:");
-        Console.WriteLine("─────────────────────────────────────");
-
-        var cvResult = result.CrossValidationResult;
-        for (int i = 0; i < cvResult.FoldScores.Count; i++)
-        {
-            Console.WriteLine($"  Fold {i + 1}: Accuracy = {cvResult.FoldScores[i]:P2}");
-        }
-
-        Console.WriteLine($"\n  Mean Accuracy: {cvResult.MeanScore:P2} (+/- {cvResult.StandardDeviation:P2})");
-    }
+    var result = await builder.BuildAsync();
 
     // Evaluate on test set using the result object directly (facade pattern)
     Console.WriteLine("\nFinal Model Evaluation:");
     Console.WriteLine("─────────────────────────────────────");
 
+    // Batch-predict the whole test matrix, then read per-row class scores.
+    var predVector = result.Predict(ToMatrix(testFeatures));
     int correct = 0;
     for (int i = 0; i < testFeatures.Length; i++)
     {
-        // Use result.Predict() - NOT result.Model.Predict()
-        var prediction = result.Predict(testFeatures[i]);
-        if (Math.Abs(prediction - testLabels[i]) < 0.5)
+        if (Math.Abs(predVector[i] - testLabels[i]) < 0.5)
             correct++;
     }
 
@@ -83,9 +71,7 @@ try
 
     for (int i = 0; i < Math.Min(5, testFeatures.Length); i++)
     {
-        // Use result.Predict() directly - this is the facade pattern
-        var prediction = result.Predict(testFeatures[i]);
-        int predictedClass = (int)Math.Round(prediction);
+        int predictedClass = Math.Clamp((int)Math.Round(predVector[i]), 0, 2);
         int actualClass = (int)testLabels[i];
 
         string status = predictedClass == actualClass ? "✓" : "✗";
@@ -153,4 +139,15 @@ static (double[][] features, double[] labels) LoadIrisDataset()
     var combined = features.Zip(labels, (f, l) => (f, l)).OrderBy(_ => random.Next()).ToList();
 
     return (combined.Select(x => x.f).ToArray(), combined.Select(x => x.l).ToArray());
+}
+
+// Pack a jagged feature array into the dense Matrix the model's Predict expects.
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    int r = rows.Length, c = rows[0].Length;
+    var m = new Matrix<double>(r, c);
+    for (int i = 0; i < r; i++)
+        for (int j = 0; j < c; j++)
+            m[i, j] = rows[i][j];
+    return m;
 }

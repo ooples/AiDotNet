@@ -50,7 +50,8 @@ public class ViTOptions : VisionEncoderOptions
     /// <summary>
     /// Gets or sets the positional embedding type.
     /// </summary>
-    public PositionalEmbeddingType PositionalEmbedding { get; set; } = PositionalEmbeddingType.Learned;
+    public PositionalEmbeddingType PositionalEmbedding { get; set; } =
+        PositionalEmbeddingType.Learned;
 
     public ViTOptions()
     {

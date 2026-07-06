@@ -519,7 +519,7 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
     /// 4. Project to forecast dimension
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }

@@ -31,5 +31,27 @@ public class StartupModel
     /// </para>
     /// </remarks>
     public string? Sha256 { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this model is served as an autoregressive text-generation model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When <c>true</c>, the model is loaded as a tensor-to-tensor (token-to-logits) language model
+    /// via the KV-cached incremental generation path (paged KV cache, per-request session isolation,
+    /// and RadixAttention-style prompt-prefix sharing). The model file must be a tensor model whose
+    /// forward maps token IDs to per-position vocabulary logits. When <c>false</c> (the default), the
+    /// model is loaded as an ordinary prediction model and the <c>generate</c> endpoint reports it as
+    /// non-generative.
+    /// </para>
+    /// </remarks>
+    public bool EnableTextGeneration { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether the incremental text-generation model uses int8 weight-only quantization
+    /// so more sequences stay KV-resident. Only takes effect when <see cref="EnableTextGeneration"/>
+    /// is <c>true</c>. Default is <c>false</c>.
+    /// </summary>
+    public bool QuantizeKvCacheWeights { get; set; } = false;
 }
 

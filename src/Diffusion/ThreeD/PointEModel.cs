@@ -357,7 +357,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
         var pointCloudShape = new[] { 1, effectiveNumPoints, POINTE_LATENT_CHANNELS };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var points = SampleNoiseTensor(pointCloudShape, rng);
 
         // Set up scheduler
@@ -430,7 +430,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
 
         // Generate point cloud
         var pointCloudShape = new[] { 1, effectiveNumPoints, POINTE_LATENT_CHANNELS };
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var points = SampleNoiseTensor(pointCloudShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);
@@ -655,17 +655,8 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         // Create a clone of the predictor to preserve trained weights
-        var clonedPredictor = new DiTNoisePredictor<T>(
-            inputChannels: POINTE_LATENT_CHANNELS,
-            hiddenSize: POINTE_HIDDEN_SIZE,
-            numLayers: POINTE_NUM_LAYERS,
-            numHeads: POINTE_NUM_HEADS,
-            patchSize: 1,
-            contextDim: POINTE_CONTEXT_DIM);
-        clonedPredictor.SetParameters(_pointCloudPredictor.GetParameters());
-
-        return new PointEModel<T>(
-            pointCloudPredictor: clonedPredictor,
+                return new PointEModel<T>(
+            pointCloudPredictor: (DiTNoisePredictor<T>)_pointCloudPredictor.Clone(),
             imageGenerator: _imageGenerator,
             conditioner: _conditioner,
             defaultPointCount: DefaultPointCount,

@@ -1,4 +1,5 @@
 using AiDotNet.Finance.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
 namespace AiDotNet.Finance.Volatility;
@@ -22,8 +23,13 @@ public sealed class ClassicalVolatilityModelOptions : ModelOptions
 /// variance path, optimized with a derivative-free Nelder–Mead simplex over the (constrained, via transform)
 /// parameters — the standard approach in econometric packages (e.g. <c>arch</c>, <c>rugarch</c>).
 /// </remarks>
-public abstract class ClassicalVolatilityModelBase<T> : IVolatilityModel<T>
+public abstract class ClassicalVolatilityModelBase<T> :
+    IVolatilityModel<T>,
+    IFeatureAware,
+    IParameterizable<T, Tensor<T>, Tensor<T>>
 {
+    private const int MinimumFitReturnCount = 10;
+
     /// <summary>Numeric operations for <typeparamref name="T"/>.</summary>
     protected INumericOperations<T> NumOps { get; } = MathHelper.GetNumericOperations<T>();
 
@@ -40,6 +46,12 @@ public abstract class ClassicalVolatilityModelBase<T> : IVolatilityModel<T>
 
     /// <summary>Number of free parameters.</summary>
     public abstract int ParameterCount { get; }
+
+    /// <inheritdoc/>
+    long IParameterizable<T, Tensor<T>, Tensor<T>>.ParameterCount => ParameterCount;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <summary>A reasonable starting guess in natural space, given the sample variance.</summary>
     protected abstract double[] InitialGuess(double sampleVariance);
@@ -62,9 +74,11 @@ public abstract class ClassicalVolatilityModelBase<T> : IVolatilityModel<T>
     /// <summary>Fits the model to a return series by maximum likelihood (Nelder–Mead on the Gaussian QMLE).</summary>
     public void FitReturns(IReadOnlyList<double> returns)
     {
-        if (returns is null || returns.Count < 10)
+        if (returns is null || returns.Count < MinimumFitReturnCount)
         {
-            throw new ArgumentException("Need at least 10 returns to fit a GARCH-family model.", nameof(returns));
+            throw new ArgumentException(
+                $"Need at least {MinimumFitReturnCount} returns to fit a GARCH-family model.",
+                nameof(returns));
         }
 
         var r = returns is double[] arr ? arr : returns.ToArray();
@@ -198,7 +212,7 @@ public abstract class ClassicalVolatilityModelBase<T> : IVolatilityModel<T>
     /// <inheritdoc/>
     public bool SupportsTraining => true;
     /// <inheritdoc/>
-    public int SequenceLength { get; protected set; }
+    public int SequenceLength { get; protected set; } = MinimumFitReturnCount;
     /// <inheritdoc/>
     public int PredictionHorizon => 1;
     /// <inheritdoc/>
@@ -290,6 +304,8 @@ public abstract class ClassicalVolatilityModelBase<T> : IVolatilityModel<T>
     // ---- Feature flags (univariate model — a single return feature) -----------------------------------
 
     /// <inheritdoc/>
+    public IEnumerable<int> GetActiveFeatureIndices() => new[] { 0 };
+    /// <inheritdoc/>
     public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
     /// <inheritdoc/>
     public bool IsFeatureUsed(int featureIndex) => featureIndex == 0;
@@ -352,13 +368,30 @@ public abstract class ClassicalVolatilityModelBase<T> : IVolatilityModel<T>
 
     // ---- helpers --------------------------------------------------------------------------------------
 
-    /// <summary>Flattens a returns tensor (1-D [n] or 2-D [n,1]) to a double array.</summary>
+    /// <summary>Flattens a univariate returns tensor ([n], [n,1], or [batch,n,1]) to a double array.</summary>
     protected double[] ToDoubles(Tensor<T> t)
     {
-        int n = t.Shape[0];
-        var r = new double[n];
         var span = t.Data.Span;
-        for (int i = 0; i < n; i++) r[i] = Convert.ToDouble(span[i]);
+        int featureCount = t.Shape.Length >= 2 ? Math.Max(1, t.Shape[^1]) : 1;
+
+        if (featureCount == 1)
+        {
+            var flattened = new double[span.Length];
+            for (int i = 0; i < flattened.Length; i++)
+            {
+                flattened[i] = Convert.ToDouble(span[i]);
+            }
+
+            return flattened;
+        }
+
+        int n = span.Length / featureCount;
+        var r = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            r[i] = Convert.ToDouble(span[i * featureCount]);
+        }
+
         return r;
     }
 

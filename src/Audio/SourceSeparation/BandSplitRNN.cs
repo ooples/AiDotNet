@@ -168,8 +168,22 @@ public class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<
         foreach (var kvp in separationResult.Sources)
         {
             double vol = sourceVolumes.TryGetValue(kvp.Key, out var v) ? v : 1.0;
-            for (int i = 0; i < kvp.Value.Length; i++)
-                output[i] = NumOps.Add(output[i], NumOps.FromDouble(NumOps.ToDouble(kvp.Value[i]) * vol));
+            // Vectorised weighted-add when source length matches the output:
+            //   output += vol · kvp.Value   via TensorMultiplyScalar + TensorAdd.
+            // Falls back to the prior min-length scalar loop only for the
+            // shorter-source case (the longer-source case wouldn't survive
+            // the previous bound check either).
+            if (kvp.Value.Length == output.Length && kvp.Value.Rank == output.Rank)
+            {
+                var scaled = Engine.TensorMultiplyScalar(kvp.Value, NumOps.FromDouble(vol));
+                output = Engine.TensorAdd(output, scaled);
+            }
+            else
+            {
+                T volT = NumOps.FromDouble(vol);
+                for (int i = 0; i < kvp.Value.Length && i < output.Length; i++)
+                    output[i] = NumOps.Add(output[i], NumOps.Multiply(kvp.Value[i], volT));
+            }
         }
         return output;
     }
@@ -189,7 +203,7 @@ public class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<
             numStems: _options.NumStems, numFreqBins: _options.NumFreqBins, dropoutRate: _options.DropoutRate));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);

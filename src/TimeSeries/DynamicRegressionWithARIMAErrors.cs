@@ -59,8 +59,77 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Forecasting: Principles and Practice", "https://otexts.com/fpp3/", Year = 2021, Authors = "Rob J. Hyndman, George Athanasopoulos")]
-public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
+public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>, IExogenousForecastModel<T>
 {
+    /// <summary>
+    /// Forecasts from future exogenous regressors (the unified facade-forecast entry point).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Produces a genuine OUT-OF-SAMPLE forecast: for each future step the deterministic mean is the
+    /// fitted regression <c>intercept + beta . x_future</c>, and the ARIMA error term is forecast by
+    /// the AR recursion seeded from the in-sample regression residuals (MA innovations are zero in
+    /// expectation out of sample). This is distinct from <see cref="Predict(Matrix{T})"/>, which
+    /// returns the in-sample fitted values when the requested span fits inside the training window —
+    /// correct for backtesting, but not for forecasting ahead of the trained series.
+    /// </para>
+    /// <para><b>For Beginners:</b> This answers "what comes next?" given the future values of your
+    /// external factors. It applies the learned regression to those future factors and adds the
+    /// model's best guess of the remaining auto-correlated error, which fades out as it gets further
+    /// from the data the model has actually seen.
+    /// </para>
+    /// </remarks>
+    public Vector<T> ForecastWithExogenous(Matrix<T> futureExogenous)
+    {
+        int horizon = futureExogenous.Rows;
+        var forecast = new Vector<T>(horizon);
+        var errorHistory = new T[horizon];
+        int arOrder = Math.Min(_arimaOptions.AROrder, _arCoefficients.Length);
+        int nRes = _trainingResiduals.Length;
+
+        for (int t = 0; t < horizon; t++)
+        {
+            // Deterministic mean: fitted regression on this step's future regressors.
+            T mean = _intercept;
+            int regLen = Math.Min(futureExogenous.Columns, _regressionCoefficients.Length);
+            for (int i = 0; i < regLen; i++)
+            {
+                mean = NumOps.Add(mean, NumOps.Multiply(futureExogenous[t, i], _regressionCoefficients[i]));
+            }
+
+            // AR(p) forecast of the regression error, using already-forecast errors and then falling
+            // back to the tail of the in-sample residuals for lags that reach before the horizon.
+            T errorForecast = NumOps.Zero;
+            for (int p = 0; p < arOrder; p++)
+            {
+                int forecastIdx = t - p - 1;
+                T priorError;
+                if (forecastIdx >= 0)
+                {
+                    priorError = errorHistory[forecastIdx];
+                }
+                else
+                {
+                    int trainIdx = nRes + forecastIdx; // forecastIdx is negative here
+                    priorError = (trainIdx >= 0 && trainIdx < nRes) ? _trainingResiduals[trainIdx] : NumOps.Zero;
+                }
+                errorForecast = NumOps.Add(errorForecast, NumOps.Multiply(_arCoefficients[p], priorError));
+            }
+
+            errorHistory[t] = errorForecast;
+            forecast[t] = NumOps.Add(mean, errorForecast);
+        }
+
+        // If the model differenced the series during training, the forecast above is on the
+        // differenced scale — integrate it back to the original scale.
+        if (_arimaOptions.DifferenceOrder > 0)
+        {
+            return InverseDifferenceTimeSeries(forecast, _differenced);
+        }
+
+        return forecast;
+    }
+
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
@@ -176,6 +245,13 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 
     /// <summary>Stored training series for in-sample predictions.</summary>
     private Vector<T> _trainingSeries = Vector<T>.Empty();
+
+    /// <summary>
+    /// The in-sample regression residuals (the ARIMA error term y - intercept - beta . x), retained
+    /// so <see cref="ForecastWithExogenous"/> can seed its AR error forecast from the tail of the
+    /// data the model was actually fit on.
+    /// </summary>
+    private Vector<T> _trainingResiduals = Vector<T>.Empty();
 
     /// <summary>
     /// Creates a new Dynamic Regression with ARIMA Errors model with the specified options.
@@ -405,7 +481,20 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         Vector<T> xTy = xT * y;
 
         _regressionCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _arimaOptions.DecompositionType);
-        _intercept = NumOps.Divide(Engine.Sum(y), NumOps.FromDouble(y.Length));
+
+        // Intercept = mean(y) - sum_i beta_i * mean(x_i), i.e. the mean of the regression residuals,
+        // so the ARIMA error term is zero-mean. Using mean(y) alone double-counts the level that the
+        // regression slope already explains (especially with a through-origin design that has no
+        // constant column), which biases every out-of-sample forecast upward by ~beta . mean(x).
+        T meanY = NumOps.Divide(Engine.Sum(y), NumOps.FromDouble(y.Length));
+        T betaDotMeanX = NumOps.Zero;
+        int coeffCount = Math.Min(_regressionCoefficients.Length, x.Columns);
+        for (int i = 0; i < coeffCount; i++)
+        {
+            T colMean = NumOps.Divide(Engine.Sum(x.GetColumn(i)), NumOps.FromDouble(x.Rows));
+            betaDotMeanX = NumOps.Add(betaDotMeanX, NumOps.Multiply(_regressionCoefficients[i], colMean));
+        }
+        _intercept = NumOps.Subtract(meanY, betaDotMeanX);
     }
 
     /// <summary>
@@ -430,8 +519,15 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> ExtractResiduals(Matrix<T> x, Vector<T> y)
     {
+        // The ARIMA error term is y minus the FULL regression mean (intercept + beta . x), so the
+        // residuals fed to the ARIMA fit — and reused to seed the forecast — are zero-mean.
         Vector<T> predictions = x * _regressionCoefficients;
-        return y - predictions;
+        Vector<T> residuals = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            residuals[i] = NumOps.Subtract(NumOps.Subtract(y[i], predictions[i]), _intercept);
+        }
+        return residuals;
     }
 
     /// <summary>
@@ -588,30 +684,84 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     {
         int maxIterations = 100;
         T tolerance = NumOps.FromDouble(1e-6);
-        T prevLikelihood = NumOps.MinValue;
+
+        // Refine from the Yule-Walker / innovation estimates, but only KEEP a step when it stays
+        // finite and improves the log-likelihood. A poorly-scaled gradient step is rejected and the
+        // best-known coefficients restored, so the optimizer can never blow the coefficients up to
+        // NaN. This matters because the out-of-sample forecast actually uses these coefficients
+        // (in-sample prediction returns the stored fitted values and never exercised them).
+        Vector<T> bestAr = _arCoefficients.Clone();
+        Vector<T> bestMa = _maCoefficients.Clone();
+        T bestLikelihood = ComputeLogLikelihood(ComputeModelResiduals(residuals));
+        if (!IsFiniteValue(bestLikelihood))
+        {
+            return; // degenerate residuals (e.g. zero variance); keep the closed-form estimates
+        }
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
-            // Compute model residuals
             Vector<T> modelResiduals = ComputeModelResiduals(residuals);
 
-            // Compute log-likelihood
-            T likelihood = ComputeLogLikelihood(modelResiduals);
+            UpdateARCoefficients(modelResiduals);
+            UpdateMACoefficients(modelResiduals);
+            EnforceErrorStationarity();
 
-            // Check for convergence
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(likelihood, prevLikelihood)), tolerance))
+            T likelihood = ComputeLogLikelihood(ComputeModelResiduals(residuals));
+
+            // Reject a non-finite or non-improving step: restore the best coefficients and stop.
+            if (!IsFiniteValue(likelihood) || NumOps.LessThan(likelihood, bestLikelihood))
             {
+                _arCoefficients = bestAr;
+                _maCoefficients = bestMa;
                 break;
             }
 
-            prevLikelihood = likelihood;
-
-            // Update AR coefficients
-            UpdateARCoefficients(modelResiduals);
-
-            // Update MA coefficients
-            UpdateMACoefficients(modelResiduals);
+            bool converged = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(likelihood, bestLikelihood)), tolerance);
+            bestLikelihood = likelihood;
+            bestAr = _arCoefficients.Clone();
+            bestMa = _maCoefficients.Clone();
+            if (converged) break;
         }
+    }
+
+    /// <summary>
+    /// Clamps the AR and MA error-model coefficients into the stable/invertible region so the error
+    /// forecast (and the optimization that fits it) cannot diverge.
+    /// </summary>
+    /// <remarks>
+    /// A sufficient condition for the AR (resp. MA) operator 1 - sum(a_i z^i) to have all roots
+    /// outside the unit disk — i.e. a stationary, non-explosive recursion — is sum(|a_i|) &lt; 1.
+    /// When the combined absolute weight exceeds that, every coefficient is scaled down uniformly.
+    /// </remarks>
+    private void EnforceErrorStationarity()
+    {
+        ClampToStableRegion(_arCoefficients);
+        ClampToStableRegion(_maCoefficients);
+    }
+
+    private void ClampToStableRegion(Vector<T> coefficients)
+    {
+        T absSum = NumOps.Zero;
+        for (int i = 0; i < coefficients.Length; i++)
+        {
+            absSum = NumOps.Add(absSum, NumOps.Abs(coefficients[i]));
+        }
+
+        T cap = NumOps.FromDouble(0.99);
+        if (NumOps.GreaterThan(absSum, cap))
+        {
+            T scale = NumOps.Divide(cap, absSum);
+            for (int i = 0; i < coefficients.Length; i++)
+            {
+                coefficients[i] = NumOps.Multiply(coefficients[i], scale);
+            }
+        }
+    }
+
+    private static bool IsFiniteValue(T value)
+    {
+        double d = Convert.ToDouble(value);
+        return !double.IsNaN(d) && !double.IsInfinity(d);
     }
 
     /// <summary>
@@ -779,12 +929,17 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     private T ComputeARGradient(Vector<T> modelResiduals, int lag)
     {
         T gradient = NumOps.Zero;
+        int count = modelResiduals.Length - (lag + 1);
         for (int t = lag + 1; t < modelResiduals.Length; t++)
         {
             gradient = NumOps.Add(gradient, NumOps.Multiply(modelResiduals[t], modelResiduals[t - lag - 1]));
         }
 
-        return NumOps.Multiply(NumOps.FromDouble(-2), gradient);
+        // Normalize by the number of summed terms so the step size is independent of series length.
+        // An unnormalized sum grows with N and, at a fixed learning rate, makes the gradient step
+        // overshoot wildly (coefficients diverge to NaN within a few iterations).
+        if (count <= 0) return NumOps.Zero;
+        return NumOps.Multiply(NumOps.FromDouble(-2.0 / count), gradient);
     }
 
     /// <summary>
@@ -811,6 +966,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     private T ComputeMAGradient(Vector<T> modelResiduals, int lag)
     {
         T gradient = NumOps.Zero;
+        int count = modelResiduals.Length - (lag + 1);
         for (int t = lag + 1; t < modelResiduals.Length; t++)
         {
             T prevError = NumOps.Zero;
@@ -821,7 +977,9 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
             gradient = NumOps.Add(gradient, NumOps.Multiply(modelResiduals[t], prevError));
         }
 
-        return NumOps.Multiply(NumOps.FromDouble(-2), gradient);
+        // Normalize by the number of summed terms (see ComputeARGradient) to keep the step bounded.
+        if (count <= 0) return NumOps.Zero;
+        return NumOps.Multiply(NumOps.FromDouble(-2.0 / count), gradient);
     }
 
     /// <summary>
@@ -906,10 +1064,13 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         // 2. Ensure invertibility of MA process
         EnsureMAInvertibility();
 
-        // 3. Normalize regression coefficients
-        NormalizeRegressionCoefficients();
+        // NOTE: regression coefficients are intentionally NOT renormalized. Rescaling the fitted
+        // OLS slopes to unit norm destroys the regression scale (e.g. a lone slope of 0.5066 becomes
+        // exactly 1.0), so y = intercept + beta . x would forecast at the wrong magnitude. The
+        // coefficients must keep the scale OLS fit them at; optional shrinkage is handled by the
+        // configured regularizer below, which preserves scale when no regularization is configured.
 
-        // 4. Apply regularization to prevent overfitting
+        // 3. Apply regularization to prevent overfitting
         ApplyRegularization();
 
         // 5. Update intercept
@@ -1613,6 +1774,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 
         // Step 3: Extract residuals
         Vector<T> residuals = ExtractResiduals(x, diffY);
+        _trainingResiduals = residuals; // retained to seed the out-of-sample AR error forecast
 
         // Step 4: Fit ARIMA model to residuals
         FitARIMAModel(residuals);

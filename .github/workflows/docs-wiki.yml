@@ -1,0 +1,64 @@
+name: Docs Wiki (generate + gate)
+
+# Regenerates the auto-generated API reference wiki from the source XML doc comments, fails if
+# the committed wiki drifted from the source, and compile-checks every ```csharp example in the
+# website docs + wiki against the real AiDotNet assemblies. The wiki lives only in the Astro
+# website (the single canonical docs site); the legacy Jekyll docs/ tree was removed.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'website/src/content/docs/**'
+      - 'tools/WikiGenerator/**'
+      - 'tools/DocSnippetVerify/**'
+      - '.github/workflows/docs-wiki.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'website/src/content/docs/**'
+      - 'tools/WikiGenerator/**'
+      - 'tools/DocSnippetVerify/**'
+      - '.github/workflows/docs-wiki.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-wiki-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate-and-gate:
+    name: Generate wiki + compile-check snippets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AIDOTNET_DISABLE_GPU: '1'
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '10.0.x'
+
+      # Build the library (net8.0) so its XML doc file exists for the generator to read.
+      - name: Build AiDotNet (net8.0, with XML docs)
+        run: dotnet build src/AiDotNet.csproj -c Debug -f net8.0
+
+      # Regenerate the full API reference (every public type, by namespace + kind). The wiki is
+      # gitignored and generated fresh here (and in the website build), not committed.
+      - name: Generate API reference wiki
+        run: dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki
+
+      # Compile every ```csharp example in the website docs + generated wiki against the real
+      # AiDotNet assemblies. Fails on any drift that would break a published example.
+      - name: Compile-check doc + wiki snippets
+        run: dotnet run --project tools/DocSnippetVerify -c Debug -- website

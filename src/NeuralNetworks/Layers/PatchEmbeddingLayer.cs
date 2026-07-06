@@ -457,6 +457,15 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         // Reshape back to 3D: [B, N, embedDim]
         var projected = Engine.Reshape(projectedFlat, new[] { batchSize, _numPatches, _embeddingDim });
 
+        // When weight streaming is engaged the bias's resident storage is paged out after
+        // registration. Engine.TensorMatMul above rehydrates _projectionWeights transparently
+        // on access, but Engine.Reshape views the storage directly and does NOT trip the
+        // transparent-streaming rehydrate gate — so reshaping a paged-out bias would view empty
+        // storage and throw ("View exceeds storage bounds ... storage [0, -1]"). Touch .Data
+        // first: the 0.95.x rehydrate gate fires on .Data/.Memory access and brings the bias
+        // resident. Cheap (a property read) for the non-streaming common case.
+        _ = _projectionBias.Data;
+
         // Add bias (broadcast) — reshape bias fresh each call to keep the tape
         // GradFn chain alive (a cached reshape primed during inference would
         // disconnect _projectionBias from the backward walk).

@@ -269,7 +269,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
         // For 4D tensors (batch, channels, height, width), use Engine directly
         if (shape.Length == 4)
         {
-            _lastInput = input;
+            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
             return Engine.PixelShuffle(input, _upscaleFactor);
         }
 

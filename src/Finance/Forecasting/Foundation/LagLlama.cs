@@ -500,7 +500,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the LagLlama model, Predict produces predictions from input data. This is the main inference step of the LagLlama architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (!_useNativeMode) return ForecastOnnx(input);
         // Extract mu (point prediction) so Predict's output shape matches

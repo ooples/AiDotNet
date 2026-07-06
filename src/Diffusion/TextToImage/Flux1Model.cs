@@ -353,28 +353,14 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedMmdit = new MMDiTNoisePredictor<T>(
-            inputChannels: FLUX_LATENT_CHANNELS,
-            hiddenSize: FLUX_HIDDEN_SIZE,
-            numJointLayers: FLUX_JOINT_LAYERS,
-            numSingleLayers: FLUX_SINGLE_LAYERS,
-            numHeads: FLUX_NUM_HEADS,
-            patchSize: 2,
-            contextDim: FLUX_CONTEXT_DIM);
-        clonedMmdit.SetParameters(_mmdit.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: FLUX_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 1.5305);
-        clonedVae.SetParameters(_vae.GetParameters());
-
+        // Delegate to the predictor's and VAE's own Clone(), which reconstruct from their
+        // actual config fields (NOT hardcoded foundation-scale constants) and preserve
+        // materialized weights — so a caller-injected variant of any scale round-trips
+        // correctly. Rebuilding at fixed FLUX_HIDDEN_SIZE here would size a clone that cannot
+        // accept an injected tiny (or otherwise non-default) predictor's parameter vector.
         return new Flux1Model<T>(
-            mmdit: clonedMmdit,
-            vae: clonedVae,
+            mmdit: (MMDiTNoisePredictor<T>)_mmdit.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             variant: _variant);
     }

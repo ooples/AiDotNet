@@ -395,7 +395,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
     }
@@ -795,7 +795,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             current = layer.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
     }
@@ -824,7 +824,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             current = Layers[i].Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
     }

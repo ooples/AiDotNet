@@ -25,7 +25,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// is the per-token paper-faithful sum <c>W + W̃</c> at <c>d = 100</c>.
 /// </para>
 /// </remarks>
-public class GloVeTests : NeuralNetworkModelTestBase
+public class GloVeTests : NeuralNetworkModelTestBase<float>
 {
     // Paper-faithful inference: per-token output is W[i] + W̃[i] at d = 100,
     // so a 4-token input sequence produces a [4, 100] embedding tensor.
@@ -38,8 +38,8 @@ public class GloVeTests : NeuralNetworkModelTestBase
     // and W̃ across different test inputs.
     private const int TestVocabUpperBound = 100;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new GloVe<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new GloVe<float>();
 
     /// <summary>
     /// GloVe operates on integer token indices per the paper objective
@@ -49,9 +49,9 @@ public class GloVeTests : NeuralNetworkModelTestBase
     /// override only the rank-1 input case (<see cref="InputShape"/>) so
     /// inputs are valid token indices; targets remain continuous-valued.
     /// </summary>
-    protected override Tensor<double> CreateRandomTensor(int[] shape, Random rng)
+    protected override Tensor<float> CreateRandomTensor(int[] shape, Random rng)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<float>(shape);
         if (IsInputShape(shape))
         {
             for (int i = 0; i < tensor.Length; i++)
@@ -60,7 +60,7 @@ public class GloVeTests : NeuralNetworkModelTestBase
         else
         {
             for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = rng.NextDouble();
+                tensor[i] = (float)rng.NextDouble();
         }
         return tensor;
     }
@@ -71,9 +71,9 @@ public class GloVeTests : NeuralNetworkModelTestBase
     /// which would both round to 0 under <c>(int)</c> conversion. Map the
     /// scalar to deterministic but distinct indices instead.
     /// </summary>
-    protected override Tensor<double> CreateConstantTensor(int[] shape, double value)
+    protected override Tensor<float> CreateConstantTensor(int[] shape, double value)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<float>(shape);
         if (IsInputShape(shape))
         {
             // Deterministic non-zero index from the scalar so 0.1 and 0.9 map
@@ -84,7 +84,7 @@ public class GloVeTests : NeuralNetworkModelTestBase
         }
         else
         {
-            for (int i = 0; i < tensor.Length; i++) tensor[i] = value;
+            for (int i = 0; i < tensor.Length; i++) tensor[i] = (float)value;
         }
         return tensor;
     }

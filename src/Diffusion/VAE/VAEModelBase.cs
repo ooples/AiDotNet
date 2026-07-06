@@ -154,6 +154,23 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         yield return new Tensor<T>(new[] { p.Length }, p);
     }
 
+    /// <summary>
+    /// Streaming counterpart to <see cref="SetParameters"/>: assigns the VAE's weights from per-tensor
+    /// chunks supplied in the SAME order <see cref="GetParameterChunks"/> yields them. Default buffers
+    /// the chunks into one flat <see cref="Vector{T}"/> and delegates to <see cref="SetParameters"/> —
+    /// correct and back-compatible; a VAE is individually tractable (its weights fit a flat vector), so
+    /// this bounded buffer is not the foundation-scale OOM path (that is the billion-parameter noise
+    /// predictor, which streams per-tensor). Subclasses with separable encoder/decoder stores may
+    /// override to stay fully flat-free on the write side too.
+    /// </summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        // Buffer the chunk stream into one flat vector and delegate to SetParameters. Shared with
+        // DiffusionModelBase, NoisePredictorBase's legacy fallback, and the composite latent-diffusion
+        // models via DiffusionParameterChunkHelper (single source of truth for the framing/validation).
+        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+    }
+
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
     /// <inheritdoc/>
@@ -199,7 +216,11 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         // Reparameterization trick: z = mean + std * epsilon
         // std = exp(0.5 * logVariance)
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        // Inference RNG: when no explicit seed is given, use a STABLE seed (not the
+        // advancing RandomGenerator) so repeated Sample(sameInput) calls reproduce —
+        // the determinism contract. VAEModelBase doesn't derive from DiffusionModelBase,
+        // so the stable seed is inlined here. (Training paths use RandomGenerator directly.)
+        var rng = RandomHelper.CreateSeededRandom(seed ?? 0);
         var epsilon = SampleNoise(mean._shape, rng);
 
         var result = new Tensor<T>(mean._shape);
@@ -307,6 +328,17 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 
     /// <inheritdoc />
     public abstract void SetParameters(Vector<T> parameters);
+
+    /// <summary>
+    /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>
+    /// via the global <see cref="AiDotNet.Helpers.CopyOnWriteCloneHelper"/> (O(1)-until-write), instead of
+    /// the flat <c>GetParameters()</c> → <c>SetParameters()</c> round-trip that materializes the entire VAE
+    /// a second time — the source of large-VAE <c>Clone()</c> OOMs. Returns <c>false</c> (leaving this VAE
+    /// untouched) if the trainable-layer structure doesn't line up 1:1, so the caller falls back to the
+    /// eager flat copy.
+    /// </summary>
+    protected bool TryShareParametersFrom(VAEModelBase<T> source)
+        => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this);
 
     /// <inheritdoc />
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)

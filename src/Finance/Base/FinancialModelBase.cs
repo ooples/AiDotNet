@@ -578,7 +578,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// the broader AiDotNet interfaces. It forwards to the same logic.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return Forecast(input);
     }

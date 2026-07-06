@@ -50,7 +50,7 @@ public class GradientCheckpointingTransformerIssue1341Tests
     /// <c>Directory.Packages.props</c>'s AiDotNet.Tensors version and remove
     /// the Skip attribute once the upstream fix is consumable.
     /// </remarks>
-    [Fact(Skip = "Blocked on ooples/AiDotNet.Tensors#361 — GradientCheckpointing vjp seeding fix. Un-skip after the Tensors NuGet that includes the fix is referenced in Directory.Packages.props.")]
+    [Fact]
     public void Transformer_Train_with_ForTransformers_checkpointing_does_not_throw_on_shape_mismatch()
     {
         const int vocabSize = 256;
@@ -123,7 +123,7 @@ public class GradientCheckpointingTransformerIssue1341Tests
     /// <c>Directory.Packages.props</c>'s AiDotNet.Tensors version and remove
     /// the Skip attribute once the upstream fix is consumable.
     /// </remarks>
-    [Fact(Skip = "Blocked on ooples/AiDotNet.Tensors#361 — GradientCheckpointing vjp seeding fix. Un-skip after the Tensors NuGet that includes the fix is referenced in Directory.Packages.props.")]
+    [Fact]
     public void Transformer_Train_with_checkpointing_succeeds_for_repeated_calls()
     {
         const int vocabSize = 32;
@@ -173,4 +173,19 @@ public class GradientCheckpointingTransformerIssue1341Tests
 
         _output.WriteLine("Three consecutive checkpointed Train calls succeeded.");
     }
+
+    // NOTE ON COVERAGE: a two-instance "checkpoint-on vs checkpoint-off parameter-update equivalence"
+    // test was attempted and removed because it cannot validly isolate checkpointing for this model —
+    // two independently-built/cloned Transformers trained in sequence diverge by an identical, fully
+    // deterministic amount EVEN WITH CHECKPOINTING OFF (order-dependent shared training state between
+    // the two Train calls, not the flat-parameter-sync gap). So that harness measures the shared-state
+    // artifact, not the checkpoint, and would give a false signal either way.
+    //
+    // The NN-base Transformer checkpoint path is instead covered by:
+    //   - the two un-skipped #1341 tests above, which run the real ForTransformers() checkpointed
+    //     Train end-to-end on the referenced package and assert it completes with a finite loss; and
+    //   - the package-level gradient-EQUIVALENCE tests in AiDotNet.Tensors
+    //     (GradientCorrectnessTests.Checkpoint_*), which prove the primitive NeuralNetworkBase calls is
+    //     exact w.r.t. BOTH inputs and weights across single-/multi-segment, scaling (4 segments), and
+    //     residual (attention-shape) blocks — the actual correctness guarantee.
 }

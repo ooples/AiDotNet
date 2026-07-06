@@ -335,22 +335,9 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new FluxDoubleStreamPredictor<T>(
-            variant: FluxPredictorVariant.V2);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: FLUX2_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 1.5305);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new Flux2Model<T>(
-            predictor: clonedPredictor,
-            vae: clonedVae,
+                        return new Flux2Model<T>(
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             variant: _variant);
     }

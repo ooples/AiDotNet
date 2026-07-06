@@ -45,6 +45,35 @@ public class InferenceOptimizerIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task Optimizer_PagedKVCache_RewritesMHA_ToPagedCachedMHA()
+    {
+        await Task.Yield();
+        // EnablePagedKVCache is on in InferenceOptimizationConfig.Default; this proves that flag
+        // specifically rewrites MHA to the PAGED cache-backed attention (vLLM-style block KV cache)
+        // — the sibling Default test only asserts "paged OR non-paged", so this pins the paged path.
+        var model = CreateMHAModel();
+        Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = true,
+            EnablePagedKVCache = true,
+            EnableFlashAttention = false,
+            AttentionMasking = AttentionMaskingMode.Causal
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        Assert.True(anyApplied);
+        Assert.Contains(optimized.Layers, l => l is PagedCachedMultiHeadAttention<float>);
+        Assert.DoesNotContain(optimized.Layers, l => l is MultiHeadAttentionLayer<float>);
+
+        var paged = optimized.Layers.OfType<PagedCachedMultiHeadAttention<float>>().First();
+        Assert.True(paged.InferenceMode);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task Optimizer_RewritesGQA_ToCachedGQA_WithKVCache()
     {
         var model = CreateGQAModel(numHeads: 8, numKVHeads: 2);
@@ -361,6 +390,42 @@ public class InferenceOptimizerIntegrationTests
     }
 
     #region Helpers
+
+    // #1632 (enable-the-inference-stack-by-default): proves the EXACT config the proposed
+    // default-on flip would apply — InferenceOptimizationConfig.Default — actually engages the
+    // stack (not just stores flags): MHA is rewritten to the cached form and a KVCache is built
+    // and attached. This is the precondition the default-flip relies on; if Default ever stopped
+    // engaging, flipping the builder default would silently do nothing.
+    [Fact(Timeout = 120000)]
+    public async Task DefaultConfig_EngagesStack_RewritesMHAAndBuildsKVCache()
+    {
+        await Task.Yield();
+        var config = AiDotNet.Configuration.InferenceOptimizationConfig.Default;
+        // The Default ships with the load-bearing flags on (so default-on means something).
+        Assert.True(config.EnableKVCache);
+        Assert.True(config.EnableFlashAttention);
+        Assert.True(config.EnableLayerFusion);
+
+        var model = CreateMHAModel();
+        Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        Assert.True(anyApplied, "InferenceOptimizationConfig.Default must engage at least one optimization");
+        // Default has EnablePagedKVCache=true, so the rewrite target is the PAGED cached attention
+        // (the non-paged CachedMultiHeadAttention is only produced when EnablePagedKVCache=false —
+        // covered by the sibling tests). Either way the MHA is rewritten to a cache-backed form;
+        // that rewrite is the proof the stack actually engages under the default config.
+        Assert.Contains(optimized.Layers,
+            l => l is PagedCachedMultiHeadAttention<float> || l is CachedMultiHeadAttention<float>);
+
+        // ...and the KV cache the rewrite is backed by was actually built/attached (the second half
+        // of this test's contract). Default has EnablePagedKVCache=true, so the paged cache is the
+        // one that must exist; the non-paged cache stays null on this path.
+        Assert.NotNull(optimizer.PagedKVCache);
+        Assert.Null(optimizer.KVCache);
+    }
 
     private static NeuralNetworkBase<float> CreateMHAModel(
         PositionalEncodingType posEncoding = PositionalEncodingType.None)

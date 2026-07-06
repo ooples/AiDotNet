@@ -673,7 +673,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);

@@ -62,6 +62,10 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
     private DiTNoisePredictor<T>? _predictor;
     private TemporalVAE<T>? _temporalVAE;
     private readonly IConditioningModule<T>? _conditioner;
+    // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
+    // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the
+    // sub-models with a null seed — dropping the requested seed and making construction non-reproducible.
+    private readonly int? _seed;
 
     public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _predictor; } }
     public override IVAEModel<T> VAE { get { EnsureInitialized(); return _temporalVAE; } }
@@ -100,6 +104,7 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
         if (predictor is not null || temporalVAE is not null)
             InitializeLayers(predictor, temporalVAE, seed);
     }
@@ -108,7 +113,7 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_predictor is null || _temporalVAE is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
@@ -123,7 +128,8 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
             numLayers: 32,
             numHeads: 16,
             patchSize: 2,
-            contextDim: CONTEXT_DIM);
+            contextDim: CONTEXT_DIM,
+            seed: seed);
 
         _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
             inputChannels: 3,
@@ -133,7 +139,8 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
             numTemporalLayers: 4,
             temporalKernelSize: 3,
             causalMode: true,
-            latentScaleFactor: 0.18215);
+            latentScaleFactor: 0.18215,
+            seed: seed);
     }
 
     protected override Tensor<T> PredictVideoNoise(
@@ -177,17 +184,8 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();
-        var clonedPredictor = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: 2048,
-            numLayers: 32,
-            numHeads: 16,
-            patchSize: 2,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        return new OpenSora2Model<T>(
-            predictor: clonedPredictor,
+                return new OpenSora2Model<T>(
+            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

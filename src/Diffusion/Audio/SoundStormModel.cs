@@ -220,12 +220,7 @@ public class SoundStormModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedConformer = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: HIDDEN_DIM,
-            numLayers: NUM_LAYERS, numHeads: NUM_HEADS,
-            patchSize: 1, contextDim: CONTEXT_DIM);
-        clonedConformer.SetParameters(_conformer.GetParameters());
-        return new SoundStormModel<T>(conformer: clonedConformer,
+                return new SoundStormModel<T>(conformer: (DiTNoisePredictor<T>)_conformer.Clone(),
             audioVAE: (AudioVAE<T>)_audioVAE.Clone(),
             conditioner: _conditioner);
     }

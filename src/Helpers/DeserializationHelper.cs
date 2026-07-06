@@ -661,6 +661,10 @@ public static class DeserializationHelper
         {
             instance = CreateMultiHeadAttentionLayer<T>(type, inputShape, additionalParams);
         }
+        else if (genericDef == typeof(CrossAttentionLayer<>))
+        {
+            instance = CreateCrossAttentionLayer<T>(type, inputShape, additionalParams);
+        }
         else if (genericDef == typeof(TransformerEncoderLayer<>))
         {
             // The current TransformerEncoderLayer<T> constructor is (numHeads, feedForwardDim);
@@ -1068,6 +1072,7 @@ public static class DeserializationHelper
             int kernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
+            int groups = TryGetInt(additionalParams, "Groups") ?? 1; // #639 depthwise marker
             // outputShape can be rank-4 [batch, depth, height, width] (NCHW) when
             // serialized after a batched forward, OR rank-3 [depth, height, width]
             // when GetOutputShape() returns the layer-only shape (no batch axis).
@@ -1086,8 +1091,10 @@ public static class DeserializationHelper
             // Try the 7-param ctor first (added nonlinearityForInit for paper-faithful
             // Conv→BN→LeakyReLU init gain). Fall back to the 6-param ctor for
             // backwards compatibility with older builds.
+            // #639: prefer the 8-param ctor that carries `groups` (depthwise) when present.
+            var ctor8 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType, activationFuncType, typeof(int) });
             var ctor7 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType, activationFuncType });
-            var ctor = ctor7 ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
+            var ctor = ctor8 ?? ctor7 ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new MissingLayerCtorException($"Cannot find ConvolutionalLayer constructor.");
@@ -1098,9 +1105,11 @@ public static class DeserializationHelper
             // Pass null for nonlinearityForInit on deserialization — weights are
             // restored from the saved parameter vector, so InitializeWeights
             // never runs and the gain choice is moot for the clone path.
-            instance = ctor7 is not null
-                ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null })
-                : ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
+            instance = ctor8 is not null
+                ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null, groups })
+                : ctor7 is not null
+                    ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null })
+                    : ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
 
             // Pre-resolve the lazy layer using the serialized inputShape so SetParameters
             // sees the correct InputDepth and the kernel/bias counts match the saved
@@ -1872,6 +1881,51 @@ public static class DeserializationHelper
             }
             instance = ctorTeb.Invoke(argsTeb);
         }
+        else if (genericDef.Name == "TimeSformerBlockLayer`1")
+        {
+            int hsTsb = TryGetInt(additionalParams, "HiddenSize")
+                ?? (inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'HiddenSize' metadata or a rank>=1 inputShape."));
+            int nhTsb = TryGetInt(additionalParams, "NumHeads")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'NumHeads' metadata.");
+            int ffTsb = TryGetInt(additionalParams, "FfnDim")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
+            int nfTsb = TryGetInt(additionalParams, "NumFrames")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'NumFrames' metadata.");
+
+            if (hsTsb <= 0 || nhTsb <= 0 || ffTsb <= 0 || nfTsb <= 0)
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} metadata is corrupt: hiddenSize ({hsTsb}), numHeads ({nhTsb}), " +
+                    $"ffnDim ({ffTsb}), and numFrames ({nfTsb}) must all be positive.");
+            if (hsTsb % nhTsb != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} divisibility violation: hiddenSize ({hsTsb}) must be a " +
+                    $"multiple of numHeads ({nhTsb}). Serialized metadata is corrupt.");
+            }
+
+            var activationFuncTypeTsb = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? ffnActivationTsb = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncTypeTsb);
+            var ctorTsb = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault()
+                ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psTsb = ctorTsb.GetParameters();
+            var argsTsb = new object?[psTsb.Length];
+            for (int i = 0; i < psTsb.Length; i++)
+            {
+                var p = psTsb[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                argsTsb[i] = (p.ParameterType, n) switch
+                {
+                    (Type t, _) when t == typeof(int) && n == "hiddensize" => hsTsb,
+                    (Type t, _) when t == typeof(int) && n == "numheads" => nhTsb,
+                    (Type t, _) when t == typeof(int) && n == "ffndim" => ffTsb,
+                    (Type t, _) when t == typeof(int) && n == "numframes" => nfTsb,
+                    (_, "ffnactivation") => ffnActivationTsb,
+                    _ => p.HasDefaultValue ? p.DefaultValue : null,
+                };
+            }
+            instance = ctorTsb.Invoke(argsTsb);
+        }
         else if (genericDef.Name == "TransformerDecoderBlock`1")
         {
             // Pre-LN decoder block (ctor: hiddenSize, numHeads, ffnDim, dropoutRate).
@@ -2075,9 +2129,11 @@ public static class DeserializationHelper
             //  HybridSchedulePattern, modelDimension, IActivationFunction)
             // HybridBlockScheduler.GetMetadata persists SequenceLength /
             // ModelDimension / NumBlocks / SchedulePattern. Fail fast if
-            // missing — issue #1239. The inner blocks list still uses the
-            // ILayer<T> placeholder until the proper round-trip via
-            // ILayerSerializationExtras lands (separately tracked).
+            // missing — issue #1239. The inner blocks now round-trip as
+            // proper MambaBlock / GatedLinearAttentionLayer instances based
+            // on the AttentionPattern + per-type dimension metadata that
+            // GetMetadata persists, so SetParameters can correctly route
+            // params into each real sub-block (Jamba/Samba/Zamba Clone tests).
             int seqLen = TryGetInt(additionalParams, "SequenceLength")
                 ?? throw new InvalidOperationException(
                     "HybridBlockScheduler requires 'SequenceLength' metadata (added in #1239).");
@@ -2088,23 +2144,62 @@ public static class DeserializationHelper
                 ?? throw new InvalidOperationException(
                     "HybridBlockScheduler requires 'NumBlocks' metadata (added in #1239).");
 
-            // Construct numBlocks placeholder inner-block instances (still
-            // using the DenseLayer<T> placeholder pattern — the real inner
-            // layers round-trip via ILayerSerializationExtras follow-up).
+            // Recover the per-position attention/SSM pattern from metadata.
+            // Older models without AttentionPattern metadata fall back to
+            // all-SSM (the placeholder regime before block-typed deser).
+            var isAttentionPattern = new bool[numBlocks];
+            if (additionalParams is not null
+                && additionalParams.TryGetValue("AttentionPattern", out var patternObj)
+                && patternObj is string patternStr)
+            {
+                int n = Math.Min(numBlocks, patternStr.Length);
+                for (int i = 0; i < n; i++)
+                    isAttentionPattern[i] = patternStr[i] == '1';
+            }
+
+            // Per-type dimension metadata (sampled from the source model's
+            // first SSM / first attention block in HybridBlockScheduler.GetMetadata).
+            int mambaStateDim = TryGetInt(additionalParams, "MambaStateDimension") ?? 16;
+            int mambaExpand = TryGetInt(additionalParams, "MambaExpandFactor") ?? 2;
+            int mambaConv = TryGetInt(additionalParams, "MambaConvKernelSize") ?? 4;
+            int mambaDtRank = TryGetInt(additionalParams, "MambaDtRank") ?? -1;
+            int attnNumHeads = TryGetInt(additionalParams, "AttentionNumHeads") ?? 8;
+
+            // Mamba2Block dims. Zamba2 uses Mamba2Block for BOTH its SSM AND its
+            // attention-flagged positions, so SsmBlockType / AttnBlockType select
+            // the concrete inner-block class per bucket. Without this the rebuild
+            // used MambaBlock/GLA and the scheduler ParameterCount diverged from
+            // the original (Zamba2 Clone_AfterTraining: 5052928 vs 5618976).
+            int m2StateDim = TryGetInt(additionalParams, "Mamba2StateDimension") ?? 64;
+            int m2NumHeads = TryGetInt(additionalParams, "Mamba2NumHeads") ?? 8;
+            int m2Expand = TryGetInt(additionalParams, "Mamba2ExpandFactor") ?? 2;
+            int m2Conv = TryGetInt(additionalParams, "Mamba2ConvKernelSize") ?? 4;
+            int m2Chunk = TryGetInt(additionalParams, "Mamba2ChunkSize") ?? 64;
+            string ssmType = (additionalParams?.TryGetValue("SsmBlockType", out var sst) == true ? sst as string : null) ?? "Mamba1";
+            string attnType = (additionalParams?.TryGetValue("AttnBlockType", out var att) == true ? att as string : null) ?? "GLA";
+
+            ILayer<T> BuildSchedBlock(bool isAttn)
+            {
+                string bt = isAttn ? attnType : ssmType;
+                if (bt == "Mamba2")
+                    return new NeuralNetworks.Layers.SSM.Mamba2Block<T>(
+                        seqLen, modelDim, m2StateDim, m2NumHeads, m2Expand, m2Conv, m2Chunk);
+                if (isAttn)
+                    return new NeuralNetworks.Layers.SSM.GatedLinearAttentionLayer<T>(
+                        seqLen, modelDim, attnNumHeads);
+                return new NeuralNetworks.Layers.SSM.MambaBlock<T>(
+                    seqLen, modelDim, mambaStateDim, mambaExpand, mambaConv, mambaDtRank);
+            }
+
+            // Construct numBlocks proper inner-block instances using the
+            // metadata-driven type + dimensions. This makes the cloned
+            // scheduler.ParameterCount match the original, so SetParameters
+            // routes params into the correct sub-block shapes instead of
+            // failing with a placeholder-vs-real mismatch.
             var blocksArrayType = typeof(ILayer<T>).MakeArrayType();
             var blocksArray = Array.CreateInstance(typeof(ILayer<T>), numBlocks);
             for (int b = 0; b < numBlocks; b++)
-            {
-                if (!TryCreatePlaceholderInnerLayer<T>(typeof(ILayer<T>), out var blockLayer) || blockLayer is null)
-                {
-                    throw new InvalidOperationException(
-                        $"HybridBlockScheduler placeholder block construction failed at index {b}.");
-                }
-                blocksArray.SetValue(blockLayer, b);
-            }
-            // Default isAttentionBlock pattern: all false (all SSM). Real
-            // pattern restoration would need a serialized bool[] payload.
-            var isAttentionPattern = new bool[numBlocks];
+                blocksArray.SetValue(BuildSchedBlock(isAttentionPattern[b]), b);
 
             var ctorH = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psH = ctorH.GetParameters();
@@ -2298,19 +2393,109 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(ResidualLayer<>))
         {
-            // ResidualLayer wraps an inner DenseLayer. Reconstruct inner layer from metadata.
-            int innerInputSize = TryGetInt(additionalParams, "InnerInputSize") ?? inputShape[0];
-            int innerOutputSize = TryGetInt(additionalParams, "InnerOutputSize") ?? inputShape[0];
+            var scalarActivationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var vectorActivationFuncType = typeof(IVectorActivationFunction<>).MakeGenericType(typeof(T));
+            // ResidualLayer can carry EITHER a scalar or a vector activation (it has a
+            // ctor for each), and LayerBase.GetMetadata serializes whichever it holds
+            // under ScalarActivationType / VectorActivationType. Restore both so a
+            // vector-activation ResidualLayer doesn't silently round-trip to scalar/identity.
+            bool hasResidualScalarActivation = additionalParams?.ContainsKey("ScalarActivationType") == true;
+            bool hasResidualVectorActivation = additionalParams?.ContainsKey("VectorActivationType") == true;
+            object? residualScalarActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", scalarActivationFuncType);
+            object? residualVectorActivation = TryCreateActivationInstance(additionalParams, "VectorActivationType", vectorActivationFuncType);
+            // A present-but-unrestorable activation key means the saved model used an
+            // activation we can't reconstruct. Falling through would silently swap it for
+            // identity, deserializing a DIFFERENT model than was saved — reject instead.
+            if (hasResidualScalarActivation && residualScalarActivation is null)
+                throw new InvalidOperationException(
+                    $"ResidualLayer metadata contains ScalarActivationType='{additionalParams!["ScalarActivationType"]}' " +
+                    "but it could not be restored; refusing to silently substitute identity.");
+            if (hasResidualVectorActivation && residualVectorActivation is null)
+                throw new InvalidOperationException(
+                    $"ResidualLayer metadata contains VectorActivationType='{additionalParams!["VectorActivationType"]}' " +
+                    "but it could not be restored; refusing to silently substitute identity.");
 
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            var innerLayer = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
-            // Eagerly resolve so ValidateInnerLayer sees concrete matching shapes.
-            innerLayer.ResolveFromShape(new[] { innerInputSize });
+            // Preferred path: reconstruct the inner layer by its REAL type from the
+            // full type-name + I/O shapes + nested "Inner__" metadata written by
+            // ResidualLayer.GetMetadata. This round-trips ANY inner layer (Conv,
+            // Dense, …) instead of assuming a DenseLayer — without it, a ResidualLayer
+            // wrapping a ConvolutionalLayer rebuilds as a wrong-sized DenseLayer and
+            // SetParameters throws "Expected N parameters, but got M" on Clone/DeepCopy.
+            ILayer<T>? innerLayer = null;
+            string? innerTypeName = null;
+            object? innerTypeObj = null;
+            if (additionalParams != null
+                && additionalParams.TryGetValue("InnerLayerTypeName", out innerTypeObj))
+            {
+                // The preferred metadata key is present, so an empty/non-string value is a
+                // HARD error: the legacy Dense fallback is only valid for older saves that
+                // never wrote InnerLayerTypeName at all. Silently rebuilding a named inner
+                // layer as Dense would deserialize the wrong architecture. The pattern match
+                // narrows innerTypeName to non-null on net471 too (string.IsNullOrWhiteSpace
+                // there lacks the [NotNullWhen] annotation the compiler would otherwise use).
+                if (innerTypeObj is not string innerTypeStr || string.IsNullOrWhiteSpace(innerTypeStr))
+                    throw new InvalidOperationException(
+                        "ResidualLayer metadata contains InnerLayerTypeName but it is empty or not a string; " +
+                        "refusing to silently rebuild it as a Dense layer.");
+                innerTypeName = innerTypeStr;
 
-            // Create ResidualLayer directly to avoid constructor ambiguity
-            object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = new ResidualLayer<T>(innerLayer, residualActivation as IActivationFunction<T>);
+                int[]? innerIn = TryGetIntArray(additionalParams, "InnerLayerInputShape");
+                int[]? innerOut = TryGetIntArray(additionalParams, "InnerLayerOutputShape");
+                // The preferred (type-name) metadata is present, so corrupt/missing
+                // inner shapes must be a HARD error — falling through to the legacy
+                // Dense fallback would silently rebuild a Conv/other inner as the wrong
+                // Dense architecture. The legacy fallback is only for saves that never
+                // wrote InnerLayerTypeName at all.
+                if (innerIn is not { Length: > 0 } || innerOut is not { Length: > 0 })
+                    throw new InvalidOperationException(
+                        $"ResidualLayer metadata names inner layer '{innerTypeName}' but its " +
+                        "InnerLayerInputShape/InnerLayerOutputShape is missing or unparseable; " +
+                        "refusing to silently rebuild it as a Dense layer.");
+                {
+                    // Strip the "Inner__" prefix so the inner layer's own metadata
+                    // (FilterSize/Stride/Padding/ScalarActivationType/…) is read by
+                    // CreateLayerFromType's per-type branch verbatim.
+                    var innerParams = new Dictionary<string, object>();
+                    foreach (var kv in additionalParams)
+                    {
+                        if (kv.Key.StartsWith("Inner__", StringComparison.Ordinal))
+                            innerParams[kv.Key.Substring("Inner__".Length)] = kv.Value;
+                    }
+
+                    var built = CreateLayerFromType<T>(innerTypeName, innerIn, innerOut, innerParams);
+                    if (built is LayerBase<T> builtBase
+                        && !builtBase.IsShapeResolved
+                        && System.Array.TrueForAll(innerIn, d => d > 0))
+                    {
+                        try { builtBase.ResolveFromShape(innerIn); }
+                        catch (Exception resolveEx)
+                        {
+                            System.Diagnostics.Trace.TraceWarning(
+                                $"DeserializationHelper: ResolveFromShape on reconstructed ResidualLayer inner " +
+                                $"'{innerTypeName}' with shape [{string.Join(",", innerIn)}] failed: {resolveEx.Message}");
+                        }
+                    }
+                    innerLayer = built;
+                }
+            }
+
+            if (innerLayer is null)
+            {
+                // Legacy fallback: older saves stored only a scalar Dense size.
+                int innerInputSize = TryGetInt(additionalParams, "InnerInputSize") ?? inputShape[0];
+                int innerOutputSize = TryGetInt(additionalParams, "InnerOutputSize") ?? inputShape[0];
+                object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", scalarActivationFuncType);
+                var denseInner = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
+                // Eagerly resolve so ValidateInnerLayer sees concrete matching shapes.
+                denseInner.ResolveFromShape(new[] { innerInputSize });
+                innerLayer = denseInner;
+            }
+
+            // Create ResidualLayer directly to avoid constructor ambiguity. Prefer the
+            // vector-activation ctor when a vector activation was serialized; else scalar.
+            instance = residualVectorActivation is IVectorActivationFunction<T> residualVectorAct
+                ? new ResidualLayer<T>(innerLayer, residualVectorAct)
+                : new ResidualLayer<T>(innerLayer, residualScalarActivation as IActivationFunction<T>);
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".MambaBlock`1"))
         {
@@ -2645,6 +2830,38 @@ public static class DeserializationHelper
         return ctor.Invoke(new object?[] { headCount, headDimension, activation, null });
     }
 
+    private static object CreateCrossAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
+    {
+        // CrossAttentionLayer(int queryDim, int contextDim, int headCount, int sequenceLength = 64).
+        // Its declared input shape is [sequenceLength, queryDim] — the SEQUENCE axis is FIRST, so
+        // queryDim is the LAST axis (NOT inputShape[0], which is the sequence length). contextDim and
+        // headCount are not encoded in the shape, so they come from the metadata written by
+        // CrossAttentionLayer.GetMetadata (ContextDim / HeadCount); fall back to queryDim / a
+        // shape-derived head count for any layer serialized before that metadata existed.
+        if (inputShape.Length < 2)
+        {
+            throw new InvalidOperationException("CrossAttentionLayer requires input shape [sequenceLength, queryDim].");
+        }
+
+        int queryDim = inputShape[^1];
+        int sequenceLength = inputShape[0];
+        int contextDim = TryGetInt(additionalParams, "ContextDim") ?? queryDim;
+        int headCount = TryGetInt(additionalParams, "HeadCount") ?? ResolveDefaultHeadCount(queryDim);
+        if (headCount <= 0 || queryDim % headCount != 0)
+        {
+            throw new InvalidOperationException(
+                $"CrossAttentionLayer deserialization: queryDim {queryDim} is not divisible by headCount {headCount}.");
+        }
+
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int) });
+        if (ctor is null)
+        {
+            throw new MissingLayerCtorException("Cannot find CrossAttentionLayer constructor with (int, int, int, int).");
+        }
+
+        return ctor.Invoke(new object?[] { queryDim, contextDim, headCount, sequenceLength });
+    }
+
     private static object CreateFlashAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
     {
         // FlashAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, FlashAttentionConfig config, IActivationFunction<T>? activationFunction = null)
@@ -2867,7 +3084,8 @@ public static class DeserializationHelper
     {
         // GRULayer(int hiddenSize, bool returnSequences = false, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
         // inputSize is now resolved lazily on first forward (lazy-shape contract from #1220).
-        int hiddenSize = outputShape.Length >= 2 ? outputShape[^1] : outputShape[0];
+        int hiddenSize = TryGetInt(additionalParams, "HiddenSize")
+            ?? (outputShape.Length >= 2 ? outputShape[^1] : outputShape[0]);
         // ReturnSequences serialization contract: when missing from
         // additionalParams, infer from the persisted output shape rather
         // than hard-coding `true` (which contradicts the GRULayer ctor
@@ -2880,14 +3098,21 @@ public static class DeserializationHelper
             ?? (outputShape.Length == inputShape.Length);
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(bool), activationFuncType, activationFuncType });
-        if (ctor is null)
-        {
-            throw new MissingLayerCtorException("Cannot find GRULayer constructor with (int hiddenSize, bool returnSequences, IActivationFunction<T>?, IActivationFunction<T>?).");
-        }
+        var activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType)
+            as IActivationFunction<T>;
+        var recurrentActivation = TryCreateActivationInstance(additionalParams, "RecurrentActivationType", activationFuncType)
+            as IActivationFunction<T>;
 
-        object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { hiddenSize, returnSequences, activation, null });
+        // Construct directly (this method is generic in T) rather than via a reflection ctor-type
+        // match. The GRULayer ctor gained a trailing optional `stateful` parameter, so the old
+        // GetConstructor(int, bool, IActivationFunction, IActivationFunction) lookup no longer matched
+        // (GetConstructor ignores optional params), threw MissingLayerCtorException, and fell through to
+        // the metadata-matching fallback — which built the GRU WITHOUT a ctor, leaving the readonly
+        // _activation/_recurrentActivation fields null. A cloned GRU then ran its gates/candidate through
+        // the wrong (identity) activation and diverged from the source despite byte-identical weights.
+        // Passing null activations lets the ctor restore its Tanh (candidate) / Sigmoid (gate) defaults,
+        // which match the model's default GRU construction.
+        return new GRULayer<T>(hiddenSize, returnSequences, activation, recurrentActivation);
     }
 
     /// <summary>

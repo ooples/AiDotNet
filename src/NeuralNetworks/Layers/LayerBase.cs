@@ -299,6 +299,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected bool IsTrainingMode = true;
 
     /// <summary>
+    /// When <c>true</c>, layers that have a faster but numerically-different inference path
+    /// (e.g. <see cref="DenseLayer{T}"/>'s fused matmul+activation kernel, used only in eval mode)
+    /// fall back to the same unfused path they use during training, so the eval-mode forward is
+    /// bit-identical to the training-mode forward. Default <c>false</c> — production inference keeps
+    /// the fast fused path; set this only when exact train/eval parity is required (e.g. determinism
+    /// tests). Propagated to sub-layers by <see cref="SetDeterministicForward"/>.
+    /// </summary>
+    public bool DeterministicForward { get; set; }
+
+    /// <summary>
     /// When true, Forward() records operations to a computation graph instead of executing them.
     /// Used by the JIT compiler to capture the full forward pass for compilation.
     /// Set via <see cref="SetCaptureMode"/>.
@@ -459,6 +469,49 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         // Layers with lazy initialization override this to allocate weights.
     }
 
+    /// <summary>
+    /// Forces lazy weight allocation now (the same materialization the first <c>Forward</c> performs),
+    /// so a caller can then read or write the layer's weights by reference through
+    /// <see cref="GetTrainableParameters"/> / <see cref="CopyTrainableParametersFrom"/> instead of
+    /// through a <see cref="GetParameters"/> copy.
+    /// </summary>
+    /// <remarks>
+    /// The allocation-free entry point for foundation-scale parameter streaming (#1624). A flat
+    /// <c>GetParameters()</c> concatenates every weight into one transient, multi-gigabyte
+    /// <see cref="LinearAlgebra.Vector{T}"/>; at &gt;2.1B-parameter scale (FLUX/MMDiT) that both overflows
+    /// the int-bounded array length AND GC-thrashes the heap into an <see cref="OutOfMemoryException"/>.
+    /// Materializing once and streaming the resident tensors by reference avoids the transient copy.
+    /// No-op for already-initialized layers and for lazy layers whose shape is not yet resolved (they
+    /// have nothing to allocate until their first real forward).
+    /// </remarks>
+    internal void MaterializeParameters() => EnsureParametersMaterialized();
+
+    /// <summary>
+    /// Forces lazy parameter allocation now (the hook <see cref="MaterializeParameters"/> drives).
+    /// </summary>
+    /// <remarks>
+    /// Default: routes through <see cref="EnsureInitialized"/> when the shape is resolved and the layer is
+    /// not yet initialized. A layer whose deferred-weight mechanism is distinct from shape-lazy init — e.g.
+    /// one whose <see cref="EnsureInitialized"/> is owned by the <c>[TrainableParameter]</c> source generator
+    /// and therefore cannot be overridden — overrides this hook to allocate its weights directly.
+    /// </remarks>
+    protected virtual void EnsureParametersMaterialized()
+    {
+        if (!IsInitialized && IsShapeResolved)
+        {
+            EnsureInitialized();
+            // #1715: register the just-materialized streaming weights with the pool so transparent
+            // auto-eviction can page them out — the forward path does this via
+            // EnsureInitializedFromInput → RegisterStreamingWeightsWithPool, but the
+            // parameter-materialization path (GetParameterChunks on foundation-scale predictors)
+            // reaches EnsureInitialized directly. Without registration, AllocateStreaming's
+            // ReserveBytes finds nothing to evict and the full (~25 GB for FLUX) weight set
+            // accumulates on the GC heap → OOM. No-op when streaming is inactive
+            // (UseStreamingAllocator false) or the weights aren't streaming-backed (idempotent).
+            RegisterStreamingWeightsWithPool();
+        }
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// <para>
@@ -601,6 +654,76 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     internal bool UseStreamingAllocator { get; set; }
 
     /// <summary>
+    /// Inference-only: keep this layer's large weight matrices RESIDENT at half precision (fp16) and
+    /// upcast to the compute type transiently per forward. Halves resident weight memory for a
+    /// foundation-scale tower (a 5.75B-param DiT: 23 GB fp32 → ~11.5 GB fp16) so it fits a memory-
+    /// bounded host — the industry-standard "store low / compute high" lever — WITHOUT the disk-backed
+    /// streaming pool (pages, ~1,670× slower) and WITHOUT Half arithmetic (scalar-slow on CPU). Set by
+    /// a foundation-scale predictor before the first forward; a no-op when the compute type is not
+    /// float. Must NOT be set while a gradient tape is active — training needs the fp32 master.
+    /// </summary>
+    internal bool LowPrecisionResident { get; set; }
+
+    /// <summary>
+    /// Thread-static, shape-keyed reuse pool for the transient full-precision upcast of an fp16-resident
+    /// weight (see <see cref="UpcastResidentWeight"/>). SHARED across every fp16-resident layer on this
+    /// thread: a foundation tower has only a handful of distinct weight shapes, so this holds ~that many
+    /// buffers, reused every layer and every forward step. Without reuse a fresh upcast tensor per layer
+    /// accumulates to the whole model (the GC can't reclaim ~hundreds of large tensors fast enough inside
+    /// one forward) → OOM. It must NOT be per-instance (one buffer per layer would equal the full fp32
+    /// model resident). Sequential forward makes in-place reuse safe — each matmul consumes its buffer
+    /// before the next same-shape weight overwrites it.
+    /// </summary>
+    [ThreadStatic]
+    private static Dictionary<string, Tensor<T>>? s_residentUpcastScratch;
+
+    /// <summary>
+    /// Returns the full-precision (T) form of an fp16-resident weight for use in one matmul, without
+    /// keeping a full-precision copy resident. On the first call it SIMD-downcasts <paramref name="full"/>
+    /// into the resident fp16 master <paramref name="half"/> (via <see cref="IVectorizedOperations{T}.ToHalfSpan"/>)
+    /// and frees the full-precision tensor; every call then SIMD-upcasts the half master into a reused,
+    /// shape-keyed scratch tensor (via <see cref="IVectorizedOperations{T}.FromHalfSpan"/>) — no per-call
+    /// allocation and no per-element loop. Generic over T through <see cref="NumOps"/> (the vectorized-ops
+    /// contract), so it is correct for any T; for float it routes to TensorPrimitives. The caller must
+    /// consume the returned tensor in its matmul before invoking this again for a same-shape weight, which
+    /// the sequential Q/K/V (and MLP) forward order guarantees.
+    /// </summary>
+    protected Tensor<T> UpcastResidentWeight(ref Tensor<T> full, ref Tensor<Half>? half)
+    {
+        if (half is null)
+        {
+            int frank = full.Rank;
+            int[] hdims = new int[frank];
+            for (int i = 0; i < frank; i++) hdims[i] = full.Shape[i];
+            var master = new Tensor<Half>(hdims);
+            NumOps.ToHalfSpan(full.AsSpan(), master.AsWritableSpan());
+            half = master;
+            // Drop the trainable-parameter registry's reference to the fp32 tensor BEFORE replacing it:
+            // _registeredTensors (and the engine's persistent-tensor list) pin the original array, so
+            // without this the full-precision weights are never GC'd and accumulate to the whole model
+            // (the OOM this fp16-resident path exists to prevent). Inference-only — the tape is inactive.
+            UnregisterTrainableParameter(full);
+            full = new Tensor<T>([0, 0]); // free the full-precision copy; only the fp16 master stays resident
+        }
+
+        Tensor<Half> resident = half;
+        int rank = resident.Rank;
+        int[] dims = new int[rank];
+        for (int i = 0; i < rank; i++) dims[i] = resident.Shape[i];
+
+        s_residentUpcastScratch ??= new Dictionary<string, Tensor<T>>();
+        string dimsKey = string.Join(",", dims);
+        if (!s_residentUpcastScratch.TryGetValue(dimsKey, out var scratch) || scratch is null)
+        {
+            scratch = new Tensor<T>(dims);
+            s_residentUpcastScratch[dimsKey] = scratch;
+        }
+
+        NumOps.FromHalfSpan(resident.AsSpan(), scratch.AsWritableSpan());
+        return scratch;
+    }
+
+    /// <summary>
     /// Allocates a lazy-init weight tensor of the given shape, routing
     /// through <see cref="WeightRegistry.AllocateStreaming{T}"/> when
     /// <see cref="UseStreamingAllocator"/> is true (so the pool can
@@ -638,8 +761,118 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (!IsShapeResolved)
         {
             OnFirstForward(input);
+            RegisterStreamingWeightsWithPool();
         }
         EnsureInitialized();
+    }
+
+    /// <summary>
+    /// Registers this layer's just-materialized streaming weight tensors with
+    /// the process-wide <see cref="WeightRegistry"/> so they become evictable
+    /// LRU entries the moment they exist — not in a batched post-forward sweep.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Lazy layers in a foundation-scale model allocate their weights through
+    /// <see cref="AllocateLazyWeight"/> → <c>WeightRegistry.AllocateStreaming</c>
+    /// during the FIRST forward. That call only <em>reserves</em> pool budget; it
+    /// does not register the tensor, so the weight is resident-on-heap but absent
+    /// from the pool's eviction LRU. Without this hook, every layer's weight
+    /// accumulates on the GC heap as the forward walks the stack — the pool has
+    /// nothing registered to evict — and a multi-GB model OOMs mid-forward on a
+    /// memory-bounded runner even though weight streaming is "enabled". The
+    /// previous registration path only ran AFTER the full forward (and is bypassed
+    /// entirely by models with a custom <c>Predict</c>), i.e. far too late.
+    /// </para>
+    /// <para>
+    /// Registering here adds the freshly-initialized weight to the LRU and drops
+    /// its resident copy to the backing store; this layer's own immediately-
+    /// following matmul transparently rehydrates it, and the next layer's
+    /// allocation evicts it again once the resident budget is crossed — keeping
+    /// the resident set bounded across the whole forward. No-op unless streaming
+    /// was enabled for this layer (<see cref="UseStreamingAllocator"/>);
+    /// idempotent via the already-registered handle gate.
+    /// </para>
+    /// </remarks>
+    private void RegisterStreamingWeightsWithPool()
+    {
+        if (!UseStreamingAllocator) return;
+        foreach (var tensor in GetTrainableParameters())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            // Only streaming-allocated tensors carry Lifetime.Streaming; skip
+            // anything already registered (handle assigned) to stay idempotent.
+            if (tensor.Lifetime != WeightLifetime.Streaming) continue;
+            if (tensor.StreamingPoolHandle >= 0) continue;
+            WeightRegistry.RegisterWeight(tensor);
+        }
+    }
+
+    // ── Shape-inference mode (single source of truth for lazy shape resolution) ─────
+    // When active, a leaf layer's Forward resolves its shape from the input (OnFirstForward)
+    // and returns a correctly-shaped, zero-filled placeholder WITHOUT materialising weights
+    // or running compute. A model can then run its real forward topology in this mode to
+    // resolve every layer's true shape exactly as the forward would (including skip
+    // concatenation, reshapes, etc.) — making ParameterCount / GetParameters / SetParameters
+    // / forward all agree, with no weight allocation. ThreadStatic: the resolution forward is
+    // synchronous and single-threaded, and normal forwards must never see it set.
+    [ThreadStatic]
+    private static bool _shapeInferenceActive;
+
+    /// <summary>
+    /// Whether the current thread is running a shape-only resolution forward. Leaf-layer
+    /// <c>Forward</c> overrides check this and return <see cref="ShapeInferenceOutput"/>
+    /// instead of materialising weights and computing. Off during all real forwards.
+    /// </summary>
+    internal static bool IsInferringShapes
+    {
+        get => _shapeInferenceActive;
+        set => _shapeInferenceActive = value;
+    }
+
+    /// <summary>
+    /// Resolves this layer's shape from <paramref name="input"/> (without allocating weights)
+    /// and returns a zero-filled tensor of the resulting forward output shape
+    /// (<c>[batch, ...OutputShape]</c>). Leaf layers call this at the top of <c>Forward</c>
+    /// when <see cref="IsInferringShapes"/> is set, so shapes propagate through the real
+    /// forward topology with no materialisation.
+    /// </summary>
+    protected virtual Tensor<T> ShapeInferenceOutput(Tensor<T> input)
+    {
+        if (!IsShapeResolved)
+        {
+            OnFirstForward(input);
+        }
+
+        // Default: forward output is [batch, ...OutputShape] — correct for layers like
+        // Conv/Deconv whose OutputShape carries the full per-sample output dims. Layers
+        // with a different shape contract (e.g. a rank-agnostic Dense that maps only the
+        // last axis) override this.
+        int batch = input.Shape.Length > 0 ? input.Shape[0] : 1;
+        int[] outShape = OutputShape;
+        var full = new int[outShape.Length + 1];
+        full[0] = batch;
+        System.Array.Copy(outShape, 0, full, 1, outShape.Length);
+        return new Tensor<T>(full);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="resolve"/> with shape-inference mode active, guaranteeing the flag
+    /// is cleared afterward even on exception. Models call this around a dummy forward to
+    /// resolve all layer shapes as the single source of truth.
+    /// </summary>
+    internal static void RunShapeInference(Action resolve)
+    {
+        bool prior = _shapeInferenceActive;
+        _shapeInferenceActive = true;
+        try
+        {
+            resolve();
+        }
+        finally
+        {
+            _shapeInferenceActive = prior;
+        }
     }
 
     /// <summary>
@@ -778,6 +1011,62 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public bool UseAutodiff { get; set; } = false;
+
+    /// <summary>
+    /// #1624 escape hatch / test hook. When true, layers populate their manual-
+    /// backward activation caches (cached Input/Output/pre-activation/statistics)
+    /// EVEN under tape autodiff. Default false: under a recording
+    /// <see cref="GradientTape{T}"/> the tape captures each op's own state, so the
+    /// manual caches are write-only dead weight that pins a SECOND reference to
+    /// every activation — the deep-model activation set behind the #1624 training-
+    /// scale OOM. Shared across all layer types, but backed by an
+    /// <see cref="System.Threading.AsyncLocal{T}"/> so the value is flow-local:
+    /// flipping it on one async flow (a test, or a single train/inference path)
+    /// never races with same-typed layers running on other threads/flows. A
+    /// plain static would let one parallel path flip cache behavior process-wide
+    /// for every <see cref="LayerBase{T}"/>.
+    /// </summary>
+    private static readonly System.Threading.AsyncLocal<bool> _keepActivationCacheUnderTape = new();
+
+    /// <summary>#1624 escape hatch / test hook — see <see cref="ShouldCacheActivationsForManualBackward"/>.</summary>
+    internal static bool KeepActivationCacheUnderTape
+    {
+        get => _keepActivationCacheUnderTape.Value;
+        set => _keepActivationCacheUnderTape.Value = value;
+    }
+
+    /// <summary>
+    /// True when the layer should populate its manual-backward activation caches:
+    /// only when NO <see cref="GradientTape{T}"/> is recording (the tape-less
+    /// manual-autodiff path may read them) or when <see cref="KeepActivationCacheUnderTape"/>
+    /// forces it, AND we are not inside an <see cref="InferenceMode"/> scope. Under a
+    /// recording tape the caches are never read — the tape backward walks the tape,
+    /// not the layers — and during inference no backward runs at all, so skipping
+    /// them frees the redundant activation reference (and, in a multi-forward arena
+    /// loop, prevents aliasing recycled scratch — issue #1668).
+    /// </summary>
+    protected static bool ShouldCacheActivationsForManualBackward
+        => !InferenceMode.IsActive
+        && (GradientTape<T>.Current is null || KeepActivationCacheUnderTape);
+
+    /// <summary>
+    /// True when this layer should populate its per-layer manual-backward activation
+    /// caches (the bespoke <c>_lastInput</c> / pre-activation fields a layer's own
+    /// eager <see cref="Backward(Tensor{T})"/> reads). This is the canonical guard
+    /// every such cache write should be gated on:
+    /// <code>if (ShouldCacheForBackward) _lastInput = input;</code>
+    /// It is false whenever no eager manual backward will read the caches —
+    /// during graph capture (<see cref="IsCapturing"/>), under a recording
+    /// <see cref="GradientTape{T}"/> (unless <see cref="KeepActivationCacheUnderTape"/>),
+    /// in eval mode (<see cref="IsTrainingMode"/> is false), or inside an
+    /// <see cref="InferenceMode"/> scope — so the redundant reference is dropped and the
+    /// inference caching allocator can safely recycle the buffer (issue #1668).
+    /// </summary>
+    protected bool ShouldCacheForBackward
+        => IsTrainingMode
+        && !IsCapturing
+        && !InferenceMode.IsActive
+        && (GradientTape<T>.Current is null || KeepActivationCacheUnderTape);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LayerBase{T}"/> class with the specified input and output shapes.
@@ -990,6 +1279,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         for (int i = 0; i < _registeredSubLayers.Count; i++)
         {
             _registeredSubLayers[i].SetTrainingMode(isTraining);
+        }
+    }
+
+    /// <summary>
+    /// Sets <see cref="DeterministicForward"/> on this layer and recursively on every registered
+    /// sub-layer (mirrors <see cref="SetTrainingMode"/>'s propagation), so a composite layer can put
+    /// its embedded layers on the unfused, train/eval-identical forward path with a single call.
+    /// </summary>
+    public virtual void SetDeterministicForward(bool deterministic)
+    {
+        DeterministicForward = deterministic;
+        for (int i = 0; i < _registeredSubLayers.Count; i++)
+        {
+            (_registeredSubLayers[i] as LayerBase<T>)?.SetDeterministicForward(deterministic);
         }
     }
 
@@ -2087,13 +2390,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         //     isn't sufficient.
         //
         // Only push when we know the eager backward will drain it: training
-        // mode ON, not capturing, no tape recording. The tape path already
-        // preserves the pre-activation reference through its recorded GradFn
-        // closures; the capture path encodes it into the graph node — both
-        // cases make the cache redundant.
+        // mode ON, not capturing, not inside an inference scope, no tape recording.
+        // The tape path already preserves the pre-activation reference through its
+        // recorded GradFn closures; the capture path encodes it into the graph node;
+        // an InferenceMode scope guarantees no backward at all — all three make the
+        // cache redundant (and leaving it set would alias arena scratch across a
+        // denoise-loop Reset — issue #1668).
         bool eagerBackwardWillRun =
             IsTrainingMode
             && !IsCapturing
+            && !InferenceMode.IsActive
             && GradientTape<T>.Current is null;
         if (eagerBackwardWillRun)
         {
@@ -3366,6 +3672,32 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         for (int i = 0; i < parameters.Count; i++)
             _registeredTensors[i] = parameters[i];
+    }
+
+    /// <summary>
+    /// Copies the values of <paramref name="sources"/> INTO this layer's existing trainable tensors,
+    /// element for element, without rebinding or allocating — the allocation-free, aliasing-free
+    /// counterpart to <see cref="SetTrainableParameters"/>. Foundation-scale chunked parameter
+    /// streaming (#1624) uses this: rebinding (<see cref="SetTrainableParameters"/>) would alias a
+    /// clone's weights onto the source's, whereas a span copy preserves each tensor's identity and
+    /// storage so a clone stays independent. Each destination's persistent-tensor cache is invalidated
+    /// so a GPU engine re-uploads the new values. Requires the layer to be materialized first
+    /// (see <see cref="MaterializeParameters"/>); a length mismatch throws.
+    /// </summary>
+    internal virtual void CopyTrainableParametersFrom(IReadOnlyList<Tensor<T>> sources)
+    {
+        var dst = GetTrainableParameters();
+        if (sources.Count != dst.Count)
+            throw new ArgumentException(
+                $"{GetType().Name} has {dst.Count} trainable tensors but received {sources.Count}.");
+        for (int i = 0; i < dst.Count; i++)
+        {
+            if (sources[i].Length != dst[i].Length)
+                throw new ArgumentException(
+                    $"{GetType().Name} trainable tensor {i} has length {dst[i].Length} but received {sources[i].Length}.");
+            sources[i].Data.Span.CopyTo(dst[i].Data.Span);
+            Engine.InvalidatePersistentTensor(dst[i]);
+        }
     }
 
     /// <summary>

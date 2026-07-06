@@ -330,7 +330,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             // If we run Forward on GPU, we should cache tensors if we want GPU backward.
             // But Backward logic is complex (Forward-Backward algo).
             // For now, cache CPU tensor to support existing Backward.
-            _lastInput = input;
+            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
             _lastOutput = new Tensor<T>(new Vector<T>(outputData.Select(x => NumOps.FromFloat(x)).ToArray()), [batchSize, seqLen, numClasses]);
         }
 
@@ -710,7 +710,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             input3D = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
 
-        _lastInput = input3D;
+        _lastInput = ShouldCacheForBackward ? input3D : null; // #1668: skip in inference (arena safety)
 
         // The actual sequence length of THIS input. Used for all Viterbi buffers and
         // loops below so the layer handles variable-length sequences (see note above).

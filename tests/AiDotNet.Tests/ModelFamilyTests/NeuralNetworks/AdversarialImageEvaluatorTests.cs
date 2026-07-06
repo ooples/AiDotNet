@@ -18,7 +18,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// default-arg threshold isn't recognised); this manual class supplies the
 /// ctor explicitly.
 /// </summary>
-public class AdversarialImageEvaluatorTests : NeuralNetworkModelTestBase
+public class AdversarialImageEvaluatorTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [1, 3, 32, 32];
     protected override int[] OutputShape => [1, 1];
@@ -38,8 +38,8 @@ public class AdversarialImageEvaluatorTests : NeuralNetworkModelTestBase
     /// </summary>
     protected override double TrainingErrorMultiplier => 100.0;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new AdversarialImageEvaluator<double>(threshold: 0.5);
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new AdversarialImageEvaluator<float>(threshold: 0.5);
 
     /// <summary>
     /// Override the base "different uniform inputs → different outputs"

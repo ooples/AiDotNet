@@ -524,7 +524,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     /// <summary>
     /// Predicts scene probabilities from audio features.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (IsOnnxMode && OnnxEncoder is not null)
         {

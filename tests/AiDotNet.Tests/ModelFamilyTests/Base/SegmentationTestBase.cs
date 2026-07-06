@@ -3,6 +3,7 @@ using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.ComputerVision.Segmentation.Common;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -11,7 +12,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits all NN invariant tests and adds segmentation-specific invariants:
 /// spatial dimension preservation, valid mask values, uniform input behavior, and output finiteness.
 /// </summary>
-public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
+public abstract class SegmentationTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // SEGMENTATION INVARIANT: Output Spatial Dimensions Match Input
@@ -66,7 +67,8 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(!double.IsNaN(output[i]) && !double.IsInfinity(output[i]),
+            double v = ConvertToDouble(output[i]);
+            Assert.True(!double.IsNaN(v) && !double.IsInfinity(v),
                 $"Mask value [{i}] is not finite — numerical instability in segmentation head.");
         }
     }
@@ -88,11 +90,17 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
 
         var output = network.Predict(uniformInput);
 
-        // Count distinct values (rounded to avoid floating-point noise)
+        // Segmentation models commonly emit raw logits. The paper-meaningful
+        // mask is the per-pixel class map after argmax along the class axis,
+        // not the raw score tensor itself.
+        if (output.Rank == 3 || output.Rank == 4)
+            output = SegmentationTensorOps.ArgmaxAlongClassDim(output);
+
+        // Count distinct mask labels (rounded to avoid floating-point noise)
         var distinctValues = new HashSet<int>();
         for (int i = 0; i < output.Length; i++)
         {
-            distinctValues.Add((int)Math.Round(output[i] * 100));
+            distinctValues.Add((int)Math.Round(ConvertToDouble(output[i]) * 100));
         }
 
         Assert.True(distinctValues.Count <= 3,
@@ -117,7 +125,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
         var output = network.Predict(input);
         double sum = 0;
         for (int i = 0; i < output.Length; i++)
-            sum += output[i];
+            sum += ConvertToDouble(output[i]);
 
         Assert.True(!double.IsNaN(sum) && !double.IsInfinity(sum),
             "Segmentation mask sum is not finite — overflow in output.");
@@ -125,3 +133,6 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
             $"Segmentation mask sum = {sum:E4} is unreasonably large.");
     }
 }
+
+/// <summary>Double-precision default for <see cref="SegmentationTestBase{T}"/>.</summary>
+public abstract class SegmentationTestBase : SegmentationTestBase<double> { }

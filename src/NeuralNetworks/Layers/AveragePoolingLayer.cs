@@ -281,7 +281,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
             throw new ArgumentException($"AveragePooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
         // Store input for autodiff backward pass
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 

@@ -82,6 +82,70 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
 #endif
     }
 
+    /// <summary>
+    /// Streaming counterpart to <see cref="SetParameters"/>: distributes per-tensor chunks to the
+    /// noise predictor, then the VAE, then the conditioner — the SAME order
+    /// <see cref="GetParameterChunks"/> yields them — without materializing a flat aggregate. Each
+    /// sub-model consumes exactly as many chunks as its own <see cref="GetParameterChunks"/> emits.
+    /// This is the set-side of the #1624 foundation-scale streaming path: FLUX/Sora/SD3.5-Large-class
+    /// stacks cannot round-trip through the flat <see cref="SetParameters"/> vector.
+    /// </summary>
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        // Detach copy-on-write-shared weights before streaming chunks straight into the sub-models'
+        // layers (this override bypasses the base flat SetParameters path), so a sibling clone isn't
+        // corrupted. Per-element null tensors are rejected by each sub-model's own SetParameterChunks.
+        EnsureOwnWeights();
+#if NETFRAMEWORK
+        // Chunked API is unavailable through the interface on net471 (see GetParameterChunks above);
+        // fall back to the base flat buffer-and-SetParameters path.
+        base.SetParameterChunks(chunks);
+#else
+        // Pull from a SINGLE shared enumerator so each sub-model draws exactly its own chunks off the
+        // front of the stream — one chunk in flight at a time. Never buffer the whole stream (that would
+        // re-create the flat-aggregate OOM as a pile of per-block copies for FLUX/Sora-scale predictors).
+        using var e = chunks.GetEnumerator();
+        PullInto(NoisePredictor as IParameterizable<T, Tensor<T>, Tensor<T>>, e);
+        PullInto(VAE as IParameterizable<T, Tensor<T>, Tensor<T>>, e);
+        PullInto(Conditioner as IParameterizable<T, Tensor<T>, Tensor<T>>, e);
+        if (e.MoveNext())
+            throw new ArgumentException(
+                "SetParameterChunks received more chunks than the model's " +
+                "noise-predictor/VAE/conditioner structure consumes.", nameof(chunks));
+#endif
+    }
+
+#if !NETFRAMEWORK
+    private static void PullInto(
+        IParameterizable<T, Tensor<T>, Tensor<T>>? sub, IEnumerator<Tensor<T>> source)
+    {
+        if (sub is null) return;
+
+        // How many chunks does this sub-model expect? Enumerating its generator costs one block in
+        // flight at a time (never a flat aggregate), so counting is cheap memory-wise.
+        int count = 0;
+        foreach (var _ in sub.GetParameterChunks()) count++;
+        if (count == 0) return;
+
+        // Hand the sub-model a LAZY view over the next `count` items of the shared enumerator. The
+        // sub-model's own SetParameterChunks pulls them one at a time, so peak stays at one chunk.
+        sub.SetParameterChunks(TakeFrom(source, count));
+    }
+
+    private static IEnumerable<Tensor<T>> TakeFrom(IEnumerator<Tensor<T>> source, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            if (!source.MoveNext())
+                throw new ArgumentException(
+                    "SetParameterChunks received fewer chunks than the model's sub-models expect.",
+                    nameof(source));
+            yield return source.Current;
+        }
+    }
+#endif
+
     /// <inheritdoc />
     public abstract IConditioningModule<T>? Conditioner { get; }
 
@@ -264,7 +328,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         var latentShape = new[] { 1, LatentChannels, latentHeight, latentWidth };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -359,7 +423,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         var startTimestep = Scheduler.Timesteps.Skip(startStep).First();
 
         // Add noise to latents at starting timestep
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var noise = SampleNoiseTensor(latentShape, rng);
         var noisyLatents = Scheduler.AddNoise(latents.ToVector(), noise.ToVector(), startTimestep);
         latents = new Tensor<T>(latentShape, noisyLatents);
@@ -431,7 +495,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         }
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler

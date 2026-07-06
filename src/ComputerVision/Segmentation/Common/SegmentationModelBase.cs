@@ -184,7 +184,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     /// <summary>
     /// Runs a forward pass, dispatching to ONNX or native mode.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (!_useNativeMode)
         {

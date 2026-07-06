@@ -174,6 +174,18 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> _biases;
 
     /// <summary>
+    /// fp16-resident copy of the weight matrix, used only when <see cref="LayerBase{T}.LowPrecisionResident"/>
+    /// is set (foundation-scale inference). When present it is the SOURCE OF TRUTH for the weights and
+    /// <see cref="_weights"/> is a freed placeholder; each forward upcasts this to fp32 transiently for the
+    /// matmul. Halves resident weight memory. Null in the normal full-precision path.
+    /// </summary>
+    private Tensor<Half>? _weightsHalf;
+
+    // The fp16-resident upcast machinery (downcast-once + reused SIMD upcast buffer) lives in
+    // LayerBase.UpcastResidentWeight so DenseLayer and SelfAttentionLayer share one thread-static
+    // shape-keyed scratch pool (same weight shapes → fewer resident buffers).
+
+    /// <summary>
     /// Temporary storage for weight gradients during backpropagation.
     /// </summary>
     /// <remarks>
@@ -237,6 +249,21 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
+    /// <summary>
+    /// Reusable per-layer scratch for the fused-linear OUTPUT ([batchDim, outputSize]),
+    /// used only on the #1672 <see cref="ForwardScratchGate"/> inference path
+    /// (<c>ForwardScratchGate.FusedLinear</c>). The fused matmul output is the dominant
+    /// residual per-call allocation in a DiT block; reusing this buffer across denoising
+    /// steps of the same token count removes it from the per-step allocation churn.
+    /// Reallocated whenever the required shape changes. Never aliased by any other live
+    /// tensor: <c>Engine.FusedLinearInto</c> fully overwrites every element each call, and
+    /// this layer instance is called once per forward with its result fully consumed
+    /// before the next call (sequential denoise steps), so per-INSTANCE reuse is safe.
+    /// NOT used while a gradient tape is active or in training (those need the recorded
+    /// allocating op).
+    /// </summary>
+    private Tensor<T>? _fusedLinearScratch;
+
     // GPU-resident cached tensors for GPU training pipeline
     private Tensor<T>? _lastInputGpu;
     private Tensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
@@ -276,6 +303,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 return (InputShape[0] * OutputShape[0]) + OutputShape[0];
             }
+            // Half-resident: _weights is a freed placeholder, _weightsHalf holds the real shape.
+            if (_weightsHalf is not null)
+                return (_weightsHalf.Shape[0] * _weightsHalf.Shape[1]) + _biases.Shape[0];
             return (_weights.Shape[0] * _weights.Shape[1]) + _biases.Shape[0];
         }
     }
@@ -453,14 +483,44 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             // Streaming-aware allocation: when the parent network has
             // engaged streaming, route through WeightRegistry.AllocateStreaming
-            // so the pool can pre-evict competing weights to disk before
-            // this allocation hits the GC heap. Otherwise preserve the
-            // existing arena-allocator fast path so non-streaming models
-            // don't pay the pool-lookup overhead.
+            // so the pool can pre-evict competing weights to disk before this
+            // allocation hits the GC heap. Otherwise allocate on the plain GC
+            // heap (AllocateLazyWeight's default `new Tensor<T>(shape)`).
+            //
+            // These weights are long-lived model parameters, but lazy
+            // materialization can run inside an active TensorArena (the first
+            // forward of a training step OR a diffusion denoise loop). Two
+            // earlier attempts routed weights through the arena and were both
+            // incomplete: TensorAllocator.Rent handed out scratch that the
+            // per-step Reset() reissued as transient activations (#1643), then
+            // TensorAllocator.RentPinned moved them to the pinned tier that
+            // survives Reset(). But RentPinned does NOT survive the arena's
+            // DISPOSE: across two separate Predict calls, each Generate creates
+            // and disposes its OWN denoise arena, the disposed arena's pinned
+            // buffers return to the shared pool, and the next Predict's arena
+            // reissues them as scratch — aliasing these still-referenced weights
+            // and corrupting them (#1711: eval Predict was non-deterministic —
+            // first call sane, second call garbage; HiDream/SD3-class MMDiT and
+            // any lazy DenseLayer in a per-step-Reset denoise loop). GC-heap
+            // weights are owned by the layer and never recycled by any arena, so
+            // they are correct by construction and survive both Reset AND
+            // Dispose. This matches AttentionLayer's Q/K/V/O weights, which
+            // already use the plain (no-arena-factory) AllocateLazyWeight.
             int[] wShape = [inputSize, outputSize];
             int[] bShape = [outputSize];
-            _weights = AllocateLazyWeight(wShape, () => TensorAllocator.Rent<T>(wShape));
-            _biases = AllocateLazyWeight(bShape, () => TensorAllocator.Rent<T>(bShape));
+            // fp16-resident eval: allocate the fp32 weights on the plain GC heap so that, immediately
+            // after this forward downcasts them to _weightsHalf, dropping the fp32 reference actually
+            // lets the GC reclaim it (AllocateLazyWeight would still GC-allocate when streaming is off,
+            // but bypass it here so the fp32 master is never registered with the streaming pool).
+            if (LowPrecisionResident)
+            {
+                _weights = new Tensor<T>(wShape);
+            }
+            else
+            {
+                _weights = AllocateLazyWeight(wShape);
+            }
+            _biases = AllocateLazyWeight(bShape);
 
             // Initialize using strategy or default. Skip strategies that only
             // advertise the LAZY deferral contract (IsLazy): their InitializeWeights
@@ -811,6 +871,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Ensure weights are initialized (supports lazy initialization)
         EnsureInitialized();
+        // Half-resident: upcast the fp16 master back to fp32 on demand.
+        if (_weightsHalf is not null) return _weightsHalf.Cast<T>();
         return _weights;
     }
 
@@ -860,8 +922,29 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is where the actual "thinking" happens in the neural network.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Dense maps only the last axis (to the output size) and preserves all leading
+    /// batch/sequence dims, so the shape-inference placeholder is the input shape with
+    /// its last dimension replaced by the output size.
+    /// </summary>
+    protected override Tensor<T> ShapeInferenceOutput(Tensor<T> input)
+    {
+        if (!IsShapeResolved)
+        {
+            OnFirstForward(input);
+        }
+        int rank = input.Shape.Length;
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++) shape[i] = input.Shape[i];
+        shape[rank - 1] = OutputShape[OutputShape.Length - 1];
+        return new Tensor<T>(shape);
+    }
+
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Shape-inference mode: resolve dims + return a placeholder, no weight allocation.
+        if (IsInferringShapes) return ShapeInferenceOutput(input);
+
         // Lazy layers must run shape resolution (OnFirstForward) BEFORE
         // EnsureInitialized — calling EnsureInitialized() directly on a
         // lazily-constructed DenseLayer reads InputShape[0]/OutputShape[0]
@@ -870,6 +953,22 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // EnsureInitializedFromInput is the correct lazy entry per
         // LayerBase docs.
         EnsureInitializedFromInput(input);
+
+        // Low-precision-resident inference (foundation-scale, eval): the fp16 copy is the SOURCE OF
+        // TRUTH; upcast it back to the compute type T just for this forward's matmul, then drop the
+        // upcast (below) so only the fp16 copy stays resident. Halves resident weight memory while
+        // compute stays at full T precision. Done before the _weights.Shape reads below so the shape
+        // checks see the real dims. Generic over T — Cast routes through INumericOperations, so it is
+        // correct for any T (and a no-op saving when T is already <= 16-bit).
+        bool lowPrecResident = false;
+        if (LowPrecisionResident && _isInitialized)
+        {
+            // Downcast-once to the fp16 master (freeing the fp32 copy) + SIMD-upcast into a shared reused
+            // scratch for this forward's matmul. _weights now points at the transient scratch; it is reset
+            // to a freed placeholder after the matmul below so only the fp16 master stays resident.
+            _weights = UpcastResidentWeight(ref _weights, ref _weightsHalf);
+            lowPrecResident = true;
+        }
 
         // _lastInput / _lastOutput are layer-side activation retention for
         // a backward path that's never reached when training goes through
@@ -881,9 +980,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 4096-wide intermediate `preActivation` is the larger cost — 16
         // KB at fp32 / 32 KB at fp64, and that's the value we'd otherwise
         // pin into _lastOutput.
-        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
-        _lastInput = tapeActive ? null : input;
+        // Retain the manual-backward activation caches only when an eager Backward will
+        // read them. A plain "no tape" test still cached during inference, which pinned the
+        // activation set and — inside the denoise-loop arena — aliased scratch recycled by
+        // the per-step Reset (issue #1668). ShouldCacheForBackward is additionally false in
+        // eval mode and inside an InferenceMode scope.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
         _originalInputShape = input._shape;
 
         // Industry standard: Support any-rank input tensors [..., inputSize]
@@ -938,10 +1041,41 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> result;
 
-        if (fusedActivation != FusedActivationType.None && !IsTrainingMode)
+        if (fusedActivation != FusedActivationType.None && !IsTrainingMode && !DeterministicForward)
         {
-            // Inference: use fused activation for maximum performance (no tape needed)
-            result = Engine.FusedLinear(flattenedInput, _weights, _biases, fusedActivation);
+            // Inference: use fused activation for maximum performance (no tape needed). This whole
+            // fast block is gated above on !DeterministicForward, so when DeterministicForward is set
+            // the eval forward falls through to the unfused training path below and stays bit-identical
+            // to it (fusion reorders the matmul+activation rounding by ~1e-8/element otherwise).
+            //
+            // #1672 destination-buffer fast path: when the scratch gate is ON and we are
+            // NOT recording a gradient tape (inference), compute the fused linear straight
+            // into a reused per-layer buffer instead of allocating [batchDim, outputSize]
+            // each call. Bit-identical math (same GEMM + bias/activation epilogue); the
+            // scratch is per-INSTANCE, fully overwritten, and consumed before the next call
+            // to this same layer, so reuse is safe across the denoise loop.
+            // Skip the reused scratch when a gradient tape is recording (e.g. classifier-guided
+            // diffusion runs a tape in eval mode): the tape holds this output for backward, so reusing
+            // the per-instance buffer on the next call to this layer would corrupt it. cacheBwd is false
+            // under eval mode regardless of the tape, so it can't gate this — check the tape directly.
+            if (ForwardScratchGate.FusedLinear && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+            {
+                int outputSize = _weights.Shape[1];
+                if (_fusedLinearScratch == null
+                    || _fusedLinearScratch.Shape.Length != 2
+                    || _fusedLinearScratch.Shape[0] != batchDim
+                    || _fusedLinearScratch.Shape[1] != outputSize)
+                {
+                    _fusedLinearScratch = new Tensor<T>([batchDim, outputSize]);
+                }
+                Engine.FusedLinearInto(_fusedLinearScratch, flattenedInput, _weights, _biases, fusedActivation);
+                result = _fusedLinearScratch;
+            }
+            else
+            {
+                // Inference: use fused activation for maximum performance (no tape needed)
+                result = Engine.FusedLinear(flattenedInput, _weights, _biases, fusedActivation);
+            }
         }
         else
         {
@@ -950,15 +1084,16 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // FusedLinear entry per forward pass (calling FusedLinear twice corrupts tape
             // entries via RemoveLastNTapeEntries).
             var preActivation = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
-            if (!tapeActive)
-            {
-                _lastOutput = preActivation;
-            }
-            else
-            {
-                _lastOutput = null;
-            }
+            _lastOutput = cacheBwd ? preActivation : null;
             result = ApplyActivation(preActivation);
+        }
+
+        if (lowPrecResident)
+        {
+            // Drop the transient fp32 upcast now the matmul has consumed it; only the fp16 master
+            // (_weightsHalf) stays resident. Without this the fp32 copy would persist per layer and
+            // defeat the half-memory goal.
+            _weights = new Tensor<T>([0, 0]);
         }
 
         // Reshape back to original shape with outputSize as last dimension
@@ -1150,7 +1285,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int existingInputSize = _weights.Shape[0];
         int outputSize = _weights.Shape[1];
-        var resizedWeights = TensorAllocator.Rent<T>([actualInputSize, outputSize]);
+        // GC-heap, NOT TensorAllocator.Rent (#1711): the resized tensor is assigned to _weights
+        // below — it is the layer's persistent parameter, not transient scratch. A lazily-sized
+        // Dense whose first forward widens its input (e.g. MMDiT's _timeEmbed1, declared at
+        // _hiddenSize but fed a TimeEmbeddingDim-wide sinusoidal embedding) lands here on the first
+        // forward. The first forward of a diffusion denoise loop runs inside the per-step TensorArena,
+        // so an arena-rented resize would be reissued as scratch on the next Reset()/Dispose and
+        // corrupt the weights — eval Predict became non-deterministic (call #1 sane, call #2 garbage).
+        // Mirrors the EnsureInitialized GC-heap allocation; arena recycling must never own weights.
+        var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
 
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
         for (int i = 0; i < sharedInputSize; i++)
@@ -1164,7 +1307,18 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (actualInputSize > sharedInputSize)
         {
             T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
-            var random = RandomHelper.CreateSecureRandom();
+            // #1643: reproducible weight resize. A lazily-sized DenseLayer that is materialized at
+            // one input width and then forwarded at a larger width (e.g. NTM's controller Dense:
+            // GetParameters() resolves it before ForwardTape feeds it the wider concat) lands here
+            // to append new weight columns. Seeding from the layer's wired RandomSeed makes that
+            // append DETERMINISTIC — the previous unseeded CreateSecureRandom re-randomized the
+            // appended columns on every forward, so two identically-seeded models produced
+            // different forward outputs (and hence different gradients) run-to-run, the root cause
+            // of NTM's M-N shard training-invariant flake. Falls back to a secure RNG in production
+            // (no wired seed), matching the seeded/fallback contract used by every other initializer.
+            var random = RandomSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+                : RandomHelper.CreateSecureRandom();
             for (int i = sharedInputSize; i < actualInputSize; i++)
             {
                 for (int o = 0; o < outputSize; o++)
@@ -1305,9 +1459,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (!IsShapeResolved) return new Vector<T>(0);
 
         EnsureInitialized();
+        // fp16-resident (#1764): _weights is a transient shared upcast scratch (overwritten every forward,
+        // and shared across same-shape layers), not the authoritative store. Read the resident half master
+        // — GetWeights() upcasts it — so the round-trip returns THIS layer's weights rather than whatever
+        // last occupied the scratch. Otherwise clone/serialize silently copies wrong (or another layer's)
+        // values at foundation scale.
+        var weightsView = _weightsHalf is not null ? GetWeights() : _weights;
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
+            Vector<T>.FromMemory(weightsView.Data),
             Vector<T>.FromMemory(_biases.Data));
     }
 
@@ -1376,6 +1536,26 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         EnsureInitialized();
+
+        // fp16-resident path (#1764): when LowPrecisionResident engaged, _weightsHalf is the authoritative
+        // weight store and _weights is a transient, shared upcast scratch that every forward overwrites
+        // from _weightsHalf. Writing the incoming weights into _weights would therefore be silently
+        // discarded on the next forward (the clone/deserialize would keep whatever the resident master
+        // held — e.g. a clone's random probe-init — diverging from the source). Downcast the incoming
+        // weights straight into the resident half master instead. Biases stay full precision.
+        if (_weightsHalf is not null)
+        {
+            int wLenHalf = _weightsHalf.Length;
+            int expectedHalf = wLenHalf + _biases.Length;
+            if (parameters.Length != expectedHalf)
+            {
+                throw new ArgumentException($"Expected {expectedHalf} parameters, but got {parameters.Length}");
+            }
+            NumOps.ToHalfSpan(parameters.AsSpan().Slice(0, wLenHalf), _weightsHalf.AsWritableSpan());
+            parameters.AsSpan().Slice(wLenHalf, _biases.Length).CopyTo(_biases.Data.Span);
+            Engine.InvalidatePersistentTensor(_biases);
+            return;
+        }
 
         int expected = _weights.Length + _biases.Length;
         if (parameters.Length != expected)

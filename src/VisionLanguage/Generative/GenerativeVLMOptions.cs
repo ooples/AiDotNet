@@ -74,7 +74,8 @@ public class GenerativeVLMOptions : ModelOptions
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>Gets or sets the generative architecture type.</summary>
-    public GenerativeArchitectureType ArchitectureType { get; set; } = GenerativeArchitectureType.EncoderDecoder;
+    public GenerativeArchitectureType ArchitectureType { get; set; } =
+        GenerativeArchitectureType.EncoderDecoder;
 
     /// <summary>Gets or sets the per-channel image normalization mean.</summary>
     public double[] ImageMean { get; set; } = [0.48145466, 0.4578275, 0.40821073];

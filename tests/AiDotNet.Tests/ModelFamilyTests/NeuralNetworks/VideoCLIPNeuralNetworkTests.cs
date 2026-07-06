@@ -26,7 +26,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 ///   - 4 frames (paper: 8) — temporal aggregation test
 ///   - Adam (β1=0.9, β2=0.98), LR=5e-5, grad-clip 2.0 (paper "Training Details")
 /// </summary>
-public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
+public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     // Paper input: [numFrames, channels, height, width] — video as frame sequence
     // 4 frames × 3 RGB channels × 32×32 (scaled from 224×224)
@@ -53,9 +53,9 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
     // dynamics + BLAS non-determinism don't trip the broken-gradient bound.
     protected override double TrainingLossReductionTolerance => 1e-3;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var architecture = new NeuralNetworkArchitecture<double>(
+        var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 32,
@@ -69,7 +69,7 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
         // runs only a handful of memorization steps, so the warm-up +
         // polynomial-decay schedule collapses to a static learning rate; the
         // paper-faithful Adam betas and gradient-clip norm are kept as-is.
-        var optimizerOptions = new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+        var optimizerOptions = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
         {
             InitialLearningRate = 5e-5,  // Paper: initial LR 5e-5
             Beta1 = 0.9,                 // Paper: Adam β1 = 0.9
@@ -89,7 +89,7 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
         // baseline that barely moves regardless of training success — the loss
         // formula plateau, not a gradient bug). Override here so the test
         // measures actual embedding alignment.
-        var model = new VideoCLIPNeuralNetwork<double>(
+        var model = new VideoCLIPNeuralNetwork<float>(
             architecture,
             imageSize: 32,              // Paper: 224 (ViT-B/16 input resolution)
             channels: 3,                // Paper: 3 RGB channels
@@ -106,8 +106,8 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
             numFrames: 4,               // Paper: 8 (sampled frames per video)
             frameRate: 1.0,             // Paper: 1 FPS sampling
             temporalAggregation: TemporalAggregationType.TemporalTransformer,
-            optimizer: new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, optimizerOptions),
-            lossFunction: new CosineSimilarityLoss<double>());
+            optimizer: new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, optimizerOptions),
+            lossFunction: new CosineSimilarityLoss<float>());
 
         return model;
     }

@@ -383,7 +383,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// or time series forecasting.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Set to inference mode
         SetTrainingMode(false);
@@ -392,17 +392,20 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Simple layer-by-layer forward pass
-        // Each layer (including LSTM layers) handles its own time-stepping internally
-        // This matches the industry-standard approach used by GRU networks
-        var current = input;
-
-        foreach (var layer in Layers)
+        // Simple layer-by-layer forward pass (wrapped in the #1622 verify-then-trust compiled gate;
+        // no-op unless acceleration is engaged). Each layer (including LSTM layers) handles its own
+        // time-stepping internally — matching the industry-standard approach used by GRU networks.
+        return Accelerate(input, () =>
         {
-            current = layer.Forward(current);
-        }
+            var current = input;
 
-        return current;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+
+            return current;
+        });
     }
 
     /// <summary>

@@ -33,5 +33,13 @@ public class GITOptions : GenerativeVLMOptions
         WeightDecay = other.WeightDecay;
     }
 
-    public GITOptions() { ArchitectureType = GenerativeArchitectureType.EncoderDecoder; VisionDim = 768; DecoderDim = 768; NumVisionLayers = 12; NumDecoderLayers = 6; NumHeads = 12; }
+    public GITOptions()
+    {
+        ArchitectureType = GenerativeArchitectureType.EncoderDecoder;
+        VisionDim = 768;
+        DecoderDim = 768;
+        NumVisionLayers = 12;
+        NumDecoderLayers = 6;
+        NumHeads = 12;
+    }
 }
