@@ -20,7 +20,15 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true  # Cancel stale release when new push to master arrives
+  # NEVER cancel an in-flight release. cancel-in-progress: true meant that any new push to master
+  # killed the running pipeline — and because master gets frequent pushes, releases were cancelled
+  # mid-flight (observed: Version+Build+Pack succeed, then Publish/GitHub-release get CANCELLED), so
+  # NO version ever published to NuGet. Worse, cancelling between the NuGet push and the git tag /
+  # GitHub release leaves a half-completed release (package pushed, tag missing). Publishing an
+  # immutable versioned artifact must be atomic. With false, the group still SERIALIZES runs (only
+  # one release at a time — no double-publish race), but each queued release runs to completion, so
+  # every should_release commit actually ships its version.
+  cancel-in-progress: false
 
 permissions:
   contents: write
