@@ -70,11 +70,22 @@ public sealed class MultiOutputRegressor<T>
 
     public Matrix<T> Predict(Matrix<T> input)
     {
-        var result = new Matrix<T>(input.Rows, Math.Max(1, _heads.Count));
+        if (_heads.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "MultiOutputRegressor has not been trained. Call Train(input, expectedOutput) before Predict().");
+        }
+
+        var result = new Matrix<T>(input.Rows, _heads.Count);
         for (var j = 0; j < _heads.Count; j++)
         {
             var col = _heads[j].Predict(input);
-            for (var i = 0; i < input.Rows && i < col.Length; i++)
+            if (col.Length != input.Rows)
+            {
+                throw new InvalidOperationException(
+                    $"MultiOutputRegressor head {j} predicted {col.Length} values for {input.Rows} input rows.");
+            }
+            for (var i = 0; i < input.Rows; i++)
             {
                 result[i, j] = col[i];
             }

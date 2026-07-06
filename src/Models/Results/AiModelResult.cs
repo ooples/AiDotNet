@@ -1880,7 +1880,31 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         if (EnsureModel is AiDotNet.TimeSeries.TimeSeriesModelBase<T> timeSeriesModel)
         {
-            return timeSeriesModel.Predict(lookback, horizon);
+            var forecast = timeSeriesModel.Predict(lookback, horizon);
+
+            // Apply the SAME denormalization + postprocessing tail as Predict(TInput) so a configured target
+            // scaler / postprocessing pipeline is honored — otherwise this overload silently returns forecasts
+            // on the model's normalized scale, inconsistent with Predict(TInput). Those transforms are typed on
+            // TOutput; a time-series result has TOutput == Vector<T> (feature matrix -> target vector), so route
+            // the forecast through them only in that case (else there is nothing configured to apply).
+            if (typeof(TOutput) == typeof(Vector<T>) && forecast is TOutput forecastAsOutput)
+            {
+                var denormalized = PreprocessingInfo?.IsTargetFitted == true
+                    ? PreprocessingInfo.InverseTransformPredictions(forecastAsOutput)
+                    : forecastAsOutput;
+
+                if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
+                {
+                    denormalized = PostprocessingPipeline.Transform(denormalized);
+                }
+
+                if (denormalized is Vector<T> denormalizedVector)
+                {
+                    return denormalizedVector;
+                }
+            }
+
+            return forecast;
         }
 
         throw new NotSupportedException(

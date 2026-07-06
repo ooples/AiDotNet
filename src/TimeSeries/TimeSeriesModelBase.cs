@@ -559,11 +559,33 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// (e.g. N-BEATS, DeepAR, Informer, TFT) override this to emit all steps at once, which avoids recursive error
     /// accumulation. Overriding is optional — every time-series model gets correct multi-horizon output for free.</para>
     /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="lookback"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="horizon"/> is not positive, or <paramref name="lookback"/> is empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
     public virtual Vector<T> Predict(Vector<T> lookback, int horizon)
     {
+        // Match the safeguards of the sibling Predict(Matrix<T>): suppress the autodiff tape during this
+        // recursive inference loop, and validate inputs / trained-state up front.
+        using var _noGrad = new NoGradScope<T>();
+
+        if (lookback is null)
+        {
+            throw new ArgumentNullException(nameof(lookback), "Lookback window cannot be null.");
+        }
+
         if (horizon <= 0)
         {
             throw new ArgumentException("Horizon must be positive.", nameof(horizon));
+        }
+
+        if (lookback.Length == 0)
+        {
+            throw new ArgumentException("Lookback window cannot be empty.", nameof(lookback));
+        }
+
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("The model must be trained before making predictions.");
         }
 
         var window = new Vector<T>(lookback.Length);

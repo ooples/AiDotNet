@@ -1047,7 +1047,18 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             }),
             ActualBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = actualFlat }),
             PredictedBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = predictedFlat }),
-            PredictionStats = PredictionStats<T>.WithR2Only(meanR2),
+            // Full stats over the flattened residuals, but seeded with the uniform-average R² (the
+            // authoritative selection signal) rather than the pooled R² — so AdjustedR², intervals,
+            // correlations and the learning curve are populated on the preferred dataset too (#1793).
+            PredictionStats = PredictionStats<T>.WithFullStatsAndSeededR2(new PredictionStatsInputs<T>
+            {
+                Actual = actualFlat,
+                Predicted = predictedFlat,
+                NumberOfParameters = inputSize,
+                ConfidenceLevel = PredictionOptions.ConfidenceLevel,
+                LearningCurveSteps = PredictionOptions.LearningCurveSteps,
+                PredictionType = predictionType
+            }, meanR2),
             Predicted = predictions,
             Features = X,
             Actual = y,
