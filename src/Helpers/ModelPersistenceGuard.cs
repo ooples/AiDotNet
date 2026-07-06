@@ -272,10 +272,24 @@ internal static class ModelPersistenceGuard
             switch (result.Status)
             {
                 case LicenseKeyStatus.Active:
-                case LicenseKeyStatus.ValidationPending:
-                    // Active or pending (within grace period) — allow the operation
+                    // Confirmed valid (online, or offline via a verified HMAC signature) — allow.
                     LicensingTelemetryCollector.Instance.RecordLicensedOperation("persistence");
                     return;
+
+                case LicenseKeyStatus.ValidationPending:
+                    // Server unreachable and not validated in-process. Honour it ONLY when this key has a
+                    // machine-bound attestation of a recent SUCCESSFUL online validation — otherwise blocking the
+                    // license server would grant unbounded unlicensed persistence. A key that has validated online
+                    // (e.g. a community/open-source key) keeps working offline for AttestationValidity.
+                    if (OnlineValidationAttestation.HasValidWithin(
+                            licenseKey, OnlineValidationAttestation.AttestationValidity))
+                    {
+                        LicensingTelemetryCollector.Instance.RecordLicensedOperation("persistence");
+                        return;
+                    }
+
+                    LicensingTelemetryCollector.Instance.RecordLicensingError("validation_pending_no_attestation");
+                    throw new LicenseRequiredException(TrialExpirationReason.LicenseInvalid);
 
                 case LicenseKeyStatus.Expired:
                     LicensingTelemetryCollector.Instance.RecordLicensingError("license_expired");

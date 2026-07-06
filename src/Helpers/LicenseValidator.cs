@@ -175,6 +175,14 @@ internal sealed class LicenseValidator
                 _cached = result;
             }
 
+            // Record a machine-bound attestation of this SUCCESSFUL online validation so the persistence gate can
+            // safely honour a later ValidationPending (server unreachable) without opening a "block the server →
+            // free forever" bypass. Best-effort; never affects the returned result.
+            if (result.Status == LicenseKeyStatus.Active)
+            {
+                OnlineValidationAttestation.Record(_licenseKey.Key);
+            }
+
             return result;
         }
         catch (Exception ex)
@@ -543,6 +551,11 @@ internal sealed class LicenseValidator
         {
             var result = await ValidateOnlineAsync(cancellationToken).ConfigureAwait(false);
             lock (_cacheLock) { _cached = result; }
+            if (result.Status == LicenseKeyStatus.Active)
+            {
+                OnlineValidationAttestation.Record(_licenseKey.Key);
+            }
+
             return result;
         }
         catch
