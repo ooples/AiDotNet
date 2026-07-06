@@ -169,12 +169,36 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Adam with a short linear LR warmup. This optimizer is wired into training via the
+        // GetOrCreateBaseOptimizer override below (without that override base.Train used the base
+        // DEFAULT optimizer and ignored this field entirely). Without warmup the first few full-LR
+        // Adam steps on this deep encoder-decoder overshoot and DRIVE THE LOSS UP (1.8 -> 8.2 over
+        // the 3 steps Training_ShouldReduceLoss runs); the 10-step warmup keeps those steps tiny,
+        // then reaches full LR so longer runs (memorization = 100 iters) still learn.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 0.001,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: 0.001, warmupSteps: 10, totalSteps: 1000,
+                    warmupInitLr: 1e-6,
+                    decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Cosine,
+                    endLr: 0.0),
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+            });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Routes tape-based training (NeuralNetworkBase.Train) through the model's own Adam+warmup
+    /// optimizer. Without this override base.Train uses the base default optimizer and the
+    /// constructor-supplied <see cref="_optimizer"/> (and its warmup) is silently ignored.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
 
     private void CopyOptionsToFields(ChronosBoltOptions<T> options)
     {
@@ -686,8 +710,18 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
                 current = layer.Forward(current);
         }
 
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = Engine.Reshape(current, new[] { current.Shape[1] });
+        // Drop the leading batch dim we added for a single unbatched series, for ANY output rank.
+        // The quantile head emits [1, forecastHorizon, numQuantiles]; the caller (and the training
+        // target / OutputShape) expect [forecastHorizon, numQuantiles]. Leaving the [1,...] batch dim
+        // makes the training loss compare mismatched shapes ([1,64,9] vs [64,9]) — the gradient is
+        // then computed against a broadcast/misaligned target and training DIVERGES (loss rises)
+        // instead of reducing. Squeezing to match the target restores a correct gradient.
+        if (addedBatchDim && current.Rank >= 2 && current.Shape[0] == 1)
+        {
+            var squeezed = new int[current.Rank - 1];
+            for (int i = 1; i < current.Rank; i++) squeezed[i - 1] = current.Shape[i];
+            current = Engine.Reshape(current, squeezed);
+        }
         return current;
     }
 
