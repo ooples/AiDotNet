@@ -31,12 +31,13 @@ namespace AiDotNet.TrainingMonitoring;
 /// it is with <paramref name="lossRisePercent"/> and <paramref name="windowSize"/>.
 /// </para>
 /// <para>
-/// This is an internal facade-plumbing type; end users engage the built-in health guard through
-/// <c>AiModelBuilder.ConfigureHealthMonitor(...)</c> rather than constructing it directly.
+/// Register it with <c>AiModelBuilder.ConfigureTrainingCallback(new HealthMonitorCallback&lt;T&gt;(...))</c>;
+/// its thresholds (<c>lossRisePercent</c>, <c>windowSize</c>) and optional monitor integration are
+/// user-configurable, and <see cref="AbortReason"/> is readable after training.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-internal sealed class HealthMonitorCallback<T> : ITrainingCallback<T>
+public sealed class HealthMonitorCallback<T> : ITrainingCallback<T>
 {
     private readonly double _lossRiseFraction;
     private readonly int _windowSize;

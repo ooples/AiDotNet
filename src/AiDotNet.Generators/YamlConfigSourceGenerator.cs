@@ -142,13 +142,8 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
                 info.Category = SectionCategory.ActionBuilder;
                 info.ActionInnerType = named.TypeArguments[0];
             }
-            else if (paramType.TypeKind == TypeKind.Class
-                || (paramType.TypeKind == TypeKind.Struct && paramType.SpecialType == SpecialType.None))
+            else if (paramType.TypeKind == TypeKind.Class || paramType.TypeKind == TypeKind.Struct)
             {
-                // Primitive value types (double/int/bool/...) are structs but are NOT POCO config sections:
-                // the generated config property is nullable (e.g. double?) and can't be passed to a
-                // non-nullable primitive parameter. Route those to Unknown below so they emit a skip-TODO
-                // instead of code that fails to compile (e.g. a builder.ConfigureHealthMonitor(double,int)).
                 info.Category = SectionCategory.PocoConfig;
                 info.IsAbstract = paramType.IsAbstract;
 

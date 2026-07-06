@@ -1760,8 +1760,9 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Use this when you want a reusable object that sets up before
-    /// training, reacts after each epoch, and cleans up at the end. For the common "stop a run whose
-    /// loss blows up" guard, prefer the built-in <see cref="ConfigureHealthMonitor(double, int)"/>.
+    /// training, reacts after each epoch, and cleans up at the end — for example
+    /// <see cref="AiDotNet.TrainingMonitoring.HealthMonitorCallback{T}"/>, which automatically
+    /// stops a run whose loss blows up.
     /// </para>
     /// <para>
     /// Register multiple callbacks (and combine with the delegate overload) as needed; they are
@@ -1771,23 +1772,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="callback">The callback whose lifecycle methods the training loop invokes.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingCallback(ITrainingCallback<T> callback);
-
-    /// <summary>
-    /// Registers the built-in training health guard that automatically aborts a run whose loss becomes
-    /// NaN/infinite or diverges (rises well above the recent-window best).
-    /// </summary>
-    /// <param name="lossRisePercent">
-    /// How much the loss may rise, as a percentage of the best loss in the recent window, before the run
-    /// is considered diverging. Defaults to 50. Values &lt;= 0 disable the rising-loss check.
-    /// </param>
-    /// <param name="windowSize">
-    /// The number of most-recent epochs the rising-loss check compares against. Defaults to 5; must be &gt;= 1.
-    /// </param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="lossRisePercent"/> is NaN/infinite, or <paramref name="windowSize"/> is less than 1.
-    /// </exception>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureHealthMonitor(double lossRisePercent = 50.0, int windowSize = 5);
 
     /// <summary>
     /// Configures model registry for centralized model storage and versioning.
