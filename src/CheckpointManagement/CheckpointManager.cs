@@ -32,6 +32,14 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
     }
 
     /// <summary>
+    /// Suffix for the sidecar file that holds the model's own <see cref="ICheckpointableModel"/>
+    /// state next to the checkpoint JSON. The JSON only round-trips the model as an untyped JSON
+    /// object (models are not JSON-round-trippable); this sidecar is what <see cref="RestoreModelState(string, ICheckpointableModel)"/>
+    /// reads to bring a real, typed model back to the exact saved state.
+    /// </summary>
+    private const string StateSuffix = ".state";
+
+    /// <summary>
     /// Saves a checkpoint of the current training state.
     /// </summary>
     public override string SaveCheckpoint<TMetadata>(
@@ -58,6 +66,16 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
             File.WriteAllText(checkpointPath, json);
 
             checkpoint.FilePath = checkpointPath;
+
+            // Persist the model's OWN state via the ICheckpointableModel contract to a sidecar file.
+            // LoadCheckpoint's JSON deserializes the model as an un-rehydrated JObject (NN models are
+            // not JSON-round-trippable), so it can't produce a usable model. This sidecar is the
+            // typed restore path consumed by RestoreModelState.
+            if (model is ICheckpointableModel checkpointable)
+            {
+                using var stateStream = File.Create(checkpointPath + StateSuffix);
+                checkpointable.SaveState(stateStream);
+            }
 
             // Store metadata
             var checkpointMetadata = new CheckpointMetadata<T>
@@ -121,6 +139,65 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
                 .FirstOrDefault();
 
             return latest != null ? LoadCheckpoint(latest.CheckpointId) : null;
+        }
+    }
+
+    /// <summary>
+    /// Restores a checkpoint's saved model state into <paramref name="target"/> — a live model of
+    /// the matching type — via the <see cref="ICheckpointableModel"/> contract. This is the TYPED
+    /// counterpart to <see cref="LoadCheckpoint"/>, whose <c>Model</c> deserializes only to an
+    /// un-rehydrated JSON object. After a successful call, <paramref name="target"/> is at the exact
+    /// state that was saved (parameters + configuration), so it reproduces the checkpointed model's
+    /// predictions.
+    /// </summary>
+    /// <param name="checkpointId">The checkpoint to restore from.</param>
+    /// <param name="target">A model instance (matching architecture) to load the state into.</param>
+    /// <returns>
+    /// <c>true</c> if the state was restored; <c>false</c> if the checkpoint has no saved-state
+    /// sidecar (e.g. a legacy checkpoint written before this feature).
+    /// </returns>
+    public bool RestoreModelState(string checkpointId, ICheckpointableModel target)
+    {
+        if (target == null)
+            throw new ArgumentNullException(nameof(target));
+
+        lock (SyncLock)
+        {
+            if (!_checkpoints.TryGetValue(checkpointId, out var metadata) || metadata.FilePath == null)
+                throw new ArgumentException($"Checkpoint with ID '{checkpointId}' not found.", nameof(checkpointId));
+
+            var statePath = metadata.FilePath + StateSuffix;
+            if (!File.Exists(statePath))
+                return false;
+
+            ValidatePathWithinDirectory(statePath, CheckpointDirectory);
+            using var stateStream = File.OpenRead(statePath);
+            target.LoadState(stateStream);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Restores the most recent checkpoint's saved model state into <paramref name="target"/>.
+    /// This is the typed resume counterpart to <see cref="LoadLatestCheckpoint"/>.
+    /// </summary>
+    /// <param name="target">A model instance (matching architecture) to load the state into.</param>
+    /// <returns>
+    /// <c>true</c> if the latest checkpoint's state was restored; <c>false</c> if there are no
+    /// checkpoints, or the latest one has no saved-state sidecar.
+    /// </returns>
+    public bool RestoreLatestModelState(ICheckpointableModel target)
+    {
+        if (target == null)
+            throw new ArgumentNullException(nameof(target));
+
+        lock (SyncLock)
+        {
+            var latest = _checkpoints.Values
+                .OrderByDescending(c => c.CreatedAt)
+                .FirstOrDefault();
+
+            return latest != null && RestoreModelState(latest.CheckpointId, target);
         }
     }
 
@@ -196,6 +273,16 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
             if (metadata.FilePath != null && File.Exists(metadata.FilePath))
             {
                 File.Delete(metadata.FilePath);
+            }
+
+            // Delete the model-state sidecar written by SaveCheckpoint, if present.
+            if (metadata.FilePath != null)
+            {
+                var statePath = metadata.FilePath + StateSuffix;
+                if (File.Exists(statePath))
+                {
+                    File.Delete(statePath);
+                }
             }
 
             // Remove from tracking
