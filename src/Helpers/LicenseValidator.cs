@@ -175,6 +175,14 @@ internal sealed class LicenseValidator
                 _cached = result;
             }
 
+            // Record a machine-bound attestation of this SUCCESSFUL online validation so the persistence gate can
+            // safely honour a later ValidationPending (server unreachable) without opening a "block the server →
+            // free forever" bypass. Best-effort; never affects the returned result.
+            if (result.Status == LicenseKeyStatus.Active)
+            {
+                OnlineValidationAttestation.Record(_licenseKey.Key);
+            }
+
             return result;
         }
         catch (Exception ex)
@@ -336,7 +344,38 @@ internal sealed class LicenseValidator
         for (int i = 0; i < parts[2].Length; i++)
             if (!IsBase64UrlChar(parts[2][i])) return false;
 
-        return true;
+        // The signature of an OFFLINE-verifiable key is an HMAC-SHA256 tag — exactly 32 bytes.
+        // Keys whose signature segment decodes to any other length are NOT offline-HMAC keys
+        // (e.g. short-form server-validated keys that merely share the `aidn.` prefix). Classifying
+        // them as signed routes them to the offline-only HMAC path (ServerUrl == "") where a
+        // sub-32-byte signature can never match a 32-byte HMAC tag → 100% false rejection on
+        // official builds, even for keys the license SERVER accepts. Returning false here lets such
+        // keys fall through to server validation (ServerUrl == null) instead.
+        return Base64UrlByteLength(parts[2]) == 32;
+    }
+
+    /// <summary>
+    /// Returns the decoded byte length of a base64url (RFC 4648 §5, no padding) segment, or -1 if it
+    /// is not valid base64url. Used to distinguish a 32-byte HMAC signature (offline-verifiable) from
+    /// shorter server-key identifiers that share the <c>aidn.</c> prefix.
+    /// </summary>
+    private static int Base64UrlByteLength(string b64url)
+    {
+        try
+        {
+            string s = b64url.Replace('-', '+').Replace('_', '/');
+            switch (s.Length % 4)
+            {
+                case 1: return -1;                 // never a valid base64 length
+                case 2: s += "=="; break;
+                case 3: s += "="; break;
+            }
+            return Convert.FromBase64String(s).Length;
+        }
+        catch (FormatException)
+        {
+            return -1;
+        }
     }
 
     /// <summary>
@@ -543,6 +582,11 @@ internal sealed class LicenseValidator
         {
             var result = await ValidateOnlineAsync(cancellationToken).ConfigureAwait(false);
             lock (_cacheLock) { _cached = result; }
+            if (result.Status == LicenseKeyStatus.Active)
+            {
+                OnlineValidationAttestation.Record(_licenseKey.Key);
+            }
+
             return result;
         }
         catch

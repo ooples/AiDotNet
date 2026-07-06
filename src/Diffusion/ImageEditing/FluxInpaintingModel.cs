@@ -137,11 +137,10 @@ public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        // Clone the ACTUAL predictor/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
-        // conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved Flux predictor/VAE,
-        // so once the source resolved its lazy layers via a forward pass the trainable-layer shapes no
-        // longer lined up 1:1 and Clone diverged. Cloning the resolved predictor/VAE (+ same architecture/
-        // options/scheduler) makes the clone structurally identical.
+        // Clone the resolved predictor/VAE via their own Clone() (+ same architecture/options/scheduler).
+        // The sub-model Clone()s already deep-copy the ~12B FLUX-scale weights, so no field-by-field
+        // SetParameters(GetParameters()) is needed — which also avoids the int-bounded flat Vector<T>
+        // round-trip ("Array dimensions exceeded" / OOM) at that scale.
         var clone = new FluxInpaintingModel<T>(
             architecture: Architecture,
             options: Options as DiffusionModelOptions<T>,
@@ -149,12 +148,7 @@ public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
             predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
-        // Field-by-field clone — bypasses the int-bounded flat
-        // Vector<T> that GetParameters/SetParameters round-trip would
-        // require for ~12B FLUX-scale weights.
-        clone._predictor.SetParameters(_predictor.GetParameters());
-        clone._vae.SetParameters(_vae.GetParameters());
+            seed: null); // predictor+vae are cloned & passed, so InitializeLayers ignores seed — do not advance the source RNG
         return clone;
     }
 

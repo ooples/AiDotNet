@@ -678,7 +678,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
             config: _config,
             conditioner: _conditioner,
             unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            seed: RandomGenerator.Next());
+            seed: null);
     }
 
     /// <inheritdoc />

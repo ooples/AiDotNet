@@ -127,6 +127,42 @@ public class PredictorParameterStreamingTests
             Assert.Equal(sf[i], cf[i], 12);
     }
 
+    // U-Net (SD/SDXL backbone; used as the _baseUNet by every ControlNet / IP-Adapter / distillation
+    // model): its res / attention / sampling layers only allocate weights on Forward, so — like U-ViT —
+    // the real chunk round-trip runs after a probe forward. Regression-covers #1758: GetParameterChunks
+    // walks the explicit EnumerateAllLayers order, while the base SetParameterChunks walked a DIFFERENT
+    // reflection order — so a chunked clone mapped tensors into the wrong layer slots until
+    // UNetNoisePredictor got a matching SetParameterChunks override.
+    private static UNetNoisePredictor<double> UNet(int seed) =>
+        new UNetNoisePredictor<double>(
+            inputChannels: 4, outputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 },
+            numResBlocks: 1, attentionResolutions: new[] { 1, 2 }, contextDim: 0, numHeads: 4,
+            inputHeight: 16, seed: seed);
+
+    private static Tensor<double> UNetInput()
+    {
+        var t = new Tensor<double>(new[] { 1, 4, 16, 16 });
+        for (int i = 0; i < t.Length; i++) t[i] = (i % 7) * 0.01 - 0.03;
+        return t;
+    }
+
+    [Fact]
+    public void UNet_Chunks_IndexIdentical()
+    {
+        var p = UNet(7);
+        p.PredictNoise(UNetInput(), 0); // resolve lazy res/attention/sampling weights
+        AssertIndexIdentical(p);
+    }
+
+    [Fact]
+    public void UNet_SetChunks_RoundTrips()
+    {
+        var src = UNet(1); var dst = UNet(2);
+        src.PredictNoise(UNetInput(), 0);
+        dst.PredictNoise(UNetInput(), 0);
+        AssertRoundTrips(src, dst);
+    }
+
     // Generic over the element type so fixtures can choose precision (FP64 for the tiny ones; FP32 for the
     // ~540 M EMMDiT so two instances fit the 16 GB runner). Values are compared after widening to double:
     // for an FP64 predictor this is identical to the previous Assert.Equal(.., 12) behavior, and for FP32

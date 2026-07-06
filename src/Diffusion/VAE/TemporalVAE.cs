@@ -963,7 +963,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             // StandardVAE.Clone.
             TriggerLazyShapeResolution();
             clone.TriggerLazyShapeResolution();
-            if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+            if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         }
         else
         {

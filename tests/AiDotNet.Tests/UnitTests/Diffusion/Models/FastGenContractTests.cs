@@ -567,7 +567,7 @@ public class FastGenContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, clone.ParameterCount); // long==long: (int) truncated valid >2.1B (e.g. 12B FLUX) counts
     }
 
     // FP32 (production-canonical for FLUX): a materialized ~12B-param FluxSchnell at FP64 would dwarf
@@ -594,7 +594,7 @@ public class FastGenContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, clone.ParameterCount); // long==long: (int) truncated valid >2.1B (e.g. 12B FLUX) counts
     }
 
     #endregion

@@ -116,6 +116,16 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private const long LowPrecisionResidentThresholdParams = 1_000_000_000L;
 
     /// <summary>
+    /// Test-only override for <see cref="LowPrecisionResidentThresholdParams"/>, letting a unit test
+    /// exercise the fp16-resident eval path (and its clone/parameter round-trip, #1764) at small scale
+    /// without allocating a real &gt;1B-parameter model. Instance-scoped so it never leaks across tests or
+    /// threads. Null in production, where the ~1B default applies.
+    /// </summary>
+    internal long? ResidentThresholdOverrideForTests { get; set; }
+
+    private long EffectiveResidentThreshold => ResidentThresholdOverrideForTests ?? LowPrecisionResidentThresholdParams;
+
+    /// <summary>
     /// Number of attention heads.
     /// </summary>
     private readonly int _numHeads;
@@ -139,6 +149,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// Latent spatial size (height = width) for computing patch count.
     /// </summary>
     private readonly int _latentSpatialSize;
+    // Seed used for weight init. Threaded into Clone so any lazy weight path the clone probe does not
+    // materialize (and which therefore re-initializes on the clone's first forward) uses the SAME RNG
+    // seed as the source and matches it deterministically — mirrors SiTPredictor._sitSeed (#1764).
+    private readonly int? _seed;
 
     /// <summary>
     /// The neural network architecture configuration, if provided.
@@ -341,6 +355,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _contextDim = contextDim;
         _mlpRatio = mlpRatio;
         _latentSpatialSize = latentSpatialSize;
+        _seed = seed;
 
         // Class-conditional DiT is fully wired end-to-end per Peebles & Xie 2022
         // §3.2: when numClasses > 0, _labelEmbed projects one-hot class labels
@@ -542,7 +557,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
-        return !tapeActive && ParameterCount > LowPrecisionResidentThresholdParams;
+        return !tapeActive && ParameterCount > EffectiveResidentThreshold;
     }
 
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
@@ -683,7 +698,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // Gated OFF while a tape is active (training needs the fp32 master for backward).
         bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
-        if (!tapeActive && ParameterCount > LowPrecisionResidentThresholdParams)
+        if (!tapeActive && ParameterCount > EffectiveResidentThreshold)
         {
             foreach (var b in _blocks) b.EnableLowPrecisionResident();
         }
@@ -1435,7 +1450,14 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             patchSize: _patchSize,
             contextDim: _contextDim,
             mlpRatio: _mlpRatio,
-            latentSpatialSize: _latentSpatialSize);
+            latentSpatialSize: _latentSpatialSize,
+            seed: _seed);
+
+        // Carry the test-only resident-threshold override so the clone's probe forward takes the same
+        // (fp16-resident vs fp32) path as the source — otherwise a small test clone would materialize fp32
+        // while the source is resident, masking the resident clone round-trip under test (#1764). Null in
+        // production, so this is a no-op there.
+        clone.ResidentThresholdOverrideForTests = ResidentThresholdOverrideForTests;
 
         ProbeMaterializeAndCopyInto(clone);
         return clone;

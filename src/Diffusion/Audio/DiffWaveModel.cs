@@ -391,14 +391,14 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
             dilationCycle: _dilationCycle,
             melChannels: _melChannels,
             sampleRate: SampleRate,
-            seed: RandomGenerator.Next());
+            seed: null);
 
         if (_lastInputShape is not null)
         {
             clone._network.ResolveLayerShapesFor(_lastInputShape);
             clone._lastInputShape = (int[])_lastInputShape.Clone();
         }
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

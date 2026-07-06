@@ -4,9 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Foundation-scale-at-default: the model's full-scale default config has a Training peak (weights +
-// gradients + Adam state + activations) that OOMs the 16 GB CI runner (fits only on a larger box).
-// Moved to the HeavyTimeout nightly lane so the default PR-gate shard fits and passes (#1706/#1305).
+[Xunit.Collection("FoundationScaleSerial")]
+// HeavyTimeout (#1706): foundation-scale image-editing diffusion — verified OOM
+// (ForwardPass throws System.OutOfMemoryException under a 16 GB DOTNET_GCHeapHardLimit reproducing the
+// CI ceiling) OS-OOM-kills the Diffusion D-I shard. Nightly heavy lane; drop once streaming fits it.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class ICEditModelTests : DiffusionModelTestBase<float>
 {

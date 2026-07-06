@@ -727,7 +727,18 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
-        foreach (var param in context.Parameters)
+        // Per-parameter Adam updates are fully INDEPENDENT: each param's m/v/vMax
+        // live in the _tapeM/_tapeV/_tapeVMax ConcurrentDictionaries keyed by tensor
+        // identity, and ProcessParam writes only to that param's own storage (param,
+        // m, v, vMax). No two params share any mutable state, so processing them
+        // concurrently is deterministic and bit-identical to the serial version.
+        // Parallelizing this loop across CPU threads closes the gap with PyTorch's
+        // multi-tensor eager Adam kernel (issue 1 of 3 in #1804). The gpuAdam case
+        // stays on the serial path to preserve GPU stream ordering.
+        var __params = context.Parameters as System.Collections.Generic.IReadOnlyList<Tensor<T>>
+            ?? System.Linq.Enumerable.ToList(context.Parameters);
+
+        void ProcessParam(Tensor<T> param)
         {
             // Cheap presence check — do NOT materialize sparse→dense yet. When only
             // sparse embedding grads exist, eagerly resolving the "effective" gradient
@@ -738,7 +749,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             bool hasDenseGrad = context.Gradients.TryGetValue(param, out var denseGradLookup) && denseGradLookup is not null;
             bool hasSparseGrad = SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param);
             if (!hasDenseGrad && !hasSparseGrad)
-                continue;
+                return;
 
             // Sparse-aware fast path for embedding-table parameters: when the
             // backward came from a SparseEmbeddingGradient (Tensors PR #553),
@@ -806,7 +817,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
                     param, m, v, lr, b1, b2, bc1, bc2, eps, weightDecay: 0.0))
             {
-                continue;
+                return;
             }
 
             // Sparse path declined (AMSGrad, non-rank-2 layout, or no sparse grads) —
@@ -814,7 +825,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             // the ToDense finally happens, and only because a dense update genuinely
             // needs it. Reuse the lookup we already did above.
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
-                continue;
+                return;
 
             // Reshape gradient to match parameter shape if element counts match
             // (can happen when Reshape adds/removes batch dimensions in forward pass)
@@ -834,7 +845,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 var vf = (Tensor<float>)(object)v;
                 if (AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamStep(
                         pf, gf, mf, vf, (float)lr, (float)b1, (float)b2, (float)eps, 0f, _tapeStep))
-                    continue;   // weights/moments updated in place on GPU; skip the CPU SIMD path for this param
+                    return;   // weights/moments updated in place on GPU; skip the CPU SIMD path for this param
             }
 
             int n = param.Length;
@@ -1090,6 +1101,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 var scaledUpdate = Engine.TensorMultiplyScalar(update, CurrentLearningRate);
                 Engine.TensorSubtractInPlace(param, scaledUpdate);
             }
+        }
+
+        // Fan the independent per-parameter updates across CPU threads. Skipped for
+        // the GPU-resident path (gpuAdam) to keep the single GPU stream ordered, and
+        // for the trivial single-parameter case where thread dispatch is pure overhead.
+        bool __canParallel = !gpuAdam && __params.Count > 1;
+        if (__canParallel)
+        {
+            System.Threading.Tasks.Parallel.For(0, __params.Count,
+                new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+                __i => ProcessParam(__params[__i]));
+        }
+        else
+        {
+            for (int __i = 0; __i < __params.Count; __i++) ProcessParam(__params[__i]);
         }
     }
 

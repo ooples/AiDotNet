@@ -4,11 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Compute-bound foundation-scale MMDiT-X predictor: a single forward exceeds the 120s
-// [Fact(Timeout)] in isolation (verified solo — Predict_ShouldBeDeterministic and
-// Clone_ShouldProduceIdenticalOutput both time out), so it belongs in the HeavyTimeout
-// nightly lane rather than the default PR gate (#1706/#1305). The Clone logic itself is
-// correct (matches the passing UNet-based ControlNet models); only the runtime is the issue.
+// HeavyTimeout (#1706): foundation-scale ControlNet over an SD3 MM-DiT backbone. Verified genuine OOM —
+// throws System.OutOfMemoryException during CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing
+// the CI runner ceiling (Metadata_ShouldExist alone OOMs), so it OS-OOM-kills the Diffusion A-C shard
+// with no test output. Runs in the nightly heavy lane. Drop once weight streaming lets it fit.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class ControlNetSD3ModelTests : DiffusionModelTestBase<float>
 {

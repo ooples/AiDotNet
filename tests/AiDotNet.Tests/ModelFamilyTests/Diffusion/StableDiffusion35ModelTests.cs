@@ -4,10 +4,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Compute-bound foundation-scale model: Clone_ShouldProduceIdenticalOutput exceeds the 120s
-// [Fact(Timeout)] gate in ISOLATION (verified solo, fresh process), so it belongs in the HeavyTimeout
-// nightly lane rather than the default PR gate (#1706/#1305) - the Clone logic is correct; the model is
-// simply too large to run a forward within the envelope.
+// HeavyTimeout (#1706): foundation-scale Stable Diffusion 3.5 MM-DiT — verified OOM
+// (System.OutOfMemoryException at CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI
+// ceiling; Metadata_ShouldExist alone OOMs), OS-OOM-kills the Diffusion Stable shard. Nightly heavy lane.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class StableDiffusion35ModelTests : DiffusionModelTestBase<float>
 {

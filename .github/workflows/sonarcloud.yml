@@ -60,20 +60,21 @@ concurrency:
   # downstream check (branch-protection, PR mergeability, release tagging)
   # actually consumes. The intermediate-SHA loss is acceptable.
   group: build-${{ github.event.pull_request.number || github.ref }}
-  # cancel-in-progress is TRUE for push/master events (a newer master tip supersedes
-  # the prior in-flight run — only the latest tip needs a green signal, saves ~45min)
-  # but FALSE for pull_request events: a rapid synchronize must NOT kill an in-progress
-  # test-shard run, because cancelling mid-shard marks in-flight tests as FAILED and
-  # leaves the 49-shard matrix with no completed signal to verify a PR against
-  # (observed repeatedly on #1719: DQNAgent / FastConformer "failures" that pass
-  # locally were cancellation artifacts). GitHub still supersedes only PENDING runs in
-  # the group, so at most one run is queued per PR — bounded (≤1 in-progress + ≤1 pending),
-  # no matrix pile-up, so the extra runner time per PR is capped, not unbounded. The
-  # obvious alternative — keep cancel-in-progress: true but treat cancelled jobs as
-  # neutral in required checks — does not fit here: GitHub reports a cancelled required
-  # check as FAILING (not neutral), which is exactly the false-red branch-protection
-  # signal this setting exists to avoid.
-  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
+  # cancel-in-progress is TRUE for ALL events (push AND pull_request). Only the latest
+  # commit on a branch/PR needs a green signal; letting a superseded 49-shard run keep
+  # executing just burns CI on a SHA nobody is on. With the GitHub free-tier 20-concurrent
+  # cap, NOT cancelling meant every synchronize/master push stacked another full matrix in
+  # the queue (≤1 in-progress + ≤1 pending PER PR, times many open PRs + master, saturated
+  # the pool for hours — the queue was so backed up that fresh runs sat pending with 0 jobs
+  # dispatched). Cancelling the in-flight run the moment a newer commit arrives frees the
+  # pool immediately, so the CURRENT tip's run actually gets runners.
+  #
+  # Trade-off accepted: a mid-matrix cancel marks that (now-stale) run's in-flight shards
+  # cancelled, and GitHub reports a cancelled required check as failing — but that is the
+  # SUPERSEDED SHA, not the head. The freshly-triggered run for the new tip is the
+  # authoritative signal every downstream check (branch protection, mergeability) consumes;
+  # its shards run to completion because nothing newer supersedes it.
+  cancel-in-progress: true
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -171,7 +172,7 @@ jobs:
         run: dotnet restore src/AiDotNet.csproj
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/init@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
         with:
           languages: csharp
           config-file: ./.github/codeql/codeql-config.yml
@@ -200,7 +201,7 @@ jobs:
           fi
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/analyze@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
         with:
           category: "/language:csharp"
           upload: ${{ steps.codeql_upload.outputs.mode }}

@@ -27,10 +27,12 @@ public sealed class TargetStandardScaler<T, TOutput> : IDataTransformer<T, TOutp
     public TargetStandardScaler(StandardScaler<T>? scaler = null)
     {
         _scaler = scaler ?? new StandardScaler<T>();
-        if (typeof(TOutput) != typeof(Vector<T>) && typeof(TOutput) != typeof(Tensor<T>))
+        if (typeof(TOutput) != typeof(Vector<T>)
+            && typeof(TOutput) != typeof(Tensor<T>)
+            && typeof(TOutput) != typeof(Matrix<T>))
         {
             throw new NotSupportedException(
-                $"Target scaling supports Vector<T> and Tensor<T> outputs; got {typeof(TOutput).Name}. " +
+                $"Target scaling supports Vector<T>, Tensor<T>, and Matrix<T> outputs; got {typeof(TOutput).Name}. " +
                 "Classification/label outputs must not be scaled — configure target scaling for regression only.");
         }
     }
@@ -75,6 +77,11 @@ public sealed class TargetStandardScaler<T, TOutput> : IDataTransformer<T, TOutp
     {
         switch (y)
         {
+            case Matrix<T> mtx:
+                // Multi-output (n×H) target: already a column-per-output matrix — the inner StandardScaler
+                // z-scores each column independently, which is exactly per-horizon target scaling.
+                return mtx;
+
             case Vector<T> v:
             {
                 var m = new Matrix<T>(v.Length, 1);
@@ -121,6 +128,11 @@ public sealed class TargetStandardScaler<T, TOutput> : IDataTransformer<T, TOutp
 
     private static TOutput FromMatrix(Matrix<T> m, TOutput shapeLike)
     {
+        if (shapeLike is Matrix<T>)
+        {
+            return (TOutput)(object)m;
+        }
+
         if (shapeLike is Vector<T>)
         {
             var v = new Vector<T>(m.Rows);

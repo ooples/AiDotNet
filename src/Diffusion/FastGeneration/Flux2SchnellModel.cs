@@ -154,7 +154,7 @@ public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
-            seed: RandomGenerator.Next());
+            seed: null);
         return clone;
     }
 

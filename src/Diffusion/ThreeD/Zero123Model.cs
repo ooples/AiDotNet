@@ -534,9 +534,9 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         var clone = new Zero123Model<T>(
             unet: (UNetNoisePredictor<T>)_unet.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
-            seed: RandomGenerator.Next());
+            seed: null);
 
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

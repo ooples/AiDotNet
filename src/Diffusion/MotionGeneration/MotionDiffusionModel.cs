@@ -121,7 +121,7 @@ public class MotionDiffusionModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             predictor: (SiTPredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
-            seed: RandomGenerator.Next());
+            seed: null);
         return clone;
     }
 
