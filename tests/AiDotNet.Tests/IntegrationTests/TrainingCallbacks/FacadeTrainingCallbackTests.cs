@@ -44,6 +44,13 @@ public class FacadeTrainingCallbackTests
         }
     }
 
+    /// <summary>A monitor whose <see cref="CheckForIssues"/> always throws, to exercise fail-closed handling.</summary>
+    private sealed class ThrowingMonitor : TrainingMonitor<float>
+    {
+        public override List<string> CheckForIssues(string sessionId) =>
+            throw new System.InvalidOperationException("monitor check failed");
+    }
+
     private static (Tensor<float> x, Tensor<float> y) BuildData()
     {
         var rng = new System.Random(1234);
@@ -216,6 +223,21 @@ public class FacadeTrainingCallbackTests
 
     private static TrainingProgress<float> Progress(int epoch, float loss) =>
         new TrainingProgress<float>(epoch, totalEpochs: 8, loss: loss, metrics: null, elapsed: System.TimeSpan.Zero);
+
+    [Fact(Timeout = 120000)]
+    public async Task HealthMonitorCallback_FailsClosedWhenMonitorCheckThrows()
+    {
+        await Task.Yield();
+        var monitor = new ThrowingMonitor();
+        var sessionId = monitor.StartSession("failclosed");
+        var health = new HealthMonitorCallback<float>(monitor: monitor, monitorSessionId: sessionId);
+        health.OnTrainBegin(Progress(0, 1.0f));
+        // A healthy (non-NaN, non-diverging) loss: the ONLY abort trigger is the monitor's CheckForIssues
+        // throwing, which must fail CLOSED (return false) rather than be treated as healthy.
+        Assert.False(health.OnEpochEnd(Progress(0, 1.0f)));
+        Assert.NotNull(health.AbortReason);
+        Assert.Contains("health check failed", health.AbortReason!, System.StringComparison.OrdinalIgnoreCase);
+    }
 
     [Fact(Timeout = 120000)]
     public async Task Result_ExposesConfiguredMonitorCheckpointAndMixedPrecisionStatus()

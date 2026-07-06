@@ -620,11 +620,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         finally
         {
-            // Notify callbacks that training has ended and close the monitor session — always, even on throw.
-            InvokeTrainingCallbacksEnd(streamingLastEpoch, epochs, streamingLastLoss, DateTime.UtcNow - streamingStart);
-            if (_trainingMonitor is not null && streamingMonitorSessionId is not null)
+            // Notify callbacks that training has ended, then close the monitor session — always, even on
+            // throw. Isolate the two so a throwing OnTrainEnd callback can't leak the monitor session.
+            try
             {
-                _trainingMonitor.EndSession(streamingMonitorSessionId);
+                InvokeTrainingCallbacksEnd(streamingLastEpoch, epochs, streamingLastLoss, DateTime.UtcNow - streamingStart);
+            }
+            finally
+            {
+                if (_trainingMonitor is not null && streamingMonitorSessionId is not null)
+                {
+                    _trainingMonitor.EndSession(streamingMonitorSessionId);
+                }
             }
         }
 
@@ -2129,6 +2136,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // dispatch throws (federated trainer.Train, finalOptimizer.Optimize, a batch await foreach, etc.).
         bool earlyStopTriggered = false;
         string? stopReason = null;
+        // The non-streaming monitor session is normally closed (with final metrics) far below; if the
+        // dispatch throws we never reach that, so track completion and close the session in the finally.
+        bool trainingDispatchCompleted = false;
         try
         {
         // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
@@ -2444,16 +2454,31 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 optimizationResult = finalOptimizer.Optimize(optimizationInputData);
             }
         }
+        trainingDispatchCompleted = true;
         }
         finally
         {
             // OnTrainEnd ALWAYS fires — whether the dispatch completed every epoch, was aborted, or threw.
-            // Also lift the abort state off the bridge for the result surface.
-            if (epochBridge is not null)
+            // Also lift the abort state off the bridge for the result surface. Isolate the callback from the
+            // session cleanup so a throwing OnTrainEnd can't leak the monitor session.
+            try
             {
-                earlyStopTriggered = epochBridge.EarlyStopTriggered;
-                stopReason = epochBridge.StopReason;
-                InvokeTrainingCallbacksEnd(epochBridge.LastEpoch, totalPlannedEpochs, epochBridge.LastLoss, epochBridge.Elapsed);
+                if (epochBridge is not null)
+                {
+                    earlyStopTriggered = epochBridge.EarlyStopTriggered;
+                    stopReason = epochBridge.StopReason;
+                    InvokeTrainingCallbacksEnd(epochBridge.LastEpoch, totalPlannedEpochs, epochBridge.LastLoss, epochBridge.Elapsed);
+                }
+            }
+            finally
+            {
+                // On a failed dispatch the normal LogMetrics + EndSession path far below is never reached, so
+                // close the monitor session here to avoid leaking it. On success, leave it for that path
+                // (which also logs the final metrics).
+                if (!trainingDispatchCompleted && _trainingMonitor is not null && monitorSessionId is not null)
+                {
+                    _trainingMonitor.EndSession(monitorSessionId);
+                }
             }
         }
 
