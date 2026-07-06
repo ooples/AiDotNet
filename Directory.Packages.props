@@ -208,10 +208,10 @@
          footprint at fp32 update precision on the CPU float fused kernel). Superset of 0.104.6, so all
          deps above are retained. NOTE: 0.106.0 (and the lockstep native packages below) is already
          PUBLISHED to NuGet, so this bump does not gate CI on an unreleased dependency. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.106.1" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.110.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.106.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.110.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.106.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.110.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
@@ -266,7 +266,7 @@
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
     <!-- Code analysis (default version; source generators may override) -->
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.3" />
     <!-- Media and visualization -->
