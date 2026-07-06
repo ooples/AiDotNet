@@ -617,12 +617,12 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <param name="input">The input vector containing the lookback window of historical values.</param>
     /// <returns>A vector of forecasted values for all forecast horizon steps.</returns>
     /// <summary>
-    /// Native DIRECT multi-horizon forecast: N-BEATS emits the whole H-step path in one forward pass (per Oreshkin
+    /// Native DIRECT multi-horizon predict: N-BEATS emits the whole H-step path in one forward pass (per Oreshkin
     /// et al.), so when the requested <paramref name="horizon"/> matches the trained ForecastHorizon we return that
     /// direct output instead of the base recursive strategy — no error accumulation. For a different horizon we fall
     /// back to the base (recursive) implementation.
     /// </summary>
-    public override Vector<T> ForecastMultiHorizon(Vector<T> lookback, int horizon)
+    public override Vector<T> Predict(Vector<T> lookback, int horizon)
     {
         if (horizon <= 0)
         {
@@ -634,7 +634,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             return ForecastHorizon(lookback);
         }
 
-        return base.ForecastMultiHorizon(lookback, horizon);
+        return base.Predict(lookback, horizon);
     }
 
     public Vector<T> ForecastHorizon(Vector<T> input)

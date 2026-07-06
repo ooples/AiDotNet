@@ -1870,22 +1870,22 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </para>
     /// </remarks>
     /// <summary>
-    /// Native multi-horizon forecast from a model built through the facade: forecasts <paramref name="horizon"/>
-    /// future steps jointly from a single <paramref name="lookback"/> window. Requires the trained model to be a
-    /// time-series model (see <see cref="AiDotNet.TimeSeries.TimeSeriesModelBase{T}.ForecastMultiHorizon"/>); models
-    /// with a native direct multi-step head (e.g. N-BEATS) emit all steps at once, others use the recursive strategy.
+    /// Multi-horizon <c>Predict</c> overload: predicts <paramref name="horizon"/> future steps at once from a single
+    /// <paramref name="lookback"/> window. Same method name as the normal <see cref="Predict(TInput)"/> — beginners
+    /// just call <c>Predict</c>. Requires the trained model to be a time-series model; models with a native direct
+    /// multi-step head (e.g. N-BEATS) emit all steps at once, others use the recursive strategy.
     /// </summary>
     /// <exception cref="NotSupportedException">The built model is not a time-series forecasting model.</exception>
-    public Vector<T> ForecastMultiHorizon(Vector<T> lookback, int horizon)
+    public Vector<T> Predict(Vector<T> lookback, int horizon)
     {
         if (EnsureModel is AiDotNet.TimeSeries.TimeSeriesModelBase<T> timeSeriesModel)
         {
-            return timeSeriesModel.ForecastMultiHorizon(lookback, horizon);
+            return timeSeriesModel.Predict(lookback, horizon);
         }
 
         throw new NotSupportedException(
-            $"ForecastMultiHorizon requires a time-series model (TimeSeriesModelBase<T>); the built model is " +
-            $"{EnsureModel.GetType().Name}. Use Predict for non-sequence models.");
+            $"Multi-horizon Predict(lookback, horizon) requires a time-series model (TimeSeriesModelBase<T>); the " +
+            $"built model is {EnsureModel.GetType().Name}. Use Predict(input) for non-sequence models.");
     }
 
     public TOutput Predict(TInput newData)

@@ -544,20 +544,22 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     public abstract T PredictSingle(Vector<T> input);
 
     /// <summary>
-    /// Forecasts several future steps jointly from a single lookback window — the native multi-horizon output.
+    /// Predicts several future steps at once from a single lookback window — the multi-horizon overload of
+    /// <see cref="Predict(Matrix{T})"/>.
     /// </summary>
     /// <param name="lookback">The most recent history the model attends to (length = the model's lookback window).</param>
     /// <param name="horizon">Number of future steps to forecast (must be positive).</param>
     /// <returns>A length-<paramref name="horizon"/> vector; element h is the forecast h+1 steps ahead.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> instead of one next value, this returns a whole path of future values
-    /// (1, 2, 3, … steps ahead) from the same history — what you want for multi-horizon forecasting.</para>
+    /// <para><b>For Beginners:</b> this is just <c>Predict</c> for more than one step ahead. Give it the recent
+    /// history and how many steps you want, and it returns the whole path of future values (1, 2, 3, … ahead) —
+    /// no extra concepts to learn beyond the normal <c>Predict</c>.</para>
     /// <para>The base implementation is the standard RECURSIVE (iterated one-step) strategy: predict the next
     /// value, append it to the window, drop the oldest, and repeat. Models with a native DIRECT multi-step head
     /// (e.g. N-BEATS, DeepAR, Informer, TFT) override this to emit all steps at once, which avoids recursive error
     /// accumulation. Overriding is optional — every time-series model gets correct multi-horizon output for free.</para>
     /// </remarks>
-    public virtual Vector<T> ForecastMultiHorizon(Vector<T> lookback, int horizon)
+    public virtual Vector<T> Predict(Vector<T> lookback, int horizon)
     {
         if (horizon <= 0)
         {

@@ -51,7 +51,7 @@ public class ForecastMultiHorizonTests
         }
 
         // Native direct path (horizon == trained ForecastHorizon).
-        var direct = model.ForecastMultiHorizon(window, horizon);
+        var direct = model.Predict(window, horizon);
         Assert.Equal(horizon, direct.Length);
         for (int h = 0; h < horizon; h++)
         {
@@ -59,7 +59,7 @@ public class ForecastMultiHorizonTests
         }
 
         // Recursive fallback (horizon != trained ForecastHorizon) must also produce a finite path of the right length.
-        var recursive = model.ForecastMultiHorizon(window, 6);
+        var recursive = model.Predict(window, 6);
         Assert.Equal(6, recursive.Length);
         for (int h = 0; h < 6; h++)
         {
@@ -83,7 +83,7 @@ public class ForecastMultiHorizonTests
             window[i] = y[y.Length - 4 + i];
         }
 
-        var forecast = model.ForecastMultiHorizon(window, 5);
+        var forecast = model.Predict(window, 5);
         Assert.Equal(5, forecast.Length);
         for (int h = 0; h < 5; h++)
         {
