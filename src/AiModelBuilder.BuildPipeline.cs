@@ -732,11 +732,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     private bool ShouldUseDirectSupervisedNeuralTraining(IFullModel<T, TInput, TOutput> model)
     {
-        // Configured Transformer training needs the neural network training path
-        // so mixed precision and checkpoint-safe memory settings are actually
-        // consumed instead of evaluated through a black-box parameter search.
-        return model is NeuralNetworks.Transformer<T>
-            && (_mixedPrecisionConfig is not null || _memoryConfig is not null);
+        // A Transformer<T> must train through the DIRECT neural-training path
+        // (TrainTensorNeuralNetworkRows → model.Train → TrainWithTape gradient steps).
+        // The outer optimizer's clone-evaluate-select ("black-box parameter search") does
+        // NOT actually train a transformer — its loss stays flat and held-out accuracy sits
+        // at chance (verified: a 12-epoch run left loss 0.0439→0.0445, acc≈1/V). This routing
+        // was previously gated on mixed-precision / memory config being set, which meant a
+        // plain `ConfigureModel(transformer).BuildAsync()` silently failed to learn. Gradient
+        // training is required for a transformer regardless of MP/memory settings, so route it
+        // unconditionally. (Non-transformer parameterizable models still use the optimizer path,
+        // which trains them correctly.)
+        return model is NeuralNetworks.Transformer<T>;
     }
 
     private OptimizationResult<T, TInput, TOutput> TrainTensorNeuralNetworkRows(
@@ -755,13 +761,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         var numOps = MathHelper.GetNumericOperations<T>();
         int rows = xTrain.Rank >= 1 ? xTrain.Shape[0] : 1;
+        // Train in MINIBATCHES, not one row at a time. Per-row (batch=1) training was both
+        // ineffective and unsafe: (1) batch-1 gradients are far too noisy to train a transformer
+        // — its loss stayed flat / accuracy at chance — whereas batched Train learns; and (2) on a
+        // realistic corpus it issued one Train call PER ROW (tens of thousands per epoch), whose
+        // accumulated per-call state crashed the training host. Batching fixes both and matches how
+        // the streaming path trains. `Train` handles a [B, …] batch natively via NormalizeBatchDim.
+        int batchSize = Math.Min(32, Math.Max(1, rows));
         int iterations = 0;
         for (int epoch = 0; epoch < epochs; epoch++)
         {
-            for (int row = 0; row < rows; row++)
+            for (int start = 0; start < rows; start += batchSize)
             {
-                var rowIndex = new[] { row };
-                neuralNetwork.Train(GatherRows(xTrain, rowIndex), GatherRows(yTrain, rowIndex));
+                int end = Math.Min(start + batchSize, rows);
+                var batchRows = new int[end - start];
+                for (int j = 0; j < batchRows.Length; j++) batchRows[j] = start + j;
+                neuralNetwork.Train(GatherRows(xTrain, batchRows), GatherRows(yTrain, batchRows));
                 iterations++;
             }
 

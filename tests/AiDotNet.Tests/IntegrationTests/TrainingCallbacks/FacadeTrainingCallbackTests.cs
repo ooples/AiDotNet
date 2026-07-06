@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet;
 using AiDotNet.ActivationFunctions;
@@ -201,6 +202,60 @@ public class FacadeTrainingCallbackTests
         Assert.NotNull(health.AbortReason);
         Assert.Contains("NaN", health.AbortReason!, System.StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(result.StopReason);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task Transformer_TrainsThroughFacade_LossFalls()
+    {
+        // Regression: a Transformer<T> must actually TRAIN through BuildAsync. Previously it did not:
+        // (a) a plain transformer routed to the optimizer "black-box" path and its loss stayed flat
+        //     (verified: 12 epochs left loss ~0.044→0.045, held-out accuracy at chance); and
+        // (b) the only path that routed to gradient training was gated behind ConfigureMixedPrecision,
+        //     and that direct path trained ONE ROW AT A TIME (batch=1) — too noisy to train a
+        //     transformer AND, on a realistic corpus, tens of thousands of Train calls per epoch
+        //     crashed the host. Fixed by (1) routing any Transformer<T> to the direct neural path
+        //     unconditionally and (2) minibatching that path. This test asserts the streamed loss
+        //     falls meaningfully — i.e. the transformer trains — with NO mixed precision configured.
+        const int seqLen = 6, vocab = 12, samples = 96, epochs = 10;
+        var rng = new System.Random(1234);
+        var x = new Tensor<float>(new[] { samples, seqLen });
+        var y = new Tensor<float>(new[] { samples, vocab });
+        for (int i = 0; i < samples; i++)
+        {
+            for (int c = 0; c < seqLen; c++) x[i, c] = rng.Next(vocab);
+            // Learnable target: class = (first token + last token) mod vocab.
+            int label = ((int)x[i, 0] + (int)x[i, seqLen - 1]) % vocab;
+            y[i, label] = 1f;
+        }
+
+        var arch = new TransformerArchitecture<float>(
+            inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.SequenceClassification,
+            numEncoderLayers: 2, numDecoderLayers: 0, numHeads: 4, modelDimension: 48,
+            feedForwardDimension: 96, inputSize: seqLen, outputSize: vocab,
+            maxSequenceLength: seqLen, vocabularySize: vocab, randomSeed: 42);
+        var opt = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
+            new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.003, MaxIterations = epochs, UseAdaptiveLearningRate = false,
+                UseEarlyStopping = false, Tolerance = 0.0,
+                FitnessCalculator = new MeanSquaredErrorFitnessCalculator<float, Tensor<float>, Tensor<float>>()
+            });
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>(), optimizer: opt);
+
+        var losses = new List<double>();
+        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model).ConfigureOptimizer(opt)
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(x, y))
+            .ConfigureTrainingCallback(p => { losses.Add(System.Convert.ToDouble(p.Loss)); return true; }) // NO ConfigureMixedPrecision
+            .BuildAsync();
+
+        Assert.NotNull(result);
+        Assert.True(losses.Count >= 2, $"expected per-epoch loss stream, got {losses.Count}");
+        Assert.All(losses, l => Assert.False(double.IsNaN(l) || double.IsInfinity(l)));
+        // The transformer trains: loss falls meaningfully (pre-fix it was flat within ~2%).
+        double best = losses.Min();
+        Assert.True(best < losses[0] * 0.85,
+            $"transformer loss should fall through the facade: first={losses[0]:E4} best={best:E4}");
     }
 
     [Fact(Timeout = 120000)]
