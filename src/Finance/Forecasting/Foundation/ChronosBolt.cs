@@ -173,17 +173,20 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         // GetOrCreateBaseOptimizer override below (without that override base.Train used the base
         // DEFAULT optimizer and ignored this field entirely). Without warmup the first few full-LR
         // Adam steps on this deep encoder-decoder overshoot and DRIVE THE LOSS UP (1.8 -> 8.2 over
-        // the 3 steps Training_ShouldReduceLoss runs); the 10-step warmup keeps those steps tiny,
-        // then reaches full LR so longer runs (memorization = 100 iters) still learn.
+        // the 3 steps Training_ShouldReduceLoss runs); the warmup keeps those steps tiny, then reaches
+        // full LR so longer runs (memorization = 100 iters) still learn. The schedule is configurable via
+        // ChronosBoltOptions (WarmupSteps/TotalSteps/LearningRate/EndLearningRate) — size TotalSteps to the
+        // real run length, since LR clamps to EndLearningRate after it (defaults preserve prior behavior).
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 0.001,
+                InitialLearningRate = options.LearningRate,
                 LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
-                    baseLearningRate: 0.001, warmupSteps: 10, totalSteps: 1000,
+                    baseLearningRate: options.LearningRate, warmupSteps: options.WarmupSteps,
+                    totalSteps: options.TotalSteps,
                     warmupInitLr: 1e-6,
                     decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Cosine,
-                    endLr: 0.0),
+                    endLr: options.EndLearningRate),
                 SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
             });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();

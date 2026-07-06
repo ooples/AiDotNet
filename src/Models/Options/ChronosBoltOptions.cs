@@ -163,4 +163,54 @@ public class ChronosBoltOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int NumQuantiles { get; set; } = 9;
+
+    /// <summary>
+    /// Gets or sets the base (peak) learning rate for the built-in Adam optimizer with linear warmup.
+    /// </summary>
+    /// <value>Defaults to 0.001.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The learning rate controls how big a step the optimizer takes on each
+    /// update. This is the value the warmup ramps <i>up</i> to (from a tiny <c>1e-6</c>) and the value the
+    /// cosine decay then winds <i>down</i> from toward <see cref="EndLearningRate"/>.
+    /// </para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 0.001;
+
+    /// <summary>
+    /// Gets or sets the number of warmup steps (batches) over which the learning rate ramps from a tiny
+    /// initial value up to <see cref="LearningRate"/>.
+    /// </summary>
+    /// <value>Defaults to 10.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Warmup starts training with tiny steps so the first few noisy batches
+    /// do not destabilize the model, then reaches the full <see cref="LearningRate"/> after this many steps.
+    /// </para>
+    /// </remarks>
+    public int WarmupSteps { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the total number of scheduler steps (batches) over which the learning rate decays from
+    /// <see cref="LearningRate"/> down to <see cref="EndLearningRate"/>.
+    /// </summary>
+    /// <value>Defaults to 1000.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> After this many steps the learning rate clamps to
+    /// <see cref="EndLearningRate"/>, so size it to your actual run length (batches-per-epoch multiplied by
+    /// epochs). If you train for more batches than this, the extra batches run at
+    /// <see cref="EndLearningRate"/> and the model effectively stops learning — raise this value for long runs.
+    /// </para>
+    /// </remarks>
+    public int TotalSteps { get; set; } = 1000;
+
+    /// <summary>
+    /// Gets or sets the final learning rate the cosine decay winds down to at <see cref="TotalSteps"/>.
+    /// </summary>
+    /// <value>Defaults to 0.0.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is where the learning rate ends up once decay completes. Leaving it
+    /// at 0.0 fully anneals the model; set a small positive value (e.g. <c>1e-5</c>) if you want it to keep
+    /// making tiny updates past <see cref="TotalSteps"/>.
+    /// </para>
+    /// </remarks>
+    public double EndLearningRate { get; set; } = 0.0;
 }
