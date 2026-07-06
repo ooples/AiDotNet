@@ -61,6 +61,26 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         // Reuse the shared DeepCausalBase.StandardizeColumns so every deep causal learner z-scores
         // identically (avoids the earlier /n vs /(n-1) variance-normalization drift). A constant column
         // still standardizes to zero — its centered values are all 0, independent of the divisor.
+        // Capture each variable's RAW marginal variance BEFORE standardization — used as the
+        // orientation cue for the final DAG projection. In an attenuating linear SEM (|coeff| < 1,
+        // the test's 0.6-0.8), an exogenous root has strictly larger marginal variance than its
+        // noise-attenuated descendants, so ranking nodes by raw variance recovers the causal
+        // topological order (root first). GraN-DAG's Gaussian-NLL (MSE) fit cannot orient near-
+        // deterministic edges from the symmetric path-norm alone (both directions predict equally
+        // well), so the default net-outflow source score leaves true edges unoriented; the variance
+        // cue supplies the missing orientation. The RANKING is invariant to uniform data scaling
+        // (all variances scale by the same factor), preserving DiscoverStructure_IsInvariantToDataScaling.
+        var rawVariance = new double[d];
+        for (int col = 0; col < d; col++)
+        {
+            double mean = 0;
+            for (int r = 0; r < n; r++) mean += NumOps.ToDouble(data[r, col]);
+            mean /= n;
+            double var = 0;
+            for (int r = 0; r < n; r++) { double dv = NumOps.ToDouble(data[r, col]) - mean; var += dv * dv; }
+            rawVariance[col] = var / n;
+        }
+
         data = StandardizeColumns(data);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -251,7 +271,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         // DiscoverStructure_OutputIsAcyclic failure (topological sort visited 0/4 nodes). ProjectToDag
         // imposes a strict source-score topological order and keeps only forward edges, so the result
         // is a DAG by construction. Mirrors the sibling DAGGNNAlgorithm, which already routes through it.
-        return BuildFinalAdjacency(ProjectToDag(learnedP, d), cov, d);
+        return BuildFinalAdjacency(ProjectToDag(learnedP, d, rawVariance), cov, d);
     }
 
     private Matrix<T> ExtractAdjacency(Matrix<T>[] W1, Matrix<T>[] W2, int d, int h)
