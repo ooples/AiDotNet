@@ -178,6 +178,14 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 if (double.IsNaN(hD) || double.IsInfinity(hD)) break;
                 double augD = NumOps.ToDouble(alpha) + NumOps.ToDouble(rho) * hD;
                 if (augD > 1e+6) augD = 1e+6;
+                // Warm-start: for the first third of training run PURE data-fit (no acyclicity force).
+                // The augmented-Lagrangian gradient (augCoeff up to 1e6, clipped to |g|<=10 => ~lr*10
+                // per step) otherwise dominates the much smaller data-fit gradient from epoch 0 and
+                // drives every MLP weight toward zero BEFORE the network learns the true dependencies —
+                // leaving a diffuse, near-zero adjacency in which no true edge stands out. Letting the
+                // data fit establish a sharp connectivity first, then ramping acyclicity to PRUNE it,
+                // is the intended NOTEARS/GraN-DAG order (fit, then enforce the constraint).
+                if (outer < MaxEpochs / 3) augD = 0.0;
                 T augCoeff = NumOps.FromDouble(augD);
 
                 // Chain rule: dh/dW1 via dh/dA * dA/dW1
