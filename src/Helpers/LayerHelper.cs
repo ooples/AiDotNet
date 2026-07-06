@@ -34132,6 +34132,16 @@ public static class LayerHelper<T>
         // per-position sequence expectation.
         yield return new DenseLayer<T>( outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
 
+        // Reshape the flat seed [B, forecastHorizon·decoderHiddenDim] into the decoder's
+        // per-position sequence [B, forecastHorizon, decoderHiddenDim] AS A LAYER, so the shape
+        // transition is part of the Layers chain. Every sequential walk over the chain — forward,
+        // and critically serialize/deserialize (Clone) — then feeds the decoder a decoderHiddenDim-
+        // wide input. Without this layer the deserializer chains the seed Dense's flat 32768-wide
+        // output straight into the decoder, sizing its attention to 32768² → OutOfMemoryException
+        // (Clone_ShouldProduceIdenticalOutput / MoreData). ForwardNative still reshapes explicitly
+        // for its two-input cross-attention dispatch; this layer is the chain-visible equivalent.
+        yield return new ReshapeLayer<T>(new[] { forecastHorizon, decoderHiddenDim });
+
         // === Decoder stack: numDecoderLayers × TransformerDecoderLayer ===
         // TransformerDecoderLayer has BOTH masked self-attention AND
         // cross-attention to encoder output — matching the T5/Chronos-Bolt
