@@ -39,6 +39,13 @@ internal static class AsymmetricLicenseVerifier
     private const int Ed25519SignatureSize = 64;
 
     /// <summary>
+    /// Upper bound for a Unix-seconds <c>exp</c> claim (9999-12-31T23:59:59Z), the max
+    /// <see cref="DateTimeOffset"/> can represent. Values outside (0, MaxUnixSeconds] are rejected
+    /// up front so <see cref="DateTimeOffset.FromUnixTimeSeconds"/> can never throw.
+    /// </summary>
+    private const long MaxUnixSeconds = 253402300799L;
+
+    /// <summary>
     /// Allowed clock skew when checking expiry, so a token that is a few seconds past <c>exp</c>
     /// due to clock drift between the signing server and the client is not spuriously rejected.
     /// Kept small — expiry is the primary bound on offline use.
@@ -79,6 +86,36 @@ internal static class AsymmetricLicenseVerifier
             || (c >= '0' && c <= '9')
             || c == '-'
             || c == '_';
+    }
+
+    /// <summary>
+    /// Cheaply decodes the <c>kid</c> claim from an <c>aidn2.</c> token WITHOUT verifying the signature.
+    /// Used only for routing (to decide whether this build embeds the matching public key). It never
+    /// grants a license — <see cref="Verify"/> remains the sole path that can return
+    /// <see cref="LicenseKeyStatus.Active"/>. Returns false on any malformed input or absent kid.
+    /// </summary>
+    internal static bool TryGetKid(string? key, out string kid)
+    {
+        kid = string.Empty;
+        if (!IsAsymmetricKeyFormat(key)) return false;
+
+        // key is non-null and 3 parts here (IsAsymmetricKeyFormat guaranteed it).
+        var parts = key!.Split('.');
+        try
+        {
+            byte[] claimsBytes = Base64UrlHelper.Decode(parts[1]);
+            if (claimsBytes.Length == 0) return false;
+            string claimsJson = System.Text.Encoding.UTF8.GetString(claimsBytes);
+            LicenseClaims? claims = LicenseClaims.TryParse(claimsJson);
+            string? parsedKid = claims?.Kid;
+            if (parsedKid is null || parsedKid.Length == 0) return false;
+            kid = parsedKid;
+            return true;
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -191,9 +228,19 @@ internal static class AsymmetricLicenseVerifier
             return Invalid("License signature verification failed.");
         }
 
-        // Signature is authentic. Now enforce expiry (bounds offline use of a leaked token).
+        // Signature is authentic. Fail CLOSED on a missing / non-positive / out-of-range exp claim
+        // BEFORE converting it: a malformed exp must never be treated as "non-expiring" (that would let
+        // a token with no/garbage expiry live forever offline), and DateTimeOffset.FromUnixTimeSeconds
+        // throws on out-of-range input. Every legitimately-issued aidn2 token carries a positive,
+        // bounded exp (offline use is expiry-bounded by design).
+        if (claims.Exp <= 0 || claims.Exp > MaxUnixSeconds)
+        {
+            return Invalid("License token has a missing or invalid expiry (exp).");
+        }
+
+        // Enforce expiry (bounds offline use of a leaked token).
         DateTimeOffset expiresAt = DateTimeOffset.FromUnixTimeSeconds(claims.Exp);
-        if (claims.Exp > 0 && expiresAt + ClockSkew < nowUtc)
+        if (expiresAt + ClockSkew < nowUtc)
         {
             return new LicenseValidationResult(
                 LicenseKeyStatus.Expired,
@@ -206,7 +253,7 @@ internal static class AsymmetricLicenseVerifier
         return new LicenseValidationResult(
             LicenseKeyStatus.Active,
             tier: claims.Tier,
-            expiresAt: claims.Exp > 0 ? expiresAt : (DateTimeOffset?)null,
+            expiresAt: expiresAt,
             seatsMax: claims.Seats > 0 ? claims.Seats : (int?)null,
             message: "Offline validation succeeded (signature verified).");
     }

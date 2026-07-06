@@ -170,7 +170,14 @@ public class AsymmetricLicenseTests
         await Task.Yield();
         var key = new AiDotNetLicenseKey(LicenseTestSupport.SignedKeyV2())
         {
-            ServerUrl = "https://192.0.2.1:1/validate" // RFC 5737 TEST-NET, unreachable
+            // Loopback port 1: the online branch fails IMMEDIATELY (connection refused on 127.0.0.1 —
+            // no DNS, no external network, no timeout wait), so the test can't hang. (A purely
+            // syntactically-invalid URL is not used because net471's WebClient path maps a malformed-URI
+            // failure to Invalid rather than ValidationPending; this loopback pattern is the one the
+            // existing licensing suite uses and yields ValidationPending uniformly on both TFMs.)
+            // The point stands: a v2 token with a custom ServerUrl is routed ONLINE, not accepted purely
+            // offline — yielding ValidationPending here.
+            ServerUrl = "http://127.0.0.1:1"
         };
 
         var result = new LicenseValidator(key).Validate();
@@ -263,6 +270,31 @@ public class AsymmetricLicenseTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task LicensePublicKeyProvider_RejectsWrongLengthKey()
+    {
+        // A key whose x is not a 32-byte Ed25519 public key must be skipped, so HasAnyKey never reports
+        // true for an unusable manifest entry.
+        await Task.Yield();
+        string json = Newtonsoft.Json.JsonConvert.SerializeObject(new
+        {
+            keys = new[]
+            {
+                new
+                {
+                    kty = "OKP",
+                    crv = "Ed25519",
+                    kid = "too-short",
+                    x = Base64UrlHelper.Encode(new byte[16]) // 16 bytes != 32
+                }
+            }
+        });
+
+        var parsed = LicensePublicKeyProvider.Parse(json);
+
+        Assert.Null(parsed);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Aidn2_UnsupportedAlg_IsRejected()
     {
         // A token that (validly, with the test key) declares a non-EdDSA alg must be rejected so a future
@@ -275,5 +307,59 @@ public class AsymmetricLicenseTests
 
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
         Assert.Contains("algorithm", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Aidn2_MissingOrZeroExp_IsRejected()
+    {
+        // A validly-signed token with a missing / non-positive exp must FAIL CLOSED (Invalid), not be
+        // treated as a non-expiring license. exp=0 (Unix epoch) stands in for an absent exp claim.
+        await Task.Yield();
+        string token = LicenseTestSupport.SignedKeyV2(exp: DateTimeOffset.FromUnixTimeSeconds(0));
+
+        var key = new AiDotNetLicenseKey(token) { ServerUrl = string.Empty };
+        var result = new LicenseValidator(key).Validate();
+
+        Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
+        Assert.Contains("expiry", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Aidn2_KidMatchRouting_Predicate_IsNetworkFree()
+    {
+        // Finding #3: opportunistic offline validation must be gated on a kid MATCH, not merely
+        // "some key embedded". This unit-tests the exact predicate LicenseValidator routes on, without
+        // any network: TryGetKid decodes the token's kid, and only a kid this build embeds is
+        // offline-verifiable. An unknown-kid token is NOT offline-verifiable (→ falls through to online).
+        await Task.Yield();
+
+        string known = LicenseTestSupport.SignedKeyV2(kid: LicenseTestSupport.TestKid);
+        Assert.True(AsymmetricLicenseVerifier.TryGetKid(known, out string knownKid));
+        Assert.Equal(LicenseTestSupport.TestKid, knownKid);
+        Assert.True(LicensePublicKeyProvider.TryGetPublicKey(knownKid, out _)); // embedded → offline-verifiable
+
+        string unknown = LicenseTestSupport.SignedKeyV2(kid: "kid-this-build-does-not-embed");
+        Assert.True(AsymmetricLicenseVerifier.TryGetKid(unknown, out string unknownKid));
+        Assert.Equal("kid-this-build-does-not-embed", unknownKid);
+        Assert.False(LicensePublicKeyProvider.TryGetPublicKey(unknownKid, out _)); // not embedded → goes online
+
+        // TryGetKid is structural only and never applies to non-v2 keys.
+        Assert.False(AsymmetricLicenseVerifier.TryGetKid(LicenseTestSupport.SignedKey("v1id"), out _));
+        Assert.False(AsymmetricLicenseVerifier.TryGetKid(null, out _));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Aidn2_ExplicitOffline_UnknownKid_FailsClosed()
+    {
+        // The kid-match routing change must NOT weaken explicit offline-only mode: an unknown-kid token
+        // there cannot reach a server, so it still fails closed (Invalid), unchanged.
+        await Task.Yield();
+        string token = LicenseTestSupport.SignedKeyV2(kid: "kid-this-build-does-not-embed");
+        var key = new AiDotNetLicenseKey(token) { ServerUrl = string.Empty };
+
+        var result = new LicenseValidator(key).Validate();
+
+        Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
+        Assert.Contains("kid", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

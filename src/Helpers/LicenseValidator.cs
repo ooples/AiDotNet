@@ -100,8 +100,12 @@ internal sealed class LicenseValidator
         //   v2 (aidn2.{claims}.{sig}) → an embedded PUBLIC signing key (asymmetric; strictly stronger —
         //       the public key is worthless to a forger, so it is safe to ship). exp bounds offline use.
         bool v1Verifiable = IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded;
-        bool v2Verifiable = AsymmetricLicenseVerifier.IsAsymmetricKeyFormat(_licenseKey.Key)
-            && LicensePublicKeyProvider.HasAnyKey;
+        // Opportunistic offline validation for a v2 token requires this build to embed the public key
+        // matching THIS token's kid — not merely "some" key. A token signed with a newer/rotated kid
+        // this build doesn't carry falls through to ONLINE validation (server is the source of truth)
+        // instead of being rejected offline. Explicit offline-only mode is unaffected (still fails closed).
+        bool v2Verifiable = AsymmetricLicenseVerifier.TryGetKid(_licenseKey.Key, out string v2Kid)
+            && LicensePublicKeyProvider.TryGetPublicKey(v2Kid, out _);
         bool useOfflineValidation = explicitOfflineOnly
             || (serverUrlIsDefault && (v1Verifiable || v2Verifiable));
 
@@ -554,8 +558,10 @@ internal sealed class LicenseValidator
         bool buildKeyEmbedded = BuildKeyProvider.GetBuildKey().Length > 0;
         bool serverUrlIsDefault = _licenseKey.ServerUrl is null;
         bool v1Verifiable = IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded;
-        bool v2Verifiable = AsymmetricLicenseVerifier.IsAsymmetricKeyFormat(_licenseKey.Key)
-            && LicensePublicKeyProvider.HasAnyKey;
+        // Same kid-match routing as the sync path: only validate a v2 token offline when this build
+        // embeds the public key for the token's kid; otherwise fall through to online validation.
+        bool v2Verifiable = AsymmetricLicenseVerifier.TryGetKid(_licenseKey.Key, out string v2Kid)
+            && LicensePublicKeyProvider.TryGetPublicKey(v2Kid, out _);
         if (explicitOfflineOnly || (serverUrlIsDefault && (v1Verifiable || v2Verifiable)))
         {
             if (!IsOfflineVerifiableKeyFormat(_licenseKey.Key))
