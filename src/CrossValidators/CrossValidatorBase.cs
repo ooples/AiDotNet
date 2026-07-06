@@ -163,19 +163,25 @@ public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T
                 YTest = emptyYTest
             };
 
-            var optimizationResult = optimizer.Optimize(optimizationInput);
-
-            // Update the fold model with optimized parameters
-            // Throw exception if optimization failed to prevent evaluating untrained models
-            if (optimizationResult.BestSolution == null)
+            // Zero-alloc training scope (#1804): reuse Engine-op scratch across this fold's steps.
+            // Scope covers SetParameters so the optimized parameters are copied into the fold
+            // model before the arena's scratch is released (the copied params are plain-heap).
+            using (var __trainArena = AiDotNet.Tensors.Helpers.TensorArena.Create())
             {
-                throw new InvalidOperationException(
-                    $"Optimization failed for fold {foldIndex}: BestSolution is null. " +
-                    "Cannot evaluate an untrained model in cross-validation. " +
-                    "This indicates the optimizer was unable to find a valid solution.");
-            }
+                var optimizationResult = optimizer.Optimize(optimizationInput);
 
-            InterfaceGuard.Parameterizable(foldModel).SetParameters(InterfaceGuard.Parameterizable(optimizationResult.BestSolution).GetParameters());
+                // Update the fold model with optimized parameters
+                // Throw exception if optimization failed to prevent evaluating untrained models
+                if (optimizationResult.BestSolution == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Optimization failed for fold {foldIndex}: BestSolution is null. " +
+                        "Cannot evaluate an untrained model in cross-validation. " +
+                        "This indicates the optimizer was unable to find a valid solution.");
+                }
+
+                InterfaceGuard.Parameterizable(foldModel).SetParameters(InterfaceGuard.Parameterizable(optimizationResult.BestSolution).GetParameters());
+            }
 
             trainingTimer.Stop();
             var trainingTime = trainingTimer.Elapsed;

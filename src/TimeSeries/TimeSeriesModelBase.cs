@@ -314,6 +314,22 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
         try
         {
+            // Zero-alloc training after warmup (AiDotNet #1804): activate a
+            // TensorArena for the whole TrainCore so every per-op forward /
+            // backward temporary is served from a reused pool instead of a
+            // fresh GC allocation — the PyTorch caching-allocator equivalent,
+            // and the ~25% per-op allocation cost that made N-BEATS training
+            // ~3x slower than PyTorch on CPU. Activation is BASE-CLASS level,
+            // so EVERY TimeSeries model inherits it transparently (mirrors what
+            // NeuralNetworkBase already does for neural-network models); the
+            // per-step recycle is automatic via GradientTape.Dispose ->
+            // TensorArena.Reset (Tensors), so models that run one tape per step
+            // need no arena code of their own. Model weights and optimizer
+            // moments are plain-heap Tensors (new Tensor<T>), so they persist
+            // across the per-step reset; only Engine-op scratch comes from the
+            // arena, and nothing arena-backed escapes TrainCore.
+            using var trainingArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+
             // Perform model-specific training (implemented by derived classes)
             TrainCore(x, y);
         }
@@ -628,6 +644,75 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </para>
     /// </remarks>
     public abstract T PredictSingle(Vector<T> input);
+
+    /// <summary>
+    /// Predicts several future steps at once from a single lookback window — the multi-horizon overload of
+    /// <see cref="Predict(Matrix{T})"/>.
+    /// </summary>
+    /// <param name="lookback">The most recent history the model attends to (length = the model's lookback window).</param>
+    /// <param name="horizon">Number of future steps to forecast (must be positive).</param>
+    /// <returns>A length-<paramref name="horizon"/> vector; element h is the forecast h+1 steps ahead.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> this is just <c>Predict</c> for more than one step ahead. Give it the recent
+    /// history and how many steps you want, and it returns the whole path of future values (1, 2, 3, … ahead) —
+    /// no extra concepts to learn beyond the normal <c>Predict</c>.</para>
+    /// <para>The base implementation is the standard RECURSIVE (iterated one-step) strategy: predict the next
+    /// value, append it to the window, drop the oldest, and repeat. Models with a native DIRECT multi-step head
+    /// (e.g. N-BEATS, DeepAR, Informer, TFT) override this to emit all steps at once, which avoids recursive error
+    /// accumulation. Overriding is optional — every time-series model gets correct multi-horizon output for free.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="lookback"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="horizon"/> is not positive, or <paramref name="lookback"/> is empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the model has not been trained.</exception>
+    public virtual Vector<T> Predict(Vector<T> lookback, int horizon)
+    {
+        // Match the safeguards of the sibling Predict(Matrix<T>): suppress the autodiff tape during this
+        // recursive inference loop, and validate inputs / trained-state up front.
+        using var _noGrad = new NoGradScope<T>();
+
+        if (lookback is null)
+        {
+            throw new ArgumentNullException(nameof(lookback), "Lookback window cannot be null.");
+        }
+
+        if (horizon <= 0)
+        {
+            throw new ArgumentException("Horizon must be positive.", nameof(horizon));
+        }
+
+        if (lookback.Length == 0)
+        {
+            throw new ArgumentException("Lookback window cannot be empty.", nameof(lookback));
+        }
+
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("The model must be trained before making predictions.");
+        }
+
+        var window = new Vector<T>(lookback.Length);
+        for (int i = 0; i < lookback.Length; i++)
+        {
+            window[i] = lookback[i];
+        }
+
+        var forecast = new Vector<T>(horizon);
+        for (int h = 0; h < horizon; h++)
+        {
+            T next = PredictSingle(window);
+            forecast[h] = next;
+
+            // Slide the window forward by one, appending the just-predicted value (recursive strategy).
+            for (int i = 0; i < window.Length - 1; i++)
+            {
+                window[i] = window[i + 1];
+            }
+
+            window[window.Length - 1] = next;
+        }
+
+        return forecast;
+    }
 
     /// <summary>
     /// Evaluates the performance of the trained model on test data.
