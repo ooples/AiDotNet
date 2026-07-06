@@ -30559,13 +30559,16 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
 
-        // Flow head
-        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
+        // Flow head — LINEAR activation: optical flow (dx, dy) is signed, so a ReLU
+        // head (the conv default) would clamp flow to >= 0, collapsing motion in the
+        // -x/-y directions and killing input sensitivity.
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Refinement (3 layers)
+        // Refinement (3 layers). The final conv emits the signed flow residual, so it
+        // is also LINEAR; the two hidden refinement convs keep the default ReLU.
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
         yield return new ConvolutionalLayer<T>(32, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
