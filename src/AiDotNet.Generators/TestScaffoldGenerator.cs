@@ -252,6 +252,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         // Generated A-M shard foundation-scale training timeouts (#1719): DPT-Large depth, 768-dim VLMs.
         "MiDaS", "METER", "DocPedia", "MERT", "LXMERT",
+        // InternViT: InternViT-6B vision encoder — default config is EmbeddingDim 3200, 48 transformer
+        // layers, 25 heads (Chen et al. 2024, InternVL). A single fp32 CPU forward over 112px/14px = 64
+        // patch tokens through 48 layers of 3200-dim O(n^2) attention inherently exceeds the 120s per-test
+        // timeout — genuine foundation-scale compute, not a correctness bug (gradients flow; the ViT stack
+        // is paper-faithful). Runs in the nightly heavy lane, matching its VLM sibling Phi3Vision.
+        "InternViT",
         // #1719 follow-up (#1694 endgame): verified-genuine foundation-scale OOM/120s-timeout on the gate
         // box — 9B-class generative VLM (same family as LXMERT/METER/SmolVLM) and an audio-LM. The
         // gradients DO flow; the footprint simply exceeds the runner, so they run in the nightly heavy lane.
