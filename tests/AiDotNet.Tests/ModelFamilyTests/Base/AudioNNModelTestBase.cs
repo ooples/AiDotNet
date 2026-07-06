@@ -13,6 +13,29 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    /// <summary>
+    /// Audio models normalize away input SCALE (loudness) — a stacked LayerNorm / instance-norm
+    /// front end. Two CONSTANT (DC) inputs that differ only in amplitude (0.1 vs 0.9) therefore
+    /// collapse to the same normalized representation, so the base DifferentInputs invariants see
+    /// "identical output" even for a perfectly healthy model (a scale-only difference is not a
+    /// meaningful different input for a scale-invariant model). Emit a value-SEEDED oscillating
+    /// signal instead, so distinct <c>value</c>s differ in CONTENT (waveform), not just scale, and
+    /// survive normalization — while <c>value == 0</c> stays true silence for the silence invariants
+    /// (SilenceIn_NearSilenceOut / SilenceClassification_ShouldNotCrash). Mirrors the documented
+    /// index-model / segmentation target overrides in sibling bases.
+    /// </summary>
+    protected override Tensor<T> CreateConstantTensor(int[] shape, double value)
+    {
+        var tensor = new Tensor<T>(shape);
+        if (value == 0.0) return tensor; // all-zero silence
+
+        // A distinct angular frequency per value → distinct waveform direction (not a scalar
+        // multiple), so scale-normalizing front ends can't wash the two inputs together.
+        for (int i = 0; i < tensor.Length; i++)
+            tensor[i] = NumOps.FromDouble(System.Math.Sin((i + 1) * (value + 0.5) * 2.0));
+        return tensor;
+    }
+
     // =====================================================
     // AUDIO INVARIANT: Finite Spectral Energy
     // Audio output must have finite L2 energy — exploding values
