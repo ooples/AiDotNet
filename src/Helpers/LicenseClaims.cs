@@ -39,6 +39,14 @@ internal sealed class LicenseClaims
     public string? Kid { get; set; }
 
     /// <summary>
+    /// Signature algorithm identifier. Always <c>"EdDSA"</c> for aidn2 tokens (Ed25519). Recorded in the
+    /// claims so a future primitive change / rotation is unambiguous — the verifier rejects any token
+    /// whose <c>alg</c> it does not implement rather than silently assuming Ed25519.
+    /// </summary>
+    [JsonProperty("alg")]
+    public string? Alg { get; set; }
+
+    /// <summary>
     /// Serializes the claims to the canonical compact JSON that gets signed. Callers MUST sign/verify
     /// over the exact bytes that appear in the token's middle segment; this helper is used by the
     /// (server/test) signer. The verifier verifies over the raw decoded segment bytes as received.

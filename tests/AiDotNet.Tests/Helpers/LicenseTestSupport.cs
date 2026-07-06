@@ -48,38 +48,33 @@ internal static class LicenseTestSupport
     internal const string TestKid = "test-kid-2026a";
 
     /// <summary>
-    /// Ephemeral RSA-2048 test keypair (NEVER a real signing key). Its PUBLIC half is injected into
-    /// <see cref="LicensePublicKeyProvider"/> by the License collection fixture; its PRIVATE half signs
-    /// test tokens via <see cref="SignedKeyV2"/>. Regenerated per test process — nothing is committed.
+    /// Ephemeral Ed25519 test keypair (NEVER a real signing key). Its PUBLIC half (32 bytes) is injected
+    /// into <see cref="LicensePublicKeyProvider"/> by the License collection fixture; its PRIVATE half
+    /// signs test tokens via <see cref="SignedKeyV2"/>. Regenerated per test process — nothing committed.
     /// </summary>
-    private static readonly RSA TestRsa = CreateTestRsa();
+    private static readonly Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair TestKeyPair = CreateEd25519KeyPair();
 
-    private static RSA CreateTestRsa()
+    private static Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair CreateEd25519KeyPair()
     {
-        var rsa = RSA.Create();
-        // Force RSA-2048 uniformly across TFMs (net471 default can be 1024; net8/net10 default is 2048).
-        if (rsa.KeySize != 2048)
-        {
-            rsa.KeySize = 2048;
-        }
-
-        // Materialize the key deterministically before first use.
-        _ = rsa.ExportParameters(false);
-        return rsa;
+        var generator = new Org.BouncyCastle.Crypto.Generators.Ed25519KeyPairGenerator();
+        generator.Init(new Org.BouncyCastle.Crypto.Parameters.Ed25519KeyGenerationParameters(
+            new Org.BouncyCastle.Security.SecureRandom()));
+        return generator.GenerateKeyPair();
     }
 
-    /// <summary>The PUBLIC parameters (modulus/exponent) of the ephemeral test signing keypair.</summary>
-    internal static RSAParameters TestPublicKeyParameters => TestRsa.ExportParameters(false);
+    /// <summary>The raw 32-byte Ed25519 PUBLIC key of the ephemeral test signing keypair.</summary>
+    internal static byte[] TestPublicKey =>
+        ((Org.BouncyCastle.Crypto.Parameters.Ed25519PublicKeyParameters)TestKeyPair.Public).GetEncoded();
 
     /// <summary>The default embedded public-key set used by the License fixture: { TestKid → test public key }.</summary>
-    internal static Dictionary<string, RSAParameters> DefaultTestKeySet() =>
-        new(StringComparer.Ordinal) { [TestKid] = TestPublicKeyParameters };
+    internal static Dictionary<string, byte[]> DefaultTestKeySet() =>
+        new(StringComparer.Ordinal) { [TestKid] = TestPublicKey };
 
     /// <summary>
     /// Produces a valid asymmetric token <c>aidn2.{base64url(claims)}.{base64url(sig)}</c> signed with the
-    /// ephemeral test PRIVATE key (RS256 = RSA PKCS#1 v1.5 + SHA-256), exactly what
-    /// <see cref="AsymmetricLicenseVerifier"/> verifies. Pass a foreign <paramref name="signingKey"/> to
-    /// forge a bad-signature token, or an <paramref name="exp"/> in the past for an expired token.
+    /// ephemeral test PRIVATE key (Ed25519 / EdDSA), exactly what <see cref="AsymmetricLicenseVerifier"/>
+    /// verifies. Pass a foreign <paramref name="signingKey"/> to forge a bad-signature token, or an
+    /// <paramref name="exp"/> in the past for an expired token.
     /// </summary>
     internal static string SignedKeyV2(
         string sub = "test-customer",
@@ -88,7 +83,8 @@ internal static class LicenseTestSupport
         DateTimeOffset? iat = null,
         DateTimeOffset? exp = null,
         string? kid = null,
-        RSA? signingKey = null)
+        string? alg = "EdDSA",
+        Org.BouncyCastle.Crypto.AsymmetricKeyParameter? signingKey = null)
     {
         var claims = new LicenseClaims
         {
@@ -97,29 +93,34 @@ internal static class LicenseTestSupport
             Seats = seats,
             Iat = (iat ?? DateTimeOffset.UtcNow).ToUnixTimeSeconds(),
             Exp = (exp ?? DateTimeOffset.UtcNow.AddDays(30)).ToUnixTimeSeconds(),
-            Kid = kid ?? TestKid
+            Kid = kid ?? TestKid,
+            Alg = alg
         };
 
         byte[] claimsBytes = Encoding.UTF8.GetBytes(claims.ToCanonicalJson());
-        RSA rsa = signingKey ?? TestRsa;
-        byte[] sig = rsa.SignData(claimsBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var signer = new Org.BouncyCastle.Crypto.Signers.Ed25519Signer();
+        signer.Init(true, signingKey ?? TestKeyPair.Private);
+        signer.BlockUpdate(claimsBytes, 0, claimsBytes.Length);
+        byte[] sig = signer.GenerateSignature();
+
         return AsymmetricLicenseVerifier.Prefix + "." +
                Base64UrlHelper.Encode(claimsBytes) + "." +
                Base64UrlHelper.Encode(sig);
     }
 
     /// <summary>
-    /// Creates a fresh, unrelated RSA-2048 keypair — used to sign a token whose signature will NOT verify
-    /// against the embedded test public key (forged-token regression).
+    /// Creates a fresh, unrelated Ed25519 PRIVATE key — used to sign a token whose signature will NOT
+    /// verify against the embedded test public key (forged-token regression).
     /// </summary>
-    internal static RSA CreateForeignSigningKey() => CreateTestRsa();
+    internal static Org.BouncyCastle.Crypto.AsymmetricKeyParameter CreateForeignSigningKey() =>
+        CreateEd25519KeyPair().Private;
 
     /// <summary>
     /// Scopes the embedded license public-key set to <paramref name="keys"/> for the duration of a test,
     /// restoring the previous set on dispose. Pass <see langword="null"/> to simulate a dev/fork build with
     /// NO embedded public key and assert fail-closed behaviour.
     /// </summary>
-    internal static IDisposable WithLicensePublicKeys(IReadOnlyDictionary<string, RSAParameters>? keys)
+    internal static IDisposable WithLicensePublicKeys(IReadOnlyDictionary<string, byte[]>? keys)
     {
         var previous = LicensePublicKeyProvider.CurrentSnapshot();
         LicensePublicKeyProvider.OverrideForTesting(keys);
@@ -128,8 +129,8 @@ internal static class LicenseTestSupport
 
     private sealed class RestorePublicKeys : IDisposable
     {
-        private readonly IReadOnlyDictionary<string, RSAParameters>? _previous;
-        public RestorePublicKeys(IReadOnlyDictionary<string, RSAParameters>? previous) => _previous = previous;
+        private readonly IReadOnlyDictionary<string, byte[]>? _previous;
+        public RestorePublicKeys(IReadOnlyDictionary<string, byte[]>? previous) => _previous = previous;
         public void Dispose() => LicensePublicKeyProvider.OverrideForTesting(_previous);
     }
 
@@ -183,7 +184,7 @@ public sealed class LicenseBuildKeyFixture : IDisposable
     private readonly byte[]? _previousKey = LicenseTestSupport.CurrentBuildKeySnapshot();
 
     // Same restore discipline for the asymmetric (aidn2) public key set.
-    private readonly IReadOnlyDictionary<string, RSAParameters>? _previousPublicKeys =
+    private readonly IReadOnlyDictionary<string, byte[]>? _previousPublicKeys =
         LicensePublicKeyProvider.CurrentSnapshot();
 
     public LicenseBuildKeyFixture()

@@ -1,6 +1,7 @@
-using System.Security.Cryptography;
 using AiDotNet.Enums;
 using AiDotNet.Models;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Crypto.Signers;
 
 namespace AiDotNet.Helpers;
 
@@ -15,21 +16,27 @@ namespace AiDotNet.Helpers;
 /// still cannot forge a valid token. This is strictly stronger than the old symmetric HMAC scheme,
 /// where the same secret had to ship in every DLL and could be used to mint unlimited fake keys.</para>
 ///
-/// <para><b>Primitive:</b> RSA-2048 (or larger) with RSASSA-PKCS1-v1.5 and SHA-256 — the exact
-/// algorithm behind JWT <c>RS256</c>. Chosen because it is available in
-/// <c>System.Security.Cryptography</c> on <b>every</b> target framework (net471/net8/net10) with no
-/// added dependency, and importing a public key from modulus+exponent works uniformly across all of
-/// them (unlike <c>ImportSubjectPublicKeyInfo</c>, which does not exist on net471, or Ed25519/PSS,
-/// which are not available on net471's default RSA implementation).</para>
+/// <para><b>Primitive:</b> Ed25519 (EdDSA over Curve25519, RFC 8032) — the modern, security-forward
+/// signature standard: fast, 32-byte public keys, 64-byte signatures, deterministic (no per-signature
+/// randomness to leak), side-channel-resistant by construction, and free of the RSA
+/// padding/parameter-oracle class of pitfalls. .NET's <c>System.Security.Cryptography</c> ships no
+/// Ed25519 type on ANY target framework (net471/net8/net10), so verification uses the well-audited
+/// <c>BouncyCastle.Cryptography</c> library, which provides Ed25519 uniformly across all three.</para>
 ///
 /// <para><b>Token grammar:</b> <c>aidn2.&lt;base64url(claims_json)&gt;.&lt;base64url(signature)&gt;</c>
 /// where the signature is computed over the raw UTF-8 bytes of <c>claims_json</c> (i.e. the exact
-/// bytes obtained by base64url-decoding the middle segment).</para>
+/// bytes obtained by base64url-decoding the middle segment). Claims carry <c>alg:"EdDSA"</c>.</para>
 /// </remarks>
 internal static class AsymmetricLicenseVerifier
 {
     /// <summary>The token version prefix for asymmetric (public-key-signed) licenses.</summary>
     internal const string Prefix = "aidn2";
+
+    /// <summary>The signature algorithm this verifier implements. Tokens must declare this (or omit alg).</summary>
+    internal const string Algorithm = "EdDSA";
+
+    /// <summary>Ed25519 signatures are exactly 64 bytes.</summary>
+    private const int Ed25519SignatureSize = 64;
 
     /// <summary>
     /// Allowed clock skew when checking expiry, so a token that is a few seconds past <c>exp</c>
@@ -75,8 +82,8 @@ internal static class AsymmetricLicenseVerifier
     }
 
     /// <summary>
-    /// Verifies an <c>aidn2.</c> token fully offline: checks the signature against the embedded public
-    /// key selected by the token's <c>kid</c>, then enforces expiry. Fails closed on any problem.
+    /// Verifies an <c>aidn2.</c> token fully offline: checks the Ed25519 signature against the embedded
+    /// public key selected by the token's <c>kid</c>, then enforces expiry. Fails closed on any problem.
     /// </summary>
     /// <param name="key">The full <c>aidn2.&lt;claims&gt;.&lt;sig&gt;</c> token.</param>
     /// <param name="nowUtc">The current UTC time (injectable for tests).</param>
@@ -84,7 +91,8 @@ internal static class AsymmetricLicenseVerifier
     /// An <see cref="LicenseValidationResult"/>: <see cref="LicenseKeyStatus.Active"/> when the
     /// signature verifies and the token is unexpired; <see cref="LicenseKeyStatus.Expired"/> when the
     /// signature verifies but <c>exp</c> has passed; <see cref="LicenseKeyStatus.Invalid"/> for a bad
-    /// signature, unknown <c>kid</c>, malformed token, or a build that embeds no public key.
+    /// signature, unknown <c>kid</c>, unsupported <c>alg</c>, malformed token, or a build that embeds
+    /// no public key.
     /// </returns>
     internal static LicenseValidationResult Verify(string key, DateTimeOffset nowUtc)
     {
@@ -116,6 +124,11 @@ internal static class AsymmetricLicenseVerifier
             return Invalid("License token is missing claims or signature.");
         }
 
+        if (signature.Length != Ed25519SignatureSize)
+        {
+            return Invalid("License signature is not a valid Ed25519 signature.");
+        }
+
         string claimsJson;
         try
         {
@@ -132,6 +145,15 @@ internal static class AsymmetricLicenseVerifier
             return Invalid("License token claims are malformed.");
         }
 
+        // Reject a token that declares a signature algorithm this verifier does not implement, so a
+        // future primitive can never be silently treated as Ed25519. A missing alg is tolerated
+        // (implicitly EdDSA for aidn2), but a present, mismatched alg fails closed.
+        if (claims.Alg is not null && claims.Alg.Length > 0 &&
+            !string.Equals(claims.Alg, Algorithm, StringComparison.Ordinal))
+        {
+            return Invalid("License token declares unsupported signature algorithm '" + claims.Alg + "'.");
+        }
+
         string? kid = claims.Kid;
         if (kid is null || kid.Length == 0)
         {
@@ -140,7 +162,7 @@ internal static class AsymmetricLicenseVerifier
 
         // A build that embeds no public key CANNOT verify a signature. It must NOT trust the token —
         // fail closed exactly like the HMAC path does when the build key is absent.
-        if (!LicensePublicKeyProvider.TryGetPublicKey(kid, out RSAParameters publicKey))
+        if (!LicensePublicKeyProvider.TryGetPublicKey(kid, out byte[] publicKey))
         {
             return Invalid(
                 "This build cannot verify the license signature: no embedded public key matches the " +
@@ -150,16 +172,17 @@ internal static class AsymmetricLicenseVerifier
         bool signatureValid;
         try
         {
-            using var rsa = RSA.Create();
-            rsa.ImportParameters(publicKey);
-            // RSASSA-PKCS1-v1.5 + SHA-256 == JWT RS256. Signature is over the raw claims bytes.
-            signatureValid = rsa.VerifyData(
-                claimsBytes, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var publicKeyParameters = new Ed25519PublicKeyParameters(publicKey, 0);
+            var verifier = new Ed25519Signer();
+            verifier.Init(false, publicKeyParameters);
+            verifier.BlockUpdate(claimsBytes, 0, claimsBytes.Length);
+            signatureValid = verifier.VerifySignature(signature);
         }
-        catch (CryptographicException ex)
+        catch (Exception ex)
         {
+            // BouncyCastle can throw on structurally-bad key/signature material — treat as invalid.
             System.Diagnostics.Trace.TraceWarning(
-                "AsymmetricLicenseVerifier: verification error: " + ex.Message);
+                "AsymmetricLicenseVerifier: verification error: " + ex.GetType().Name + ": " + ex.Message);
             return Invalid("License signature verification failed.");
         }
 

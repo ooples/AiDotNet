@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -81,10 +78,11 @@ public class AsymmetricLicenseTests
     [Fact(Timeout = 60000)]
     public async Task Aidn2_ForgedSignature_ForeignKey_IsRejected()
     {
-        // The core security property: a token signed by a keypair whose public half is NOT embedded
-        // cannot be forged into validity. This is exactly what an attacker without the private key faces.
+        // The core security property: an Ed25519 token signed by a keypair whose public half is NOT
+        // embedded cannot be forged into validity. This is exactly what an attacker without the private
+        // key faces.
         await Task.Yield();
-        using RSA foreign = LicenseTestSupport.CreateForeignSigningKey();
+        var foreign = LicenseTestSupport.CreateForeignSigningKey();
         string forged = LicenseTestSupport.SignedKeyV2(signingKey: foreign); // kid still = TestKid
 
         var key = new AiDotNetLicenseKey(forged) { ServerUrl = string.Empty };
@@ -214,19 +212,21 @@ public class AsymmetricLicenseTests
     // ───────────── provider round-trip ─────────────
 
     [Fact(Timeout = 60000)]
-    public async Task LicensePublicKeyProvider_ParsesJwkManifest()
+    public async Task LicensePublicKeyProvider_ParsesJwkOkpManifest()
     {
         await Task.Yield();
-        RSAParameters pub = LicenseTestSupport.TestPublicKeyParameters;
+        byte[] pub = LicenseTestSupport.TestPublicKey;
+        Assert.Equal(LicensePublicKeyProvider.Ed25519PublicKeySize, pub.Length);
         string json = Newtonsoft.Json.JsonConvert.SerializeObject(new
         {
             keys = new[]
             {
                 new
                 {
+                    kty = "OKP",
+                    crv = "Ed25519",
                     kid = "roundtrip",
-                    n = Base64UrlHelper.Encode(pub.Modulus),
-                    e = Base64UrlHelper.Encode(pub.Exponent)
+                    x = Base64UrlHelper.Encode(pub)
                 }
             }
         });
@@ -235,7 +235,45 @@ public class AsymmetricLicenseTests
 
         Assert.NotNull(parsed);
         Assert.True(parsed!.ContainsKey("roundtrip"));
-        Assert.Equal(pub.Modulus, parsed["roundtrip"].Modulus);
-        Assert.Equal(pub.Exponent, parsed["roundtrip"].Exponent);
+        Assert.Equal(pub, parsed["roundtrip"]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task LicensePublicKeyProvider_RejectsNonEd25519Curve()
+    {
+        // A present, non-Ed25519 crv must be skipped (fail closed), never treated as Ed25519.
+        await Task.Yield();
+        string json = Newtonsoft.Json.JsonConvert.SerializeObject(new
+        {
+            keys = new[]
+            {
+                new
+                {
+                    kty = "OKP",
+                    crv = "X25519",
+                    kid = "wrong-curve",
+                    x = Base64UrlHelper.Encode(LicenseTestSupport.TestPublicKey)
+                }
+            }
+        });
+
+        var parsed = LicensePublicKeyProvider.Parse(json);
+
+        Assert.Null(parsed);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Aidn2_UnsupportedAlg_IsRejected()
+    {
+        // A token that (validly, with the test key) declares a non-EdDSA alg must be rejected so a future
+        // primitive can never be silently accepted as Ed25519.
+        await Task.Yield();
+        string token = LicenseTestSupport.SignedKeyV2(alg: "RS256");
+
+        var key = new AiDotNetLicenseKey(token) { ServerUrl = string.Empty };
+        var result = new LicenseValidator(key).Validate();
+
+        Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
+        Assert.Contains("algorithm", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 }
