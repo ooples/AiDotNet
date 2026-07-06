@@ -99,6 +99,7 @@ public class FacadeTrainingCallbackTests
     [Fact(Timeout = 120000)]
     public async Task PerEpochStreaming_MonitorHistoryLengthEqualsEpochsRun()
     {
+        await Task.Yield(); // ensure the test yields so [Fact(Timeout)] can enforce on a sync-completing BuildAsync
         const int epochs = 4;
         var (x, y) = BuildData();
         var optimizer = BuildOptimizer(epochs, 0.05);
@@ -123,6 +124,7 @@ public class FacadeTrainingCallbackTests
     [Fact(Timeout = 120000)]
     public async Task Callback_FiresOncePerEpoch()
     {
+        await Task.Yield();
         const int epochs = 4;
         var (x, y) = BuildData();
         var optimizer = BuildOptimizer(epochs, 0.05);
@@ -145,6 +147,7 @@ public class FacadeTrainingCallbackTests
     [Fact(Timeout = 120000)]
     public async Task Callback_ReturningFalse_AbortsTraining()
     {
+        await Task.Yield();
         const int epochs = 3;
         var (x, y) = BuildData();
         var optimizer = BuildOptimizer(epochs, 0.05);
@@ -168,13 +171,13 @@ public class FacadeTrainingCallbackTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task HealthMonitorCallback_AbortsOnDivergingLoss()
+    public async Task HealthMonitorCallback_AbortsOnNaNLoss()
     {
+        await Task.Yield();
         const int epochs = 8;
         var (x, y) = BuildData();
-        // Inject a NaN target so the very first epoch's loss becomes NaN.
+        // Inject a NaN target so the very first epoch's loss becomes NaN — this exercises the NaN branch.
         y[0, 0] = float.NaN;
-        // A large learning rate also guarantees divergence even absent the NaN.
         var optimizer = BuildOptimizer(epochs, 5.0);
         var model = BuildModel(optimizer);
 
@@ -187,14 +190,37 @@ public class FacadeTrainingCallbackTests
             .BuildAsync();
 
         Assert.NotNull(result);
-        Assert.True(result.EarlyStopTriggered, "Diverging/NaN training should be aborted by HealthMonitorCallback.");
+        Assert.True(result.EarlyStopTriggered, "NaN training should be aborted by HealthMonitorCallback.");
         Assert.NotNull(health.AbortReason);
+        Assert.Contains("NaN", health.AbortReason!, System.StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(result.StopReason);
     }
 
     [Fact(Timeout = 120000)]
+    public async Task HealthMonitorCallback_AbortsOnDivergingLoss()
+    {
+        await Task.Yield();
+        // Drive OnEpochEnd directly with a deterministic loss sequence that exercises the sliding-window
+        // DIVERGENCE branch (not the NaN branch): establish a stable recent best of 1.0, then feed a loss
+        // more than lossRisePercent (50%) above it.
+        var health = new HealthMonitorCallback<float>(lossRisePercent: 50.0, windowSize: 5);
+        health.OnTrainBegin(Progress(0, 1.0f));
+        Assert.True(health.OnEpochEnd(Progress(0, 1.0f)));
+        Assert.True(health.OnEpochEnd(Progress(1, 1.0f)));
+        Assert.True(health.OnEpochEnd(Progress(2, 1.0f)));
+        // 2.0 > 1.0 + 1.0 * 0.5  =>  diverging; must return false and record a "diverging" reason.
+        Assert.False(health.OnEpochEnd(Progress(3, 2.0f)));
+        Assert.NotNull(health.AbortReason);
+        Assert.Contains("diverging", health.AbortReason!, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TrainingProgress<float> Progress(int epoch, float loss) =>
+        new TrainingProgress<float>(epoch, totalEpochs: 8, loss: loss, metrics: null, elapsed: System.TimeSpan.Zero);
+
+    [Fact(Timeout = 120000)]
     public async Task Result_ExposesConfiguredMonitorCheckpointAndMixedPrecisionStatus()
     {
+        await Task.Yield();
         const int epochs = 3;
         var (x, y) = BuildData();
         var optimizer = BuildOptimizer(epochs, 0.05);
@@ -203,24 +229,33 @@ public class FacadeTrainingCallbackTests
         var ckptDir = System.IO.Path.Combine(
             System.IO.Path.GetTempPath(), "aidotnet_cb_ckpt_" + System.Guid.NewGuid().ToString("N").Substring(0, 8));
         System.IO.Directory.CreateDirectory(ckptDir);
-        var checkpointManager = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir);
+        try
+        {
+            var checkpointManager = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir);
 
-        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-            .ConfigureModel(model)
-            .ConfigureOptimizer(optimizer)
-            .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(x, y))
-            .ConfigureTrainingMonitor(monitor)
-            .ConfigureCheckpointManager(checkpointManager)
-            .ConfigureMixedPrecision(new MixedPrecisionConfig { PrecisionType = MixedPrecisionType.FP16 })
-            .BuildAsync();
+            var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                .ConfigureModel(model)
+                .ConfigureOptimizer(optimizer)
+                .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(x, y))
+                .ConfigureTrainingMonitor(monitor)
+                .ConfigureCheckpointManager(checkpointManager)
+                .ConfigureMixedPrecision(new MixedPrecisionConfig { PrecisionType = MixedPrecisionType.FP16 })
+                .BuildAsync();
 
-        Assert.NotNull(result);
-        // The result surfaces the CONFIGURED instances (previously null).
-        Assert.Same(monitor, result.TrainingMonitor);
-        Assert.Same(checkpointManager, result.CheckpointManager);
-        // Mixed-precision status is populated and reports that FP16 engaged.
-        Assert.False(string.IsNullOrEmpty(result.MixedPrecisionStatus));
-        Assert.True(result.MixedPrecisionEngaged, $"FP16 should have engaged; status='{result.MixedPrecisionStatus}'.");
-        Assert.Contains("engaged", result.MixedPrecisionStatus!, System.StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(result);
+            // The result surfaces the CONFIGURED instances (previously null).
+            Assert.Same(monitor, result.TrainingMonitor);
+            Assert.Same(checkpointManager, result.CheckpointManager);
+            // Mixed-precision status is populated and reports that FP16 engaged.
+            Assert.False(string.IsNullOrEmpty(result.MixedPrecisionStatus));
+            Assert.True(result.MixedPrecisionEngaged, $"FP16 should have engaged; status='{result.MixedPrecisionStatus}'.");
+            Assert.Contains("engaged", result.MixedPrecisionStatus!, System.StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            // Best-effort cleanup of the unique temp checkpoint dir so runs don't leak directories.
+            try { System.IO.Directory.Delete(ckptDir, recursive: true); }
+            catch (System.IO.IOException) { /* still locked — leave it for the OS temp sweep */ }
+        }
     }
 }

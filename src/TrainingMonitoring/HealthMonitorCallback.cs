@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AiDotNet.Interfaces;
 using LogLevel = AiDotNet.Interfaces.LogLevel;
 
@@ -29,9 +30,13 @@ namespace AiDotNet.TrainingMonitoring;
 /// early and hands you back the model as it was before the blow-up. You can tune how sensitive
 /// it is with <paramref name="lossRisePercent"/> and <paramref name="windowSize"/>.
 /// </para>
+/// <para>
+/// This is an internal facade-plumbing type; end users engage the built-in health guard through
+/// <c>AiModelBuilder.ConfigureHealthMonitor(...)</c> rather than constructing it directly.
+/// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public sealed class HealthMonitorCallback<T> : ITrainingCallback<T>
+internal sealed class HealthMonitorCallback<T> : ITrainingCallback<T>
 {
     private readonly double _lossRiseFraction;
     private readonly int _windowSize;
@@ -59,6 +64,7 @@ public sealed class HealthMonitorCallback<T> : ITrainingCallback<T>
     /// </param>
     /// <param name="windowSize">
     /// The number of most-recent epochs the rising-loss check compares against. Defaults to 5.
+    /// Must be at least 1.
     /// </param>
     /// <param name="monitor">
     /// An optional training monitor whose <see cref="ITrainingMonitor{T}.CheckForIssues"/> is
@@ -74,14 +80,30 @@ public sealed class HealthMonitorCallback<T> : ITrainingCallback<T>
     /// no arguments (<c>new HealthMonitorCallback&lt;float&gt;()</c>) and it will guard against
     /// NaN/infinite losses and a runaway (&gt;50%) rise.
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="lossRisePercent"/> is <c>NaN</c> or infinite, or <paramref name="windowSize"/> is less than 1.
+    /// </exception>
     public HealthMonitorCallback(
         double lossRisePercent = 50.0,
         int windowSize = 5,
         ITrainingMonitor<T>? monitor = null,
         string? monitorSessionId = null)
     {
+        // Validate rather than silently accept: a NaN/infinite threshold would quietly disable or break
+        // the divergence check, and windowSize < 1 was previously rewritten to 1 (hiding a caller mistake).
+        if (double.IsNaN(lossRisePercent) || double.IsInfinity(lossRisePercent))
+        {
+            throw new ArgumentOutOfRangeException(nameof(lossRisePercent), lossRisePercent,
+                "lossRisePercent must be a finite number (use a value <= 0 to disable the rising-loss check).");
+        }
+        if (windowSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(windowSize), windowSize,
+                "windowSize must be at least 1.");
+        }
+
         _lossRiseFraction = lossRisePercent / 100.0;
-        _windowSize = windowSize < 1 ? 1 : windowSize;
+        _windowSize = windowSize;
         _monitor = monitor;
         _monitorSessionId = monitorSessionId;
         _recentLosses = new Queue<double>(_windowSize + 1);
@@ -140,9 +162,16 @@ public sealed class HealthMonitorCallback<T> : ITrainingCallback<T>
             {
                 issues = _monitor.CheckForIssues(_monitorSessionId);
             }
-            catch
+            catch (Exception ex)
             {
-                issues = new List<string>();
+                // Fail closed: a health guard that cannot run the monitor check it was configured with must
+                // not silently treat the run as healthy. Abort with a clear reason and surface the failure
+                // (the NaN/divergence guards above still ran; this only fires when a monitor was supplied).
+                Trace.TraceWarning(
+                    $"HealthMonitorCallback: ITrainingMonitor.CheckForIssues failed at epoch {progress.Epoch}: {ex}");
+                return Abort(
+                    $"training monitor health check failed at epoch {progress.Epoch}: {ex.GetType().Name}",
+                    progress);
             }
 
             if (issues.Count > 0)
@@ -172,9 +201,13 @@ public sealed class HealthMonitorCallback<T> : ITrainingCallback<T>
             {
                 _monitor.LogMessage(_monitorSessionId, LogLevel.Error, $"HealthMonitorCallback aborting training: {reason}");
             }
-            catch
+            catch (Exception ex)
             {
-                // Logging is best-effort; never let it mask the abort decision.
+                // Logging is best-effort and must never mask the abort decision — but do not hide that it
+                // failed. Record it on AbortReason (which callers read) and to the trace listeners so a
+                // broken monitor integration is observable rather than silent.
+                AbortReason = $"{reason}; NOTE: failed to log abort to monitor ({ex.GetType().Name})";
+                Trace.TraceWarning($"HealthMonitorCallback: ITrainingMonitor.LogMessage failed while recording abort: {ex}");
             }
         }
 

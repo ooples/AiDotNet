@@ -207,7 +207,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             List<string> issues;
             try { issues = _trainingMonitor.CheckForIssues(monitorSessionId); }
-            catch { issues = new List<string>(); }
+            catch (Exception ex)
+            {
+                // Degrade to "no issues reported" for this epoch, but surface the failure so a broken
+                // monitor integration is visible to operators instead of being silently swallowed.
+                issues = new List<string>();
+                System.Diagnostics.Trace.TraceWarning($"Training monitor CheckForIssues failed at epoch {epoch}: {ex}");
+            }
             if (issues.Count > 0)
             {
                 shouldContinue = false;
@@ -327,6 +333,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         T streamingLastLoss = numOps.Zero;
         InvokeTrainingCallbacksBegin(epochs);
 
+        // #1790: guarantee OnTrainEnd fires (and the monitor session closes) even if the streaming loop
+        // throws — the "always called" contract, symmetric with the non-streaming path.
+        try
+        {
         // Train for the specified number of epochs
         for (int epoch = 0; epoch < epochs; epoch++)
         {
@@ -607,11 +617,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
-        // Notify callbacks that training has ended and close the monitor session.
-        InvokeTrainingCallbacksEnd(streamingLastEpoch, epochs, streamingLastLoss, DateTime.UtcNow - streamingStart);
-        if (_trainingMonitor is not null && streamingMonitorSessionId is not null)
+        }
+        finally
         {
-            _trainingMonitor.EndSession(streamingMonitorSessionId);
+            // Notify callbacks that training has ended and close the monitor session — always, even on throw.
+            InvokeTrainingCallbacksEnd(streamingLastEpoch, epochs, streamingLastLoss, DateTime.UtcNow - streamingStart);
+            if (_trainingMonitor is not null && streamingMonitorSessionId is not null)
+            {
+                _trainingMonitor.EndSession(streamingMonitorSessionId);
+            }
         }
 
         // Calculate average loss
@@ -2095,7 +2109,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         EpochProgressBridge? epochBridge = null;
         if (trainingObservabilityEnabled)
         {
-            try { totalPlannedEpochs = finalOptimizer.GetOptions().MaxIterations; } catch { /* options optional */ }
+            try { totalPlannedEpochs = finalOptimizer.GetOptions().MaxIterations; }
+            catch (Exception ex)
+            {
+                // Leave totalPlannedEpochs at its default, but do not hide the failure: a broken/misbehaving
+                // GetOptions() otherwise silently feeds TotalEpochs = 0 into every registered callback.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Could not read MaxIterations from optimizer options for TrainingProgress.TotalEpochs: {ex}");
+            }
             epochBridge = new EpochProgressBridge(
                 this, monitorSessionId, cancellationToken, totalPlannedEpochs,
                 MathHelper.GetNumericOperations<T>().Zero);
@@ -2103,6 +2124,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             InvokeTrainingCallbacksBegin(totalPlannedEpochs);
         }
 
+        // #1790: OnTrainEnd is contractually "always called" — callbacks release resources acquired in
+        // OnTrainBegin there. Wrap the whole training dispatch so it fires in the finally below even if the
+        // dispatch throws (federated trainer.Train, finalOptimizer.Optimize, a batch await foreach, etc.).
+        bool earlyStopTriggered = false;
+        string? stopReason = null;
+        try
+        {
         // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
         if (_federatedLearningOptions != null)
         {
@@ -2416,17 +2444,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 optimizationResult = finalOptimizer.Optimize(optimizationInputData);
             }
         }
-
-        // Notify all callbacks that training has ended (whether it completed every epoch or
-        // was aborted). Always fires so callbacks can release resources acquired in OnTrainBegin.
-        // Also lift the abort state off the bridge for the result surface.
-        bool earlyStopTriggered = false;
-        string? stopReason = null;
-        if (epochBridge is not null)
+        }
+        finally
         {
-            earlyStopTriggered = epochBridge.EarlyStopTriggered;
-            stopReason = epochBridge.StopReason;
-            InvokeTrainingCallbacksEnd(epochBridge.LastEpoch, totalPlannedEpochs, epochBridge.LastLoss, epochBridge.Elapsed);
+            // OnTrainEnd ALWAYS fires — whether the dispatch completed every epoch, was aborted, or threw.
+            // Also lift the abort state off the bridge for the result surface.
+            if (epochBridge is not null)
+            {
+                earlyStopTriggered = epochBridge.EarlyStopTriggered;
+                stopReason = epochBridge.StopReason;
+                InvokeTrainingCallbacksEnd(epochBridge.LastEpoch, totalPlannedEpochs, epochBridge.LastLoss, epochBridge.Elapsed);
+            }
         }
 
         // ============================================================================

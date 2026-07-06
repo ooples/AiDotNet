@@ -1583,11 +1583,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <remarks>
     /// <para><b>For Beginners:</b> Use this when you want more than a one-liner — for example a
     /// reusable object that sets up before training, reacts after each epoch, and cleans up at
-    /// the end. A ready-made example is <see cref="AiDotNet.TrainingMonitoring.HealthMonitorCallback{T}"/>,
-    /// which automatically stops a run whose loss blows up:</para>
+    /// the end. For the common "stop a run whose loss blows up" guard, prefer the built-in
+    /// <see cref="ConfigureHealthMonitor(double, int)"/>, which wires that up for you:</para>
     /// <example>
     /// <code>
-    /// builder.ConfigureTrainingCallback(new HealthMonitorCallback&lt;float&gt;());
+    /// builder.ConfigureHealthMonitor();
     /// </code>
     /// </example>
     /// <para>You can register multiple callbacks (and combine them with the delegate overload);
@@ -1602,6 +1602,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         _trainingCallbacks.Add(callback);
         return this;
+    }
+
+    /// <summary>
+    /// Registers the built-in training health guard that automatically aborts a run whose loss becomes
+    /// NaN/infinite or diverges (rises well above the recent-window best).
+    /// </summary>
+    /// <param name="lossRisePercent">
+    /// How much the loss may rise, as a percentage of the best loss in the recent window, before the run
+    /// is considered diverging. Defaults to 50. Values &lt;= 0 disable the rising-loss check.
+    /// </param>
+    /// <param name="windowSize">
+    /// The number of most-recent epochs the rising-loss check compares against. Defaults to 5; must be &gt;= 1.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Long runs sometimes "explode" — the loss turns into NaN or starts
+    /// climbing — and every remaining epoch is wasted. This registers a safety cut-off that watches the
+    /// loss after each epoch and stops training the moment it looks unhealthy.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="lossRisePercent"/> is NaN/infinite, or <paramref name="windowSize"/> is less than 1.
+    /// </exception>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureHealthMonitor(
+        double lossRisePercent = 50.0, int windowSize = 5)
+    {
+        return ConfigureTrainingCallback(
+            new TrainingMonitoring.HealthMonitorCallback<T>(lossRisePercent, windowSize));
     }
 
     /// <summary>
