@@ -4,125 +4,131 @@ using AiDotNet.LinearAlgebra;
 namespace AiDotNet.NeuralNetworks.CreditAssignment;
 
 /// <summary>
-/// Shared implementation for the credit rules that propagate the error <i>sequentially</i> layer-by-layer
-/// (Back-prop, Feedback Alignment, Sign-Symmetric). They differ only in <b>which matrix</b> carries the error
-/// from a layer back to the previous layer (<see cref="FeedbackMatrix"/>); the rest of the backward chain is
-/// identical.
+/// Shared implementation for credit rules that route the error <i>sequentially</i> layer-by-layer (Feedback
+/// Alignment, Sign-Symmetric). Starting from the output error, each layer's teaching signal is obtained from the
+/// next layer's teaching signal through a per-boundary feedback matrix (<see cref="FeedbackMatrix"/>). The engine
+/// then supplies each layer's local activation Jacobian via a vector-Jacobian product.
 /// </summary>
 /// <typeparam name="T">The numeric data type.</typeparam>
 internal abstract class SequentialFeedbackRule<T> : CreditRuleBase<T>
 {
-    /// <summary>
-    /// The feedback matrix (shape <c>[outputDim, inputDim]</c>, same orientation as the layer weights) used to
-    /// carry <c>delta</c> back from <paramref name="layer"/> to its input. Back-prop returns the true weights;
-    /// Feedback Alignment returns a fixed random matrix; Sign-Symmetric returns the element-wise sign of the
-    /// weights.
-    /// </summary>
-    protected abstract Matrix<T> FeedbackMatrix(ICreditLayer<T> layer, ICreditAssignmentContext<T> context);
+    protected SequentialFeedbackRule(int? seed = null) : base(seed) { }
 
-    /// <inheritdoc />
-    public override void ComputeUpdates(ICreditAssignmentContext<T> context)
+    /// <summary>
+    /// The feedback matrix carrying the teaching signal from layer <c>index+1</c>'s output space
+    /// (<c>M_{index+1}</c> features) to layer <c>index</c>'s output space (<c>M_index</c> features) — shape
+    /// <c>[M_{index+1}, M_index]</c>. Feedback Alignment returns a fixed random matrix; Sign-Symmetric returns the
+    /// element-wise sign of the next layer's weights.
+    /// </summary>
+    protected abstract Matrix<T> FeedbackMatrix(int index, ICreditAssignmentContext<T> context);
+
+    public override void ComputeTeachingSignals(ICreditAssignmentContext<T> context)
     {
-        var ops = context.NumOps;
         var layers = context.Layers;
         int last = layers.Count - 1;
 
-        // delta at the output pre-activation = ∂L/∂z_last = (prediction − target).
-        Matrix<T> delta = context.OutputError;
+        // Teaching signal at the output layer = output error (the output layer itself is trained by the engine's
+        // exact loss gradient; we only need this as the seed of the sequential recurrence).
+        Matrix<T> current = ErrorMatrix(context); // [B, M_last]
 
-        for (int i = last; i >= 0; i--)
+        for (int i = last - 1; i >= 0; i--)
         {
-            var layer = layers[i];
-            SetParameterGradients(layer, delta, ops);
-
-            if (i > 0)
-            {
-                // Route the error back to the previous layer through this layer's feedback matrix,
-                // then gate it by the previous layer's activation derivative.
-                var feedback = FeedbackMatrix(layer, context);   // [out_i, in_i]
-                var preDelta = delta.Multiply(feedback);          // [B, out_i] · [out_i, in_i] = [B, in_i]
-                var prevDeriv = layers[i - 1].ActivationDerivative();
-                delta = Hadamard(preDelta, prevDeriv, ops);
-            }
+            var feedback = FeedbackMatrix(i, context);         // [M_{i+1}, M_i]
+            current = current.Multiply(feedback);              // [B, M_{i+1}] · [M_{i+1}, M_i] = [B, M_i]
+            layers[i].TeachingSignal = ToTeachingSignal(current, layers[i].OutputShape);
         }
     }
 }
 
 /// <summary>
-/// Standard reverse-mode back-propagation expressed through the credit-rule interface: the feedback matrix is
-/// the layer's own (transpose) weights. Used as the reference the alternative rules are validated against.
-/// </summary>
-internal sealed class BackpropCreditRule<T> : SequentialFeedbackRule<T>
-{
-    public override string Name => "Backprop";
-
-    protected override Matrix<T> FeedbackMatrix(ICreditLayer<T> layer, ICreditAssignmentContext<T> context)
-        => layer.Weights;
-}
-
-/// <summary>
-/// <b>Feedback Alignment</b> (Lillicrap et al., 2016): each layer's transpose-weight feedback is replaced by a
-/// <i>fixed random</i> matrix of the same shape, allocated once in <see cref="Initialize"/>.
+/// <b>Feedback Alignment</b> (Lillicrap et al., 2016): the error is routed sequentially through a <i>fixed random</i>
+/// feedback matrix at each layer boundary instead of the transpose weights.
 /// </summary>
 internal sealed class FeedbackAlignmentCreditRule<T> : SequentialFeedbackRule<T>
 {
-    private Matrix<T>[]? _feedback;
+    private Matrix<T>[]? _feedback; // _feedback[i] : [M_{i+1}, M_i]
     private int[]? _shapeSignature;
+
+    public FeedbackAlignmentCreditRule(int? seed = null) : base(seed) { }
 
     public override string Name => "FeedbackAlignment";
 
     public override void Initialize(ICreditAssignmentContext<T> context)
     {
         if (IsInitializedFor(context)) return;
-
         var layers = context.Layers;
-        _feedback = new Matrix<T>[layers.Count];
-        _shapeSignature = new int[layers.Count * 2];
+        var random = ResolveRandom(context);
+
+        _feedback = new Matrix<T>[Math.Max(0, layers.Count - 1)];
+        _shapeSignature = new int[layers.Count];
         for (int i = 0; i < layers.Count; i++)
+            _shapeSignature[i] = layers[i].FlatFeatureSize;
+        for (int i = 0; i < layers.Count - 1; i++)
         {
-            var layer = layers[i];
-            // Same shape as the weights [out, in]; scale by fan-in for stability.
-            _feedback[i] = RandomGaussian(layer.OutputDim, layer.InputDim, layer.InputDim, context.Random, context.NumOps);
-            _shapeSignature[i * 2] = layer.OutputDim;
-            _shapeSignature[i * 2 + 1] = layer.InputDim;
+            int mNext = layers[i + 1].FlatFeatureSize;
+            int mThis = layers[i].FlatFeatureSize;
+            _feedback[i] = RandomGaussian(mNext, mThis, mNext, random, context.NumOps);
         }
     }
 
-    protected override Matrix<T> FeedbackMatrix(ICreditLayer<T> layer, ICreditAssignmentContext<T> context)
+    protected override Matrix<T> FeedbackMatrix(int index, ICreditAssignmentContext<T> context)
     {
-        if (_feedback is null) Initialize(context);
-        return _feedback![layer.Index];
+        if (!IsInitializedFor(context)) Initialize(context);
+        return _feedback![index];
     }
 
     private bool IsInitializedFor(ICreditAssignmentContext<T> context)
     {
         if (_feedback is null || _shapeSignature is null) return false;
         var layers = context.Layers;
-        if (_feedback.Length != layers.Count) return false;
+        if (_shapeSignature.Length != layers.Count) return false;
         for (int i = 0; i < layers.Count; i++)
-            if (_shapeSignature[i * 2] != layers[i].OutputDim || _shapeSignature[i * 2 + 1] != layers[i].InputDim)
-                return false;
+            if (_shapeSignature[i] != layers[i].FlatFeatureSize) return false;
         return true;
     }
 }
 
 /// <summary>
-/// <b>Sign-Symmetric feedback</b> (Liao et al., 2016): the error is routed back through the element-wise
-/// <i>sign</i> of the transpose weights (magnitude discarded). Unlike Feedback Alignment the feedback tracks
-/// the live weight signs each step, so there is no fixed random state.
+/// <b>Sign-Symmetric feedback</b> (Liao et al., 2016 / Xiao et al., 2018): the error is routed back through the
+/// element-wise <i>sign</i> of the next layer's transpose weights. This requires each trainable layer to expose a
+/// single weight matrix (dense layers); it is not defined for attention/normalization blocks, which have no single
+/// weight — use Direct Feedback Alignment for those architectures.
 /// </summary>
 internal sealed class SignSymmetricCreditRule<T> : SequentialFeedbackRule<T>
 {
+    public SignSymmetricCreditRule(int? seed = null) : base(seed) { }
+
     public override string Name => "SignSymmetric";
 
-    protected override Matrix<T> FeedbackMatrix(ICreditLayer<T> layer, ICreditAssignmentContext<T> context)
+    protected override Matrix<T> FeedbackMatrix(int index, ICreditAssignmentContext<T> context)
     {
-        var ops = context.NumOps;
-        var w = layer.Weights;
-        var sign = new Matrix<T>(w.Rows, w.Columns);
-        for (int i = 0; i < w.Rows; i++)
-            for (int j = 0; j < w.Columns; j++)
-                sign[i, j] = ops.SignOrZero(w[i, j]);
-        return sign;
+        var thisLayer = context.Layers[index];
+        var nextLayer = context.Layers[index + 1];
+        var weights = nextLayer.Weights;
+
+        // Sign-Symmetric routes the error through sign(W_{index+1}), which only makes sense when each layer is a
+        // single dense weight whose shape chains the consecutive feature sizes ([M_{index+1}, M_index]). Attention
+        // / normalization blocks have no single weight (null) or a non-chaining shape — reject those clearly.
+        if (weights is null || weights.Rows != nextLayer.FlatFeatureSize || weights.Columns != thisLayer.FlatFeatureSize)
+        {
+            throw new NotSupportedException(
+                $"SignSymmetric requires every trainable layer to be a single dense weight matrix that chains the " +
+                $"feature sizes; trainable layer {index + 1} is not (e.g. an attention/normalization block). Use " +
+                $"CreditRule.DirectFeedbackAlignment for Transformer / attention architectures.");
+        }
+
+        // weights: [outNext, inNext] = [M_{index+1}, M_index]; sign gives the sign-symmetric feedback.
+        return SignMatrix(weights, context.NumOps);
     }
+}
+
+/// <summary>
+/// Standard reverse-mode back-propagation, exposed as a credit rule for API symmetry. Selecting it uses the
+/// network's exact gradient (identical to the default path); it produces no teaching signals.
+/// </summary>
+internal sealed class BackpropCreditRule<T> : CreditRuleBase<T>
+{
+    public override string Name => "Backprop";
+    public override bool IsExactBackprop => true;
+    public override void ComputeTeachingSignals(ICreditAssignmentContext<T> context) { }
 }

@@ -11161,13 +11161,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Pluggable credit-assignment rule (Feedback Alignment, Direct Feedback Alignment, Sign-Symmetric,
-        // or a custom ICreditRule<T>). When configured, the per-layer error routing is replaced while the
-        // forward pass, optimizer, batching and scheduler are unchanged. Null (the default) leaves the
-        // reverse-mode tape path below byte-for-byte identical.
-        if (_creditRule is not null)
+        // or a custom ICreditRule<T>). When configured with a non-backprop rule, the per-layer error routing
+        // is replaced (via local tape VJPs) while the forward pass, optimizer, batching and scheduler are
+        // unchanged. Null OR an exact-backprop rule leaves the reverse-mode tape path below byte-for-byte
+        // identical to the default.
+        if (_creditRule is not null && !_creditRule.IsExactBackprop)
         {
             return CreditAssignment.CreditAssignmentGradientComputer<T>.ComputeGradients(
-                _layers, input, target, _creditRule, _creditRuleRandom);
+                this, input, target, _creditRule, _creditRuleRandom, lossFunction ?? LossFunction);
         }
 
         using var tape = new GradientTape<T>();

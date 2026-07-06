@@ -1,291 +1,253 @@
+using System.Linq;
+using AiDotNet.Engines;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.CreditAssignment;
 
 /// <summary>
-/// Produces the flat per-parameter gradient vector for a dense feed-forward network using a pluggable
-/// <see cref="ICreditRule{T}"/> instead of reverse-mode back-propagation. The result is laid out exactly like
-/// <c>NeuralNetworkBase&lt;T&gt;.GetParameters()</c> (per layer: weights row-major, then biases), so the optimizer,
-/// batching and scheduler consume it unchanged.
+/// Produces the flat per-parameter gradient vector for a neural network using a pluggable
+/// <see cref="ICreditRule{T}"/> instead of end-to-end back-propagation.
 /// </summary>
 /// <typeparam name="T">The numeric data type.</typeparam>
 /// <remarks>
 /// <para>
-/// <b>Supported networks.</b> The credit-rule path targets a stack of <see cref="FullyConnectedLayer{T}"/>
-/// layers (each carrying its own element-wise activation) with a matched output loss (MSE+linear or
-/// cross-entropy+softmax). This is the domain in which the feedback-alignment literature is defined. Any other
-/// layer type causes a clear <see cref="NotSupportedException"/> so the limitation is explicit rather than
-/// silently wrong.
+/// <b>Mechanism (tape vector-Jacobian products).</b> The network's forward pass is run under a gradient tape,
+/// capturing each trainable layer's output node. The rule supplies a <i>teaching signal</i> at each hidden
+/// layer's output (for Direct Feedback Alignment, a fixed random projection of the network output error). For each
+/// hidden layer, the engine forms the scalar <c>sum(output ⊙ teachingSignal)</c> and backpropagates it through
+/// <i>only that layer</i> to its own parameters — a local VJP that automatically supplies the layer's activation
+/// Jacobian. The output layer is trained with the exact loss gradient. Because the local VJP works for any layer
+/// type, this supports dense, multi-head attention, feed-forward, LayerNorm and embedding layers — so DFA trains
+/// Transformers, not just dense stacks.
+/// </para>
+/// <para>
+/// The returned vector is laid out exactly like the network's flat gradient (via <c>GetParameterChunks</c>), so
+/// the optimizer, batching and scheduler consume it unchanged.
 /// </para>
 /// </remarks>
 internal static class CreditAssignmentGradientComputer<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
-    /// <summary>
-    /// Runs a forward pass, builds the credit-assignment context, invokes <paramref name="rule"/>, and returns
-    /// the flattened gradient vector.
-    /// </summary>
     public static Vector<T> ComputeGradients(
-        IReadOnlyList<ILayer<T>> layers,
+        NeuralNetworkBase<T> network,
         Tensor<T> input,
         Tensor<T> target,
         ICreditRule<T> rule,
-        Random random)
+        Random random,
+        ILossFunction<T> lossFunction)
     {
-        var denseLayers = ValidateAndCollect(layers);
-
-        var x = ToMatrix(input);                       // [B, inputFeatures]
-        int batch = x.Rows;
-
-        // Forward pass: capture per-layer input, pre-activation z, activated output a.
-        var creditLayers = new List<ICreditLayer<T>>(denseLayers.Count);
-        var currentInput = x;
-        for (int i = 0; i < denseLayers.Count; i++)
+        if (lossFunction is not LossFunctionBase<T> tapeLoss)
         {
-            var layer = denseLayers[i];
-            bool isOutput = i == denseLayers.Count - 1;
+            throw new NotSupportedException(
+                "Credit-rule (non-backprop) training requires a tape-capable loss (a LossFunctionBase<T> such as " +
+                "CategoricalCrossEntropyLoss or MeanSquaredErrorLoss).");
+        }
 
-            var weights = TensorToMatrix(GetWeights(layer));   // [out, in]
-            var bias = TensorToVector(GetBiases(layer));       // [out]
+        IEngine engine = AiDotNetEngine.Current;
+        var layers = network.Layers;
+        bool prevTrainingMode = network.IsTrainingMode;
+        network.SetTrainingMode(true);
 
-            if (weights.Columns != currentInput.Columns)
+        try
+        {
+            using var tape = new GradientTape<T>();
+
+            // Forward pass under the tape, capturing each layer's output node.
+            var outputs = new Tensor<T>[layers.Count];
+            var current = input;
+            for (int i = 0; i < layers.Count; i++)
             {
-                throw new NotSupportedException(
-                    $"Credit-rule training: layer {i} expects input width {weights.Columns} but received " +
-                    $"{currentInput.Columns}. The credit-rule path supports a plain dense feed-forward stack.");
+                current = layers[i].Forward(current);
+                outputs[i] = current;
+            }
+            var predictionNode = current; // final (post-softmax) network output, tracked
+
+            // Constant output error e = prediction - target (detached from the tape).
+            var predConst = Detach(predictionNode);
+            var targetTensor = BuildTargetTensor(target, predConst.Shape.ToArray());
+            var outputError = SubtractConst(predConst, targetTensor);
+
+            // Collect the trainable layers (those with at least one trainable parameter tensor), in order.
+            var trainableLayers = new List<ILayer<T>>();
+            var trainableParams = new List<IReadOnlyList<Tensor<T>>>();
+            var trainableOutputs = new List<Tensor<T>>();
+            for (int i = 0; i < layers.Count; i++)
+            {
+                var ps = CollectParameters(layers[i]);
+                if (ps.Count == 0) continue;
+                trainableLayers.Add(layers[i]);
+                trainableParams.Add(ps);
+                trainableOutputs.Add(outputs[i]);
             }
 
-            var z = Linear(currentInput, weights, bias);        // [B, out]
-            var a = ApplyActivation(layer, z, isHidden: !isOutput);
-
-            creditLayers.Add(new CreditLayer<T>(
-                index: i,
-                isOutputLayer: isOutput,
-                weights: weights,
-                input: currentInput,
-                preActivation: z,
-                output: a,
-                scalarActivation: layer.ScalarActivation,
-                numOps: Ops));
-
-            currentInput = a;
-        }
-
-        var prediction = currentInput;                          // [B, outputFeatures]
-        var targetMatrix = ToTargetMatrix(target, prediction);  // [B, outputFeatures]
-        var outputError = Subtract(prediction, targetMatrix);   // prediction − target
-
-        var context = new CreditAssignmentContext<T>(
-            creditLayers, x, prediction, targetMatrix, outputError, Ops, random);
-
-        rule.Initialize(context);
-        rule.ComputeUpdates(context);
-
-        return Flatten(creditLayers);
-    }
-
-    private static List<FullyConnectedLayer<T>> ValidateAndCollect(IReadOnlyList<ILayer<T>> layers)
-    {
-        var dense = new List<FullyConnectedLayer<T>>();
-        foreach (var layer in layers)
-        {
-            if (layer is FullyConnectedLayer<T> fc)
+            if (trainableLayers.Count == 0)
             {
-                dense.Add(fc);
-            }
-            else
-            {
-                throw new NotSupportedException(
-                    $"Credit-rule (non-backprop) training currently supports a stack of " +
-                    $"{nameof(FullyConnectedLayer<T>)} layers only; found '{layer.GetType().Name}'. " +
-                    "Use the default back-propagation path for this architecture, or express the model as a " +
-                    "dense feed-forward network.");
-            }
-        }
-
-        if (dense.Count == 0)
-        {
-            throw new NotSupportedException("Credit-rule training requires at least one FullyConnectedLayer.");
-        }
-
-        return dense;
-    }
-
-    private static Matrix<T> Linear(Matrix<T> input, Matrix<T> weights, Vector<T> bias)
-    {
-        // z = input · Wᵀ + b   (weights are [out, in]; output = input · Wᵀ)
-        var z = input.Multiply(weights.Transpose());  // [B, out]
-        for (int r = 0; r < z.Rows; r++)
-            for (int c = 0; c < z.Columns; c++)
-                z[r, c] = Ops.Add(z[r, c], bias[c]);
-        return z;
-    }
-
-    private static Matrix<T> ApplyActivation(FullyConnectedLayer<T> layer, Matrix<T> z, bool isHidden)
-    {
-        if (layer.ScalarActivation is not null)
-        {
-            // Apply the activation ROW-WISE via the vector overload, matching how the real layer applies it.
-            // For genuinely element-wise activations (ReLU/Tanh/Sigmoid) this is the same as per-element;
-            // for a row-coupled activation exposed through IActivationFunction (e.g. Softmax, whose
-            // Activate(Vector) does a proper row soft-max) this is essential — applying Activate(scalar)
-            // element-wise would be wrong.
-            var a = new Matrix<T>(z.Rows, z.Columns);
-            for (int r = 0; r < z.Rows; r++)
-            {
-                var activated = layer.ScalarActivation.Activate(z.GetRow(r));
-                for (int c = 0; c < z.Columns; c++)
-                    a[r, c] = activated[c];
-            }
-            return a;
-        }
-
-        if (layer.VectorActivation is not null)
-        {
-            if (isHidden)
-            {
-                throw new NotSupportedException(
-                    "Credit-rule training: hidden FullyConnectedLayer layers must use an element-wise " +
-                    "(scalar) activation so f'(z) is well-defined. Vector activations (e.g. softmax) are only " +
-                    "supported on the output layer.");
+                throw new InvalidOperationException(
+                    "Credit-rule training found no trainable layers with parameters.");
             }
 
-            var a = new Matrix<T>(z.Rows, z.Columns);
-            for (int r = 0; r < z.Rows; r++)
+            // Build the credit-layer views for the rule.
+            var creditLayers = new List<CreditLayer<T>>(trainableLayers.Count);
+            for (int k = 0; k < trainableLayers.Count; k++)
             {
-                var activated = layer.VectorActivation.Activate(z.GetRow(r));
-                for (int c = 0; c < z.Columns; c++)
-                    a[r, c] = activated[c];
+                bool isOutput = k == trainableLayers.Count - 1;
+                creditLayers.Add(new CreditLayer<T>(
+                    index: k,
+                    isOutputLayer: isOutput,
+                    output: trainableOutputs[k],
+                    weights: TryGetWeightMatrix(trainableLayers[k])));
             }
-            return a;
-        }
 
-        // No activation → linear/identity.
-        return z;
+            var context = new CreditAssignmentContext<T>(creditLayers, outputError, Ops, random);
+            rule.Initialize(context);
+            rule.ComputeTeachingSignals(context);
+
+            var grads = new Dictionary<Tensor<T>, Tensor<T>>();
+
+            // Output layer: exact loss gradient (handles the softmax head + matched loss correctly).
+            var lossTensor = tapeLoss.ComputeTapeLoss(predictionNode, targetTensor);
+            Merge(grads, tape.ComputeGradients(lossTensor, sources: trainableParams[trainableLayers.Count - 1]));
+
+            // Hidden layers: local VJP seeded by the rule's teaching signal.
+            for (int k = 0; k < trainableLayers.Count - 1; k++)
+            {
+                var teaching = creditLayers[k].TeachingSignal
+                    ?? throw new InvalidOperationException(
+                        $"Credit rule '{rule.Name}' did not set a teaching signal for hidden layer {k}.");
+
+                var prod = engine.TensorMultiply(trainableOutputs[k], teaching);
+                var allAxes = Enumerable.Range(0, prod.Shape.Length).ToArray();
+                var scalar = engine.ReduceSum(prod, allAxes, keepDims: false);
+                Merge(grads, tape.ComputeGradients(scalar, sources: trainableParams[k]));
+            }
+
+            return Flatten(network, grads);
+        }
+        finally
+        {
+            network.SetTrainingMode(prevTrainingMode);
+        }
     }
 
-    private static Vector<T> Flatten(List<ICreditLayer<T>> layers)
-    {
-        int total = 0;
-        foreach (var layer in layers)
-            total += layer.OutputDim * layer.InputDim + layer.OutputDim;
+    // ---- helpers -------------------------------------------------------------------------------
 
-        var flat = new Vector<T>(total);
-        int idx = 0;
-        foreach (var layer in layers)
-        {
-            var wg = layer.WeightGradient;
-            for (int o = 0; o < wg.Rows; o++)
-                for (int i = 0; i < wg.Columns; i++)
-                    flat[idx++] = wg[o, i];
-            var bg = layer.BiasGradient;
-            for (int o = 0; o < bg.Length; o++)
-                flat[idx++] = bg[o];
-        }
-        return flat;
+    private static void Merge(Dictionary<Tensor<T>, Tensor<T>> into, Dictionary<Tensor<T>, Tensor<T>> from)
+    {
+        foreach (var kv in from)
+            into[kv.Key] = kv.Value;
     }
 
-    // --- Tensor / Matrix conversion helpers -------------------------------------------------
-
-    private static Matrix<T> ToMatrix(Tensor<T> t)
+    /// <summary>Recursively collects a layer's trainable parameter tensors (including composite sub-layers), deduped by reference.</summary>
+    private static List<Tensor<T>> CollectParameters(ILayer<T> layer)
     {
-        if (t.Shape.Length == 2)
+        var result = new List<Tensor<T>>();
+        var seen = new HashSet<Tensor<T>>();
+        Collect(layer, result, seen);
+        return result;
+
+        static void Collect(ILayer<T> l, List<Tensor<T>> acc, HashSet<Tensor<T>> seen)
         {
-            var m = new Matrix<T>(t.Shape[0], t.Shape[1]);
-            for (int i = 0; i < t.Shape[0]; i++)
-                for (int j = 0; j < t.Shape[1]; j++)
-                    m[i, j] = t[i, j];
-            return m;
+            if (l is ITrainableLayer<T> t)
+            {
+                foreach (var p in t.GetTrainableParameters())
+                    if (p is not null && p.Length > 0 && seen.Add(p))
+                        acc.Add(p);
+            }
+            if (l is LayerBase<T> lb)
+            {
+                foreach (var sub in lb.GetSubLayers())
+                    Collect(sub, acc, seen);
+            }
         }
-        if (t.Shape.Length == 1)
-        {
-            var m = new Matrix<T>(1, t.Shape[0]);
-            for (int j = 0; j < t.Shape[0]; j++)
-                m[0, j] = t[j];
-            return m;
-        }
-        throw new NotSupportedException(
-            $"Credit-rule training expects rank-1 or rank-2 input tensors; got rank {t.Shape.Length}.");
     }
 
-    private static Matrix<T> TensorToMatrix(Tensor<T> t)
+    private static Matrix<T>? TryGetWeightMatrix(ILayer<T> layer)
     {
-        var m = new Matrix<T>(t.Shape[0], t.Shape[1]);
-        for (int i = 0; i < t.Shape[0]; i++)
-            for (int j = 0; j < t.Shape[1]; j++)
-                m[i, j] = t[i, j];
+        var w = (layer as LayerBase<T>)?.GetWeights();
+        if (w is null || w.Shape.Length != 2) return null;
+        var m = new Matrix<T>(w.Shape[0], w.Shape[1]);
+        for (int i = 0; i < w.Shape[0]; i++)
+            for (int j = 0; j < w.Shape[1]; j++)
+                m[i, j] = w[i, j];
         return m;
     }
 
-    private static Vector<T> TensorToVector(Tensor<T> t)
+    private static Tensor<T> Detach(Tensor<T> t) => new Tensor<T>(t.Shape.ToArray(), t.ToVector());
+
+    private static Tensor<T> SubtractConst(Tensor<T> a, Tensor<T> b)
     {
-        var v = new Vector<T>(t.Shape[0]);
-        for (int i = 0; i < t.Shape[0]; i++)
-            v[i] = t[i];
-        return v;
+        var va = a.ToVector();
+        var vb = b.ToVector();
+        var r = new Vector<T>(va.Length);
+        for (int i = 0; i < va.Length; i++)
+            r[i] = Ops.Subtract(va[i], vb[i]);
+        return new Tensor<T>(a.Shape.ToArray(), r);
     }
 
-    private static Matrix<T> ToTargetMatrix(Tensor<T> target, Matrix<T> prediction)
+    /// <summary>Aligns the target to the prediction shape (one-hot expanding class-index targets), as a constant tensor.</summary>
+    private static Tensor<T> BuildTargetTensor(Tensor<T> target, int[] predShape)
     {
-        int batch = prediction.Rows;
-        int outFeatures = prediction.Columns;
-        var m = new Matrix<T>(batch, outFeatures);
+        if (target.Shape.Length == predShape.Length && target.Shape.ToArray().SequenceEqual(predShape))
+            return new Tensor<T>(predShape, target.ToVector());
 
-        // Case 1: target already matches [B, outFeatures].
-        if (target.Shape.Length == 2 && target.Shape[0] == batch && target.Shape[1] == outFeatures)
-        {
-            for (int i = 0; i < batch; i++)
-                for (int j = 0; j < outFeatures; j++)
-                    m[i, j] = target[i, j];
-            return m;
-        }
+        int batch = predShape[0];
+        int outFeatures = predShape[predShape.Length - 1];
 
-        // Case 2: class-index targets → one-hot (outFeatures > 1). Accept [B], [B,1].
         bool isIndexShape =
             (target.Shape.Length == 1 && target.Shape[0] == batch) ||
             (target.Shape.Length == 2 && target.Shape[0] == batch && target.Shape[1] == 1);
 
-        if (isIndexShape && outFeatures > 1)
+        if (predShape.Length == 2 && isIndexShape && outFeatures > 1)
         {
-            for (int i = 0; i < batch; i++)
+            var t = new Tensor<T>(predShape); // zeros
+            for (int b = 0; b < batch; b++)
             {
-                T raw = target.Shape.Length == 1 ? target[i] : target[i, 0];
+                T raw = target.Shape.Length == 1 ? target[b] : target[b, 0];
                 int cls = (int)Math.Round(Ops.ToDouble(raw));
                 if (cls >= 0 && cls < outFeatures)
-                    m[i, cls] = Ops.One;
+                    t[b, cls] = Ops.One;
             }
-            return m;
+            return t;
         }
 
-        // Case 3: scalar regression [B] / [B,1] with outFeatures == 1.
-        if (isIndexShape && outFeatures == 1)
+        if (predShape.Length == 2 && isIndexShape && outFeatures == 1)
         {
-            for (int i = 0; i < batch; i++)
-                m[i, 0] = target.Shape.Length == 1 ? target[i] : target[i, 0];
-            return m;
+            var t = new Tensor<T>(predShape);
+            for (int b = 0; b < batch; b++)
+                t[b, 0] = target.Shape.Length == 1 ? target[b] : target[b, 0];
+            return t;
         }
 
         throw new NotSupportedException(
-            $"Credit-rule training could not align a target of shape [{string.Join(",", target.Shape)}] " +
-            $"to a prediction of shape [{batch},{outFeatures}].");
+            $"Credit-rule training could not align a target of shape [{string.Join(",", target.Shape.ToArray())}] to a " +
+            $"prediction of shape [{string.Join(",", predShape)}].");
     }
 
-    private static Matrix<T> Subtract(Matrix<T> a, Matrix<T> b)
+    /// <summary>Flattens the reference-keyed gradient map into a vector matching the network's parameter layout.</summary>
+    private static Vector<T> Flatten(NeuralNetworkBase<T> network, Dictionary<Tensor<T>, Tensor<T>> grads)
     {
-        var result = new Matrix<T>(a.Rows, a.Columns);
-        for (int i = 0; i < a.Rows; i++)
-            for (int j = 0; j < a.Columns; j++)
-                result[i, j] = Ops.Subtract(a[i, j], b[i, j]);
-        return result;
+        var flat = new List<T>();
+        foreach (var paramTensor in network.GetParameterChunks())
+        {
+            if (paramTensor is null || paramTensor.Length == 0) continue;
+            if (grads.TryGetValue(paramTensor, out var grad))
+            {
+                for (int i = 0; i < grad.Length; i++)
+                    flat.Add(grad[i]);
+            }
+            else
+            {
+                for (int i = 0; i < paramTensor.Length; i++)
+                    flat.Add(Ops.Zero);
+            }
+        }
+        return new Vector<T>(flat.ToArray());
     }
-
-    private static Tensor<T> GetWeights(FullyConnectedLayer<T> layer)
-        => layer.GetWeights() ?? throw new NotSupportedException("FullyConnectedLayer has no weights (unresolved shape).");
-
-    private static Tensor<T> GetBiases(FullyConnectedLayer<T> layer)
-        => layer.GetBiases() ?? throw new NotSupportedException("FullyConnectedLayer has no biases (unresolved shape).");
 }

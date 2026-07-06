@@ -4,18 +4,22 @@ using AiDotNet.LinearAlgebra;
 namespace AiDotNet.NeuralNetworks.CreditAssignment;
 
 /// <summary>
-/// <b>Direct Feedback Alignment</b> (Nøkland, 2016). Instead of propagating the error sequentially through the
-/// network, DFA projects the <i>global</i> output error directly onto every hidden layer through a per-layer
-/// fixed random matrix, then gates it by that layer's activation derivative. Each layer's teaching signal
-/// depends only on the output error — there is no backward chain — so updates are local and parallelisable.
+/// <b>Direct Feedback Alignment</b> (Nøkland, 2016; scaled to Transformers by Launay et al., 2020). Instead of
+/// propagating the error sequentially through the network, DFA projects the <i>global</i> output error directly
+/// onto every hidden layer through a per-layer fixed random matrix. Each layer's teaching signal depends only on
+/// the output error — there is no backward chain — so the rule applies uniformly to dense, attention,
+/// feed-forward, LayerNorm and embedding layers. The training engine turns each teaching signal into that layer's
+/// parameter gradients via a local vector-Jacobian product (which supplies the layer's own activation Jacobian).
 /// </summary>
 /// <typeparam name="T">The numeric data type.</typeparam>
 internal sealed class DirectFeedbackAlignmentCreditRule<T> : CreditRuleBase<T>
 {
-    // _feedback[i] maps the output error [B, outputFeatures] to hidden layer i's units [B, outDim_i].
-    // Shape: [outputFeatures, outDim_i]. The final (output) layer uses the true error and has no matrix.
+    // _feedback[i] maps the output error [B, C] to hidden layer i's flat feature space [B, M_i].
+    // Shape: [C, M_i]. The output layer is trained with the exact loss gradient (no feedback matrix).
     private Matrix<T>?[]? _feedback;
     private int[]? _shapeSignature;
+
+    public DirectFeedbackAlignmentCreditRule(int? seed = null) : base(seed) { }
 
     public override string Name => "DirectFeedbackAlignment";
 
@@ -24,7 +28,9 @@ internal sealed class DirectFeedbackAlignmentCreditRule<T> : CreditRuleBase<T>
         if (IsInitializedFor(context)) return;
 
         var layers = context.Layers;
-        int outputFeatures = layers[layers.Count - 1].OutputDim;
+        int outputFeatures = layers[layers.Count - 1].FlatFeatureSize;
+        var random = ResolveRandom(context);
+
         _feedback = new Matrix<T>?[layers.Count];
         _shapeSignature = new int[layers.Count + 1];
         _shapeSignature[layers.Count] = outputFeatures;
@@ -33,35 +39,21 @@ internal sealed class DirectFeedbackAlignmentCreditRule<T> : CreditRuleBase<T>
             var layer = layers[i];
             _feedback[i] = layer.IsOutputLayer
                 ? null
-                : RandomGaussian(outputFeatures, layer.OutputDim, outputFeatures, context.Random, context.NumOps);
-            _shapeSignature[i] = layer.OutputDim;
+                : RandomGaussian(outputFeatures, layer.FlatFeatureSize, outputFeatures, random, context.NumOps);
+            _shapeSignature[i] = layer.FlatFeatureSize;
         }
     }
 
-    public override void ComputeUpdates(ICreditAssignmentContext<T> context)
+    public override void ComputeTeachingSignals(ICreditAssignmentContext<T> context)
     {
         if (!IsInitializedFor(context)) Initialize(context);
-        var ops = context.NumOps;
-        var layers = context.Layers;
-        var error = context.OutputError; // [B, outputFeatures]
+        var error = ErrorMatrix(context); // [B, C]
 
-        for (int i = 0; i < layers.Count; i++)
+        foreach (var layer in context.Layers)
         {
-            var layer = layers[i];
-            Matrix<T> delta;
-            if (layer.IsOutputLayer)
-            {
-                // Output layer's delta is the true error (= ∂L/∂z_last for a matched output loss).
-                delta = error;
-            }
-            else
-            {
-                var projected = error.Multiply(_feedback![i]!);   // [B, outFeat] · [outFeat, outDim_i] = [B, outDim_i]
-                var deriv = layer.ActivationDerivative();
-                delta = Hadamard(projected, deriv, ops);
-            }
-
-            SetParameterGradients(layer, delta, ops);
+            if (layer.IsOutputLayer) continue; // engine uses the exact loss gradient here
+            var projected = error.Multiply(_feedback![layer.Index]!); // [B, C] · [C, M_i] = [B, M_i]
+            layer.TeachingSignal = ToTeachingSignal(projected, layer.OutputShape);
         }
     }
 
@@ -70,9 +62,9 @@ internal sealed class DirectFeedbackAlignmentCreditRule<T> : CreditRuleBase<T>
         if (_feedback is null || _shapeSignature is null) return false;
         var layers = context.Layers;
         if (_feedback.Length != layers.Count) return false;
-        if (_shapeSignature[layers.Count] != layers[layers.Count - 1].OutputDim) return false;
+        if (_shapeSignature[layers.Count] != layers[layers.Count - 1].FlatFeatureSize) return false;
         for (int i = 0; i < layers.Count; i++)
-            if (_shapeSignature[i] != layers[i].OutputDim) return false;
+            if (_shapeSignature[i] != layers[i].FlatFeatureSize) return false;
         return true;
     }
 }

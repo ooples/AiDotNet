@@ -4,70 +4,67 @@ using AiDotNet.LinearAlgebra;
 namespace AiDotNet.NeuralNetworks.CreditAssignment;
 
 /// <summary>
-/// Shared linear-algebra helpers for the built-in credit-assignment rules. Not part of the public API.
+/// Shared base + linear-algebra helpers for the built-in credit-assignment rules. Not part of the public API.
 /// </summary>
 /// <typeparam name="T">The numeric data type.</typeparam>
 internal abstract class CreditRuleBase<T> : ICreditRule<T>
 {
+    /// <summary>Optional explicit RNG seed (set via the <c>CreditRules</c> factory) for reproducible feedback matrices.</summary>
+    protected readonly int? Seed;
+
+    protected CreditRuleBase(int? seed = null) => Seed = seed;
+
     /// <inheritdoc />
     public abstract string Name { get; }
+
+    /// <inheritdoc />
+    public virtual bool IsExactBackprop => false;
 
     /// <inheritdoc />
     public virtual void Initialize(ICreditAssignmentContext<T> context) { }
 
     /// <inheritdoc />
-    public abstract void ComputeUpdates(ICreditAssignmentContext<T> context);
+    public abstract void ComputeTeachingSignals(ICreditAssignmentContext<T> context);
 
-    /// <summary>
-    /// Element-wise (Hadamard) product of two equally-shaped matrices.
-    /// </summary>
-    protected static Matrix<T> Hadamard(Matrix<T> a, Matrix<T> b, INumericOperations<T> ops)
+    /// <summary>Returns the RNG this rule should use: its own seeded generator if a seed was supplied, else the context's.</summary>
+    protected Random ResolveRandom(ICreditAssignmentContext<T> context)
+        => Seed.HasValue ? new Random(Seed.Value) : context.Random;
+
+    /// <summary>The output error as a <c>[batch, features]</c> matrix.</summary>
+    protected static Matrix<T> ErrorMatrix(ICreditAssignmentContext<T> context)
     {
-        var result = new Matrix<T>(a.Rows, a.Columns);
-        for (int i = 0; i < a.Rows; i++)
-            for (int j = 0; j < a.Columns; j++)
-                result[i, j] = ops.Multiply(a[i, j], b[i, j]);
-        return result;
+        var e = context.OutputError; // [B, C]
+        var m = new Matrix<T>(e.Shape[0], e.Shape[1]);
+        for (int b = 0; b < e.Shape[0]; b++)
+            for (int c = 0; c < e.Shape[1]; c++)
+                m[b, c] = e[b, c];
+        return m;
     }
 
     /// <summary>
-    /// Fills a layer's <see cref="ICreditLayer{T}.WeightGradient"/> and <see cref="ICreditLayer{T}.BiasGradient"/>
-    /// from a pre-activation error signal <paramref name="delta"/> (shape <c>[batch, outputDim]</c>):
-    /// <c>dW = (1/B) · deltaᵀ · input</c> and <c>db = (1/B) · Σ_batch delta</c> (mean over the batch, matching
-    /// the mean-scaled gradient the optimizer expects).
+    /// Builds a constant teaching-signal tensor of shape <paramref name="outputShape"/> from a
+    /// <c>[batch, flatFeatures]</c> matrix (row-major over the non-batch axes).
     /// </summary>
-    protected static void SetParameterGradients(ICreditLayer<T> layer, Matrix<T> delta, INumericOperations<T> ops)
+    protected static Tensor<T> ToTeachingSignal(Matrix<T> flat, int[] outputShape)
     {
-        int batch = delta.Rows;
-        int outDim = layer.OutputDim;
-        int inDim = layer.InputDim;
-        var input = layer.Input;
-        T invBatch = ops.FromDouble(1.0 / Math.Max(1, batch));
+        int batch = flat.Rows;
+        int m = flat.Columns;
+        var data = new Vector<T>(batch * m);
+        int idx = 0;
+        for (int b = 0; b < batch; b++)
+            for (int j = 0; j < m; j++)
+                data[idx++] = flat[b, j];
+        return new Tensor<T>(outputShape, data);
+    }
 
-        var weightGrad = new Matrix<T>(outDim, inDim);
-        // dW[o, i] = (1/B) * Σ_b delta[b, o] * input[b, i]
-        for (int o = 0; o < outDim; o++)
-        {
-            for (int i = 0; i < inDim; i++)
-            {
-                T acc = ops.Zero;
-                for (int b = 0; b < batch; b++)
-                    acc = ops.Add(acc, ops.Multiply(delta[b, o], input[b, i]));
-                weightGrad[o, i] = ops.Multiply(acc, invBatch);
-            }
-        }
-
-        var biasGrad = new Vector<T>(outDim);
-        for (int o = 0; o < outDim; o++)
-        {
-            T acc = ops.Zero;
-            for (int b = 0; b < batch; b++)
-                acc = ops.Add(acc, delta[b, o]);
-            biasGrad[o] = ops.Multiply(acc, invBatch);
-        }
-
-        layer.WeightGradient = weightGrad;
-        layer.BiasGradient = biasGrad;
+    /// <summary>Element-wise sign matrix (−1 / 0 / +1) of <paramref name="w"/>.</summary>
+    protected static Matrix<T> SignMatrix(Matrix<T> w, INumericOperations<T> ops)
+    {
+        var s = new Matrix<T>(w.Rows, w.Columns);
+        for (int i = 0; i < w.Rows; i++)
+            for (int j = 0; j < w.Columns; j++)
+                s[i, j] = ops.SignOrZero(w[i, j]);
+        return s;
     }
 
     /// <summary>
