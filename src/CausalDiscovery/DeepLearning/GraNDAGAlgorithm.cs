@@ -10,10 +10,11 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// <remarks>
 /// <para>
 /// GraN-DAG parameterizes each structural equation f_j as a neural network with sigmoid
-/// activations. The weighted adjacency matrix A[i,j] = ||W1_j[:,i]||_2 is derived from
-/// the first-layer input weights. Path-specific connectivity through the MLP gives a
-/// refined adjacency measure. The NOTEARS acyclicity constraint h(A) = tr(e^(A*A)) - d
-/// is enforced via augmented Lagrangian.
+/// activations. The weighted adjacency A[i,j] is the PATH PRODUCT of absolute weights across
+/// the MLP layers — for the 1-hidden-layer network predicting x_j, A[i,j] = Σ_k |W1_j[i,k]|·|W2_j[k]|
+/// (Lachapelle et al. 2020 §2.2), so an input→hidden weight only contributes if that hidden unit
+/// actually drives the output. The NOTEARS acyclicity constraint h(A) = tr(e^(A*A)) - d is enforced
+/// via augmented Lagrangian.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> GraN-DAG trains a separate neural network for each variable to
@@ -140,7 +141,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 }
 
                 // Acyclicity gradient on adjacency A[i,j] = ||W1[j][:,i]||_2
-                var A = ExtractAdjacency(W1, d, h);
+                var A = ExtractAdjacency(W1, W2, d, h);
                 T hVal = ComputeTraceExpConstraint(A, d);
 
                 // Numerical stabilization. Unlike BCD-Nets' clamped edge logits,
@@ -215,7 +216,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
             // penalty multiplied 10x every epoch up to 1e16 and annihilated every
             // path norm — the learned adjacency collapsed to all-zeros and no
             // edges could ever be reported.
-            var Afinal = ExtractAdjacency(W1, d, h);
+            var Afinal = ExtractAdjacency(W1, W2, d, h);
             T hFinal = ComputeTraceExpConstraint(Afinal, d);
             double hNow = NumOps.ToDouble(hFinal);
             if (double.IsNaN(hNow) || double.IsInfinity(hNow)) break;
@@ -230,7 +231,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
             if (hNow <= 1e-8) break;
         }
 
-        var rawAdj = ExtractAdjacency(W1, d, h);
+        var rawAdj = ExtractAdjacency(W1, W2, d, h);
         // Use raw adjacency magnitudes as learned edge probabilities (normalize to [0,1])
         double maxNorm = 0;
         for (int i = 0; i < d; i++)
@@ -253,17 +254,28 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         return BuildFinalAdjacency(ProjectToDag(learnedP, d), cov, d);
     }
 
-    private Matrix<T> ExtractAdjacency(Matrix<T>[] W1, int d, int h)
+    private Matrix<T> ExtractAdjacency(Matrix<T>[] W1, Matrix<T>[] W2, int d, int h)
     {
+        // GraN-DAG connectivity (Lachapelle et al. 2020 §2.2): the path product of absolute
+        // weights across ALL layers, NOT the first-layer norm alone. For the per-variable
+        // 1-hidden-layer MLP predicting x_j, the connection strength from input i is
+        //   A[i,j] = Σ_k |W1[j][i,k]| · |W2[j][k]|
+        // — each input→hidden weight is scaled by how much that hidden unit actually drives the
+        // output. The previous ||W1[:,i]||_2 measure ignored W2, so a large first-layer weight into
+        // a hidden unit that does NOT affect the output (|W2|≈0) still inflated a spurious edge,
+        // producing a diffuse/partly-reversed adjacency that the DAG projection then mis-ordered.
         var A = new Matrix<T>(d, d);
         for (int j = 0; j < d; j++)
             for (int i = 0; i < d; i++)
             {
                 if (i == j) continue;
-                T norm = NumOps.Zero;
+                T sum = NumOps.Zero;
                 for (int k = 0; k < h; k++)
-                    norm = NumOps.Add(norm, NumOps.Multiply(W1[j][i, k], W1[j][i, k]));
-                A[i, j] = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(norm)));
+                {
+                    T contrib = NumOps.Multiply(NumOps.Abs(W1[j][i, k]), NumOps.Abs(W2[j][k, 0]));
+                    sum = NumOps.Add(sum, contrib);
+                }
+                A[i, j] = sum;
             }
         return A;
     }
