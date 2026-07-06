@@ -332,6 +332,50 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <summary>
+    /// Selects the <b>credit-assignment (learning) rule</b> used to produce per-parameter updates during
+    /// neural-network training. The default is <see cref="CreditRule.Backprop"/> (standard reverse-mode
+    /// back-propagation); alternative published rules — Feedback Alignment, Direct Feedback Alignment,
+    /// Sign-Symmetric — replace how the error signal is routed back to each layer while reusing the same
+    /// forward pass, optimizer, batching and scheduler.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> when the network is wrong, it must decide how much each weight was to blame.
+    /// Back-prop does this exactly (through the transpose of every weight); the feedback-alignment rules use a
+    /// fixed random (or sign-only) shortcut instead — and still learn. Use this to experiment with those
+    /// alternatives without changing anything else about training.
+    /// </para>
+    /// <para>
+    /// Selecting <see cref="CreditRule.Backprop"/> is identical to not calling this method at all (the default
+    /// path is left byte-for-byte unchanged). The non-backprop rules currently support a dense feed-forward
+    /// stack (<c>FullyConnectedLayer</c> layers) with a matched output loss.
+    /// </para>
+    /// </remarks>
+    /// <param name="rule">The built-in credit rule to use.</param>
+    /// <param name="seed">Optional RNG seed for reproducible fixed feedback matrices.</param>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCreditRule(CreditRule rule, int? seed = null)
+    {
+        _creditRule = NeuralNetworks.CreditAssignment.CreditRuleFactory<T>.Create(rule);
+        _creditRuleSeed = seed;
+        return this;
+    }
+
+    /// <summary>
+    /// Selects a custom <see cref="ICreditRule{T}"/> implementation as the credit-assignment (learning) rule
+    /// used during neural-network training. This is the extensibility hook for research rules implemented
+    /// outside this library — any type implementing <see cref="ICreditRule{T}"/> can be plugged in without
+    /// changing the training flow.
+    /// </summary>
+    /// <param name="rule">The custom credit rule, or null to restore the default back-propagation path.</param>
+    /// <param name="seed">Optional RNG seed for reproducible fixed feedback matrices.</param>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCreditRule(ICreditRule<T>? rule, int? seed = null)
+    {
+        _creditRule = rule;
+        _creditRuleSeed = seed;
+        return this;
+    }
+
     /// <inheritdoc />
     public IAiModelBuilder<T, TInput, TOutput> ConfigureLicenseKey(AiDotNetLicenseKey licenseKey)
     {

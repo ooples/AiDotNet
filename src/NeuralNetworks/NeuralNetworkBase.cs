@@ -210,6 +210,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected ILossFunction<T> LossFunction;
 
     /// <summary>
+    /// Optional pluggable credit-assignment (learning) rule. When null (the default), gradients are produced
+    /// by standard reverse-mode back-propagation and behaviour is byte-for-byte unchanged. When set (via the
+    /// facade's <c>ConfigureCreditRule</c>), <see cref="ComputeGradients"/> routes the error to each layer
+    /// through this rule instead — e.g. Feedback Alignment or Direct Feedback Alignment.
+    /// </summary>
+    private Interfaces.ICreditRule<T>? _creditRule;
+
+    /// <summary>Deterministic RNG seeding the credit rule's fixed feedback matrices (allocated once).</summary>
+    private Random _creditRuleRandom = new(12345);
+
+    /// <summary>
+    /// Selects a pluggable credit-assignment rule for training. Passing <c>null</c> restores the default
+    /// back-propagation path. Wired from <c>AiModelBuilder.ConfigureCreditRule</c>.
+    /// </summary>
+    /// <param name="rule">The credit rule, or null for standard back-propagation.</param>
+    /// <param name="seed">Optional RNG seed for the rule's fixed feedback matrices (for reproducibility).</param>
+    public void SetCreditRule(Interfaces.ICreditRule<T>? rule, int? seed = null)
+    {
+        _creditRule = rule;
+        if (seed.HasValue)
+        {
+            _creditRuleRandom = new Random(seed.Value);
+        }
+    }
+
+    /// <summary>Gets the configured credit-assignment rule, or null when standard back-propagation is used.</summary>
+    public Interfaces.ICreditRule<T>? ActiveCreditRule => _creditRule;
+
+    /// <summary>
     /// The last calculated loss value during training.
     /// </summary>
     /// <remarks>
@@ -11131,6 +11160,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
+        // Pluggable credit-assignment rule (Feedback Alignment, Direct Feedback Alignment, Sign-Symmetric,
+        // or a custom ICreditRule<T>). When configured, the per-layer error routing is replaced while the
+        // forward pass, optimizer, batching and scheduler are unchanged. Null (the default) leaves the
+        // reverse-mode tape path below byte-for-byte identical.
+        if (_creditRule is not null)
+        {
+            return CreditAssignment.CreditAssignmentGradientComputer<T>.ComputeGradients(
+                _layers, input, target, _creditRule, _creditRuleRandom);
+        }
+
         using var tape = new GradientTape<T>();
 
         // Forward pass under tape recording (NOT Predict which uses NoGradScope).

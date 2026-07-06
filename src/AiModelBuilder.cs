@@ -200,6 +200,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     internal IFullModel<T, TInput, TOutput>? ConfiguredModel => _model;
 
     private IOptimizer<T, TInput, TOutput>? _optimizer;
+
+    /// <summary>
+    /// Optional pluggable credit-assignment (learning) rule set via <c>ConfigureCreditRule</c>. Null = default
+    /// back-propagation.
+    /// </summary>
+    private Interfaces.ICreditRule<T>? _creditRule;
+
+    /// <summary>Optional RNG seed for the credit rule's fixed feedback matrices (reproducibility).</summary>
+    private int? _creditRuleSeed;
+
     private IDataLoader<T>? _dataLoader;
     private DataPreparationPipeline<T>? _dataPreparationPipeline;
     private IBiasDetector<T>? _biasDetector;
