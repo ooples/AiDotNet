@@ -293,6 +293,26 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
 
     /// <summary>
+    /// Selects the credit-assignment (learning) rule used during neural-network training. Default is
+    /// <see cref="CreditRule.Backprop"/> (standard back-propagation); alternatives (Feedback Alignment,
+    /// Direct Feedback Alignment, Sign-Symmetric) replace how the error is routed to each layer while keeping
+    /// the forward pass, optimizer, batching and scheduler unchanged.
+    /// </summary>
+    /// <param name="rule">The built-in credit rule to use.</param>
+    /// <param name="seed">Optional RNG seed for reproducible fixed feedback matrices.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCreditRule(CreditRule rule, int? seed = null);
+
+    /// <summary>
+    /// Selects a custom <see cref="ICreditRule{T}"/> as the credit-assignment (learning) rule used during
+    /// neural-network training. Extensibility hook for research rules implemented outside this library.
+    /// </summary>
+    /// <param name="rule">The custom credit rule, or null to restore the default back-propagation path.</param>
+    /// <param name="seed">Optional RNG seed for reproducible fixed feedback matrices.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCreditRule(ICreditRule<T>? rule, int? seed = null);
+
+    /// <summary>
     /// Configures a license key for encrypted model loading and saving with optional online validation.
     /// </summary>
     /// <remarks>
