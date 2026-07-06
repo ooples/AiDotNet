@@ -204,58 +204,141 @@ public class FacadeTrainingCallbackTests
         Assert.NotNull(result.StopReason);
     }
 
-    [Fact(Timeout = 180000)]
-    public async Task Transformer_TrainsThroughFacade_LossFalls()
-    {
-        // Regression: a Transformer<T> must actually TRAIN through BuildAsync. Previously it did not:
-        // (a) a plain transformer routed to the optimizer "black-box" path and its loss stayed flat
-        //     (verified: 12 epochs left loss ~0.044→0.045, held-out accuracy at chance); and
-        // (b) the only path that routed to gradient training was gated behind ConfigureMixedPrecision,
-        //     and that direct path trained ONE ROW AT A TIME (batch=1) — too noisy to train a
-        //     transformer AND, on a realistic corpus, tens of thousands of Train calls per epoch
-        //     crashed the host. Fixed by (1) routing any Transformer<T> to the direct neural path
-        //     unconditionally and (2) minibatching that path. This test asserts the streamed loss
-        //     falls meaningfully — i.e. the transformer trains — with NO mixed precision configured.
-        const int seqLen = 6, vocab = 12, samples = 96, epochs = 10;
-        var rng = new System.Random(1234);
-        var x = new Tensor<float>(new[] { samples, seqLen });
-        var y = new Tensor<float>(new[] { samples, vocab });
-        for (int i = 0; i < samples; i++)
-        {
-            for (int c = 0; c < seqLen; c++) x[i, c] = rng.Next(vocab);
-            // Learnable target: class = (first token + last token) mod vocab.
-            int label = ((int)x[i, 0] + (int)x[i, seqLen - 1]) % vocab;
-            y[i, label] = 1f;
-        }
+    // --- Learnable probe task: "most-frequent token in the window" ---------------------------
+    // Order-invariant and generalizing: a strict-majority token m is planted in each window and
+    // the label is m. A correct SequenceClassification transformer learns this FAR above chance
+    // (1/V). Train and held-out windows are drawn from the same generator so accuracy measures
+    // GENERALIZATION, not memorization.
+    private const int ProbeV = 10;   // vocab / class count → chance top-1 = 0.10
+    private const int ProbeCtx = 8;
+    private const int ProbeMajority = 5; // > Ctx/2 → strict mode → deterministic label
 
+    private static (Tensor<float> x, Tensor<float> y, int[] labels) BuildMajorityData(int n, int seed)
+    {
+        var rng = new System.Random(seed);
+        var x = new Tensor<float>(new[] { n, ProbeCtx });
+        var y = new Tensor<float>(new[] { n, ProbeV });
+        var labels = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            int m = rng.Next(ProbeV);
+            var toks = new int[ProbeCtx];
+            for (int c = 0; c < ProbeCtx; c++) toks[c] = c < ProbeMajority ? m : rng.Next(ProbeV);
+            for (int c = ProbeCtx - 1; c > 0; c--) { int j = rng.Next(c + 1); (toks[c], toks[j]) = (toks[j], toks[c]); }
+            for (int c = 0; c < ProbeCtx; c++) x[i, c] = toks[c];
+            labels[i] = m; y[i, m] = 1f;
+        }
+        return (x, y, labels);
+    }
+
+    // Held-out top-1 accuracy from the model's raw Predict output. NOTE: a SequenceClassification
+    // Transformer applies a Softmax output head, so Predict returns PROBABILITIES (rows sum to 1,
+    // all ≥ 0) — argmax is well-defined directly on them (no logits / no extra softmax).
+    private static double HeldOutAccuracy(object result, Tensor<float> vx, int[] vlabels)
+    {
+        var predMethod = result.GetType().GetMethod("Predict", new[] { typeof(Tensor<float>) });
+        Assert.NotNull(predMethod);
+        int correct = 0, cnt = 0;
+        for (int i = 0; i < vlabels.Length; i++)
+        {
+            var xi = new Tensor<float>(new[] { 1, ProbeCtx });
+            for (int c = 0; c < ProbeCtx; c++) xi[0, c] = vx[i, c];
+            var pred = predMethod!.Invoke(result, new object[] { xi }) as Tensor<float>;
+            if (pred is null) continue;
+            var flat = pred.ToArray();
+            int off = System.Math.Max(0, flat.Length - ProbeV);
+            int argmax = 0; float best = float.NegativeInfinity;
+            for (int v = 0; v < ProbeV; v++) if (flat[off + v] > best) { best = flat[off + v]; argmax = v; }
+            if (argmax == vlabels[i]) correct++;
+            cnt++;
+        }
+        return cnt > 0 ? (double)correct / cnt : double.NaN;
+    }
+
+    private static Transformer<float> BuildProbeTransformer(AdamOptimizer<float, Tensor<float>, Tensor<float>> opt)
+    {
         var arch = new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.SequenceClassification,
-            numEncoderLayers: 2, numDecoderLayers: 0, numHeads: 4, modelDimension: 48,
-            feedForwardDimension: 96, inputSize: seqLen, outputSize: vocab,
-            maxSequenceLength: seqLen, vocabularySize: vocab, randomSeed: 42);
-        var opt = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
+            numEncoderLayers: 2, numDecoderLayers: 0, numHeads: 4, modelDimension: 32,
+            feedForwardDimension: 64, inputSize: ProbeCtx, outputSize: ProbeV,
+            maxSequenceLength: ProbeCtx, vocabularySize: ProbeV, randomSeed: 42);
+        return new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>(), optimizer: opt);
+    }
+
+    private static AdamOptimizer<float, Tensor<float>, Tensor<float>> BuildProbeOptimizer(int epochs)
+        => new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
             new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
             {
-                InitialLearningRate = 0.003, MaxIterations = epochs, UseAdaptiveLearningRate = false,
-                UseEarlyStopping = false, Tolerance = 0.0,
+                InitialLearningRate = 0.01, MaxIterations = epochs, UseAdaptiveLearningRate = false,
+                UseEarlyStopping = false, Tolerance = 0.0, BatchSize = 32,
                 FitnessCalculator = new MeanSquaredErrorFitnessCalculator<float, Tensor<float>, Tensor<float>>()
             });
-        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>(), optimizer: opt);
 
+    [Fact(Timeout = 300000)]
+    public async Task Transformer_TrainsThroughFacade_LearnsHeldOutTask()
+    {
+        // Regression: a plain Transformer<T> (NO mixed-precision / memory config) must actually
+        // LEARN through BuildAsync — measured with a CORRECT metric (held-out top-1 accuracy on a
+        // genuinely-learnable task), NOT the optimizer's MSE-fitness value (which is minimised by a
+        // near-uniform output and therefore does NOT indicate learning). A plain transformer takes
+        // the standard OPTIMIZER path (AdamOptimizer.Optimize → tape-backprop gradient steps); this
+        // asserts that path drives held-out accuracy from ~chance to well above it.
+        const int epochs = 30;
+        var (tx, ty, _) = BuildMajorityData(384, 1);
+        var (vx, _, vlabels) = BuildMajorityData(192, 999);
+
+        // Untrained baseline of the identical architecture: held-out accuracy ≈ chance (1/V).
+        double accBefore = HeldOutAccuracy(BuildProbeTransformer(BuildProbeOptimizer(epochs)), vx, vlabels);
+
+        var opt = BuildProbeOptimizer(epochs);
+        var model = BuildProbeTransformer(opt);
         var losses = new List<double>();
         var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
             .ConfigureModel(model).ConfigureOptimizer(opt)
-            .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(x, y))
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(tx, ty))
             .ConfigureTrainingCallback(p => { losses.Add(System.Convert.ToDouble(p.Loss)); return true; }) // NO ConfigureMixedPrecision
             .BuildAsync();
 
         Assert.NotNull(result);
         Assert.True(losses.Count >= 2, $"expected per-epoch loss stream, got {losses.Count}");
         Assert.All(losses, l => Assert.False(double.IsNaN(l) || double.IsInfinity(l)));
-        // The transformer trains: loss falls meaningfully (pre-fix it was flat within ~2%).
-        double best = losses.Min();
-        Assert.True(best < losses[0] * 0.85,
-            $"transformer loss should fall through the facade: first={losses[0]:E4} best={best:E4}");
+
+        double accAfter = HeldOutAccuracy(result!, vx, vlabels);
+        double chance = 1.0 / ProbeV;
+        // REAL learning: held-out accuracy clearly beats chance AND clearly beats the untrained baseline.
+        Assert.True(accAfter > 0.50,
+            $"transformer did not learn through the facade (optimizer path): held-out acc={accAfter:F4} (chance={chance:F4})");
+        Assert.True(accAfter > accBefore + 0.20,
+            $"training did not improve held-out accuracy: {accBefore:F4} -> {accAfter:F4}");
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task Transformer_TrainsThroughFacade_DirectPath_WithMemoryConfig_Learns()
+    {
+        // Companion regression for the DIRECT in-memory path: configuring memory management routes
+        // a transformer through TrainTensorNeuralNetworkRows (minibatched model.Train). That path
+        // must ALSO learn the held-out task — this guards the minibatching of the direct loop.
+        const int epochs = 30;
+        var (tx, ty, _) = BuildMajorityData(384, 1);
+        var (vx, _, vlabels) = BuildMajorityData(192, 999);
+
+        double accBefore = HeldOutAccuracy(BuildProbeTransformer(BuildProbeOptimizer(epochs)), vx, vlabels);
+
+        var opt = BuildProbeOptimizer(epochs);
+        var model = BuildProbeTransformer(opt);
+        var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
+        builder.ConfigureMemoryManagement(AiDotNet.Training.Memory.TrainingMemoryConfig.ForTransformers());
+        var result = await builder
+            .ConfigureModel(model).ConfigureOptimizer(opt)
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(tx, ty))
+            .BuildAsync();
+
+        Assert.NotNull(result);
+        double accAfter = HeldOutAccuracy(result!, vx, vlabels);
+        Assert.True(accAfter > 0.50,
+            $"direct-path transformer did not learn the held-out task: acc={accAfter:F4} (chance={1.0 / ProbeV:F4})");
+        Assert.True(accAfter > accBefore + 0.20,
+            $"direct-path training did not improve held-out accuracy: {accBefore:F4} -> {accAfter:F4}");
     }
 
     [Fact(Timeout = 120000)]
