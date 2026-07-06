@@ -22,6 +22,25 @@ public class LicenseValidatorTests
     private static readonly string ValidTestKey2 = LicenseTestSupport.SignedKey("cached12key3");
     private static readonly string ValidTestKey3 = LicenseTestSupport.SignedKey("grace12test3");
 
+    [Fact]
+    public void IsSignedKeyFormat_RequiresA32ByteSignature()
+    {
+        // A genuine offline-verifiable key has a 32-byte HMAC-SHA256 signature.
+        Assert.True(LicenseValidator.IsSignedKeyFormat(LicenseTestSupport.SignedKey("abc123def456")));
+
+        // Short-form server-validated keys share the `aidn.` prefix but their signature segment
+        // decodes to fewer than 32 bytes; they must NOT be classified as offline-HMAC (that routes
+        // them to the offline-only path where they can never validate — they belong on the server).
+        Assert.False(LicenseValidator.IsSignedKeyFormat("aidn.e284ddf8d8c6.b48e57387dbc47cf")); // 12-byte sig
+        Assert.False(LicenseValidator.IsSignedKeyFormat("aidn.0b7.1c2d"));                       // tiny sig
+
+        // Malformed / non-signed formats.
+        Assert.False(LicenseValidator.IsSignedKeyFormat("AIDN-PROD-abc-123"));  // server format, not aidn.
+        Assert.False(LicenseValidator.IsSignedKeyFormat("aidn..sig"));          // empty id
+        Assert.False(LicenseValidator.IsSignedKeyFormat("aidn.id."));           // empty sig
+        Assert.False(LicenseValidator.IsSignedKeyFormat(null!));
+    }
+
     [Fact(Timeout = 60000)]
     public async Task OfflineMode_ValidKey_ReturnsActive()
     {
