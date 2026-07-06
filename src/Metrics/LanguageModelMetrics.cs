@@ -49,6 +49,10 @@ public static class LanguageModelMetrics<T>
     /// typically streams the loss (cross-entropy) and reports perplexity alongside it.
     /// </summary>
     /// <inheritdoc cref="Perplexity(Tensor{T}, int[], bool)"/>
+    /// <returns>
+    /// The mean cross-entropy (negative log-likelihood) in nats, &gt;= 0; lower is better. (Perplexity is
+    /// <c>exp</c> of this, so it is &gt;= 1 — this method overrides the inherited perplexity return text.)
+    /// </returns>
     public static T CrossEntropy(Tensor<T> predictions, int[] targets, bool fromLogits = true)
         => NumOps.FromDouble(MeanCrossEntropyDouble(predictions, targets, fromLogits));
 
@@ -77,12 +81,12 @@ public static class LanguageModelMetrics<T>
                 throw new ArgumentException($"target[{i}]={target} is outside the vocabulary [0, {v}).", nameof(targets));
 
             // The true token is in the top k iff strictly fewer than k other tokens outscore it.
-            double targetScore = Convert.ToDouble(NumOps.ToDouble(predictions[i, target]));
+            double targetScore = NumOps.ToDouble(predictions[i, target]);
             int strictlyGreater = 0;
             for (int j = 0; j < v; j++)
             {
                 if (j == target) continue;
-                if (Convert.ToDouble(NumOps.ToDouble(predictions[i, j])) > targetScore && ++strictlyGreater >= k)
+                if (NumOps.ToDouble(predictions[i, j]) > targetScore && ++strictlyGreater >= k)
                     break;
             }
             if (strictlyGreater < k) hits++;
@@ -111,18 +115,18 @@ public static class LanguageModelMetrics<T>
                 double max = double.NegativeInfinity;
                 for (int j = 0; j < v; j++)
                 {
-                    double z = Convert.ToDouble(NumOps.ToDouble(predictions[i, j]));
+                    double z = NumOps.ToDouble(predictions[i, j]);
                     if (z > max) max = z;
                 }
                 double sumExp = 0.0;
                 for (int j = 0; j < v; j++)
-                    sumExp += Math.Exp(Convert.ToDouble(NumOps.ToDouble(predictions[i, j])) - max);
+                    sumExp += Math.Exp(NumOps.ToDouble(predictions[i, j]) - max);
                 double logSumExp = max + Math.Log(sumExp);
-                sumNll += logSumExp - Convert.ToDouble(NumOps.ToDouble(predictions[i, target]));
+                sumNll += logSumExp - NumOps.ToDouble(predictions[i, target]);
             }
             else
             {
-                double p = Convert.ToDouble(NumOps.ToDouble(predictions[i, target]));
+                double p = NumOps.ToDouble(predictions[i, target]);
                 // Guard against log(0) for a zero-probability true token.
                 sumNll += -Math.Log(Math.Max(p, 1e-12));
             }
