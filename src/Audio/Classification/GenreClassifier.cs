@@ -511,18 +511,18 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
             return OnnxEncoder.Run(input);
         }
 
-        // Native mode: forward pass through layers to per-genre logits, then softmax.
-        // The classification head is a LINEAR (identity) projection emitting logits; genre
-        // classification returns a probability distribution over genres (Tzanetakis & Cook 2002),
-        // so Predict applies softmax here — matching the model's other prediction paths
-        // (AnalyzeGenre / GetGenreProbabilities) and keeping class scores non-negative and
-        // normalized. Training uses the base logits path (unaffected by this inference softmax).
+        // Native mode: forward pass through the layers to per-genre LOGITS. Do NOT softmax here — the
+        // classification head is a LINEAR (identity) projection emitting logits, and every probability
+        // path (Classify / GetGenreProbabilities / PostprocessOutput) applies ApplySoftmax exactly once.
+        // Returning probabilities here (as a prior revision did) double-normalized the distribution —
+        // flattening confidence and sometimes shifting the top genre (#1789 review). ONNX mode above
+        // likewise returns raw logits, so both modes now hand callers a consistent logits tensor.
         var current = input;
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
-        return Engine.Softmax(current, current.Rank - 1);
+        return current;
     }
 
     /// <summary>
