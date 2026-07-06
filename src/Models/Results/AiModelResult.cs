@@ -1043,6 +1043,48 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ITrainingMonitor<T>? TrainingMonitor { get; private set; }
 
     /// <summary>
+    /// Gets whether training stopped before running all configured epochs.
+    /// </summary>
+    /// <value><c>true</c> if training was aborted early; otherwise <c>false</c>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> <c>true</c> means training ended before completing every
+    /// planned epoch — because a callback asked it to stop, the run was cancelled, or a health
+    /// check detected a problem. Read <see cref="StopReason"/> to find out exactly why.</para>
+    /// </remarks>
+    public bool EarlyStopTriggered { get; private set; }
+
+    /// <summary>
+    /// Gets a human-readable explanation of why training stopped early, or <c>null</c> when
+    /// training ran to completion.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A short sentence such as "callback requested abort at epoch 2"
+    /// explaining why training did not run all the way to the end. It is <c>null</c> when
+    /// training finished normally.</para>
+    /// </remarks>
+    public string? StopReason { get; private set; }
+
+    /// <summary>
+    /// Gets whether mixed-precision (FP16) training actually engaged during this run.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Mixed precision can make training faster, but only applies in
+    /// certain setups. This is <c>true</c> only when it was requested AND actually took effect.
+    /// See <see cref="MixedPrecisionStatus"/> for the full story.</para>
+    /// </remarks>
+    public bool MixedPrecisionEngaged { get; private set; }
+
+    /// <summary>
+    /// Gets a human-readable description of the mixed-precision outcome (for example
+    /// "not requested", "engaged: FP16", or "ignored: T is not float").
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Explains in plain words what happened with mixed precision —
+    /// whether it was off, turned on, or requested but skipped (and the reason it was skipped).</para>
+    /// </remarks>
+    public string? MixedPrecisionStatus { get; private set; }
+
+    /// <summary>
     /// Gets or sets the hyperparameter optimization result.
     /// </summary>
     /// <value>Complete hyperparameter optimization results including all trials, or null if optimization was not used.</value>
@@ -1358,6 +1400,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         CheckpointManager = options.CheckpointManager;
         ModelRegistry = options.ModelRegistry;
         TrainingMonitor = options.TrainingMonitor;
+        EarlyStopTriggered = options.EarlyStopTriggered;
+        StopReason = options.StopReason;
+        MixedPrecisionEngaged = options.MixedPrecisionEngaged;
+        MixedPrecisionStatus = options.MixedPrecisionStatus;
         HyperparameterOptimizationResult = options.HyperparameterOptimizationResult;
         ExperimentRunId = options.ExperimentRunId;
         ExperimentId = options.ExperimentId;
@@ -3353,6 +3399,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             CheckpointManager = CheckpointManager,
             ModelRegistry = ModelRegistry,
             TrainingMonitor = TrainingMonitor,
+            EarlyStopTriggered = EarlyStopTriggered,
+            StopReason = StopReason,
+            MixedPrecisionEngaged = MixedPrecisionEngaged,
+            MixedPrecisionStatus = MixedPrecisionStatus,
             HyperparameterOptimizationResult = HyperparameterOptimizationResult,
             ExperimentRunId = ExperimentRunId,
             ExperimentId = ExperimentId,
@@ -5098,6 +5148,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             CheckpointManager = CheckpointManager,
             ModelRegistry = ModelRegistry,
             TrainingMonitor = TrainingMonitor,
+            EarlyStopTriggered = EarlyStopTriggered,
+            StopReason = StopReason,
+            MixedPrecisionEngaged = MixedPrecisionEngaged,
+            MixedPrecisionStatus = MixedPrecisionStatus,
             HyperparameterOptimizationResult = HyperparameterOptimizationResult,
             ExperimentRunId = ExperimentRunId,
             ExperimentId = ExperimentId,

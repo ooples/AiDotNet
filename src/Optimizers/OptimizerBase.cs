@@ -87,6 +87,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected readonly List<OptimizationIterationInfo<T>> IterationHistoryList;
 
     /// <summary>
+    /// Optional per-epoch progress callback invoked once per outer optimization iteration.
+    /// Receives the iteration index and the CURRENT iteration's fitness/loss, and returns
+    /// <c>false</c> to request that optimization stop early. Registered via
+    /// <see cref="SetEpochProgressCallback"/>; <c>null</c> when no observer is attached.
+    /// </summary>
+    private Func<int, T, bool>? _epochProgressCallback;
+
+    /// <summary>
+    /// The most recent CURRENT-iteration fitness observed by <see cref="UpdateBestSolution"/>,
+    /// used to report per-epoch loss to <see cref="_epochProgressCallback"/> instead of the
+    /// monotonic best-so-far fitness. <c>_hasObservedFitness</c> guards the initial state.
+    /// </summary>
+    private T? _lastObservedFitness;
+    private bool _hasObservedFitness;
+
+    /// <summary>
     /// Caches evaluated models to avoid redundant calculations.
     /// </summary>
     protected readonly IModelCache<T, TInput, TOutput> ModelCache;
@@ -1290,6 +1306,23 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected void UpdateBestSolution(OptimizationStepData<T, TInput, TOutput> currentStepData, ref OptimizationStepData<T, TInput, TOutput> bestStepData)
     {
+        // Stash the CURRENT step's fitness so the per-epoch progress callback can report the
+        // live loss (which may be diverging / NaN) rather than the monotonic best-so-far
+        // fitness that UpdateIterationHistoryAndCheckEarlyStopping otherwise receives. Gradient
+        // optimizers call this exactly once per epoch with the freshly evaluated step, giving
+        // the callback (and any health monitor) an accurate divergence signal. Guarded so this
+        // is a strict no-op when no progress observer is attached (zero behaviour change on the
+        // default training paths). An optimizer that evaluates multiple candidates per iteration overwrites
+        // this on each call, so the value consumed once per iteration in
+        // UpdateIterationHistoryAndCheckEarlyStopping is the LAST candidate stashed that iteration (the
+        // consumer then resets the stash so it can't go stale across iterations); the seam is designed for
+        // the once-per-epoch gradient optimizers described above.
+        if (_epochProgressCallback is not null)
+        {
+            _lastObservedFitness = currentStepData.FitnessScore;
+            _hasObservedFitness = true;
+        }
+
         // If bestStepData has never been set by a real evaluation, always accept the
         // first real result. This prevents a bug where the default FitnessScore of 0 is
         // considered "better" than real evaluations by fitness calculators that treat
@@ -1521,6 +1554,31 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             FitDetectionResult = stepData.FitDetectionResult
         });
 
+        // Notify the per-epoch progress observer (if any). Report the CURRENT iteration's
+        // fitness (stashed by UpdateBestSolution) so observers see live loss — including a
+        // diverging or NaN loss — rather than the monotonic best-so-far value passed here.
+        // A false return means an observer (e.g. a user training callback or health monitor)
+        // requested an abort, which we honor by signalling the optimizer to stop.
+        if (_epochProgressCallback is not null)
+        {
+            T reported = stepData.FitnessScore;
+            if (_hasObservedFitness && _lastObservedFitness is { } observed)
+            {
+                reported = observed;
+            }
+            // Consume the stash so each iteration reports a value stashed DURING that iteration: without this
+            // reset, an iteration that never calls UpdateBestSolution would re-report the previous iteration's
+            // stale fitness. When an optimizer evaluates multiple candidates per iteration, `reported` is the
+            // LAST candidate stashed this iteration (falling back to the monotonic best `stepData.FitnessScore`
+            // when nothing was stashed) — the seam targets per-epoch gradient optimizers that call
+            // UpdateBestSolution exactly once per epoch (see SetEpochProgressCallback).
+            _hasObservedFitness = false;
+            if (!_epochProgressCallback(iteration, reported))
+            {
+                return true; // Observer requested an early stop
+            }
+        }
+
         // Check for early stopping
         if (Options.UseEarlyStopping && ShouldEarlyStop())
         {
@@ -1528,6 +1586,33 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
 
         return false; // Continue optimization
+    }
+
+    /// <summary>
+    /// Registers a per-epoch progress callback invoked once per outer optimization iteration.
+    /// </summary>
+    /// <param name="callback">
+    /// A delegate receiving the zero-based iteration index and that iteration's current
+    /// fitness/loss. It should return <c>true</c> to continue optimizing or <c>false</c> to
+    /// request an early, graceful stop. Pass <c>null</c> to clear a previously registered
+    /// callback.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// This is the seam the <c>AiModelBuilder</c> facade uses to stream per-epoch metrics to a
+    /// training monitor and to invoke user-registered training callbacks against the in-memory
+    /// supervised path (where the optimizer owns the epoch loop). It fires from within
+    /// <see cref="UpdateIterationHistoryAndCheckEarlyStopping"/>, which every gradient-based
+    /// optimizer calls once per epoch.
+    /// </para>
+    /// <para><b>For Beginners:</b> You normally will not call this directly — the model builder
+    /// wires it up for you when you register a training callback. It lets code outside the
+    /// optimizer watch each epoch and stop training early if needed.
+    /// </para>
+    /// </remarks>
+    internal void SetEpochProgressCallback(Func<int, T, bool>? callback)
+    {
+        _epochProgressCallback = callback;
     }
 
     /// <summary>

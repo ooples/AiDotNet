@@ -325,6 +325,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IExperimentTracker<T>? _experimentTracker;
     private ICheckpointManager<T, TInput, TOutput>? _checkpointManager;
     private ITrainingMonitor<T>? _trainingMonitor;
+
+    /// <summary>
+    /// User-registered per-epoch training callbacks (see
+    /// <see cref="ConfigureTrainingCallback(ITrainingCallback{T})"/>). All are invoked each
+    /// epoch on the supervised training paths; training aborts if any returns <c>false</c>.
+    /// </summary>
+    private readonly List<ITrainingCallback<T>> _trainingCallbacks = new();
     private IModelRegistry<T, TInput, TOutput>? _modelRegistry;
     private IDataVersionControl<T>? _dataVersionControl;
     private IHyperparameterOptimizer<T, TInput, TOutput>? _hyperparameterOptimizer;
