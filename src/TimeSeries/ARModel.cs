@@ -204,7 +204,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
         Vector<T> residuals = new Vector<T>(y.Length);
         for (int t = _arOrder; t < y.Length; t++)
         {
-            T yHat = Predict(y, t);
+            T yHat = PredictAtIndex(y, t);
             residuals[t] = NumOps.Subtract(y[t], yHat);
         }
 
@@ -324,7 +324,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
                     extended[j] = series[j];
                 for (int j = series.Length; j < t; j++)
                     extended[j] = predictions[j];
-                predictions[t] = Predict(extended, t);
+                predictions[t] = PredictAtIndex(extended, t);
             }
         }
 
@@ -354,7 +354,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// The method handles cases where we don't have enough history (e.g., at the beginning
     /// of the series) by only using the available information.
     /// </remarks>
-    private T Predict(Vector<T> y, int t)
+    private T PredictAtIndex(Vector<T> y, int t)
     {
         // VECTORIZED: Use dot product for AR prediction
         int availableHistory = Math.Min(_arOrder, t);
@@ -621,7 +621,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
         // Generate predictions one by one
         for (int t = history.Length; t < extendedHistory.Length; t++)
         {
-            extendedHistory[t] = Predict(extendedHistory, t);
+            extendedHistory[t] = PredictAtIndex(extendedHistory, t);
         }
 
         // Extract just the forecasted values
@@ -837,6 +837,6 @@ public class ARModel<T> : TimeSeriesModelBase<T>
 
         // Interpret the input as the complete history up to the current time
         // and predict the next value using the vectorized helper
-        return Predict(input, input.Length);
+        return PredictAtIndex(input, input.Length);
     }
 }

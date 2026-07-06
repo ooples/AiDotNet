@@ -230,7 +230,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         Vector<T> residuals = new Vector<T>(y.Length);
         for (int t = Math.Max(_arOrder, _maOrder); t < y.Length; t++)
         {
-            T yHat = Predict(y, t);
+            T yHat = PredictAtIndex(y, t);
             residuals[t] = NumOps.Subtract(y[t], yHat);
         }
 
@@ -416,7 +416,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// This recursive approach allows the model to build up predictions one step at a time,
     /// using both actual values and predictions as needed.
     /// </remarks>
-    private T Predict(Vector<T> y, int t)
+    private T PredictAtIndex(Vector<T> y, int t)
     {
         T prediction = NumOps.Zero;
 
@@ -441,7 +441,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         // MA component (recursive - keep as is for correctness)
         for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
         {
-            T residual = NumOps.Subtract(y[t - i - 1], Predict(y, t - i - 1));
+            T residual = NumOps.Subtract(y[t - i - 1], PredictAtIndex(y, t - i - 1));
             prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], residual));
         }
 

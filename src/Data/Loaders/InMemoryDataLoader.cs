@@ -234,6 +234,21 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
             return CastToDataType<Tensor<T>, TOutput>(result);
         }
 
+        if (_labels is Matrix<T> matrix)
+        {
+            // Multi-output (n×H) target: gather the requested ROWS, preserving all output columns (horizons).
+            var result = new Matrix<T>(indices.Length, matrix.Columns);
+            for (int i = 0; i < indices.Length; i++)
+            {
+                for (int c = 0; c < matrix.Columns; c++)
+                {
+                    result[i, c] = matrix[indices[i], c];
+                }
+            }
+
+            return CastToDataType<Matrix<T>, TOutput>(result);
+        }
+
         throw new NotSupportedException($"Unsupported output type: {typeof(TOutput).Name}");
     }
 
@@ -289,6 +304,12 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
         {
             int outputDim = tensor.Shape.Length > 1 ? tensor.Shape[1] : 1;
             return (tensor.Shape[0], outputDim);
+        }
+
+        if (output is Matrix<T> matrix)
+        {
+            // Multi-output (n×H) target: n samples, H output dimensions (horizons).
+            return (matrix.Rows, matrix.Columns);
         }
 
         throw new NotSupportedException($"Unsupported output type: {typeof(TOutput).Name}");
