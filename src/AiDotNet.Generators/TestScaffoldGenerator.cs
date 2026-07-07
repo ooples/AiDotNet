@@ -197,6 +197,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // inference-determinism bug — dropout active in Predict — is fixed in the model itself.)
         "WavLMSpeaker", "UniVS",
 
+        // UniSpeech (Wang et al. 2021): foundation-scale ASR — 12-layer / 768-dim / 12-head
+        // transformer encoder + 5000-token CTC head. Its training invariants time out on CPU
+        // (LossStrictlyDecreasesOnMemorizationTask). The manual UniSpeechTests scaffold in
+        // ModelFamilyTests/NeuralNetworks runs the same encoder+CTC architecture at reduced scale
+        // (2 layers / 64-dim / 64-vocab) in seconds.
+        "UniSpeech",
+
         // GAN models with non-default latent / image shapes that the generic
         // GAN-family scaffold ([16] rank-1 input) can't supply correctly.
         // Manual test classes in ModelFamilyTests/NeuralNetworks supply the

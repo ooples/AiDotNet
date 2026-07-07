@@ -72,6 +72,8 @@ public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     private readonly string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly bool _hasUserSuppliedOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
     private bool _disposed;
     private int _encoderLayerEnd;
     #endregion
@@ -120,7 +122,8 @@ public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _hasUserSuppliedOptimizer = optimizer is not null;
+        _optimizer = optimizer;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -174,7 +177,38 @@ public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
     /// </para>
     /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        if (!_useNativeMode) return PredictOnnx(input);
+        SetTrainingMode(false); // eval mode: sync inference-weight cache to latest weights
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Supplies the training optimizer: a linear-warmup Adam at 1e-4 (honoring a
+    /// constructor-supplied optimizer when present) so the from-scratch SAM-style stack
+    /// does not diverge — the default optimizer was never consulted and MoreData saw the
+    /// loss climb (22 -> 58) over successive iterations. Mirrors the MedSAM / UniVS / ODISE fix.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        if (_hasUserSuppliedOptimizer && _optimizer is not null)
+            return _optimizer;
+
+        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = false,
+                InitialLearningRate = 0.0001,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: 0.0001,
+                    warmupSteps: 5,
+                    totalSteps: 300,
+                    warmupInitLr: 0.00001)
+            });
+    }
 
     /// <summary>
     /// Performs one training step.
