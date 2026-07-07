@@ -104,9 +104,18 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         // Run simplified HDBSCAN directly on Matrix<T>
         RunHDBSCAN();
 
-        // Calculate scores for training data to set threshold
-        var trainingScores = ScoreAnomaliesInternal(X);
-        SetThresholdFromContamination(trainingScores);
+        // Set the contamination threshold from the fit-time per-point outlier scores
+        // (core-distance / noise-membership based), NOT ScoreAnomaliesInternal(X).
+        // ScoreAnomaliesInternal scores each training point against the training set
+        // INCLUDING ITSELF, so its nearest neighbour is the point itself at distance 0 and
+        // every training score collapses to ~0. The contamination threshold then degenerates
+        // to 0, and every subsequent query — normal or genuine outlier — scores above it and
+        // is flagged an anomaly (Outliers_ShouldHaveHigherScores saw normal and outlier both
+        // predicted -1). The fit-time _outlierScores give a real score distribution to
+        // percentile against.
+        var outlierScores = _outlierScores
+            ?? throw new InvalidOperationException("HDBSCAN outlier scores were not computed during fit.");
+        SetThresholdFromContamination(new Vector<T>(outlierScores));
 
         _isFitted = true;
     }
