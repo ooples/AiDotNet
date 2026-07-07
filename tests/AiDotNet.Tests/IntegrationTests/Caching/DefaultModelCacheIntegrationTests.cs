@@ -18,6 +18,60 @@ public class DefaultModelCacheIntegrationTests
         return new OptimizationStepData<double, Matrix<double>, Vector<double>>();
     }
 
+    #region Capacity Bound (leak regression)
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_BeyondCapacity_EvictsOldestAndBoundsCount()
+    {
+        // Regression for the optimizer per-epoch memory leak: the parameter-content cache key
+        // changes every epoch as the model trains, so an unbounded cache would retain one
+        // deep-copied model + O(N) predictions per epoch forever. The cache must bound itself.
+        int cap = DefaultModelCache<double, Matrix<double>, Vector<double>>.DefaultCapacity;
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>(cap);
+
+        // Insert 5x the capacity of distinct keys (simulating 5*cap training epochs).
+        int inserted = cap * 5;
+        for (int i = 0; i < inserted; i++)
+        {
+            cache.CacheStepData($"epoch_{i}", CreateStepData());
+        }
+
+        // The most-recently inserted `cap` keys must still be present...
+        for (int i = inserted - cap; i < inserted; i++)
+        {
+            Assert.NotNull(cache.GetCachedStepData($"epoch_{i}"));
+        }
+
+        // ...and the earliest keys must have been evicted (memory does not grow without bound).
+        Assert.Null(cache.GetCachedStepData("epoch_0"));
+        Assert.Null(cache.GetCachedStepData($"epoch_{inserted - cap - 1}"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheStepData_RepeatedSameKey_DoesNotEvictOthers()
+    {
+        // Overwriting an existing key must not count as a new insertion (which would spuriously
+        // evict live entries). Fill to capacity, then hammer one key; the rest must survive.
+        int cap = DefaultModelCache<double, Matrix<double>, Vector<double>>.DefaultCapacity;
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>(cap);
+
+        for (int i = 0; i < cap; i++)
+        {
+            cache.CacheStepData($"k{i}", CreateStepData());
+        }
+        for (int r = 0; r < cap * 10; r++)
+        {
+            cache.CacheStepData("k0", CreateStepData());
+        }
+
+        for (int i = 0; i < cap; i++)
+        {
+            Assert.NotNull(cache.GetCachedStepData($"k{i}"));
+        }
+    }
+
+    #endregion
+
     #region Basic CRUD Operations
 
     [Fact(Timeout = 120000)]
@@ -133,7 +187,10 @@ public class DefaultModelCacheIntegrationTests
     public async Task Cache_MultipleKeys_EachRetrievableIndependently()
     {
         // Arrange
-        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
+        // The cache is now bounded (FIFO eviction) to stop the optimizer per-epoch leak; size it
+        // large enough to hold every key so this test still verifies independent retrieval of many
+        // distinct entries rather than the (removed) unbounded-retention behavior.
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>(capacity: 128);
         var stepDataDict = new Dictionary<string, OptimizationStepData<double, Matrix<double>, Vector<double>>>();
 
         for (int i = 0; i < 100; i++)
