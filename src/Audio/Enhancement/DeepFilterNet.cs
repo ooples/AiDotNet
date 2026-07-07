@@ -559,20 +559,19 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // Update all layer parameters
+        // SET each layer's parameters from the flat vector (the contract of this method — it is how
+        // Clone / deserialize restore weights). Walk `Layers` in the SAME order GetParameters emits so
+        // the slices line up. The previous version was doubly broken: it ignored `parameters` entirely
+        // and instead called layer.UpdateParameters(0.001) (a gradient STEP, not a set), and it iterated
+        // the internal sub-lists in a different order (gain last) than GetParameters — so Clone produced
+        // a model with different weights (Clone_ShouldProduceIdenticalOutput).
         int offset = 0;
-        var allLayers = _erbEncoder.Concat(_gruLayers).Concat(_dfLayers).Concat(_decoder);
-        if (_gainLayer is not null)
+        foreach (var layer in Layers)
         {
-            allLayers = allLayers.Append(_gainLayer);
-        }
-
-        foreach (var layer in allLayers)
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            layer.UpdateParameters(NumOps.FromDouble(0.001)); // Learning rate
-            offset += layerParams.Length;
+            int count = layer.GetParameters().Length;
+            if (count == 0) continue;
+            layer.SetParameters(parameters.Slice(offset, count));
+            offset += count;
         }
     }
 
