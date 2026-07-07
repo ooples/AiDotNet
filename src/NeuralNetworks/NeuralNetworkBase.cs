@@ -8268,7 +8268,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 double fusedParamChecksumAfter = FusedTrainableParamChecksum(trainableLayers);
                 bool persisted = fusedParamChecksumAfter != fusedParamChecksumBefore;
-                if (!persisted && fusedParamChecksumBefore != 0.0 && !NumOps.IsNaN(lossValue))
+                // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
+                // squares, so 0.0 means every trainable parameter starts exactly at zero. A
+                // non-persisting fused step then leaves it at 0.0 too (persisted == false),
+                // which is exactly the silent no-op we must catch — skipping it for all-zero
+                // init would commit the decoupled path unverified (ooples/AiDotNet#1822 review).
+                if (!persisted && !NumOps.IsNaN(lossValue))
                 {
                     _fusedTrainingDisabled = true;
                     _pendingFusedMissReason =
