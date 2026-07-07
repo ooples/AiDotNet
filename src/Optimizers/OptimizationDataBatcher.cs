@@ -195,9 +195,19 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
             // Shuffle if requested
             if (_shuffle)
             {
+                // Determinism (S0.7 bit-reproducibility): when no explicit seed is configured,
+                // fall back to a NON-reproducible secure RNG only in the normal high-throughput
+                // mode. Under AiDotNetEngine.SetDeterministicMode(true) the minibatch order MUST be
+                // reproducible across runs — otherwise identical-seed training diverges purely from
+                // shuffle order (the run-to-run weight divergence that SetDeterministicMode is
+                // supposed to eliminate: it governs BLAS/reduction order but, without this, never
+                // touched the data-shuffle RNG). Use a fixed fallback seed in deterministic mode so
+                // "same seed + SetDeterministicMode(true)" yields bit-identical GPU/CPU training.
                 Random random = _seed.HasValue
                     ? RandomHelper.CreateSeededRandom(_seed.Value)
-                    : RandomHelper.CreateSecureRandom();
+                    : AiDotNet.Tensors.Engines.AiDotNetEngine.DeterministicMode
+                        ? RandomHelper.CreateSeededRandom(0)
+                        : RandomHelper.CreateSecureRandom();
 
                 // Fisher-Yates shuffle
                 for (int i = indices.Length - 1; i > 0; i--)

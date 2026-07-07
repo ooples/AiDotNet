@@ -50,6 +50,43 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #endregion
 
+        #region Determinism (S0.7 bit-reproducibility)
+
+        /// <summary>
+        /// Regression: under AiDotNetEngine.SetDeterministicMode(true), an unseeded shuffling batcher
+        /// MUST produce the SAME minibatch order on every run. Before the fix an unseeded batcher used a
+        /// secure (non-reproducible) RNG, so identical-seed training diverged run-to-run purely from
+        /// shuffle order — the exact nondeterminism SetDeterministicMode is supposed to eliminate.
+        /// </summary>
+        [Fact(Timeout = 60000)]
+        public void Shuffle_UnseededUnderDeterministicMode_IsReproducibleAcrossInstances()
+        {
+            bool prev = AiDotNet.Tensors.Engines.AiDotNetEngine.DeterministicMode;
+            try
+            {
+                AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(true);
+                var data = CreateTestData(257, 4);
+
+                int[] Flatten(OptimizationDataBatcher<double, Matrix<double>, Vector<double>> b)
+                    => b.GetBatchIndices().SelectMany(x => x).ToArray();
+
+                // Two independent unseeded shuffling batchers (seed: null) must agree bit-for-bit.
+                var a = Flatten(new OptimizationDataBatcher<double, Matrix<double>, Vector<double>>(data, batchSize: 16, shuffle: true));
+                var c = Flatten(new OptimizationDataBatcher<double, Matrix<double>, Vector<double>>(data, batchSize: 16, shuffle: true));
+
+                Assert.Equal(a.Length, c.Length);
+                Assert.Equal(a, c); // identical shuffle order across instances under deterministic mode
+                // And it is an actual permutation (shuffle happened, not just identity fallback).
+                Assert.Equal(Enumerable.Range(0, 257).OrderBy(i => i), a.OrderBy(i => i));
+            }
+            finally
+            {
+                AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(prev);
+            }
+        }
+
+        #endregion
+
         #region Constructor Tests
 
         [Fact(Timeout = 60000)]
