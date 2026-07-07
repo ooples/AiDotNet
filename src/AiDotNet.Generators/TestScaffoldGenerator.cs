@@ -2002,8 +2002,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // CreateDefaultRoboticsActionLayers: a ViT encoder (LayerNormalization + vision
             // MultiHeadAttention(VisionDim) blocks) -> action decoder. Same leading vision-attention-
             // over-VisionDim contract, so they consume post-patch-embedding token tensors
-            // [batch, num_tokens, VisionDim] — never raw [3, spatial, spatial] pixels.
-            or "PaLME" or "RT2";
+            // [batch, num_tokens, VisionDim] — never raw [3, spatial, spatial] pixels. (Helix/Octo
+            // are token-consuming too but listed above with their own vision dims.)
+            or "PaLME" or "RT2" or "GR00TN1" or "PiZero" or "ThreeDVLA";
 
     /// <summary>
     /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
@@ -2030,7 +2031,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Robotics VLA (PaLM-E, RT-2) built at CI-smoke VisionDim=128 (see the robotics
             // constructor branch in EmitGeneratedTestClass); their [1,4,128] token InputShape
             // matches that width. Paper defaults (1408 / 1024) OOM/timeout on construction.
-            "PaLME" or "RT2" => 128,
+            "PaLME" or "RT2" or "GR00TN1" or "PiZero" or "ThreeDVLA" => 128,
             _ => 768, // SigLIP2, ViLT, Florence2
         };
 
@@ -2267,13 +2268,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // fragment above needs the doubled '{{' to emit one literal '{'.)
                     "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
             }
-            else if ((model.ClassName is "PaLME" or "RT2")
+            else if ((model.ClassName is "PaLME" or "RT2" or "GR00TN1" or "PiZero" or "ThreeDVLA")
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.VisionLanguage.Robotics.", System.StringComparison.Ordinal))
             {
-                // PaLM-E (Driess et al. 2023) and RT-2 (Brohan et al. 2023) are vision-language-action
-                // robotics models built from CreateDefaultRoboticsActionLayers: a ViT encoder
+                // Vision-language-action robotics models (PaLM-E, RT-2, GR00T-N1, Pi-Zero, 3D-VLA) are
+                // built from CreateDefaultRoboticsActionLayers: a ViT encoder
                 // (LayerNormalization + vision MultiHeadAttention(VisionDim) blocks) -> action decoder.
                 // Their production defaults are paper-scale — PaLM-E is VisionDim 1408 / DecoderDim 8192
                 // with 48 vision + 64 decoder layers (562B params) and OOM/timeout the CI runner on
