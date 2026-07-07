@@ -73,6 +73,8 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     private readonly string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly bool _hasUserSuppliedOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
     private bool _disposed;
     private int _encoderLayerEnd;
     #endregion
@@ -121,7 +123,8 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _hasUserSuppliedOptimizer = optimizer is not null;
+        _optimizer = optimizer;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -175,7 +178,44 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
     /// </para>
     /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        if (!_useNativeMode) return PredictOnnx(input);
+        SetTrainingMode(false); // eval mode: sync any inference-weight cache to latest weights
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Supplies the training optimizer: a linear-warmup Adam at 1e-4 rather than the
+    /// framework default, honoring a constructor-supplied optimizer when present.
+    /// </summary>
+    /// <remarks>
+    /// The from-scratch SAM-style encoder/decoder DIVERGES TO NaN within ~10 steps under a
+    /// plain high-rate optimizer (verified: ForwardPass_ShouldBeFinite_AfterTraining and
+    /// Clone_AfterTraining both saw NaN). The constructor-built optimizer was never consulted
+    /// (no GetOrCreateBaseOptimizer override), so training used an untuned rate. A small warmup
+    /// into 1e-4 with a decay phase keeps the descent finite and monotonic (same fix family as
+    /// ODISE / UniVS).
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        if (_hasUserSuppliedOptimizer && _optimizer is not null)
+            return _optimizer;
+
+        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = false,
+                InitialLearningRate = 0.0001,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: 0.0001,
+                    warmupSteps: 5,
+                    totalSteps: 300,
+                    warmupInitLr: 0.00001)
+            });
+    }
 
     /// <summary>
     /// Performs one training step.
