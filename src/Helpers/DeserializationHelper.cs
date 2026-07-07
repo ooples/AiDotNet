@@ -2809,7 +2809,10 @@ public static class DeserializationHelper
             throw new InvalidOperationException("MultiHeadAttentionLayer requires input shape [sequenceLength, embeddingDimension].");
         }
 
-        int embDim = inputShape[1];
+        // Prefer the serialized EmbeddingDimension (headCount × headDimension, fixed at construction)
+        // over inputShape[1]: a lazy MHA serialized before its first Forward reports a placeholder
+        // input shape ([seq, 1]), which would otherwise make embDim=1 and fail the divisibility guard.
+        int embDim = TryGetInt(additionalParams, "EmbeddingDimension") ?? inputShape[1];
         int headCount = TryGetInt(additionalParams, "HeadCount") ?? ResolveDefaultHeadCount(embDim);
         int headDimension = TryGetInt(additionalParams, "HeadDimension") ?? (embDim / headCount);
         if (headDimension * headCount != embDim)

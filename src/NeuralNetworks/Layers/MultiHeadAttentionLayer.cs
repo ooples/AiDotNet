@@ -703,6 +703,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         var metadata = base.GetMetadata();
         metadata["HeadCount"] = _headCount.ToString();
+        // Serialize the fixed embedding dimension (headCount × headDimension, set at construction).
+        // The lazy Q/K/V/O weights aren't allocated until the first Forward, so a model cloned/
+        // serialized before any forward reports a placeholder input shape ([seq, 1]); without this,
+        // deserialization derived embeddingDimension from that placeholder (1) and threw
+        // "embeddingDimension 1 is not divisible by headCount N".
+        metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
         metadata["PositionalEncoding"] = PositionalEncoding.ToString();
         return metadata;
     }
