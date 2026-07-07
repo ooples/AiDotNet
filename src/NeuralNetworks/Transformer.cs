@@ -650,6 +650,15 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         bool seenDecoder = false;
         Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input._shape, NumOps.One); // Default to all ones if no mask is provided
 
+        // #1824: under the inference recycle arena this walk Resets the arena between layers to
+        // bound the forward's peak to ~one block (see NeuralNetworkBase.Predict). `mask` is read
+        // by EVERY attention layer, so it must survive those Resets — detach it to GC once up
+        // front. (No-op on the training / non-arena paths — RunLayerWalk is shared with
+        // ForwardForTraining, where _inferenceRecycleArena is null and recycling never fires.)
+        bool recycle = InferenceRecycleActive;
+        if (recycle) mask = DetachFromArena(mask);
+        int lastLayer = Layers.Count - 1;
+
         // Process all layers sequentially
         // The layer list structure: input projection, positional encoding, dropout, then encoder/decoder blocks
         for (int i = 0; i < Layers.Count; i++)
@@ -677,6 +686,14 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             {
                 output = Layers[i].Forward(output);
             }
+
+            // #1824: recycle this layer's forward scratch before the next layer allocates —
+            // detach the running stream to GC, then Reset the arena. Done BEFORE the encoder-
+            // output capture below so `encoderOutput` (assigned from `output`) is the detached
+            // GC copy and survives every subsequent per-layer Reset until a decoder consumes it.
+            // Skip the last layer — Predict detaches the final output. No-op when not recycling.
+            if (recycle && i < lastLayer)
+                output = DetachAndRecycleBetweenLayers(output);
 
             // Track encoder output for cross-attention in decoders.
             // The encoder output we want is the LAST encoder block's

@@ -3366,12 +3366,80 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return PredictCore(input);
 
         // Run the forward inside a per-call arena. The arena recycles intermediate Rent-backed
-        // buffers; it Resets/returns them to the cross-arena pool on Dispose (no mid-forward
-        // recycling, so intermediates stay valid for the whole forward). The output is copied
-        // out (DetachFromArena) before Dispose so the returned tensor is GC-owned and survives.
+        // buffers; it Resets/returns them to the cross-arena pool on Dispose. The output is
+        // copied out (DetachFromArena) before Dispose so the returned tensor is GC-owned and
+        // survives.
+        //
+        // #1824 ROOT FIX — per-LAYER recycling for a memory-BOUNDED forward. Before this, the
+        // arena never Reset MID-forward, so every layer's intermediates accumulated live for the
+        // whole pass: peak = O(depth · per-block churn) — the ~817 MB LAMBADA-eval forward that
+        // the arena (on OR off) never bounded, because the arena only recycled ACROSS calls, not
+        // WITHIN one. The eager forward loops (PredictEager hot path + Transformer.RunLayerWalk)
+        // now detach each layer's boundary activation and Reset the arena between layers, so a
+        // single forward reuses one block's scratch for every layer: peak ≈ O(one block),
+        // independent of depth. This is what makes BOTH the existing chunked PredictInBatches
+        // (per-chunk forward now bounded) and the streaming overload memory-safe by construction.
+        //
+        // Ownership is threaded through _inferenceRecycleArena (below), NOT TensorArena.Current,
+        // so the recycling fires ONLY for the arena THIS Predict created for THIS inference
+        // forward — never an outer training/composite arena (whose live tape/step tensors a
+        // mid-forward Reset would corrupt). Save/restore makes it nesting-safe.
         using var arena = TensorArena.Create();
-        var output = PredictCore(input);
+        var prevRecycle = _inferenceRecycleArena;
+        _inferenceRecycleArena =
+            InferenceArenaSettings.RecycleLayerScratch ? arena : null;
+        Tensor<T> output;
+        try
+        {
+            output = PredictCore(input);
+        }
+        finally
+        {
+            _inferenceRecycleArena = prevRecycle;
+        }
         return DetachFromArena(output);
+    }
+
+    /// <summary>
+    /// The <c>TensorArena</c> the current inference <see cref="Predict"/> call created for this
+    /// forward and has authorized the eager layer walk to recycle between layers (#1824). Null
+    /// when the inference arena is off, when per-layer recycling is disabled
+    /// (<see cref="InferenceArenaSettings.RecycleLayerScratch"/>), or when the forward is NOT an
+    /// inference <c>Predict</c> (e.g. a training forward under the optimizer's arena — that arena
+    /// holds live tape state a mid-forward <c>Reset</c> would corrupt, so it is never authorized).
+    /// [ThreadStatic] and save/restored across the <c>PredictCore</c> call so nested / composite
+    /// inference is safe (each level authorizes only its own arena).
+    /// </summary>
+    [ThreadStatic]
+    private static TensorArena? _inferenceRecycleArena;
+
+    /// <summary>
+    /// True when the current forward is running under an authorized inference recycle arena
+    /// (#1824) — i.e. per-layer scratch recycling is live. Lets overriding forward walks (e.g.
+    /// <see cref="Transformer{T}"/>'s encoder→decoder walk) detach any tensor they must carry
+    /// across the per-layer <c>Reset</c> (an attention mask, a captured encoder output) exactly
+    /// once, and skip that work on the training / non-arena paths where it would be wasted.
+    /// </summary>
+    private protected static bool InferenceRecycleActive => _inferenceRecycleArena is not null;
+
+    /// <summary>
+    /// Detaches a layer-boundary activation from the recycle arena and Resets the arena so the
+    /// NEXT layer reuses this layer's scratch buffers instead of allocating fresh — the core of
+    /// the memory-bounded forward (#1824). Detach copies <paramref name="boundary"/> to GC-owned
+    /// storage FIRST (it must survive the Reset that recycles the arena's backing arrays), then
+    /// rewinds the arena cursors. No-ops (returns the input unchanged) when this call is not
+    /// running under an authorized inference recycle arena, so training / non-arena forwards are
+    /// untouched. Safe for the sequential eager walk: once a layer's Forward returns, its internal
+    /// scratch is dead for this pass and only the boundary is carried forward.
+    /// </summary>
+    private protected static Tensor<T> DetachAndRecycleBetweenLayers(Tensor<T> boundary)
+    {
+        var arena = _inferenceRecycleArena;
+        if (arena is null) return boundary;
+        // The arena carries the boundary out of the recyclable scratch region (via its cross-arena
+        // persistent pool, so it survives the Reset AND is reused across calls — no per-forward GC
+        // churn), then Resets the scratch pool so the next layer reuses this layer's buffers.
+        return arena.DetachBoundaryAndReset(boundary);
     }
 
     /// <summary>
@@ -3380,7 +3448,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <c>ToArray()</c> materializes any GPU/lazy result and always returns a fresh plain array
     /// (never arena-routed), so the wrapped tensor is fully detached from the recycled scope.
     /// </summary>
-    private static Tensor<T> DetachFromArena(Tensor<T> output)
+    private protected static Tensor<T> DetachFromArena(Tensor<T> output)
     {
         var shape = new int[output.Rank];
         for (int i = 0; i < shape.Length; i++)
@@ -3413,6 +3481,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// single big forward. Callers that build such layers must opt out by
     /// invoking <see cref="Predict"/> directly. This is the same contract
     /// PyTorch eval-mode forward implies when iterating a DataLoader.
+    ///
+    /// <para>#1824: each chunk routes through <see cref="Predict"/>, whose eager forward now
+    /// Resets the per-call arena between layers (<see cref="InferenceArenaSettings.RecycleLayerScratch"/>),
+    /// so a chunk's forward peaks at ~one transformer block regardless of model depth — the
+    /// per-chunk encoder churn that used to make even the chunked path allocate O(depth · batch)
+    /// per slice is now bounded by construction. This overload still holds the concatenated
+    /// <c>[N, …, outputDim]</c> result live (by contract — it returns the full output); when the
+    /// caller only needs a per-row reduction (argmax / target log-prob) and N·outputDim is large,
+    /// prefer the streaming <see cref="PredictInBatches(Tensor{T}, int, Action{Tensor{T}, int})"/>
+    /// overload, which never materializes the full output.</para>
     /// </remarks>
     public virtual Tensor<T> PredictInBatches(Tensor<T> input, int batchSize)
     {
@@ -4493,8 +4571,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (!_weightLifetimeConfigured)
         {
             var c = input;
-            foreach (var layer in Layers)
-                c = layer.Forward(c);
+            int lastLayer = Layers.Count - 1;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                c = Layers[i].Forward(c);
+                // #1824: recycle this layer's forward scratch before the next
+                // layer allocates, keeping the arena's live working set at
+                // ~one layer instead of the whole depth. No-op unless running
+                // under an authorized inference recycle arena; the boundary is
+                // detached to GC first so it survives the Reset. Skip the last
+                // layer — the caller (Predict) detaches the final output.
+                if (i < lastLayer)
+                    c = DetachAndRecycleBetweenLayers(c);
+            }
             return c;
         }
 

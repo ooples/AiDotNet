@@ -159,6 +159,15 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         ImmutableArray<INamedTypeSymbol?> candidates,
         Compilation compilation)
     {
+        // Scope the model-metadata contract to the shipping AiDotNet library assembly ONLY.
+        // The generator is referenced as an analyzer by downstream projects — notably
+        // tests/AiDotNet.Tests (OutputItemType="Analyzer") — whose model-shaped types are test
+        // fixtures that legitimately lack the production ModelDomain/Category/Task/... attributes.
+        // Emitting AIDN001 (Error) against those breaks the test build. The contract only governs
+        // the models the library actually ships, so gate on the compilation's assembly name.
+        if (!string.Equals(compilation.AssemblyName, "AiDotNet", System.StringComparison.Ordinal))
+            return;
+
         if (candidates.IsDefaultOrEmpty)
             return;
 
