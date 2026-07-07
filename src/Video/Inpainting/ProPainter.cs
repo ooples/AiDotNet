@@ -257,6 +257,35 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         return InpaintFrame(input, mask, input, input, mask, mask);
     }
 
+    private bool _shapesProbed;
+
+    /// <inheritdoc/>
+    protected override void ResolveLazyLayerShapes()
+    {
+        // ProPainter's Layers list is NOT a linear pipeline: the real forward (InpaintFrame) runs the
+        // flow encoder/decoder on flow tensors and the image encoder on a mask-concatenated frame in
+        // a custom order. The base linear walk would feed the image encoder the flow-decoder output
+        // (wrong depth) and resolve the lazy convs inconsistently — corrupting inference the first
+        // time GetParameters/serialization runs. Probe the real forward once so every conv resolves
+        // to what InpaintFrame actually feeds it.
+        if (_shapesProbed || Layers.Count == 0) return;
+        _shapesProbed = true;
+        int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        _ = PredictCore(new Tensor<T>([1, c, 32, 32]));
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Route training through the SAME forward as inference (InpaintFrame with a zero mask, as in
+        // PredictCore). The base ForwardForTraining walks the flat Layers list linearly, which runs
+        // the flow AND image encoders in series — collapsing the spatial dims to 1x1 and producing a
+        // [N, C, 1, 1] output that cannot match the target ("Tensor shapes must match. Got
+        // [4, 3, 1, 1] and [4]"). Using the real forward keeps train/inference shape-consistent.
+        var mask = new Tensor<T>(input._shape);
+        return InpaintFrame(input, mask, input, input, mask, mask);
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -393,8 +422,13 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     private Tensor<T> CompleteFlow(Tensor<T> src, Tensor<T> dst, Tensor<T> mask)
     {
         int batchSize = src.Shape[0];
-        int height = _height;
-        int width = _width;
+        // Use the ACTUAL frame dimensions, not the architecture's baked _height/_width. The
+        // generated tests construct ProPainter via its parameterless ctor (256x256) but feed a
+        // smaller frame, so indexing src with _height/_width ran off the end of the tensor
+        // (IndexOutOfRange at src[b, 0, h, w +/- 1]). Deriving the loop bounds from src keeps the
+        // gradient/warp math in range for any input size.
+        int height = src.Shape[2];
+        int width = src.Shape[3];
 
         // Initialize coarse flow (zero)
         var flow = new Tensor<T>([batchSize, 2, height, width]);
