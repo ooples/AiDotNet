@@ -840,4 +840,77 @@ promptTemplate:
     }
 
     #endregion
+
+    #region Merged-section (RegistryMerged) regression — PR #1789 CodeRabbit fixes
+
+    /// <summary>
+    /// Thread 2 (YamlConfigSourceGenerator.GetYamlPropertyType): a RegistryMerged section whose builder
+    /// exposes the interface overload emits a <c>type:</c>/<c>params:</c> applier branch, so its
+    /// YamlModelConfig property MUST be a <see cref="YamlTypeSection"/> (exposing Type/Params). If the
+    /// generator instead surfaced the concrete POCO type, the applier's <c>config.AutoML.Type</c> access
+    /// would not compile. This pins the AutoML merged section to YamlTypeSection.
+    /// </summary>
+    [Fact]
+    public void YamlModelConfig_AutoMLMergedSection_PropertyIsYamlTypeSection()
+    {
+        var prop = typeof(YamlModelConfig).GetProperty("AutoML");
+        Assert.NotNull(prop);
+        Assert.Equal(typeof(YamlTypeSection), prop!.PropertyType);
+    }
+
+    /// <summary>
+    /// Threads 1+2: a YAML <c>autoML.type</c> naming a registered IAutoMLModel round-trips through the
+    /// merged applier branch (CreateInstance&lt;IAutoMLModel&gt; -&gt; builder.ConfigureAutoML(IAutoMLModel))
+    /// without error, proving the merged section is genuinely instantiable end to end and that the parsed
+    /// property carries the type name via YamlTypeSection.
+    /// </summary>
+    [Fact]
+    public void YamlRoundTrip_AutoMLMergedSection_ResolvesRegisteredEngine()
+    {
+        var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+        var interfaceType = typeof(IAutoMLModel<double, Matrix<double>, Vector<double>>);
+        var engineName = registries["AutoML"]
+            .Where(kvp => interfaceType.IsAssignableFrom(kvp.Value))
+            .Select(kvp => kvp.Key)
+            .First();
+
+        var yaml = $"autoML:\n  type: {engineName}\n";
+        var config = YamlConfigLoader.LoadFromString(yaml);
+
+        // Thread 2: the generated property is a YamlTypeSection carrying the parsed type name.
+        Assert.NotNull(config.AutoML);
+        Assert.Equal(engineName, config.AutoML!.Type);
+
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        var exception = Record.Exception(() =>
+            YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder));
+        Assert.Null(exception);
+    }
+
+    /// <summary>
+    /// Thread 3 (IAiModelBuilder): the advanced <c>ConfigureAutoML(IAutoMLModel&lt;...&gt;)</c> overload must
+    /// NOT be declared on the IAiModelBuilder interface (adding it is a breaking change for every external
+    /// implementer), but it MUST remain a public method on the concrete AiModelBuilder — which is exactly
+    /// what the generated YAML applier dispatches against.
+    /// </summary>
+    [Fact]
+    public void ConfigureAutoML_IAutoMLModelOverload_IsOnConcreteBuilderNotInterface()
+    {
+        var interfaceType = typeof(IAiModelBuilder<double, Matrix<double>, Vector<double>>);
+        var concreteType = typeof(AiModelBuilder<double, Matrix<double>, Vector<double>>);
+        var autoMLModelType = typeof(IAutoMLModel<double, Matrix<double>, Vector<double>>);
+
+        static bool HasIAutoMLModelOverload(Type t, Type paramType) => t
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Any(m => m.Name == "ConfigureAutoML"
+                && m.GetParameters().Length == 1
+                && m.GetParameters()[0].ParameterType == paramType);
+
+        Assert.False(HasIAutoMLModelOverload(interfaceType, autoMLModelType),
+            "ConfigureAutoML(IAutoMLModel<...>) must not be declared on IAiModelBuilder — it is a breaking change for external implementers.");
+        Assert.True(HasIAutoMLModelOverload(concreteType, autoMLModelType),
+            "ConfigureAutoML(IAutoMLModel<...>) must remain a public method on the concrete AiModelBuilder.");
+    }
+
+    #endregion
 }

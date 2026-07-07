@@ -332,11 +332,36 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
             if (!string.Equals(method.Name, methodName, StringComparison.Ordinal)) continue;
             if (method.Parameters.Length == 0) continue;
 
+            // The applier emits `builder.Configure<Section>(instance)` where `instance` is typed
+            // as `interfaceType`. That single-argument call only binds when every trailing parameter
+            // is optional (or params), so reject overloads with required trailing parameters.
+            if (HasRequiredTrailingParameters(method)) continue;
+
+            // For `builder.Configure<Section>(instance)` to compile, the first parameter must be
+            // assignable FROM `interfaceType` — i.e. it is `interfaceType` itself or a base interface
+            // that `interfaceType` implements. (Checking `paramType.AllInterfaces` would be the wrong
+            // direction: it would also accept a MORE-derived concrete parameter that an
+            // `interfaceType`-typed argument cannot satisfy.)
             var paramType = method.Parameters[0].Type;
             if (SymbolEqualityComparer.Default.Equals(paramType.OriginalDefinition, interfaceType.OriginalDefinition))
                 return true;
-            if (paramType.AllInterfaces.Any(i =>
-                    SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, interfaceType.OriginalDefinition)))
+            if (interfaceType.AllInterfaces.Any(i =>
+                    SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, paramType.OriginalDefinition)))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="method"/> has any parameter after the first that is neither
+    /// optional nor a <c>params</c> array — i.e. a single-argument invocation of it would not compile.
+    /// </summary>
+    private static bool HasRequiredTrailingParameters(IMethodSymbol method)
+    {
+        for (var i = 1; i < method.Parameters.Length; i++)
+        {
+            var p = method.Parameters[i];
+            if (!p.IsOptional && !p.IsParams)
                 return true;
         }
         return false;
@@ -1240,6 +1265,17 @@ internal static class YamlParamsHelper
 
     private static string GetYamlPropertyType(SectionInfo section)
     {
+        // A merged POCO+interface section whose builder exposes the interface overload emits a
+        // `type:`/`params:` applier branch (see EmitYamlConfigApplier), so the YAML property MUST be
+        // a YamlTypeSection regardless of the POCO's own shape. Otherwise a non-generic merged POCO
+        // would surface its concrete type here and the applier's `config.<Section>.Type` access
+        // would not compile. This mirrors the applier's `RegistryMerged && MergedInterfaceTypeName`
+        // guard exactly; registry-only merges (no interface overload) keep the POCO path below.
+        if (section.Method.RegistryMerged && section.Method.MergedInterfaceTypeName is not null)
+        {
+            return "YamlTypeSection";
+        }
+
         return section.Method.Category switch
         {
             SectionCategory.Interface => "YamlTypeSection",

@@ -913,19 +913,11 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null);
 
-    /// <summary>
-    /// Configures AutoML with a custom <see cref="IAutoMLModel{T,TInput,TOutput}"/> search engine (advanced).
-    /// </summary>
-    /// <param name="autoMLModel">A concrete AutoML search engine to drive the search. Must not be null.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// Use this overload to plug in a specific AutoML implementation instead of the strategy-selected default
-    /// built by <see cref="ConfigureAutoML(AutoMLOptions{T,TInput,TOutput})"/>. It is also the overload the YAML
-    /// loader targets when an <c>autoML.type</c> names a registered implementation.
-    /// </para>
-    /// </remarks>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+    // NOTE: The advanced ConfigureAutoML(IAutoMLModel<T,TInput,TOutput>) overload is intentionally
+    // NOT part of this interface. Adding it would be a breaking change for every external
+    // IAiModelBuilder<T,TInput,TOutput> implementer. It remains a public method on the concrete
+    // AiModelBuilder<T,TInput,TOutput>, which is also what the generated YAML applier targets
+    // (it dispatches against the concrete builder type, not this interface).
 
     /// <summary>
     /// Configures reinforcement learning options for training an RL agent.
