@@ -2093,6 +2093,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 4, " +
                     "VocabSize = 4, MaxTextLength = 8, DropoutRate = 0.0, ComputeType = \"float32\", BeamSize = 1 })";
             }
+            else if (model.ClassName == "Pengi" && model.TypeParameterCount == 1)
+            {
+                // Pengi (Deshmukh et al. 2023) is an audio-language model: an audio encoder ->
+                // attention-based audio-to-LM projection (CreateDefaultPengiLayers) whose leading layer
+                // is a MultiHeadAttention over AudioEncoderDim, so it consumes [batch, seq, AudioEncoderDim]
+                // audio-token tensors — never a raw [1, 64, 32] spectrogram. Its production default
+                // (AudioEncoderDim 768 / LLMHiddenDim 2048) produced "embedding dimension (16) does not
+                // match weight dimension (768)" across every invariant. Build the same projection
+                // architecture at CI-smoke width (AudioEncoderDim == LLMHiddenDim == 128, 1 projection
+                // block, dropout 0) and feed the matching [1, 4, 128] audio-token InputShape (emitted
+                // in the isAudio branch below). Uses the native (architecture, options) ctor, not ONNX.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 128), " +
+                    "new AiDotNet.Audio.Multimodal.PengiOptions { AudioEncoderDim = 128, LLMHiddenDim = 128, " +
+                    "NumProjectionLayers = 1, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "JambaLanguageModel" && model.TypeParameterCount == 1)
             {
                 // Jamba's production default is a high-vocab hybrid LM head.
@@ -3452,6 +3470,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 4 };");
                 sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
+            }
+            else if (model.ClassName == "Pengi")
+            {
+                // Pengi's CreateDefaultPengiLayers leads with a MultiHeadAttention over AudioEncoderDim
+                // and ends with a DenseLayer(LLMHiddenDim), so at the CI-smoke width built above
+                // (AudioEncoderDim == LLMHiddenDim == 128) it maps [1, 4, 128] audio tokens -> [1, 4, 128].
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 4, 128 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 128 };");
             }
             else
             {
