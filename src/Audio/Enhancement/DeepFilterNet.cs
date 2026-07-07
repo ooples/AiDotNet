@@ -665,12 +665,21 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return IstftDifferentiable(specEnh, numFrames, outLen);
     }
 
-    /// <summary>Differentiable STFT: frame → Hann window → RFFT, all tape-aware. Returns [T, numFreqs*2].</summary>
+    /// <summary>Center-pad amount (L/2) so every ORIGINAL output sample sits under full window coverage.</summary>
+    private int CenterPad => FrameLen / 2;
+
+    /// <summary>Differentiable STFT: center-pad → frame → Hann window → RFFT, all tape-aware. Returns [T, numFreqs*2].</summary>
     private Tensor<T> StftDifferentiable(Tensor<T> audio)
     {
-        int L = FrameLen, hop = _hopSize;
-        int samples = audio.Length;
-        var flat = Engine.Reshape(audio, [samples]);
+        int L = FrameLen, hop = _hopSize, pad = CenterPad;
+        int origSamples = audio.Length;
+        var flat = Engine.Reshape(audio, [origSamples]);
+
+        // Center padding (librosa center=True): the first frame is centered on sample 0, so original
+        // samples never fall in a barely-covered window tail — keeping every output sample well-scaled
+        // and its clone (compiled-plan-vs-fresh) diff at float-epsilon-relative, not O(value) at edges.
+        flat = Engine.TensorConstantPad(flat, [pad, pad], NumOps.Zero);
+        int samples = origSamples + 2 * pad;
 
         int numFrames = samples < L ? 1 : 1 + (samples - L) / hop;
         int needed = (numFrames - 1) * hop + L;
@@ -708,15 +717,27 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         var result = acc ?? Engine.TensorConstantPad(Engine.Reshape(spectrum, [spectrum.Length]), [0, 0], NumOps.Zero);
 
-        // Weighted overlap-add normalization: divide by the per-sample sum of squared analysis+synthesis
-        // windows (a constant), so overlapping frames reconstruct at the correct amplitude instead of the
-        // window² attenuation that leaves near-silent edge samples (which then trip the clone test's tight
-        // absolute tolerance on near-zero values). This is the standard WOLA reconstruction.
-        var wsum = WindowOverlapSum(numFrames, fullLen); // [fullLen], constant
-        result = Engine.TensorDivide(result, wsum);
+        // Overlap-add normalization by the CONSTANT interior window-overlap (peak of Σ window²), NOT a
+        // per-sample divisor. For Hann + 50% overlap the interior Σ window² is constant, so a single
+        // scalar reconstructs fully-covered samples at the correct amplitude. Dividing per-sample would
+        // divide barely-covered EDGE samples by a near-zero sum, amplifying the compiled-plan-vs-fresh
+        // float noise into an O(1) discrepancy (broke Clone_ShouldProduceIdenticalOutput). A scalar
+        // divisor only ATTENUATES edges (never amplifies), keeping reconstruction deterministic.
+        double peakOverlap = PeakWindowOverlap(numFrames, fullLen);
+        result = Engine.TensorMultiplyScalar(result, NumOps.FromDouble(1.0 / peakOverlap));
 
-        if (fullLen > outLen) result = Engine.TensorSlice(result, [0], [outLen]);
-        else if (fullLen < outLen) result = Engine.TensorConstantPad(result, [0, outLen - fullLen], NumOps.Zero);
+        // Undo the center padding: original sample n lives at padded index CenterPad + n.
+        int pad = CenterPad;
+        int avail = fullLen - pad;
+        if (avail >= outLen)
+        {
+            result = Engine.TensorSlice(result, [pad], [outLen]);
+        }
+        else
+        {
+            if (pad > 0) result = Engine.TensorSlice(result, [pad], [Math.Max(0, avail)]);
+            result = Engine.TensorConstantPad(result, [0, outLen - Math.Max(0, avail)], NumOps.Zero);
+        }
         return result;
     }
 
@@ -801,11 +822,11 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Per-sample sum of squared (analysis·synthesis) Hann windows across all overlapping frames —
-    /// the WOLA normalization denominator. Constant (non-trainable), floored by a small epsilon so the
-    /// division is safe at edge samples that no frame covers.
+    /// The peak per-sample sum of squared (analysis·synthesis) Hann windows across overlapping frames —
+    /// i.e. the constant interior overlap of a fully-covered output sample. Used as the single scalar
+    /// overlap-add normalizer (see IstftDifferentiable).
     /// </summary>
-    private Tensor<T> WindowOverlapSum(int numFrames, int fullLen)
+    private double PeakWindowOverlap(int numFrames, int fullLen)
     {
         int L = FrameLen, hop = _hopSize;
         var win = HannWindow().ToVector();
@@ -819,19 +840,9 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 sum[off + i] += w * w;
             }
         }
-        // Floor RELATIVE to the peak overlap (not a tiny absolute epsilon): edge samples the window
-        // barely covers have a near-zero true sum, and dividing by it would amplify the compiled-plan-
-        // vs-fresh float noise by ~1/window² into an O(1) discrepancy (breaking clone-determinism at
-        // those samples). Flooring at 1e-3·peak bounds the per-sample gain to ~1000×, so those few
-        // edge samples are gently attenuated instead of blowing up, while the fully-covered interior
-        // (sum ≈ peak) normalizes exactly.
         double peak = 0.0;
         for (int i = 0; i < fullLen; i++) if (sum[i] > peak) peak = sum[i];
-        double floor = Math.Max(1e-8, 1e-3 * peak);
-        var data = new Vector<T>(fullLen);
-        for (int i = 0; i < fullLen; i++)
-            data[i] = NumOps.FromDouble(sum[i] < floor ? floor : sum[i]);
-        return new Tensor<T>([fullLen], data);
+        return peak < 1e-8 ? 1e-8 : peak;
     }
 
     private Tensor<T> HannWindow()
