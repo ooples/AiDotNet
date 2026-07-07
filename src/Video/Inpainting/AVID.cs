@@ -131,6 +131,37 @@ public class AVID<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
 
+    private bool _shapesProbed;
+
+    /// <inheritdoc/>
+    protected override void ResolveLazyLayerShapes()
+    {
+        // AVID's inference path (PredictCore -> Inpaint) concatenates a 1-channel mask before the
+        // encoder, so the lazy first conv must resolve to InputDepth+1 — not the InputDepth the base
+        // linear walk infers from the architecture input shape. Probe the real inference forward once
+        // on a tiny dummy frame so callers that run before any real forward (GetParameters,
+        // serialization, Clone) resolve the encoder to the same depth training and inference feed it.
+        if (_shapesProbed || Layers.Count == 0) return;
+        _shapesProbed = true;
+        int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        _ = PredictCore(new Tensor<T>([1, c, 32, 32]));
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Training must apply the SAME transform inference does (Inpaint): normalize the frames,
+        // concatenate a 1-channel mask (InputDepth -> InputDepth+1 so the encoder conv matches),
+        // run the layer stack, then denormalize. Feeding the raw InputDepth frames straight through
+        // the base would resolve/expect a different first-conv depth than inference AND train in a
+        // different value space, so the two paths would diverge. Delegate the actual layer walk
+        // (autodiff tape, gradient checkpointing, seed-wiring) to the base by handing it the
+        // mask-concatenated tensor; normalize/denormalize are Engine ops so gradients still flow.
+        var mask = new Tensor<T>([input.Shape[0], 1, input.Shape[2], input.Shape[3]]);
+        var combined = ConcatFramesAndMasks(PreprocessFrames(input), mask);
+        return PostprocessOutput(base.ForwardForTraining(combined));
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
