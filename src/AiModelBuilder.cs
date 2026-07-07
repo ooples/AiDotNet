@@ -200,6 +200,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     internal IFullModel<T, TInput, TOutput>? ConfiguredModel => _model;
 
     private IOptimizer<T, TInput, TOutput>? _optimizer;
+
+    /// <summary>
+    /// Optional pluggable credit-assignment (learning) rule set via <c>ConfigureCreditRule</c>. Null = default
+    /// back-propagation.
+    /// </summary>
+    private Interfaces.ICreditRule<T>? _creditRule;
+
+    /// <summary>Optional RNG seed for the credit rule's fixed feedback matrices (reproducibility).</summary>
+    private int? _creditRuleSeed;
+
     private IDataLoader<T>? _dataLoader;
     private DataPreparationPipeline<T>? _dataPreparationPipeline;
     private IBiasDetector<T>? _biasDetector;
@@ -325,6 +335,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IExperimentTracker<T>? _experimentTracker;
     private ICheckpointManager<T, TInput, TOutput>? _checkpointManager;
     private ITrainingMonitor<T>? _trainingMonitor;
+
+    /// <summary>
+    /// User-registered per-epoch training callbacks (see
+    /// <see cref="ConfigureTrainingCallback(ITrainingCallback{T})"/>). All are invoked each
+    /// epoch on the supervised training paths; training aborts if any returns <c>false</c>.
+    /// </summary>
+    private readonly List<ITrainingCallback<T>> _trainingCallbacks = new();
     private IModelRegistry<T, TInput, TOutput>? _modelRegistry;
     private IDataVersionControl<T>? _dataVersionControl;
     private IHyperparameterOptimizer<T, TInput, TOutput>? _hyperparameterOptimizer;

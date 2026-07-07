@@ -96,6 +96,8 @@
 	       of the core package. -->
 	  <!-- <PackageReference Include="Elastic.Clients.Elasticsearch" /> -->
 
+	  <!-- Ed25519 (EdDSA) for asymmetric aidn2 license verification — no BCL Ed25519 on any TFM. -->
+	  <PackageReference Include="BouncyCastle.Cryptography" />
 	  <PackageReference Include="Google.Protobuf" />
 	  <PackageReference Include="Microsoft.CSharp" />
 	  <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
@@ -271,6 +273,16 @@
 	       protection. Injected during official CI/CD builds only. -->
 	  <EmbeddedResource Include="BuildKey\BuildKey.bin" Condition="Exists('BuildKey\BuildKey.bin')">
 	    <LogicalName>AiDotNet.BuildKey</LogicalName>
+	  </EmbeddedResource>
+	  <!-- Asymmetric license PUBLIC signing key(s) used by LicensePublicKeyProvider to verify
+	       aidn2.{claims}.{signature} tokens offline (Ed25519 / EdDSA). Unlike BuildKey this is a
+	       PUBLIC key and is safe to ship/extract (worthless to a forger). Injected during official
+	       CI/CD builds; CI generates the Ed25519 keypair, keeps the PRIVATE key in a secret store
+	       (never committed), and drops the public half here as JWK OKP JSON:
+	       { "keys": [ { "kty":"OKP", "crv":"Ed25519", "kid":"...", "x":"<base64url 32-byte pubkey>" } ] }.
+	       See LicensePublicKeyProvider.cs. -->
+	  <EmbeddedResource Include="BuildKey\LicensePublicKey.json" Condition="Exists('BuildKey\LicensePublicKey.json')">
+	    <LogicalName>AiDotNet.LicensePublicKey</LogicalName>
 	  </EmbeddedResource>
 	  <EmbeddedResource Include="IntegrityHash\IntegrityHash.bin" Condition="Exists('IntegrityHash\IntegrityHash.bin')">
 	    <LogicalName>AiDotNet.IntegrityHash</LogicalName>

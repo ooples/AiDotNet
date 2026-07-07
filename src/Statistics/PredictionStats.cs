@@ -639,6 +639,26 @@ public class PredictionStats<T>
     }
 
     /// <summary>
+    /// Builds the FULL prediction stats from <paramref name="inputs"/> (all the deferred metrics —
+    /// AdjustedR², intervals, correlations, learning curve — remain available), but overrides the eagerly
+    /// computed R²/AdjustedR² with a caller-supplied <paramref name="seededR2"/>.
+    /// </summary>
+    /// <remarks>
+    /// Used by the multi-output optimizer path, where the authoritative model-selection signal is the
+    /// uniform-average R² across the output columns rather than the pooled R² of the flattened residuals —
+    /// yet the remaining stats should still be populated (not left at <see cref="WithR2Only"/>'s defaults).
+    /// </remarks>
+    internal static PredictionStats<T> WithFullStatsAndSeededR2(PredictionStatsInputs<T> inputs, T seededR2)
+    {
+        var stats = new PredictionStats<T>(inputs);
+        // Override the eager (pooled) R² with the authoritative uniform-average, and keep AdjustedR²
+        // consistent with it. The 30+ deferred metrics still compute lazily from `inputs` on first access.
+        stats.R2 = seededR2;
+        stats.AdjustedR2 = StatisticsHelper<T>.CalculateAdjustedR2(seededR2, inputs.Actual.Length, inputs.NumberOfParameters);
+        return stats;
+    }
+
+    /// <summary>
     /// Calculates all prediction statistics based on actual and predicted values.
     /// </summary>
     /// <param name="actual">Vector of actual values (ground truth).</param>

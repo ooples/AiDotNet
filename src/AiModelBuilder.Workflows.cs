@@ -1535,6 +1535,76 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Registers a per-epoch training callback using a simple delegate.
+    /// </summary>
+    /// <param name="onEpochEnd">
+    /// A function called once after each training epoch with a <see cref="TrainingProgress{T}"/>
+    /// snapshot. Return <c>true</c> to keep training or <c>false</c> to stop early.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the one-liner way to watch training as it happens.
+    /// Pass a small function and it runs after every epoch, handing you the current loss and
+    /// epoch number. Do whatever you like with it — print it, plot it, or stop training early
+    /// by returning <c>false</c>:</para>
+    /// <example>
+    /// <code>
+    /// builder.ConfigureTrainingCallback(p =>
+    /// {
+    ///     Console.WriteLine($"epoch {p.Epoch}: loss={p.Loss}");
+    ///     return p.Epoch &lt; 10; // stop after 10 epochs
+    /// });
+    /// </code>
+    /// </example>
+    /// <para>You can call this multiple times (and mix it with the
+    /// <see cref="ConfigureTrainingCallback(ITrainingCallback{T})"/> overload) to register
+    /// several callbacks; training aborts if any of them returns <c>false</c>.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingCallback(Func<TrainingProgress<T>, bool> onEpochEnd)
+    {
+        if (onEpochEnd is null)
+        {
+            throw new ArgumentNullException(nameof(onEpochEnd));
+        }
+
+        _trainingCallbacks.Add(new TrainingMonitoring.DelegateTrainingCallback<T>(onEpochEnd));
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a full <see cref="ITrainingCallback{T}"/> that observes training and can abort it.
+    /// </summary>
+    /// <param name="callback">
+    /// The callback to register. Its <see cref="ITrainingCallback{T}.OnTrainBegin"/>,
+    /// <see cref="ITrainingCallback{T}.OnEpochEnd"/>, and <see cref="ITrainingCallback{T}.OnTrainEnd"/>
+    /// methods are invoked by the supervised training loops.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this when you want more than a one-liner — for example a
+    /// reusable object that sets up before training, reacts after each epoch, and cleans up at
+    /// the end. A ready-made example is <see cref="AiDotNet.TrainingMonitoring.HealthMonitorCallback{T}"/>,
+    /// which automatically stops a run whose loss blows up:</para>
+    /// <example>
+    /// <code>
+    /// builder.ConfigureTrainingCallback(new HealthMonitorCallback&lt;float&gt;());
+    /// </code>
+    /// </example>
+    /// <para>You can register multiple callbacks (and combine them with the delegate overload);
+    /// they are all invoked each epoch and training aborts if any returns <c>false</c>.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingCallback(ITrainingCallback<T> callback)
+    {
+        if (callback is null)
+        {
+            throw new ArgumentNullException(nameof(callback));
+        }
+
+        _trainingCallbacks.Add(callback);
+        return this;
+    }
+
+    /// <summary>
     /// Configures model registry for centralized model storage and versioning.
     /// </summary>
     /// <param name="registry">The model registry implementation to use.</param>

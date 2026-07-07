@@ -727,7 +727,18 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
-        foreach (var param in context.Parameters)
+        // Per-parameter Adam updates are fully INDEPENDENT: each param's m/v/vMax
+        // live in the _tapeM/_tapeV/_tapeVMax ConcurrentDictionaries keyed by tensor
+        // identity, and ProcessParam writes only to that param's own storage (param,
+        // m, v, vMax). No two params share any mutable state, so processing them
+        // concurrently is deterministic and bit-identical to the serial version.
+        // Parallelizing this loop across CPU threads closes the gap with PyTorch's
+        // multi-tensor eager Adam kernel (issue 1 of 3 in #1804). The gpuAdam case
+        // stays on the serial path to preserve GPU stream ordering.
+        var __params = context.Parameters as System.Collections.Generic.IReadOnlyList<Tensor<T>>
+            ?? System.Linq.Enumerable.ToList(context.Parameters);
+
+        void ProcessParam(Tensor<T> param)
         {
             // Cheap presence check — do NOT materialize sparse→dense yet. When only
             // sparse embedding grads exist, eagerly resolving the "effective" gradient
@@ -738,7 +749,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             bool hasDenseGrad = context.Gradients.TryGetValue(param, out var denseGradLookup) && denseGradLookup is not null;
             bool hasSparseGrad = SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param);
             if (!hasDenseGrad && !hasSparseGrad)
-                continue;
+                return;
 
             // Sparse-aware fast path for embedding-table parameters: when the
             // backward came from a SparseEmbeddingGradient (Tensors PR #553),
@@ -806,7 +817,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
                     param, m, v, lr, b1, b2, bc1, bc2, eps, weightDecay: 0.0))
             {
-                continue;
+                return;
             }
 
             // Sparse path declined (AMSGrad, non-rank-2 layout, or no sparse grads) —
@@ -814,7 +825,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             // the ToDense finally happens, and only because a dense update genuinely
             // needs it. Reuse the lookup we already did above.
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
-                continue;
+                return;
 
             // Reshape gradient to match parameter shape if element counts match
             // (can happen when Reshape adds/removes batch dimensions in forward pass)
@@ -834,7 +845,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 var vf = (Tensor<float>)(object)v;
                 if (AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamStep(
                         pf, gf, mf, vf, (float)lr, (float)b1, (float)b2, (float)eps, 0f, _tapeStep))
-                    continue;   // weights/moments updated in place on GPU; skip the CPU SIMD path for this param
+                    return;   // weights/moments updated in place on GPU; skip the CPU SIMD path for this param
             }
 
             int n = param.Length;
@@ -972,29 +983,13 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
                     && (!useAmsgrad || vMaxArr is not null))
                 {
-                    for (int i = 0; i < n; i++)
-                    {
-                        float g = gradArr[i];
-                        float mNew = fb1 * mArr[i] + f1mb1 * g;
-                        float vNew = fb2 * vArr[i] + f1mb2 * g * g;
-                        mArr[i] = mNew;
-                        vArr[i] = vNew;
-                        float mHat = mNew / fbc1;
-                        float vHatEff;
-                        if (useAmsgrad)
-                        {
-                            float vHatNow = vNew / fbc2;
-                            float vMaxPrev = vMaxArr![i];
-                            float vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
-                            vMaxArr[i] = vMaxNew;
-                            vHatEff = vMaxNew;
-                        }
-                        else
-                        {
-                            vHatEff = vNew / fbc2;
-                        }
-                        paramArr[i] -= flr * mHat / ((float)Math.Sqrt(vHatEff) + feps);
-                    }
+                    // SIMD (AVX2/FMA) Adam/AMSGrad step — single source of truth in
+                    // AdamMomentKernels (InternalsVisibleTo "AiDotNet"). Replaces the
+                    // hand-rolled scalar loop; numerics are bit-near (FMA moment update).
+                    AiDotNet.Tensors.Engines.Simd.AdamMomentKernels.AdamStep(
+                        paramArr.AsSpan(0, n), gradArr.AsSpan(0, n), mArr.AsSpan(0, n), vArr.AsSpan(0, n),
+                        useAmsgrad ? vMaxArr!.AsSpan(0, n) : System.Span<float>.Empty,
+                        fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
                 }
                 else
                 {
@@ -1002,47 +997,19 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                     var gradF = (Tensor<float>)(object)grad;
                     var mF = (Tensor<float>)(object)m;
                     var vF = (Tensor<float>)(object)v;
+                    // Buffer-aliased view path (non-zero storage offset): AsWritableSpan
+                    // slices into the live backing at the correct offset so mutations land
+                    // on the shared ParameterBuffer. Same SIMD kernel as the array path.
                     System.Span<float> paramSpan = paramF.AsWritableSpan();
                     System.ReadOnlySpan<float> gradSpan = gradF.AsSpan();
                     System.Span<float> mSpan = mF.AsWritableSpan();
                     System.Span<float> vSpan = vF.AsWritableSpan();
-                    ref float paramR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(paramSpan);
-                    ref float gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
-                    ref float mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
-                    ref float vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
-                    ref float vMaxR = ref System.Runtime.CompilerServices.Unsafe.NullRef<float>();
-                    if (useAmsgrad)
-                    {
-                        var vMaxF = (Tensor<float>)(object)vMax!;
-                        System.Span<float> vMaxSpan = vMaxF.AsWritableSpan();
-                        vMaxR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vMaxSpan);
-                    }
-                    for (int i = 0; i < n; i++)
-                    {
-                        float g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
-                        float mPrev = System.Runtime.CompilerServices.Unsafe.Add(ref mR, i);
-                        float vPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vR, i);
-                        float mNew = fb1 * mPrev + f1mb1 * g;
-                        float vNew = fb2 * vPrev + f1mb2 * g * g;
-                        System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
-                        System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
-                        float mHat = mNew / fbc1;
-                        float vHatEff;
-                        if (useAmsgrad)
-                        {
-                            float vHatNow = vNew / fbc2;
-                            float vMaxPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i);
-                            float vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
-                            System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i) = vMaxNew;
-                            vHatEff = vMaxNew;
-                        }
-                        else
-                        {
-                            vHatEff = vNew / fbc2;
-                        }
-                        System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
-                            flr * mHat / ((float)Math.Sqrt(vHatEff) + feps);
-                    }
+                    System.Span<float> vMaxSpan = useAmsgrad
+                        ? ((Tensor<float>)(object)vMax!).AsWritableSpan()
+                        : System.Span<float>.Empty;
+                    AiDotNet.Tensors.Engines.Simd.AdamMomentKernels.AdamStep(
+                        paramSpan, gradSpan, mSpan, vSpan, vMaxSpan,
+                        fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
                 }
             }
             else
@@ -1090,6 +1057,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 var scaledUpdate = Engine.TensorMultiplyScalar(update, CurrentLearningRate);
                 Engine.TensorSubtractInPlace(param, scaledUpdate);
             }
+        }
+
+        // Fan the independent per-parameter updates across CPU threads. Skipped for
+        // the GPU-resident path (gpuAdam) to keep the single GPU stream ordered, and
+        // for the trivial single-parameter case where thread dispatch is pure overhead.
+        bool __canParallel = !gpuAdam && __params.Count > 1;
+        if (__canParallel)
+        {
+            System.Threading.Tasks.Parallel.For(0, __params.Count,
+                new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+                __i => ProcessParam(__params[__i]));
+        }
+        else
+        {
+            for (int __i = 0; __i < __params.Count; __i++) ProcessParam(__params[__i]);
         }
     }
 

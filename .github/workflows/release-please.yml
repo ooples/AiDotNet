@@ -1,0 +1,146 @@
+name: Release Please
+
+# Batched, reviewable releases (replaces the per-push automated-release.yml).
+#
+# How it works:
+#   1. Every push to master, release-please accumulates the conventional-commit changes since the
+#      last release into a rolling "Release PR" (version bump + CHANGELOG). NO release is cut yet —
+#      merges just keep updating that one PR, so a burst of merged PRs bundles into a single version.
+#   2. When a maintainer merges the Release PR, release-please creates the git tag (v<version>) and
+#      the GitHub release. Only then does the `publish` job run: it builds, packs, pushes to NuGet,
+#      and attaches the .nupkg to the release.
+#
+# This gives deliberate, atomic, batched releases instead of one release per merged PR.
+
+on:
+  push:
+    branches:
+      - master
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Serialize (never cancel): a release cut / PR update must finish. Runs are cheap when they only
+# update the Release PR, and must be atomic when they actually publish.
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Maintain Release PR / cut release
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+      version: ${{ steps.rp.outputs.version }}
+    steps:
+      - name: Run release-please
+        id: rp
+        uses: googleapis/release-please-action@a02a34c4d625f9be7cb89156071d8567266a2445 # v4.1.3
+        with:
+          # A PAT (not GITHUB_TOKEN) so the Release PR and the release/tag it creates can trigger the
+          # normal CI checks; GITHUB_TOKEN-authored events don't re-trigger workflows. Falls back to
+          # GITHUB_TOKEN if the PAT isn't configured (PR still opens, CI just won't auto-run on it).
+          token: ${{ secrets.AUTOFIX_PAT || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    name: Build, pack, publish NuGet
+    runs-on: ubuntu-latest
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    timeout-minutes: 25
+    steps:
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet/shared/Microsoft.AspNetCore.App/6.* \
+            /usr/share/dotnet/shared/Microsoft.AspNetCore.App/7.* /usr/share/dotnet/shared/Microsoft.NETCore.App/6.* \
+            /usr/share/dotnet/shared/Microsoft.NETCore.App/7.* /opt/hostedtoolcache/CodeQL /usr/share/swift \
+            /opt/ghc /usr/local/.ghcup || true
+          sudo apt-get clean || true
+          docker system prune -af || true
+          df -h /
+
+      - name: Checkout the release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Inject build signing key
+        run: |
+          if [ -z "${{ secrets.AIDOTNET_BUILD_KEY }}" ]; then
+            echo "::error::AIDOTNET_BUILD_KEY secret is not configured. Cannot publish unsigned artifacts."
+            exit 1
+          fi
+          mkdir -p src/BuildKey
+          echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
+          echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
+
+      - name: Generate integrity hash
+        run: |
+          mkdir -p src/IntegrityHash
+          BUILD_KEY_HEX=$(xxd -p -c 256 src/BuildKey/BuildKey.bin | tr -d '\n')
+          # HMAC-SHA256(buildKey, buildKey) — matches AssemblyIntegrityChecker.VerifyIntegrity()
+          openssl dgst -sha256 -mac HMAC -macopt "hexkey:${BUILD_KEY_HEX}" -binary < src/BuildKey/BuildKey.bin > src/IntegrityHash/IntegrityHash.bin
+          echo "Integrity hash generated ($(wc -c < src/IntegrityHash/IntegrityHash.bin) bytes)"
+
+      - name: Restore and Build
+        run: |
+          dotnet restore
+          dotnet build -c Release --no-restore
+
+      - name: Pack NuGet
+        run: |
+          dotnet pack src/AiDotNet.csproj -c Release -o out --no-build \
+            /p:PackageVersion=${{ needs.release-please.outputs.version }}
+          echo "Package created: AiDotNet.${{ needs.release-please.outputs.version }}.nupkg"
+
+      - name: Verify TFMs in package (net471, net10.0)
+        run: |
+          set -e
+          shopt -s nullglob
+          pkgs=(out/*.nupkg)
+          [ ${#pkgs[@]} -gt 0 ] || { echo "Error: No packages found in out/"; exit 1; }
+          for pkg in "${pkgs[@]}"; do
+            files=$(unzip -Z1 "$pkg")
+            for tfm in net471 net10.0; do
+              echo "$files" | grep -qE "^lib/${tfm}/.+\.dll$" || { echo "Error: Missing ${tfm} lib in $pkg"; exit 1; }
+              echo "Found ${tfm} in $(basename "$pkg")"
+            done
+          done
+
+      - name: Push to NuGet
+        run: |
+          shopt -s nullglob
+          pkgs=(out/*.nupkg)
+          [ ${#pkgs[@]} -gt 0 ] || { echo "Error: No .nupkg files found in out/"; exit 1; }
+          for pkg in "${pkgs[@]}"; do
+            echo "Publishing $pkg to NuGet..."
+            dotnet nuget push "$pkg" \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+
+      - name: Attach .nupkg to the GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.release-please.outputs.tag_name }}" out/*.nupkg --clobber

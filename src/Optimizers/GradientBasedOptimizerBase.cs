@@ -1570,6 +1570,28 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 // Step mutates the parameter tensors in place via tape semantics;
                 // since we passed the live parameter-chunk refs, the model is
                 // already updated. No SetParameters call needed.
+                //
+                // GPU-cache coherency: Step writes the new weights straight into each parameter
+                // tensor's backing storage (via GetLiveBackingArrayOrNull()/AsWritableSpan()) WITHOUT
+                // going through a Tensor API that bumps the version. A GPU engine caches an uploaded
+                // copy of each weight tensor keyed by that backing array; without an explicit
+                // invalidation the version gate ('_gpuBufferVersion == Version') still matches and the
+                // NEXT forward reads the STALE device weights from step 0, so the model appears to
+                // train on the host (GetParameters changes) while the GPU forward never sees the
+                // update — GPU-engine training then diverges from the CPU engine. Tell the engine each
+                // updated parameter changed so it re-uploads on the next use. On the CPU engine this is
+                // a no-op. (The legacy SetParameters path below already refreshes device state.)
+                var updatedParams = ctx.Parameters;
+                for (int pi = 0; pi < updatedParams.Count; pi++)
+                {
+                    var updated = updatedParams[pi];
+                    // Bump the version so a GPU engine's version gate re-uploads the mutated weights
+                    // from the host backing store on the next forward. IncrementVersion is a lightweight
+                    // mark-dirty — unlike InvalidatePersistentTensor it does NOT download the current
+                    // device buffer to host (which, for a GPU-resident parameter, would overwrite the
+                    // Adam update we just wrote and freeze training).
+                    updated?.IncrementVersion();
+                }
                 return currentSolution;
             }
             // Fall through to legacy path if synthesis declined (e.g. no chunks).

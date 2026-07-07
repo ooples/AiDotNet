@@ -1427,7 +1427,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             memberOptimizer.SetModel(memberModel);
 
             var memberInputData = CreateDeepEnsembleMemberOptimizationInputData(optimizationInputData, baseSeed, memberIndex);
-            var memberResult = memberOptimizer.Optimize(memberInputData);
+            OptimizationResult<T, TInput, TOutput> memberResult;
+            // Zero-alloc training scope (#1804): reuse Engine-op scratch across this member's steps.
+            using (var __trainArena = AiDotNet.Tensors.Helpers.TensorArena.Create())
+            {
+                memberResult = memberOptimizer.Optimize(memberInputData);
+            }
             if (memberResult.BestSolution != null)
             {
                 members.Add(memberResult.BestSolution);
