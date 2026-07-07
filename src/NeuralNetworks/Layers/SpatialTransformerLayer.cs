@@ -783,38 +783,26 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         int batchSize = transformationParams.Shape[0];
-        var tensor = TensorAllocator.Rent<T>([batchSize, 2, 3]);
 
-        T scale = NumOps.FromDouble(0.1);
-        for (int b = 0; b < batchSize; b++)
-        {
-            T theta11 = transformationParams[b, 0];
-            T theta12 = transformationParams[b, 1];
-            T theta13 = transformationParams[b, 2];
-            T theta21 = transformationParams[b, 3];
-            T theta22 = transformationParams[b, 4];
-            T theta23 = transformationParams[b, 5];
+        // Tape-tracked equivalent of the old per-element scalar loop. The previous version
+        // Rent-ed a fresh tensor and filled it via scalar indexing + raw NumOps/MathHelper
+        // math — that SEVERS the autodiff tape between the localization weights and theta, so
+        // no trainable parameter received a gradient (STN was silently untrainable). Using
+        // Engine ops (all in OpRegistry.DifferentiableOps) keeps the gradient path intact:
+        //   theta = tanh(0.1 * params), then +1 on the two diagonal scale terms (cols 0 & 4),
+        //   reshaped [batch, 6] -> [batch, 2, 3]. Numerically identical to the old loop.
+        var scaled = Engine.TensorMultiplyScalar(transformationParams, NumOps.FromDouble(0.1));
+        var activated = Engine.TensorTanh(scaled);
 
-            theta11 = MathHelper.Tanh(NumOps.Multiply(theta11, scale));
-            theta12 = MathHelper.Tanh(NumOps.Multiply(theta12, scale));
-            theta21 = MathHelper.Tanh(NumOps.Multiply(theta21, scale));
-            theta22 = MathHelper.Tanh(NumOps.Multiply(theta22, scale));
+        // Constant leaf bias adding 1.0 to theta11 (col 0) and theta22 (col 4) so the identity
+        // transform is the zero-parameter default. A constant is fine to fill directly — only the
+        // OPERATIONS connecting trainable params to the output must be tape-tracked.
+        var diagBias = new Tensor<T>([1, 6]);
+        diagBias[0, 0] = NumOps.One;
+        diagBias[0, 4] = NumOps.One;
+        var biased = Engine.TensorBroadcastAdd(activated, diagBias);
 
-            theta13 = MathHelper.Tanh(NumOps.Multiply(theta13, scale));
-            theta23 = MathHelper.Tanh(NumOps.Multiply(theta23, scale));
-
-            theta11 = NumOps.Add(theta11, NumOps.One);
-            theta22 = NumOps.Add(theta22, NumOps.One);
-
-            tensor[b, 0, 0] = theta11;
-            tensor[b, 0, 1] = theta12;
-            tensor[b, 0, 2] = theta13;
-            tensor[b, 1, 0] = theta21;
-            tensor[b, 1, 1] = theta22;
-            tensor[b, 1, 2] = theta23;
-        }
-
-        return tensor;
+        return Engine.Reshape(biased, [batchSize, 2, 3]);
     }
 
 
