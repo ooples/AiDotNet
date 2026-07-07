@@ -983,29 +983,13 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
                     && (!useAmsgrad || vMaxArr is not null))
                 {
-                    for (int i = 0; i < n; i++)
-                    {
-                        float g = gradArr[i];
-                        float mNew = fb1 * mArr[i] + f1mb1 * g;
-                        float vNew = fb2 * vArr[i] + f1mb2 * g * g;
-                        mArr[i] = mNew;
-                        vArr[i] = vNew;
-                        float mHat = mNew / fbc1;
-                        float vHatEff;
-                        if (useAmsgrad)
-                        {
-                            float vHatNow = vNew / fbc2;
-                            float vMaxPrev = vMaxArr![i];
-                            float vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
-                            vMaxArr[i] = vMaxNew;
-                            vHatEff = vMaxNew;
-                        }
-                        else
-                        {
-                            vHatEff = vNew / fbc2;
-                        }
-                        paramArr[i] -= flr * mHat / ((float)Math.Sqrt(vHatEff) + feps);
-                    }
+                    // SIMD (AVX2/FMA) Adam/AMSGrad step — single source of truth in
+                    // AdamMomentKernels (InternalsVisibleTo "AiDotNet"). Replaces the
+                    // hand-rolled scalar loop; numerics are bit-near (FMA moment update).
+                    AiDotNet.Tensors.Engines.Simd.AdamMomentKernels.AdamStep(
+                        paramArr.AsSpan(0, n), gradArr.AsSpan(0, n), mArr.AsSpan(0, n), vArr.AsSpan(0, n),
+                        useAmsgrad ? vMaxArr!.AsSpan(0, n) : System.Span<float>.Empty,
+                        fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
                 }
                 else
                 {
@@ -1013,47 +997,19 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                     var gradF = (Tensor<float>)(object)grad;
                     var mF = (Tensor<float>)(object)m;
                     var vF = (Tensor<float>)(object)v;
+                    // Buffer-aliased view path (non-zero storage offset): AsWritableSpan
+                    // slices into the live backing at the correct offset so mutations land
+                    // on the shared ParameterBuffer. Same SIMD kernel as the array path.
                     System.Span<float> paramSpan = paramF.AsWritableSpan();
                     System.ReadOnlySpan<float> gradSpan = gradF.AsSpan();
                     System.Span<float> mSpan = mF.AsWritableSpan();
                     System.Span<float> vSpan = vF.AsWritableSpan();
-                    ref float paramR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(paramSpan);
-                    ref float gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
-                    ref float mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
-                    ref float vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
-                    ref float vMaxR = ref System.Runtime.CompilerServices.Unsafe.NullRef<float>();
-                    if (useAmsgrad)
-                    {
-                        var vMaxF = (Tensor<float>)(object)vMax!;
-                        System.Span<float> vMaxSpan = vMaxF.AsWritableSpan();
-                        vMaxR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vMaxSpan);
-                    }
-                    for (int i = 0; i < n; i++)
-                    {
-                        float g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
-                        float mPrev = System.Runtime.CompilerServices.Unsafe.Add(ref mR, i);
-                        float vPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vR, i);
-                        float mNew = fb1 * mPrev + f1mb1 * g;
-                        float vNew = fb2 * vPrev + f1mb2 * g * g;
-                        System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
-                        System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
-                        float mHat = mNew / fbc1;
-                        float vHatEff;
-                        if (useAmsgrad)
-                        {
-                            float vHatNow = vNew / fbc2;
-                            float vMaxPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i);
-                            float vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
-                            System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i) = vMaxNew;
-                            vHatEff = vMaxNew;
-                        }
-                        else
-                        {
-                            vHatEff = vNew / fbc2;
-                        }
-                        System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
-                            flr * mHat / ((float)Math.Sqrt(vHatEff) + feps);
-                    }
+                    System.Span<float> vMaxSpan = useAmsgrad
+                        ? ((Tensor<float>)(object)vMax!).AsWritableSpan()
+                        : System.Span<float>.Empty;
+                    AiDotNet.Tensors.Engines.Simd.AdamMomentKernels.AdamStep(
+                        paramSpan, gradSpan, mSpan, vSpan, vMaxSpan,
+                        fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
                 }
             }
             else
