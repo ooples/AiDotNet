@@ -59,8 +59,11 @@ namespace AiDotNetTests.UnitTests.Optimizers
         /// shuffle order — the exact nondeterminism SetDeterministicMode is supposed to eliminate.
         /// </summary>
         [Fact(Timeout = 60000)]
-        public void Shuffle_UnseededUnderDeterministicMode_IsReproducibleAcrossInstances()
+        public async Task Shuffle_UnseededUnderDeterministicMode_IsReproducibleAcrossInstances()
         {
+            // [Fact(Timeout)] is only enforced for async tests — a synchronous void method silently
+            // ignores it (and can fail at collection startup under xUnit v2.7+), so keep this async.
+            await Task.Yield();
             bool prev = AiDotNet.Tensors.Engines.AiDotNetEngine.DeterministicMode;
             try
             {
@@ -78,6 +81,9 @@ namespace AiDotNetTests.UnitTests.Optimizers
                 Assert.Equal(a, c); // identical shuffle order across instances under deterministic mode
                 // And it is an actual permutation (shuffle happened, not just identity fallback).
                 Assert.Equal(Enumerable.Range(0, 257).OrderBy(i => i), a.OrderBy(i => i));
+                // The sorted-coverage check above also passes for the identity ordering [0,1,2,...],
+                // so assert the result actually DIFFERS from sequential — a real shuffle must reorder.
+                Assert.NotEqual(Enumerable.Range(0, 257).ToArray(), a);
             }
             finally
             {

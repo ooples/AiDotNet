@@ -228,7 +228,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
             NotifyEpochStart(epoch);
-            var batcher = CreateBatcher(inputData, _options.BatchSize);
+            var batcher = CreateBatcher(inputData, _options.BatchSize, epoch);
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {

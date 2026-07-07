@@ -379,7 +379,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         {
             NotifyEpochStart(epoch);
 
-            var batcher = CreateBatcher(inputData, _options.BatchSize);
+            var batcher = CreateBatcher(inputData, _options.BatchSize, epoch);
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {

@@ -94,7 +94,7 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         for (int epoch = 0; epoch < _gdOptions.MaxIterations; epoch++)
         {
             NotifyEpochStart(epoch);
-            var batcher = CreateBatcher(inputData, _gdOptions.BatchSize);
+            var batcher = CreateBatcher(inputData, _gdOptions.BatchSize, epoch);
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {

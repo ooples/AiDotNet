@@ -44,6 +44,7 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
     private readonly int? _seed;
     private readonly IDataSampler? _sampler;
     private readonly int _dataSize;
+    private readonly int _epoch;
 
     /// <summary>
     /// Initializes a new instance of the OptimizationDataBatcher class.
@@ -54,13 +55,19 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
     /// <param name="dropLast">Whether to drop the last incomplete batch. Default is false.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <param name="sampler">Optional custom sampler for advanced sampling strategies.</param>
+    /// <param name="epoch">
+    /// Zero-based epoch index that offsets the shuffle seed so each epoch draws a different
+    /// (but still run-to-run reproducible) minibatch order. Callers rebuild the batcher once
+    /// per epoch and pass the loop counter here. Default 0 preserves single-epoch behavior.
+    /// </param>
     public OptimizationDataBatcher(
         OptimizationInputData<T, TInput, TOutput> inputData,
         int batchSize,
         bool shuffle = true,
         bool dropLast = false,
         int? seed = null,
-        IDataSampler? sampler = null)
+        IDataSampler? sampler = null,
+        int epoch = 0)
     {
         Guard.NotNull(inputData);
         _inputData = inputData;
@@ -69,6 +76,7 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
         _dropLast = dropLast;
         _seed = seed;
         _sampler = sampler;
+        _epoch = epoch;
         _dataSize = InputHelper<T, TInput>.GetBatchSize(inputData.XTrain);
     }
 
@@ -201,12 +209,18 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
                 // reproducible across runs — otherwise identical-seed training diverges purely from
                 // shuffle order (the run-to-run weight divergence that SetDeterministicMode is
                 // supposed to eliminate: it governs BLAS/reduction order but, without this, never
-                // touched the data-shuffle RNG). Use a fixed fallback seed in deterministic mode so
-                // "same seed + SetDeterministicMode(true)" yields bit-identical GPU/CPU training.
+                // touched the data-shuffle RNG).
+                //
+                // The batcher is rebuilt once per epoch, so the seed must be OFFSET BY THE EPOCH:
+                // a fixed seed every epoch reshuffles identically each epoch (no per-epoch
+                // reshuffling — hurts convergence). Deriving the seed from the epoch keeps
+                // "same seed + SetDeterministicMode(true)" bit-identical run-to-run while still
+                // giving every epoch a distinct order — matching PyTorch's DataLoader, whose
+                // generator advances across epochs even with a fixed seed.
                 Random random = _seed.HasValue
-                    ? RandomHelper.CreateSeededRandom(_seed.Value)
+                    ? RandomHelper.CreateSeededRandom(_seed.Value + _epoch)
                     : AiDotNet.Tensors.Engines.AiDotNetEngine.DeterministicMode
-                        ? RandomHelper.CreateSeededRandom(0)
+                        ? RandomHelper.CreateSeededRandom(_epoch)
                         : RandomHelper.CreateSecureRandom();
 
                 // Fisher-Yates shuffle
