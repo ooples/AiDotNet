@@ -30240,12 +30240,14 @@ public static class LayerHelper<T>
         yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(elu);
 
-        // GRU layers — only the last layer in the stack collapses the time axis;
-        // intermediate layers must return sequences so the next GRU sees [B, T, F].
+        // GRU layers — ALL return sequences: DeepFilterNet estimates per-frame ERB gains and
+        // deep-filter coefficients, so the time axis must be preserved end to end (the downstream
+        // gain/DF heads and the inverse-STFT overlap-add operate frame-by-frame). Collapsing the time
+        // axis on the last GRU (previous behavior) produced a single pooled frame and broke the
+        // per-frame enhancement + differentiable reconstruction.
         for (int i = 0; i < numGruLayers; i++)
         {
-            bool isLast = i == numGruLayers - 1;
-            yield return new GRULayer<T>( hiddenDim, returnSequences: !isLast,
+            yield return new GRULayer<T>(hiddenDim, returnSequences: true,
                 (IActivationFunction<T>?)null, (IActivationFunction<T>?)null);
         }
 
