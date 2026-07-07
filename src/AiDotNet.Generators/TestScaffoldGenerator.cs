@@ -2825,6 +2825,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             string outShape = isOpticalFlowModel ? "1, 2, 64, 64" : "1, 3, 64, 64";
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ {outShape} }};");
         }
+        else if (model.ClassName == "UniversalDifferentialEquation")
+        {
+            // UDE (Rackauckas et al. 2021) predicts the state DERIVATIVE. Its PredictCore
+            // requires rank-2 [batch, stateDim+1] (the state vector concatenated with the
+            // scalar time) and emits [batch, stateDim]. The default stateDim is 2, so the
+            // model's fixed input contract is [batch, 3] -> [batch, 2]. The generic
+            // NeuralNetwork shape ([1, 4]) mismatches it and throws
+            // "Expected input shape [batch, 3]" on every Forward, failing all invariants.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 2 };");
+        }
         else if (isVisionModel && model.ClassName.StartsWith("ViLBERT", System.StringComparison.Ordinal))
         {
             // Lu et al. 2019 §3 ("ViLBERT") feeds Faster-RCNN region
