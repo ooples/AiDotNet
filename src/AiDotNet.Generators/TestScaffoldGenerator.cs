@@ -2268,12 +2268,32 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // fragment above needs the doubled '{{' to emit one literal '{'.)
                     "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
             }
-            else if ((model.ClassName is "PaLME" or "RT2" or "GR00TN1" or "PiZero" or "ThreeDVLA")
+            else if (model.ClassName == "GR00TN1"
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.VisionLanguage.Robotics.", System.StringComparison.Ordinal))
             {
-                // Vision-language-action robotics models (PaLM-E, RT-2, GR00T-N1, Pi-Zero, 3D-VLA) are
+                // GR00T-N1 (NVIDIA 2025) is a DUAL-SYSTEM VLA: a System-2 vision-language transformer
+                // (System2LatentDim) feeds a System-1 action transformer (System1HiddenDim). Its paper
+                // defaults (System2LatentDim 1536, System1HiddenDim 1024) are both paper-scale AND
+                // mutually mismatched for the generic path — a 1536-wide token hits 1024-wide System-1
+                // weights ("embedding dimension (1536) does not match weight dimension (1024)"). Build
+                // EVERY width equal at CI-smoke 128 so the [1,4,128] token InputShape, the System-2
+                // latent, and the System-1 hidden all line up with no projection gap.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Robotics.GR00TN1Options { VisionDim = 128, DecoderDim = 128, " +
+                    "System2LatentDim = 128, System1HiddenDim = 128, NumVisionLayers = 2, NumDecoderLayers = 2, " +
+                    "System1NumLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "PaLME" or "RT2" or "PiZero" or "ThreeDVLA")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Robotics.", System.StringComparison.Ordinal))
+            {
+                // Vision-language-action robotics models (PaLM-E, RT-2, Pi-Zero, 3D-VLA) are
                 // built from CreateDefaultRoboticsActionLayers: a ViT encoder
                 // (LayerNormalization + vision MultiHeadAttention(VisionDim) blocks) -> action decoder.
                 // Their production defaults are paper-scale — PaLM-E is VisionDim 1408 / DecoderDim 8192
