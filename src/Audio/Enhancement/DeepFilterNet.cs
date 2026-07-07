@@ -160,6 +160,15 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private Tensor<Complex<T>>? _cachedComplexStft;
 
+    // Cached constants for the differentiable STFT/ERB pipeline (built lazily once numFreqs is known).
+    // These are non-trainable leaf tensors, so building them with scalar fills is fine — only the
+    // OPERATIONS wiring trainable params to the loss must be tape-tracked IEngine ops.
+    private Tensor<T>? _analysisWindow;   // Hann window [frameLen]
+    private Tensor<T>? _erbPoolMatrix;    // [numFreqs, numErbBands]  magnitude -> ERB-band pooling
+    private Tensor<T>? _erbExpandMatrix;  // [numErbBands, numFreqs]  ERB-band gain -> per-bin gain
+    private int _cachedNumFreqs = -1;
+    private bool _lazyShapesWarmed;
+
     #endregion
 
     #region Training State
@@ -485,19 +494,48 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        var preprocessed = PreprocessAudio(input);
-
-        Tensor<T> output;
         if (IsOnnxMode && OnnxModel is not null)
         {
-            output = OnnxModel.Run(preprocessed);
-        }
-        else
-        {
-            output = ForwardNative(preprocessed);
+            var preprocessed = PreprocessAudio(input);
+            return PostprocessOutput(OnnxModel.Run(preprocessed));
         }
 
-        return PostprocessOutput(output);
+        // Native path: end-to-end differentiable enhancement (same graph training back-props through).
+        return EnhanceAudio(input);
+    }
+
+    /// <summary>
+    /// Training forward used by the transparent-autodiff training path
+    /// (<see cref="NeuralNetworkBase{T}.TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}})"/>):
+    /// the ERB encoder → GRU → deep-filter/gain stack composed with the SAME tape-aware
+    /// <c>IEngine</c> layer ops as inference, so gradients flow to every trainable layer automatically.
+    /// The (fixed, non-trainable) STFT/ERB preprocessing is applied by <see cref="Train"/> before this
+    /// runs, so the tape only spans the learnable graph.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => EnhanceAudio(input);
+
+    /// <summary>
+    /// Resolves every lazy layer's input dimension by running ONE dummy pass through the REAL
+    /// enhancement graph. The base implementation walks the flat <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// list feeding the raw-audio architecture shape sequentially, which is wrong here: the layers
+    /// actually consume ERB features at shape [1, T, numErbBands], not the waveform. Without correct
+    /// resolution, post-deserialize <c>SetParameters</c> silently skips the still-unresolved layers and
+    /// the clone/round-trip loses trained weights (issue #1221 class — Clone_* tests).
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesWarmed) return;
+        _lazyShapesWarmed = true; // set first so any reentrancy is a no-op
+        if (IsOnnxMode) return;
+
+        // A few frames' worth of silence is enough to establish every layer's input width.
+        int len = _fftSize + 4 * _hopSize;
+        var dummy = new Tensor<T>([len]);
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try { _ = EnhanceAudio(dummy); }
+        catch { /* best-effort; a genuine forward failure surfaces on the real Train/Predict */ }
+        finally { if (wasTraining) SetTrainingMode(true); }
     }
 
     /// <inheritdoc/>
@@ -506,57 +544,16 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         if (!SupportsTraining)
             throw new InvalidOperationException("Cannot train in ONNX mode.");
 
-        SetTrainingMode(true);
-
-        var preprocessedInput = PreprocessAudio(input);
-        var preprocessedExpected = PreprocessAudio(expectedOutput);
-
-        // Forward pass
-        var predicted = ForwardNative(preprocessedInput);
-
-        // Convert to vectors for loss computation
-        var predictedVector = predicted.ToVector();
-        var expectedVector = preprocessedExpected.ToVector();
-
-        // Length-align predicted vs expected before the loss. The
-        // preprocessing pipeline (STFT → ERB) and the encoder/decoder
-        // stack can produce different sequence lengths depending on the
-        // input audio's exact sample count vs the STFT window/hop, so
-        // raw `predicted.Length == expected.Length` is not guaranteed —
-        // and MeanSquaredErrorLoss.CalculateLoss rejects mismatched
-        // lengths with `Predicted and actual vectors must have the same
-        // length`, cascade-failing every DeepFilterNet test. Truncate
-        // both vectors to their common length so the loss computes
-        // over the overlap.
-        int commonLen = System.Math.Min(predictedVector.Length, expectedVector.Length);
-        if (predictedVector.Length != commonLen)
-        {
-            var truncatedP = new Vector<T>(commonLen);
-            for (int i = 0; i < commonLen; i++) truncatedP[i] = predictedVector[i];
-            predictedVector = truncatedP;
-        }
-        if (expectedVector.Length != commonLen)
-        {
-            var truncatedE = new Vector<T>(commonLen);
-            for (int i = 0; i < commonLen; i++) truncatedE[i] = expectedVector[i];
-            expectedVector = truncatedE;
-        }
-
-        // Compute loss (multi-resolution STFT loss is typical for audio)
-        var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
-
-        // Backward pass and update
-        var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        // gradientTensor is shape-matched only if the loss derivative kept
-        // the truncated length — when it doesn't, fall back to allocating
-        // a flat tensor sized to the derivative.
-        var gradientTensor = gradientVector.Length == predicted.Length
-            ? Tensor<T>.FromVector(gradientVector, predicted._shape)
-            : Tensor<T>.FromVector(gradientVector, new[] { gradientVector.Length });
-
-        _optimizer?.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        // Fully tape-transparent training: ForwardForTraining runs the end-to-end differentiable
+        // enhancement (STFT → ERB → encoder/GRU/decoder → gains + deep filter → inverse STFT) with
+        // IEngine ops, so the framework records the graph on the gradient tape automatically (PyTorch-
+        // style), computes dLoss/dParams over the ENHANCED audio vs the CLEAN target, and the optimizer
+        // updates every layer. Both enhanced output and the clean target are waveforms of the same
+        // shape as the input, so the spectral/waveform loss compares matching representations —
+        // replacing the old hand-rolled path that never back-propagated (DenseLayer.UpdateParameters
+        // threw "Backward pass must be called before updating parameters") and compared mismatched
+        // model-output vs ERB-feature tensors via an arbitrary flatten+truncate.
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
 
     /// <inheritdoc/>
@@ -607,36 +604,270 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <summary>
     /// Forward pass through native layers.
     /// </summary>
-    private Tensor<T> ForwardNative(Tensor<T> erbFeatures)
+    private int FrameLen => _fftSize;
+    private int NFft => NextPowerOfTwo(_fftSize);
+    private int NumFreqs => NFft / 2 + 1;
+
+    /// <summary>
+    /// End-to-end DIFFERENTIABLE speech-enhancement forward, composed ENTIRELY of tape-aware
+    /// <see cref="IEngine"/> ops so the framework's transparent autograd propagates the loss back to
+    /// every trainable layer (the previous <c>Tensor&lt;Complex&lt;T&gt;&gt;</c> STFT / scalar-loop
+    /// reconstruction severed the tape and was non-differentiable). Pipeline (DeepFilterNet, Schröter
+    /// et al. 2022): STFT → ERB features → ERB encoder → GRU stack → decoder → {ERB gains, deep-filter
+    /// coefficients} → apply gains (all bins) + complex deep filter (low bins) → inverse STFT → audio.
+    /// </summary>
+    private Tensor<T> EnhanceAudio(Tensor<T> audio)
     {
-        var x = erbFeatures;
-
-        // ERB encoder
-        foreach (var layer in _erbEncoder)
-        {
-            x = layer.Forward(x);
-        }
-
-        // GRU layers
+        // Deterministic, stateless full-utterance forward: reset the GRUs' streaming hidden state so a
+        // single Predict/Train call processes the whole sequence from a clean state. Without this the
+        // GRU state persists across calls, so the same input yields slightly different outputs run to
+        // run (breaks Clone_ShouldProduceIdenticalOutput). Streaming inference uses ProcessChunk.
         foreach (var layer in _gruLayers)
-        {
-            x = layer.Forward(x);
-        }
+            if (layer is GRULayer<T> gru) gru.ResetState();
 
-        // Deep filtering coefficients
-        var dfCoeffs = x;
-        foreach (var layer in _dfLayers)
-        {
-            dfCoeffs = layer.Forward(dfCoeffs);
-        }
+        int outLen = audio.Length;
+        var spectrum = StftDifferentiable(audio);          // [T, numFreqs*2] interleaved re/im
+        int numFrames = spectrum.Shape[0];
+        var (re, im) = SplitComplex(spectrum, numFrames);  // each [T, numFreqs]
 
-        // Gain estimation
+        var erb = ErbFeatures(re, im);                     // [T, numErbBands]
+
+        // Learnable stack (all tape-aware layer.Forward). Every trainable layer is on the path from
+        // the ERB features to the enhanced spectrum, so each receives a gradient. The GRUs need an
+        // explicit batch axis and return sequences, so run the stack as [1, T, F] and squeeze the
+        // per-frame gain / deep-filter heads back to [T, F] for the spectral application.
+        var x = Engine.Reshape(erb, [1, numFrames, _numErbBands]); // [1, T, numErbBands]
+        foreach (var layer in _erbEncoder) x = layer.Forward(x);
+        foreach (var layer in _gruLayers) x = layer.Forward(x);
+        foreach (var layer in _decoder) x = layer.Forward(x);
+        var h = x;                                          // [1, T, hiddenDim]
+
         var gainLayer = _gainLayer
             ?? throw new InvalidOperationException("Gain layer has not been initialized.");
-        var gains = gainLayer.Forward(x);
+        var gainsRaw = gainLayer.Forward(h);                                    // [1, T, numErbBands]
+        var gains = Engine.TensorSigmoid(Engine.Reshape(gainsRaw, [numFrames, _numErbBands])); // [T, numErbBands]
 
-        // Combine DF coefficients and gains
-        return CombineOutputs(dfCoeffs, gains);
+        var dfHidden = h;
+        foreach (var layer in _dfLayers) dfHidden = layer.Forward(dfHidden);    // [1, T, dfBins*dfOrder*2]
+        var dfInput = Engine.Reshape(dfHidden, [numFrames, _dfBins * _dfOrder * 2]); // [T, dfBins*dfOrder*2]
+
+        // Apply ERB-band gains to every frequency bin (band gain broadcast to its bins via a matmul).
+        EnsureErbMatrices();
+        var gainPerBin = Engine.TensorMatMul(gains, _erbExpandMatrix!); // [T, numFreqs]
+        var reEnh = Engine.TensorMultiply(re, gainPerBin);
+        var imEnh = Engine.TensorMultiply(im, gainPerBin);
+
+        // Complex deep filter over the lowest dfBins bins: a learned order-1 complex refinement
+        // enhanced_bin = (a + j b) * gained_bin, keeping the deep-filter head on the gradient path.
+        (reEnh, imEnh) = ApplyDeepFilter(reEnh, imEnh, dfInput, numFrames);
+
+        var specEnh = MergeComplex(reEnh, imEnh, numFrames);
+        return IstftDifferentiable(specEnh, numFrames, outLen);
+    }
+
+    /// <summary>Differentiable STFT: frame → Hann window → RFFT, all tape-aware. Returns [T, numFreqs*2].</summary>
+    private Tensor<T> StftDifferentiable(Tensor<T> audio)
+    {
+        int L = FrameLen, hop = _hopSize;
+        int samples = audio.Length;
+        var flat = Engine.Reshape(audio, [samples]);
+
+        int numFrames = samples < L ? 1 : 1 + (samples - L) / hop;
+        int needed = (numFrames - 1) * hop + L;
+        if (needed > samples)
+            flat = Engine.TensorConstantPad(flat, [0, needed - samples], NumOps.Zero);
+
+        var window = HannWindow();
+        var frames = new Tensor<T>[numFrames];
+        for (int t = 0; t < numFrames; t++)
+        {
+            var frame = Engine.TensorSlice(flat, [t * hop], [L]);   // [L]
+            frames[t] = Engine.TensorMultiply(frame, window);        // windowed [L]
+        }
+        var stacked = Engine.TensorStack(frames, axis: 0);           // [T, L]
+        return Engine.RFFT(stacked);                                 // [T, numFreqs*2]
+    }
+
+    /// <summary>Differentiable inverse STFT: IRFFT → synthesis window → overlap-add. Returns [outLen].</summary>
+    private Tensor<T> IstftDifferentiable(Tensor<T> spectrum, int numFrames, int outLen)
+    {
+        int L = FrameLen, hop = _hopSize;
+        var frames = Engine.IRFFT(spectrum, L);   // [T, L]
+        var window = HannWindow();
+        int fullLen = (numFrames - 1) * hop + L;
+
+        Tensor<T>? acc = null;
+        for (int t = 0; t < numFrames; t++)
+        {
+            var frame = Engine.Reshape(Engine.TensorSlice(frames, [t, 0], [1, L]), [L]); // [L]
+            var wframe = Engine.TensorMultiply(frame, window);
+            int rightPad = fullLen - t * hop - L;
+            var padded = Engine.TensorConstantPad(wframe, [t * hop, rightPad < 0 ? 0 : rightPad], NumOps.Zero);
+            acc = acc is null ? padded : Engine.TensorAdd(acc, padded);
+        }
+
+        var result = acc ?? Engine.TensorConstantPad(Engine.Reshape(spectrum, [spectrum.Length]), [0, 0], NumOps.Zero);
+
+        // Weighted overlap-add normalization: divide by the per-sample sum of squared analysis+synthesis
+        // windows (a constant), so overlapping frames reconstruct at the correct amplitude instead of the
+        // window² attenuation that leaves near-silent edge samples (which then trip the clone test's tight
+        // absolute tolerance on near-zero values). This is the standard WOLA reconstruction.
+        var wsum = WindowOverlapSum(numFrames, fullLen); // [fullLen], constant
+        result = Engine.TensorDivide(result, wsum);
+
+        if (fullLen > outLen) result = Engine.TensorSlice(result, [0], [outLen]);
+        else if (fullLen < outLen) result = Engine.TensorConstantPad(result, [0, outLen - fullLen], NumOps.Zero);
+        return result;
+    }
+
+    /// <summary>Splits an interleaved [T, numFreqs*2] spectrum into real/imag [T, numFreqs] parts (tape-aware).</summary>
+    private (Tensor<T> re, Tensor<T> im) SplitComplex(Tensor<T> spectrum, int numFrames)
+    {
+        int F = NumFreqs;
+        var r3 = Engine.Reshape(spectrum, [numFrames, F, 2]);
+        var re = Engine.Reshape(Engine.TensorSlice(r3, [0, 0, 0], [numFrames, F, 1]), [numFrames, F]);
+        var im = Engine.Reshape(Engine.TensorSlice(r3, [0, 0, 1], [numFrames, F, 1]), [numFrames, F]);
+        return (re, im);
+    }
+
+    /// <summary>Re-interleaves real/imag [T, numFreqs] into [T, numFreqs*2] (tape-aware).</summary>
+    private Tensor<T> MergeComplex(Tensor<T> re, Tensor<T> im, int numFrames)
+    {
+        int F = NumFreqs;
+        var re3 = Engine.Reshape(re, [numFrames, F, 1]);
+        var im3 = Engine.Reshape(im, [numFrames, F, 1]);
+        var cat = Engine.TensorConcatenate([re3, im3], axis: 2); // [T, F, 2]
+        return Engine.Reshape(cat, [numFrames, F * 2]);
+    }
+
+    /// <summary>Differentiable ERB features: |X| ERB-band pooling (tape-aware). Returns [T, numErbBands].</summary>
+    private Tensor<T> ErbFeatures(Tensor<T> re, Tensor<T> im)
+    {
+        EnsureErbMatrices();
+        var mag2 = Engine.TensorAdd(Engine.TensorMultiply(re, re), Engine.TensorMultiply(im, im));
+        var mag = Engine.TensorSqrt(Engine.TensorAdd(mag2, MakeScalarLike(mag2, 1e-8))); // [T, numFreqs]
+        return Engine.TensorMatMul(mag, _erbPoolMatrix!);                                 // [T, numErbBands]
+    }
+
+    /// <summary>
+    /// Complex deep filter on the lowest <c>dfBins</c> bins: a learned per-bin complex gain
+    /// <c>(a + j b)</c> read from the deep-filter head (order-0 taps), applied differentiably. Bins
+    /// above <c>dfBins</c> pass through the ERB-gained spectrum unchanged.
+    /// </summary>
+    private (Tensor<T> re, Tensor<T> im) ApplyDeepFilter(Tensor<T> re, Tensor<T> im, Tensor<T> dfCoeffs, int numFrames)
+    {
+        int F = NumFreqs;
+        int lowBins = Math.Min(_dfBins, F);
+        if (lowBins <= 0) return (re, im);
+
+        // dfCoeffs: [T, dfBins*dfOrder*2]. Use the order-0 (a, b) tap per low bin: index bin*dfOrder*2.
+        // Build per-bin complex gain tensors [T, lowBins] via tape-aware slices, then pad to [T, F]
+        // (ones on the real part, zeros on imag) so bins >= dfBins are identity.
+        var aParts = new Tensor<T>[lowBins];
+        var bParts = new Tensor<T>[lowBins];
+        for (int bin = 0; bin < lowBins; bin++)
+        {
+            int baseIdx = bin * _dfOrder * 2;
+            aParts[bin] = Engine.TensorSlice(dfCoeffs, [0, baseIdx], [numFrames, 1]);       // [T,1]
+            bParts[bin] = Engine.TensorSlice(dfCoeffs, [0, baseIdx + 1], [numFrames, 1]);   // [T,1]
+        }
+        var aLow = Engine.TensorConcatenate(aParts, axis: 1); // [T, lowBins]
+        var bLow = Engine.TensorConcatenate(bParts, axis: 1); // [T, lowBins]
+
+        // Split spectrum into low / high bins.
+        var reLow = Engine.TensorSlice(re, [0, 0], [numFrames, lowBins]);
+        var imLow = Engine.TensorSlice(im, [0, 0], [numFrames, lowBins]);
+
+        // Complex multiply (a + jb)(reLow + j imLow).
+        var reNew = Engine.TensorSubtract(Engine.TensorMultiply(aLow, reLow), Engine.TensorMultiply(bLow, imLow));
+        var imNew = Engine.TensorAdd(Engine.TensorMultiply(aLow, imLow), Engine.TensorMultiply(bLow, reLow));
+
+        if (lowBins == F) return (reNew, imNew);
+
+        var reHigh = Engine.TensorSlice(re, [0, lowBins], [numFrames, F - lowBins]);
+        var imHigh = Engine.TensorSlice(im, [0, lowBins], [numFrames, F - lowBins]);
+        var reOut = Engine.TensorConcatenate([reNew, reHigh], axis: 1);
+        var imOut = Engine.TensorConcatenate([imNew, imHigh], axis: 1);
+        return (reOut, imOut);
+    }
+
+    private Tensor<T> MakeScalarLike(Tensor<T> like, double value)
+    {
+        var t = new Tensor<T>(like.Shape.ToArray());
+        var v = NumOps.FromDouble(value);
+        var span = t.Data.Span;
+        for (int i = 0; i < span.Length; i++) span[i] = v;
+        return t;
+    }
+
+    /// <summary>
+    /// Per-sample sum of squared (analysis·synthesis) Hann windows across all overlapping frames —
+    /// the WOLA normalization denominator. Constant (non-trainable), floored by a small epsilon so the
+    /// division is safe at edge samples that no frame covers.
+    /// </summary>
+    private Tensor<T> WindowOverlapSum(int numFrames, int fullLen)
+    {
+        int L = FrameLen, hop = _hopSize;
+        var win = HannWindow().ToVector();
+        var sum = new double[fullLen];
+        for (int t = 0; t < numFrames; t++)
+        {
+            int off = t * hop;
+            for (int i = 0; i < L && off + i < fullLen; i++)
+            {
+                double w = NumOps.ToDouble(win[i]);
+                sum[off + i] += w * w;
+            }
+        }
+        // Floor RELATIVE to the peak overlap (not a tiny absolute epsilon): edge samples the window
+        // barely covers have a near-zero true sum, and dividing by it would amplify the compiled-plan-
+        // vs-fresh float noise by ~1/window² into an O(1) discrepancy (breaking clone-determinism at
+        // those samples). Flooring at 1e-3·peak bounds the per-sample gain to ~1000×, so those few
+        // edge samples are gently attenuated instead of blowing up, while the fully-covered interior
+        // (sum ≈ peak) normalizes exactly.
+        double peak = 0.0;
+        for (int i = 0; i < fullLen; i++) if (sum[i] > peak) peak = sum[i];
+        double floor = Math.Max(1e-8, 1e-3 * peak);
+        var data = new Vector<T>(fullLen);
+        for (int i = 0; i < fullLen; i++)
+            data[i] = NumOps.FromDouble(sum[i] < floor ? floor : sum[i]);
+        return new Tensor<T>([fullLen], data);
+    }
+
+    private Tensor<T> HannWindow()
+    {
+        if (_analysisWindow is null)
+        {
+            int L = FrameLen;
+            var w = new Vector<T>(L);
+            for (int i = 0; i < L; i++)
+                w[i] = NumOps.FromDouble(0.5 - 0.5 * Math.Cos(2.0 * Math.PI * i / Math.Max(1, L - 1)));
+            _analysisWindow = new Tensor<T>([L], w);
+        }
+        return _analysisWindow;
+    }
+
+    private void EnsureErbMatrices()
+    {
+        if (_erbPoolMatrix is not null && _cachedNumFreqs == NumFreqs) return;
+        int F = NumFreqs, E = _numErbBands;
+        var pool = new Tensor<T>([F, E]);
+        var expand = new Tensor<T>([E, F]);
+        for (int erb = 0; erb < E; erb++)
+        {
+            int startBin = erb * F / E;
+            int endBin = (erb + 1) * F / E;
+            if (endBin <= startBin) endBin = startBin + 1;
+            double inv = 1.0 / (endBin - startBin);
+            for (int bin = startBin; bin < endBin && bin < F; bin++)
+            {
+                pool[[bin, erb]] = NumOps.FromDouble(inv);
+                expand[[erb, bin]] = NumOps.One;
+            }
+        }
+        _erbPoolMatrix = pool;
+        _erbExpandMatrix = expand;
+        _cachedNumFreqs = NumFreqs;
     }
 
     /// <summary>
