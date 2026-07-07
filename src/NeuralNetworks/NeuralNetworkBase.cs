@@ -3472,6 +3472,61 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Streaming chunked inference: splits <paramref name="input"/> along axis 0 into
+    /// slices of <paramref name="batchSize"/>, runs <see cref="Predict"/> on each slice,
+    /// invokes <paramref name="consume"/> with that slice's output and its axis-0 start
+    /// offset, then DISPOSES the slice output before advancing. Unlike
+    /// <see cref="PredictInBatches(Tensor{T},int)"/> — which concatenates every chunk into
+    /// one <c>[N, …, outputDim]</c> tensor and therefore holds O(N · outputDim) live at
+    /// once — this overload never materializes the full-dataset output. Peak managed memory
+    /// stays O(batchSize · outputDim), independent of N.
+    /// </summary>
+    /// <param name="input">Batched input tensor; leading axis is the sample axis.</param>
+    /// <param name="batchSize">Maximum samples per forward pass. Clamped to <c>≥ 1</c>.</param>
+    /// <param name="consume">
+    /// Called once per chunk with (chunkOutput, chunkStartIndex). The callback must fully
+    /// extract what it needs (e.g. reduce each row to an argmax / target log-prob scalar);
+    /// the tensor is disposed immediately after the callback returns and must not be retained.
+    /// </param>
+    /// <remarks>
+    /// This is the memory-safe path for large-vocabulary next-token / LAMBADA-style
+    /// evaluation, where the caller only needs a per-row scalar (predicted id or the target's
+    /// probability) and materializing the full <c>[N, V]</c> softmax matrix — ~800 MB at
+    /// N=4096, V=50257 — is pure waste on top of the per-chunk forward. Reducing per chunk and
+    /// discarding the logits keeps eval peak at one chunk's forward regardless of dataset size.
+    /// </remarks>
+    public virtual void PredictInBatches(Tensor<T> input, int batchSize, Action<Tensor<T>, int> consume)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (consume is null) throw new ArgumentNullException(nameof(consume));
+        if (batchSize < 1) batchSize = 1;
+
+        int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
+        bool appearsUnbatched = expectedUnbatchedRank > 0 && input.Rank == expectedUnbatchedRank;
+
+        if (input.Rank == 0 || appearsUnbatched || input.Shape[0] <= batchSize)
+        {
+            var only = Predict(input);
+            try { consume(only, 0); } finally { (only as IDisposable)?.Dispose(); }
+            return;
+        }
+
+        int n = input.Shape[0];
+        for (int start = 0; start < n; start += batchSize)
+        {
+            int end = Math.Min(start + batchSize, n);
+            var chunk = SliceAlongAxis0(input, start, end);
+            var outp = Predict(chunk);
+            try { consume(outp, start); }
+            finally
+            {
+                (outp as IDisposable)?.Dispose();
+                (chunk as IDisposable)?.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
     /// Chunked training with TRUE gradient accumulation. Walks
     /// <paramref name="input"/> / <paramref name="target"/> in axis-0
     /// chunks of size <paramref name="batchSize"/>, runs forward + backward
