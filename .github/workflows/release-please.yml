@@ -21,6 +21,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write # release-please creates/applies the `autorelease:` labels via the Issues API
 
 # Serialize (never cancel): a release cut / PR update must finish. Runs are cheap when they only
 # update the Release PR, and must be atomic when they actually publish.
