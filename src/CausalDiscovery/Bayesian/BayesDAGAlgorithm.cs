@@ -92,15 +92,14 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
                 if (i != j) Z[i, j] = zInit;
         T lr = NumOps.FromDouble(_learningRate);
 
-        // Augmented Lagrangian parameters
-        T alpha = NumOps.Zero;
         // Acyclicity penalty weight. Kept LOW (0.1) so it discourages cycles without
         // overwhelming the data fit: with the previous rho=1 (and the runaway augmented-
         // Lagrangian escalation before that) the positive-for-every-edge acyclicity gradient
         // held even genuine strong edges just below p=0.5, so 0 edges were recovered. At 0.1 the
         // data fit lifts true edges past their KL-to-0.5 equilibrium while non-edges stay near 0.5.
+        // Applied as a FIXED penalty (no augmented-Lagrangian dual ascent), so there is no alpha
+        // multiplier and no rho escalation/cap.
         T rho = NumOps.FromDouble(0.1);
-        T rhoMax = NumOps.FromDouble(100.0);
 
         for (int outerIter = 0; outerIter < NumSamples; outerIter++)
         {
@@ -186,9 +185,9 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
                             Math.Log(NumOps.ToDouble(pij) / NumOps.ToDouble(oneMinusP)));
                     }
 
-                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                    // Acyclicity gradient (fixed-penalty NOTEARS): rho*h * [exp(P∘P)^T ∘ 2P][i,j]
                     T acycGrad = NumOps.Multiply(
-                        NumOps.Add(alpha, NumOps.Multiply(rho, hValC)),
+                        NumOps.Multiply(rho, hValC),
                         NumOps.Multiply(expPSqC[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
 
                     // Total gradient w.r.t. P[i,j]
@@ -207,8 +206,8 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
                     Z[i, j] = NumOps.Subtract(Z[i, j], NumOps.Multiply(lr, gradZ[i, j]));
                 }
 
-            // Acyclicity is applied as a MILD FIXED penalty (rho constant, alpha = 0), NOT a
-            // growing augmented-Lagrangian dual. The original code ran the dual ascent
+            // Acyclicity is applied as a MILD FIXED penalty (rho constant, no dual multiplier), NOT
+            // a growing augmented-Lagrangian dual. The original code ran the dual ascent
             // (alpha += rho*h) and penalty escalation (rho *= 10) on EVERY one of the
             // NumSamples (5000) inner gradient steps, compounding alpha/rho to ~1e10 within a
             // few dozen steps. The acyclicity gradient — which is positive for EVERY edge, not
@@ -216,8 +215,7 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
             // orders of magnitude and drove all edge logits to zero, so DiscoverStructure
             // recovered 0 edges on a clean linear SEM. A constant O(1) penalty keeps acyclicity
             // comparable to the data fit, so genuine strong edges rise above p=0.5 while the
-            // penalty still discourages cycles. (rhoMax is retained for API compatibility.)
-            _ = rhoMax;
+            // penalty still discourages cycles.
         }
 
         // Final edge extraction. The relaxed objective (data fit + a KL prior anchored at
@@ -228,9 +226,10 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
         // orientation) and (b) the OLS coefficient of x_i in x_j is significant. This uses the
         // logits for orientation and the covariance for edge strength — the true SEM edges
         // (strong |coeff| in the correct direction) are recovered; symmetric noise is not.
-        var result = new Matrix<T>(d, d);
         T weightThreshold = NumOps.FromDouble(0.1);
 
+        // Collect the significant, correctly-oriented candidate edges with their strengths.
+        var candidates = new List<(int i, int j, T weight, double strength)>();
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
@@ -244,10 +243,54 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
 
                 T weight = NumOps.Divide(cov[i, j], varI);
                 if (NumOps.GreaterThan(NumOps.Abs(weight), weightThreshold))
-                    result[i, j] = weight;
+                    candidates.Add((i, j, weight, Math.Abs(NumOps.ToDouble(weight))));
             }
 
+        // The strict Z[i,j] > Z[j,i] orientation guarantees anti-symmetry (never both i->j and
+        // j->i) but NOT acyclicity — three or more edges can still form a directed cycle. The
+        // CausalGraph contract requires a DAG (GetTopologicalOrder throws on cycles), so insert
+        // edges greedily strongest-first and skip any that would close a cycle. Dropping the
+        // weakest edge of each cycle keeps the more significant causal links, matching how
+        // continuous-optimization DAG learners resolve residual cyclicity after thresholding.
+        candidates.Sort((a, b) => b.strength.CompareTo(a.strength));
+
+        var result = new Matrix<T>(d, d);
+        var adjacency = new List<int>[d];
+        for (int k = 0; k < d; k++) adjacency[k] = new List<int>();
+
+        foreach (var (i, j, weight, _) in candidates)
+        {
+            // Adding i->j closes a cycle iff j can already reach i.
+            if (CanReach(adjacency, j, i, d)) continue;
+            result[i, j] = weight;
+            adjacency[i].Add(j);
+        }
+
         return result;
+    }
+
+    /// <summary>Depth-first reachability test: can <paramref name="from"/> reach <paramref name="to"/> along the current directed edges?</summary>
+    private static bool CanReach(List<int>[] adjacency, int from, int to, int d)
+    {
+        if (from == to) return true;
+        var visited = new bool[d];
+        var stack = new Stack<int>();
+        stack.Push(from);
+        visited[from] = true;
+        while (stack.Count > 0)
+        {
+            int node = stack.Pop();
+            foreach (int next in adjacency[node])
+            {
+                if (next == to) return true;
+                if (!visited[next])
+                {
+                    visited[next] = true;
+                    stack.Push(next);
+                }
+            }
+        }
+        return false;
     }
 
 }

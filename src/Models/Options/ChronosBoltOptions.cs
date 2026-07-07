@@ -61,6 +61,10 @@ public class ChronosBoltOptions<T> : TimeSeriesRegressionOptions<T>
         DropoutRate = other.DropoutRate;
         ModelSize = other.ModelSize;
         NumQuantiles = other.NumQuantiles;
+        LearningRate = other.LearningRate;
+        WarmupSteps = other.WarmupSteps;
+        TotalSteps = other.TotalSteps;
+        EndLearningRate = other.EndLearningRate;
     }
 
     /// <summary>

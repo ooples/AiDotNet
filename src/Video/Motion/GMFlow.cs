@@ -429,6 +429,15 @@ public class GMFlow<T> : OpticalFlowBase<T>
     /// → BatchMatMul → reshape) so gradients flow to the Q/K projection convolutions.
     /// GMFlow performs GLOBAL matching (attention across every spatial position, not a
     /// local window), which is exactly this dense HW×HW attention.
+    /// <para>
+    /// <b>Memory:</b> the score/attention tensors are dense <c>[B, HW, HW]</c>, so memory grows
+    /// as O(B·(HW)²) in the feature-map resolution. GMFlow runs this on the 1/8-downsampled
+    /// encoder features, so a 512×512 input becomes a 64×64 (HW=4096) map — already ~134 M score
+    /// entries per batch item. To keep the OOM from surfacing as an opaque allocation failure deep
+    /// inside <see cref="IEngine.BatchMatMul"/>, we guard the token count up front and throw an
+    /// actionable message naming the resolution. Callers needing higher resolution should tile the
+    /// image or switch to a windowed/local-attention variant.
+    /// </para>
     /// </remarks>
     private Tensor<T> SpatialAttention(Tensor<T> query, Tensor<T> key, Tensor<T> value)
     {
@@ -437,6 +446,19 @@ public class GMFlow<T> : OpticalFlowBase<T>
         int h = query.Shape[2];
         int w = query.Shape[3];
         int hw = h * w;
+
+        // Dense global attention materializes a [B, HW, HW] score matrix. Guard the token count so
+        // an over-large feature map fails with a clear diagnostic instead of an opaque OOM inside
+        // BatchMatMul/Softmax. 16384 tokens (e.g. 128×128) => ~2.1e8 float scores per batch item.
+        const int MaxAttentionTokens = 16384;
+        if (hw > MaxAttentionTokens)
+        {
+            throw new InvalidOperationException(
+                $"GMFlow global attention feature map is {h}×{w} ({hw} tokens), which exceeds the " +
+                $"{MaxAttentionTokens}-token limit for the dense O(HW²) score matrix (~{(long)hw * hw} " +
+                "entries per batch item). Reduce the input resolution, tile the image, or use a " +
+                "windowed/local-attention variant for higher resolutions.");
+        }
 
         // [B, C, H, W] -> [B, C, HW] -> [B, HW, C] (spatial positions as tokens)
         var q = Engine.TensorPermute(Engine.Reshape(query, [b, c, hw]), [0, 2, 1]);
