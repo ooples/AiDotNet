@@ -220,6 +220,24 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Resolves the default loss for a Transformer when the caller passes none. Starts from the task's
+    /// generic default (<see cref="NeuralNetworkHelper{T}.GetDefaultLossFunction"/>) and, when that is
+    /// categorical cross-entropy, upgrades it to the label-smoothed variant (ε = 0.1). "Attention Is All
+    /// You Need" (Vaswani et al. 2017) trains with label smoothing 0.1, and it is the default in
+    /// transformer recipes (fairseq label_smoothed_cross_entropy, the annotated transformer); it was
+    /// missing here, which let batched (averaged-gradient) training overshoot the Noam warmup into a
+    /// saturated, frozen softmax and stall short of convergence (ooples/AiDotNet#1559). Non-classification
+    /// defaults (regression MSE, etc.) are returned unchanged; an explicitly-supplied loss always wins.
+    /// </summary>
+    private static ILossFunction<T> ResolveDefaultLoss(TransformerArchitecture<T> architecture)
+    {
+        var defaultLoss = NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        return defaultLoss is CategoricalCrossEntropyLoss<T>
+            ? new CategoricalCrossEntropyLoss<T>(labelSmoothing: 0.1)
+            : defaultLoss;
+    }
+
+    /// <summary>
     /// Creates a new Transformer neural network with the specified architecture.
     /// </summary>
     /// <param name="architecture">
@@ -244,7 +262,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public Transformer(TransformerArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, TransformerOptions? options = null) :
-        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
+        base(architecture, lossFunction ?? ResolveDefaultLoss(architecture))
     {
         _options = options ?? new TransformerOptions();
         Options = _options;

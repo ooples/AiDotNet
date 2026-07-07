@@ -36,6 +36,47 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     private readonly ConcurrentDictionary<string, OptimizationStepData<T, TInput, TOutput>> _cache = new();
 
     /// <summary>
+    /// Default maximum number of distinct step-data entries retained before the oldest are evicted.
+    /// </summary>
+    public const int DefaultCapacity = 8;
+
+    /// <summary>
+    /// Maximum number of distinct keys retained. Once exceeded, the oldest-inserted entries are evicted.
+    /// </summary>
+    private readonly int _capacity;
+
+    /// <summary>
+    /// Insertion-order record of cache keys, used to evict the oldest entry when the cache is full.
+    /// </summary>
+    private readonly ConcurrentQueue<string> _insertionOrder = new();
+
+    /// <summary>
+    /// Initializes a new cache with the <see cref="DefaultCapacity"/> bound.
+    /// </summary>
+    public DefaultModelCache() : this(DefaultCapacity)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new cache that retains at most <paramref name="capacity"/> distinct entries.
+    /// </summary>
+    /// <param name="capacity">
+    /// Maximum number of step-data entries to keep. Once exceeded, the oldest-inserted entry is
+    /// evicted (FIFO). This bounds memory: an optimizer's per-epoch evaluation writes a fresh
+    /// entry every epoch (the parameter-content key changes as the model trains), so without a
+    /// bound the cache — which retains a deep-copied model and O(N) predictions per entry — would
+    /// grow without limit across a long training run, driving per-epoch memory and wall-clock up.
+    /// A gradient optimizer never re-queries a prior epoch's key (parameters keep changing), and
+    /// population optimizers only hit on exact-duplicate parameter vectors (rare in continuous
+    /// search), so a small bound preserves the cache's real value while eliminating the leak.
+    /// Values &lt;= 0 fall back to <see cref="DefaultCapacity"/>.
+    /// </param>
+    public DefaultModelCache(int capacity)
+    {
+        _capacity = capacity > 0 ? capacity : DefaultCapacity;
+    }
+
+    /// <summary>
     /// Removes all cached optimization step data from the cache.
     /// </summary>
     /// <remarks>
@@ -47,6 +88,7 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     public void ClearCache()
     {
         _cache.Clear();
+        while (_insertionOrder.TryDequeue(out _)) { }
     }
 
     /// <summary>
@@ -95,7 +137,24 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
         if (key == null) throw new ArgumentNullException(nameof(key), "Cache key cannot be null.");
         if (stepData == null) throw new ArgumentNullException(nameof(stepData), "Step data cannot be null.");
 
+        bool isNewKey = !_cache.ContainsKey(key);
         _cache[key] = stepData;
+
+        // Bound the cache (FIFO eviction). Only track insertion order for genuinely new keys so
+        // re-writing an existing key (an in-place update of the same entry) doesn't inflate the
+        // count. Overshoot by one transiently under concurrency is harmless — the loop trims back
+        // to capacity. A dequeued key that was already removed (or re-added) simply no-ops.
+        if (isNewKey)
+        {
+            _insertionOrder.Enqueue(key);
+            while (_cache.Count > _capacity && _insertionOrder.TryDequeue(out var oldestKey))
+            {
+                if (!string.Equals(oldestKey, key, StringComparison.Ordinal))
+                {
+                    _cache.TryRemove(oldestKey, out _);
+                }
+            }
+        }
     }
 
     /// <summary>

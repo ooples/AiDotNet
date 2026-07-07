@@ -32,6 +32,13 @@ jobs:
   release-please:
     name: Maintain Release PR / cut release
     runs-on: ubuntu-latest
+    # Scope issues:write (label mutations) to this job only, following least-privilege —
+    # a job-level permissions block OVERRIDES the workflow default, so contents/pull-requests
+    # are re-declared here; the publish job keeps the workflow-level contents:write it needs.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write # release-please creates/applies the `autorelease:` labels via the Issues API
     outputs:
       release_created: ${{ steps.rp.outputs.release_created }}
       tag_name: ${{ steps.rp.outputs.tag_name }}

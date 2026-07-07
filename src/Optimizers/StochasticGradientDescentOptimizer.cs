@@ -134,7 +134,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
 
             // Create batcher for the current epoch using DataLoader infrastructure
             // Default BatchSize=1 gives true stochastic gradient descent
-            var batcher = CreateBatcher(inputData, _options.BatchSize);
+            var batcher = CreateBatcher(inputData, _options.BatchSize, epoch);
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {

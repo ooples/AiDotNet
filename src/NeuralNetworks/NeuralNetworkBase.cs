@@ -11202,6 +11202,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (resolved is LossFunctions.LossFunctionBase<T> tapeLoss)
         {
             lossTensor = tapeLoss.ComputeTapeLoss(prediction, target);
+            // Record the scalar loss so GetLastLoss() reflects this gradient step. The
+            // IGradientComputable fast-path (used by every gradient-based optimizer's
+            // CalculateGradient) previously left LastLoss stale/zero, so callers reading the
+            // per-batch training loss — e.g. AdamOptimizer's UseTrainingLossAsFitness mode —
+            // saw 0 even though the true batch loss was computed right here. The other training
+            // paths (TrainWithTape / fused step) already set LastLoss the same way.
+            LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         }
         else
         {
