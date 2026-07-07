@@ -23087,7 +23087,16 @@ public static class LayerHelper<T>
         // === Vision Encoder (CoAtNet: Dense approximation of CNN stages, then Transformer stages) ===
         // Note: Real CoAtNet uses depthwise convolutions + relative attention in early stages.
         // CNN stages here use Dense expand-project blocks as a simplified approximation.
-        yield return new LayerNormalizationLayer<T>();
+        //
+        // Input token projection (CLIP/ViT "trainable linear projection", Dosovitskiy et al. 2021
+        // §3.1). A leading BARE LayerNormalization was used here, but LayerNorm is scale/shift-
+        // invariant (LN(a*x+b) == LN(x)), so it discards the amplitude of the input and lets
+        // contrastive training collapse to an input-independent uniform embedding
+        // (DifferentImages_DifferentEmbeddings / DifferentInputs_AfterTraining). The affine
+        // projection preserves the input signal; the per-block LayerNormalizations below keep
+        // activations normalized. (Mirrors CreateDefaultViTLayers / the EVA-CLIP fix in
+        // CreateDefaultUnifiedGenerationLayers.)
+        yield return new DenseLayer<T>(visionEmbeddingDim, identityActivation);
 
         // First half: Dense expand-project blocks (approximates MBConv CNN stages)
         int cnnStages = numVisionLayers / 2;
@@ -23882,7 +23891,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === EVA-CLIP Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>();
+        // Input token projection — the ViT/CLIP "trainable linear projection of flattened
+        // patches" (Dosovitskiy et al. 2021 §3.1) applied before the transformer stack. A leading
+        // BARE LayerNormalization was used here, but LayerNorm is scale/shift-invariant
+        // (LN(a*x+b) == LN(x)), so scaling the input produced a bit-identical output
+        // (ScaledInput_ShouldChangeOutput) and training could collapse to an input-independent
+        // uniform state. The affine projection preserves the input signal while the per-block
+        // LayerNormalizations below keep activations normalized. (Mirrors CreateDefaultViTLayers /
+        // CreateDefaultEncoderDecoderVLMLayers.)
+        yield return new DenseLayer<T>(visionDim, identityActivation);
 
         for (int i = 0; i < numVisionLayers; i++)
         {

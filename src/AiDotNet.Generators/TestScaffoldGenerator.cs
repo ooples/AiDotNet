@@ -167,6 +167,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // shape, ~4x smaller dims, DropoutRate=0) that exercises every code path in seconds.
         "Donut",
 
+        // BASIC (Pham et al. 2022, "Combined Scaling for Zero-shot Transfer Learning") and the
+        // Emu generative-VLM family (Sun et al. 2023, "Generative Pretraining in Multimodality"):
+        // foundation-scale contrastive / generative VLMs. BASIC's defaults are a 24-layer /
+        // 1536-dim CoAtNet+transformer dual encoder; Emu's are a 39-layer / 1408-dim EVA-CLIP
+        // vision tower plus a 32-layer / 4096-dim decoder — multi-billion-parameter models whose
+        // forward+backward+optimizer step cannot fit the 120s CI budget on CPU (verified: the
+        // training invariants time out at 120000ms). Manual BASICTests / EmuTests scaffolds in
+        // ModelFamilyTests/NeuralNetworks run the same architecture shape at reduced <float> scale
+        // (Janus/Donut precedent), exercising every code path in seconds. (Emu2/Emu3 share Emu's
+        // CreateDefaultUnifiedGenerationLayers factory and are covered by the same category should
+        // they surface.)
+        "BASIC", "Emu",
+
+        // IconVSR (Chan et al., CVPR 2021, BasicVSR family): a 30 residual-block, 4x pixel-shuffle
+        // video super-resolution net — conv-only heavy compute whose training invariants (up to
+        // 250 iters) time out at 120/180s on CPU. The manual IconVSRTests scaffold in
+        // ModelFamilyTests/Video runs the same residual-block + pixel-shuffle architecture at
+        // reduced scale (fewer blocks, 2x upscale, small resolution) in seconds.
+        "IconVSR",
+
         // GAN models with non-default latent / image shapes that the generic
         // GAN-family scaffold ([16] rank-1 input) can't supply correctly.
         // Manual test classes in ModelFamilyTests/NeuralNetworks supply the
