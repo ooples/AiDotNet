@@ -3584,6 +3584,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                 var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+                try {
+                    int _miss = 0; foreach (var pp in trainableParams) if (!allGrads.ContainsKey(pp)) _miss++;
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+                        $"[CHUNKED] engine={Engine.GetType().Name} nParams={trainableParams.Count} nGrads={allGrads.Count} missed={_miss}\n");
+                } catch { }
                 // Walk both the layer-collected params AND any network-
                 // level trainable tensors so the latter actually receive
                 // accumulated gradient updates.
@@ -6723,6 +6728,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var lossTensor = loss.ComputeTapeLoss(output, expected);
         LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+            $"[STREAMING-PATH-TAKEN] engine={Engine.GetType().Name}\n"); } catch { }
 
         // Sources = layer-owned trainable params + network-level extras
         // (cls/pos tokens, etc.), exactly the set the eager path optimizes.
@@ -6762,14 +6769,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // full weight set has to fit in RAM, which is what makes a model whose
             // gradients exceed memory trainable at all. The 8-bit StreamingAdam
             // epilogue runs inside the callback at each gradient's release point.
+            int _covOk = 0, _covMiss = 0;
             tape.ComputeGradientsStreaming(lossTensor, sources,
                 (source, grad) =>
                 {
-                    if (grad is null || grad.Length == 0) return;
+                    if (grad is null || grad.Length == 0) { _covMiss++; return; }
+                    _covOk++;
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
+                    // GPU resident-weight coherence: the streaming optimizer just mutated this
+                    // weight's CPU backing in place; invalidate its resident device buffer so the
+                    // next forward re-uploads current weights (parity with the eager/fused fixes).
+                    if (Engine is DirectGpuTensorEngine _sg) _sg.InvalidateResidentWeightBuffer(source);
                 });
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+                $"[STREAMING clip=false] engine={Engine.GetType().Name} nSources={sources.Count} gradOk={_covOk} gradMiss={_covMiss}\n"); } catch { }
         }
         else if (twoPass)
         {
@@ -6941,7 +6956,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // scale loss, unscale gradients, overflow detection) actually runs.
         if (_mixedPrecisionContext is null
             && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer, useStreamingDefaults))
+        {
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+                $"[FUSED-PATH-TAKEN] engine={Engine.GetType().Name}\n"); } catch { }
             return;
+        }
 
         // Loud one-time fallback warning. The fused path above is the fast path;
         // when it doesn't engage we drop to the eager tape every step — a large,
@@ -7366,6 +7385,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Passing sources directly can miss parameters when the tape backward
             // can't match view tensor references through the GradFn chain.
             var allGrads = tape.ComputeGradients(lossForBackward, sources: null);
+            try {
+                int _miss = 0; foreach (var pp in trainableParams) if (!allGrads.ContainsKey(pp)) _miss++;
+                System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+                    $"[EAGER] engine={Engine.GetType().Name} nParams={trainableParams.Count} nGrads={allGrads.Count} missed={_miss}\n");
+            } catch { }
             var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var param in trainableParams)
@@ -7533,6 +7557,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
                 MarkTrainMutationStarted();
                 opt.Step(context);
+
+                // GPU RESIDENT-WEIGHT COHERENCE: the eager tape optimizer mutates each weight
+                // tensor's CPU backing in place (Adam SIMD via GetLiveBackingArrayOrNull) and bumps
+                // Tensor.Version (#1810). But in a GPU resident/capture scope the forward's upload
+                // fast-path returns the cached device buffer WITHOUT consulting Version (the
+                // ResidentStepActive bypass in DirectGpuTensorEngine.GetOrAllocateBuffer), so the
+                // version bump alone does NOT force a re-upload — the next forward keeps reading the
+                // STALE pre-step device weights and the model trains against frozen weights (drift
+                // without descent → held-out accuracy pinned at chance on GPU while CPU learns).
+                // Fully invalidate each updated weight's resident device buffer so the next forward
+                // re-uploads the current CPU weights.
+                if (Engine is DirectGpuTensorEngine residentGpuEngine)
+                {
+                    foreach (var wtensor in trainableParams)
+                        residentGpuEngine.InvalidateResidentWeightBuffer(wtensor);
+                }
             }
 
             // Apply gradient updates to network-level RAW trainable
@@ -8908,6 +8948,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
     {
         GpuEngine?.InvalidateAllWeightCaches();
+        // InvalidateAllWeightCaches only clears the PERSISTENT + activation caches. It does NOT
+        // clear each weight tensor's per-tensor `_gpuBuffer` fast-path field, which
+        // GetWeightBufferPreferResident returns (line ~2417) whenever `_gpuBufferVersion == Version`.
+        // An in-place layer.SetParameters / optimizer update that does not bump Version (raw-array
+        // write) leaves that gate satisfied, so the GPU forward serves the STALE per-tensor device
+        // buffer and the model trains against frozen device weights (host GetParameters is correct
+        // but the GPU prediction never reflects the update — verified via a per-step console-harness
+        // probe: at step 2 the host weight matches the CPU engine bit-for-bit while the GPU forward
+        // prediction diverges). Fully invalidate each trainable weight's resident device buffer so the
+        // next forward re-uploads the current host weights. No-op on the CPU engine.
+        if (GpuEngine is { } gpuForInvalidate)
+        {
+            foreach (var wtensor in Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion))
+                gpuForInvalidate.InvalidateResidentWeightBuffer(wtensor);
+        }
         // CPU-side mirror of the same contract: the CPU engine's inference
         // fast paths cache DERIVED weight forms (SgemmWithCachedB's
         // pre-packed B panels, Conv2D's transposed kernels) keyed by the

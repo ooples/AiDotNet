@@ -1582,15 +1582,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 // updated parameter changed so it re-uploads on the next use. On the CPU engine this is
                 // a no-op. (The legacy SetParameters path below already refreshes device state.)
                 var updatedParams = ctx.Parameters;
+                var residentEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current
+                    as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
                 for (int pi = 0; pi < updatedParams.Count; pi++)
                 {
                     var updated = updatedParams[pi];
+                    if (updated is null) continue;
                     // Bump the version so a GPU engine's version gate re-uploads the mutated weights
-                    // from the host backing store on the next forward. IncrementVersion is a lightweight
-                    // mark-dirty — unlike InvalidatePersistentTensor it does NOT download the current
-                    // device buffer to host (which, for a GPU-resident parameter, would overwrite the
-                    // Adam update we just wrote and freeze training).
-                    updated?.IncrementVersion();
+                    // from the host backing store on the next forward.
+                    updated.IncrementVersion();
+                    // GPU-cache coherency (the ACTUAL fix): IncrementVersion alone is INSUFFICIENT.
+                    // The GPU forward's upload fast-path returns the cached per-tensor device buffer
+                    // WITHOUT re-checking Version when a resident scope is active, and the activation
+                    // cache (keyed by the weight's backing array) also holds the stale device buffer.
+                    // Observed: after the in-place Adam update the HOST weight is correct (GetParameters
+                    // matches the CPU engine bit-for-bit) but the next forward's prediction diverges from
+                    // CPU — the device buffer is STALE — so GPU training silently trains against frozen
+                    // device weights (held-out accuracy pinned at chance while CPU learns). Fully
+                    // invalidate the resident device buffer + activation-cache entries so the next forward
+                    // re-uploads the current host weights. No-op on the CPU engine.
+                    residentEngine?.InvalidateResidentWeightBuffer(updated);
                 }
                 return currentSolution;
             }
