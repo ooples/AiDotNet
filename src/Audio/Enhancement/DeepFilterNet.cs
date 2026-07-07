@@ -573,6 +573,13 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             layer.SetParameters(parameters.Slice(offset, count));
             offset += count;
         }
+
+        // Weights just changed wholesale (Clone / deserialize restore path). Invalidate any packed
+        // inference weight caches so the next Predict rebuilds them from these params — otherwise a
+        // clone whose cache was populated during ResolveLazyLayerShapes' warm-forward (random init)
+        // keeps serving stale packed weights and predicts differently from the original
+        // (Clone_ShouldProduceIdenticalOutput).
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
     /// <inheritdoc/>
