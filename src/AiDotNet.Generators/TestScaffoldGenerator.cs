@@ -2556,8 +2556,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // the first conv as inputChannels * 2 internally. The test's
                     // InputShape still uses 6 (2 frames × 3 channels) so the
                     // Predict input matches what the conv expects.
+                    //
+                    // Optical-flow models (OpticalFlowBase) instead feed the concatenated 6-channel
+                    // pair to a LAZILY-resolved feature-extractor conv, so InputDepth — which
+                    // ResolveLazyLayerShapes uses to resolve that conv's input depth — must be the
+                    // concatenated 2×3=6. The single-frame 3 resolves the conv to 3, and the real
+                    // EstimateFlow forward (which concatenates the pair) then throws "Expected input
+                    // depth 3, but got 6". PredictCore derives its per-frame split from input.Shape[1]/2,
+                    // not InputDepth, so the [1,6,64,64] InputShape still splits correctly.
                     inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
-                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4";
+                    int twoFrameDepth = isOpticalFlow ? 6 : 3;
+                    sizeExpr = $"inputHeight: 64, inputWidth: 64, inputDepth: {twoFrameDepth}, outputSize: 4";
                 }
                 else if (isVision)
                 {
