@@ -189,6 +189,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _tapeM.Clear();
         _tapeV.Clear();
         _tapeVMax.Clear();
+        _fp32StepCache.Clear();
         _tapeStep = 0;
 
         // Initialize parameters
@@ -694,6 +695,31 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeVMax = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 
+    /// <summary>
+    /// Steady-state per-parameter backing-array cache for the plain dense fp32 Adam
+    /// step (re-profile #3). The hot path resolved m/v via two ConcurrentDictionary
+    /// lookups + shape SequenceEqual + four <c>GetLiveBackingArrayOrNull</c> calls +
+    /// a sparse-grad probe, every param every step (~90 params × ~500 steps for
+    /// N-BEATS). Param / moment tensor refs and their backing arrays are stable
+    /// across steps (the tape dicts only replace an entry on a shape change), so
+    /// once resolved we cache {param, m, v arrays, length} keyed by param identity
+    /// and the fast path below reuses them — only the fresh per-step gradient is
+    /// resolved. Guarded so ANY deviation (AMSGrad, sparse-only grad, buffer-aliased
+    /// view with null backing array, length change from lazy-init, gpu path) falls
+    /// through to the fully-general resolution below; the numerics are the SAME SIMD
+    /// kernel, so results are bit-identical. Cleared on Optimize() reset alongside
+    /// the tape moment dicts.
+    /// </summary>
+    private sealed class Fp32AdamSlot
+    {
+        public float[] P = default!;
+        public float[] M = default!;
+        public float[] V = default!;
+        public int N;
+    }
+    private readonly ConcurrentDictionary<Tensor<T>, Fp32AdamSlot> _fp32StepCache =
+        new(TensorReferenceComparer<Tensor<T>>.Instance);
+
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
@@ -818,8 +844,42 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var __params = context.Parameters as System.Collections.Generic.IReadOnlyList<Tensor<T>>
             ?? System.Linq.Enumerable.ToList(context.Parameters);
 
+        // #3 steady-state fast path is engaged only for the plain dense fp32, non-AMSGrad,
+        // CPU step. Precompute the per-step float constants once (they're identical across
+        // all params) so the cached fast path can call AdamMomentKernels.AdamStep directly.
+        bool useStepCache = isFloat && !gpuAdam && !_options.UseAMSGrad;
+        float cfb1 = (float)b1, cfb2 = (float)b2, cf1mb1 = (float)oneMinusB1, cf1mb2 = (float)oneMinusB2;
+        float cfbc1 = (float)bc1, cfbc2 = (float)bc2, cflr = (float)lr, cfeps = (float)eps;
+
         void ProcessParam(Tensor<T> param)
         {
+            // #3 STEADY-STATE FAST PATH (plain dense fp32, non-AMSGrad, CPU): once a param's
+            // backing arrays are cached, skip the two ConcurrentDictionary lookups, the m/v
+            // shape checks, the three GetLiveBackingArrayOrNull resolutions and the sparse
+            // probe. Only the fresh per-step gradient is resolved. Guarded so any deviation
+            // (length change from lazy-init, buffer-aliased grad with null backing, sparse-
+            // only grad, missing dense grad) falls through to the fully-general path below;
+            // the arithmetic is the SAME AdamMomentKernels.AdamStep, so this is bit-identical.
+            if (useStepCache
+                && _fp32StepCache.TryGetValue(param, out var slot)
+                && slot.N == param.Length
+                && context.Gradients.TryGetValue(param, out var fastGradObj) && fastGradObj is not null)
+            {
+                var fastGrad = (Tensor<T>)fastGradObj;
+                if (!param._shape.SequenceEqual(fastGrad._shape) && param.Length == fastGrad.Length)
+                    fastGrad = Engine.Reshape(fastGrad, param._shape);
+                float[]? fastGradArr = (float[]?)(object?)fastGrad.GetLiveBackingArrayOrNull();
+                if (fastGradArr is not null && fastGradArr.Length >= slot.N)
+                {
+                    AiDotNet.Tensors.Engines.Simd.AdamMomentKernels.AdamStep(
+                        slot.P.AsSpan(0, slot.N), fastGradArr.AsSpan(0, slot.N),
+                        slot.M.AsSpan(0, slot.N), slot.V.AsSpan(0, slot.N), System.Span<float>.Empty,
+                        cfb1, cfb2, cf1mb1, cf1mb2, cfbc1, cfbc2, cflr, cfeps, false);
+                    return;
+                }
+                // else: fall through to the general path (buffer-aliased grad view, etc.)
+            }
+
             // Cheap presence check — do NOT materialize sparse→dense yet. When only
             // sparse embedding grads exist, eagerly resolving the "effective" gradient
             // here would ToDense the whole [vocab, dim] table and then the sparse fast
@@ -1070,6 +1130,14 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                         paramArr.AsSpan(0, n), gradArr.AsSpan(0, n), mArr.AsSpan(0, n), vArr.AsSpan(0, n),
                         useAmsgrad ? vMaxArr!.AsSpan(0, n) : System.Span<float>.Empty,
                         fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
+
+                    // #3: memoize the resolved backing arrays for the steady-state fast path
+                    // above (only the plain dense non-AMSGrad case; all arrays are the live
+                    // backing storage that the tape dicts keep stable across steps).
+                    if (useStepCache && !useAmsgrad)
+                    {
+                        _fp32StepCache[param] = new Fp32AdamSlot { P = paramArr, M = mArr, V = vArr, N = n };
+                    }
                 }
                 else
                 {
@@ -1264,6 +1332,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _tapeM.Clear();
         _tapeV.Clear();
         _tapeVMax.Clear();
+        _fp32StepCache.Clear();
         _tapeStep = 0;
     }
 
