@@ -1262,6 +1262,51 @@ public static class DeserializationHelper
                 conv3d.ResolveShapesOnly(new[] { inC, inD, inH, inW });
             }
         }
+        else if (genericDef == typeof(NeuralNetworks.Layers.DeformableConvolutionalLayer<>))
+        {
+            // DeformableConvolutionalLayer(int outputChannels, int kernelSize, int stride, int padding,
+            //   int groups, int deformGroups, bool useModulation, IEngine? engine) — lazy ctor; input
+            // channels / spatial dims resolve on first Forward. The construction-shape hyperparameters are
+            // restored from GetMetadata; without them the reflection fallback built the layer with default
+            // ctor args (padding 0, wrong output channels), producing a mis-shaped output and breaking Clone
+            // for DCN-using models (InternImage, BasicVSR++).
+            int outputChannels = TryGetInt(additionalParams, "OutputChannels")
+                ?? (outputShape.Length switch { >= 4 => outputShape[1], 3 => outputShape[0], _ => outputShape.Length > 0 ? outputShape[0] : 1 });
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int padding = TryGetInt(additionalParams, "Padding") ?? 1;
+            int groups = TryGetInt(additionalParams, "Groups") ?? 1;
+            int deformGroups = TryGetInt(additionalParams, "DeformGroups") ?? 1;
+            bool useModulation = TryGetBool(additionalParams, "UseModulation") ?? true;
+
+            var engineType = typeof(AiDotNet.Tensors.Engines.IEngine);
+            var ctor = type.GetConstructor(new Type[]
+                { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), engineType });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find DeformableConvolutionalLayer constructor with expected signature.");
+            instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, groups, deformGroups, useModulation, null });
+
+            // Pre-resolve from saved inputShape so SetParameters sizes the (offset/mask/main) weights to
+            // match the saved parameter vector. inputShape is rank-3 [C,H,W] (layer-only) or rank-4
+            // [B,C,H,W] post-batch.
+            if (instance is NeuralNetworks.Layers.DeformableConvolutionalLayer<T> dcn && inputShape != null && inputShape.Length >= 3)
+            {
+                int inC, inH, inW;
+                if (inputShape.Length == 4)
+                {
+                    inC = inputShape[1] > 0 ? inputShape[1] : 1;
+                    inH = inputShape[2] > 0 ? inputShape[2] : 1;
+                    inW = inputShape[3] > 0 ? inputShape[3] : 1;
+                }
+                else
+                {
+                    inC = inputShape[0] > 0 ? inputShape[0] : 1;
+                    inH = inputShape[1] > 0 ? inputShape[1] : 1;
+                    inW = inputShape[2] > 0 ? inputShape[2] : 1;
+                }
+                dcn.ResolveShapesOnly(new[] { inC, inH, inW });
+            }
+        }
         else if (genericDef == typeof(NeuralNetworks.Layers.DeconvolutionalLayer<>))
         {
             // DeconvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?)
