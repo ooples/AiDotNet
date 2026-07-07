@@ -7948,8 +7948,15 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Decoder
+        // Decoder — the encoder applied two stride-2 convs (÷4 spatial), so mirror them with two
+        // ×2 upsamples to restore the input resolution. Video inpainting is a dense per-pixel task:
+        // the reconstructed frame MUST be the same spatial size as the input frame (otherwise
+        // Predict returns a ¼-resolution tensor and output.Length != input.Length).
+        yield return new UpsamplingLayer<T>(2);
+        h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>(2);
+        h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Output head
