@@ -40,10 +40,27 @@ namespace AiDotNet.LossFunctions;
 public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
+    /// Label-smoothing coefficient ε in [0, 1). 0 disables smoothing (plain one-hot targets).
+    /// </summary>
+    private readonly double _labelSmoothing;
+
+    /// <summary>
     /// Initializes a new instance of the CategoricalCrossEntropyLoss class.
     /// </summary>
-    public CategoricalCrossEntropyLoss()
+    /// <param name="labelSmoothing">
+    /// Label-smoothing coefficient ε in [0, 1), default 0 (no smoothing). When ε &gt; 0 the one-hot
+    /// target y is replaced by <c>(1 - ε)·y + ε/K</c> (K = number of classes) before the loss and
+    /// gradient are computed — the "Attention Is All You Need" (Vaswani et al. 2017) regularizer
+    /// (they use ε = 0.1). Smoothing keeps the optimal softmax output off the hard 0/1 rail, so the
+    /// softmax gradient never vanishes into a saturated state — this is what lets batched
+    /// (averaged-gradient) training keep learning instead of overshooting into a frozen local optimum.
+    /// </param>
+    public CategoricalCrossEntropyLoss(double labelSmoothing = 0.0)
     {
+        if (labelSmoothing < 0.0 || labelSmoothing >= 1.0)
+            throw new ArgumentOutOfRangeException(
+                nameof(labelSmoothing), labelSmoothing, "Label smoothing must be in [0, 1).");
+        _labelSmoothing = labelSmoothing;
     }
 
     /// <summary>
@@ -55,6 +72,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
+        actual = SmoothActual(actual);
 
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
@@ -75,6 +93,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
+        actual = SmoothActual(actual);
 
         // Derivative of -Σ actual_i * log(predicted_i) with respect to predicted_i = -actual_i / predicted_i
         // Note: When composed with softmax, this simplifies to (predicted - actual),
@@ -105,6 +124,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
+        actual = SmoothTarget(actual);
         int size = predicted.Length;
 
         // Compute loss on GPU
@@ -145,6 +165,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
         target = EnsureTargetMatchesPredicted(predicted, target);
+        target = SmoothTarget(target);
         // Categorical CE per sample = -Σ_class target * log(predicted + eps),
         // summed over the class (last) axis, then averaged over any remaining
         // batch / sequence axes. This matches PyTorch's
@@ -175,5 +196,40 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         var batchAxes = Enumerable.Range(0, perSample.Shape.Length).ToArray();
         var mean = Engine.ReduceMean(perSample, batchAxes, keepDims: false);
         return Engine.TensorNegate(mean);
+    }
+
+    /// <summary>
+    /// Applies label smoothing to a one-hot target VECTOR: <c>(1 - ε)·y + ε/K</c> where K is the
+    /// class count. Returns the input unchanged when smoothing is disabled (ε = 0).
+    /// </summary>
+    private Vector<T> SmoothActual(Vector<T> actual)
+    {
+        if (_labelSmoothing <= 0.0) return actual;
+        int k = actual.Length;
+        if (k == 0) return actual;
+        T keep = NumOps.FromDouble(1.0 - _labelSmoothing);
+        T add = NumOps.FromDouble(_labelSmoothing / k);
+        var smoothed = new Vector<T>(k);
+        for (int i = 0; i < k; i++)
+            smoothed[i] = NumOps.Add(NumOps.Multiply(actual[i], keep), add);
+        return smoothed;
+    }
+
+    /// <summary>
+    /// Applies label smoothing to a one-hot target TENSOR along its last (class) axis:
+    /// <c>(1 - ε)·y + ε/K</c>. Returns the input unchanged when smoothing is disabled (ε = 0).
+    /// The target is a constant (not a tape variable), so these element-wise ops do not affect the
+    /// back-propagated gradient path — they only reshape the loss's target distribution.
+    /// </summary>
+    private Tensor<T> SmoothTarget(Tensor<T> target)
+    {
+        if (_labelSmoothing <= 0.0) return target;
+        int rank = target.Shape.Length;
+        if (rank == 0) return target;
+        int k = target.Shape[rank - 1];
+        if (k == 0) return target;
+        return Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(target, NumOps.FromDouble(1.0 - _labelSmoothing)),
+            NumOps.FromDouble(_labelSmoothing / k));
     }
 }
