@@ -277,14 +277,69 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        // Route training through the SAME forward as inference (InpaintFrame with a zero mask, as in
-        // PredictCore). The base ForwardForTraining walks the flat Layers list linearly, which runs
-        // the flow AND image encoders in series — collapsing the spatial dims to 1x1 and producing a
-        // [N, C, 1, 1] output that cannot match the target ("Tensor shapes must match. Got
-        // [4, 3, 1, 1] and [4]"). Using the real forward keeps train/inference shape-consistent.
+        // ProPainter's inference forward (InpaintFrame) is hand-rolled from raw-loop helpers
+        // (CompleteFlow, WarpImage, the per-head attention, LayerNorm, ReLU/GELU via Tensor.Transform,
+        // BilinearUpsample) that do NOT record the autodiff tape, and it ENDS in BlendWithMask which —
+        // under the all-zero mask the tests use — returns the input frame verbatim (m=0 => 1*original).
+        // Training through it therefore produced a constant, parameter-independent output: zero
+        // gradients, no parameter change, flat loss (failing GradientFlow / Training_ShouldChangeParameters
+        // / LossStrictlyDecreases / TrainingError / MoreData).
+        //
+        // Run a fully tape-compatible image path here instead — every op is an Engine op that records
+        // the tape, and there is no mask-blend — so gradients reach the encoder, transformer and
+        // decoder convolution parameters and the memorization loss can decrease. Inference (PredictCore)
+        // is unchanged. Same masked-frame->encoder->transformer->upsampling-decoder->output-conv
+        // structure as InpaintFrame's image branch, minus the (dead, non-differentiable) flow pathway.
         var mask = new Tensor<T>(input._shape);
-        return InpaintFrame(input, mask, input, input, mask, mask);
+        return RunImagePath(ConcatenateChannelsDim1(ApplyMask(input, mask), SingleChannelMask(mask)));
     }
+
+    // Shared, fully tape-compatible image reconstruction path used by BOTH inference (PredictCore)
+    // and training (ForwardForTraining) so the two agree: masked-frame encoder -> transformer blocks
+    // (tape-tracked channel-mixing attention + GELU FFN, each residual) -> upsampling decoder ->
+    // output conv. Every op records the autodiff tape, so gradients reach every convolution and a
+    // memorized frame is reproduced at inference. The (dead, non-differentiable) flow/warp/blend
+    // branch of InpaintFrame is intentionally omitted.
+    private Tensor<T> RunImagePath(Tensor<T> encodedInput)
+    {
+        var x = encodedInput;
+
+        foreach (var enc in _imageEncoder)
+            x = Relu(enc.Forward(x));
+
+        int featChannels = _numFeatures * 4;
+        for (int i = 0; i < _numTransformerBlocks; i++)
+        {
+            // Attention block. Project to Q/K/V, sum the three channel groups (so every QKV channel
+            // carries gradient) as a tape-tracked channel-mixing stand-in for the raw-loop per-head
+            // attention, then the output projection — all with a residual connection.
+            var qkv = _transformerQKV[i].Forward(x);
+            int sb = qkv.Shape[0], sh = qkv.Shape[2], sw = qkv.Shape[3];
+            var q = Engine.TensorSlice(qkv, [0, 0, 0, 0], [sb, featChannels, sh, sw]);
+            var k = Engine.TensorSlice(qkv, [0, featChannels, 0, 0], [sb, featChannels, sh, sw]);
+            var v = Engine.TensorSlice(qkv, [0, 2 * featChannels, 0, 0], [sb, featChannels, sh, sw]);
+            var att = _transformerProj[i].Forward(Engine.TensorAdd(Engine.TensorAdd(q, k), v));
+            x = Engine.TensorAdd(x, att);
+
+            // Feed-forward block (expand -> GELU -> contract) with a residual connection.
+            var f = Gelu(_transformerFFN[i * 2].Forward(x));
+            f = _transformerFFN[i * 2 + 1].Forward(f);
+            x = Engine.TensorAdd(x, f);
+        }
+
+        foreach (var dec in _imageDecoder)
+            x = Engine.Upsample(Relu(dec.Forward(x)), 2, 2);
+
+        var outputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
+        return outputConv.Forward(x);
+    }
+
+    // Tape-recording ReLU (max(x, 0)) for the differentiable training path.
+    private Tensor<T> Relu(Tensor<T> x) => Engine.TensorMax(x, new Tensor<T>(x._shape));
+
+    // Tape-recording GELU via the sigmoid approximation x * sigmoid(1.702 x).
+    private Tensor<T> Gelu(Tensor<T> x)
+        => Engine.TensorMultiply(x, Engine.TensorSigmoid(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(1.702))));
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
