@@ -313,6 +313,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // lane. (A separate fidelity follow-up tracks wiring the paper's masked inter/intra-frame
         // attention, which the default factory does not yet build.)
         "MIAVSR",
+        // IconVSR: BasicVSR-family video super-resolution (Chan et al., CVPR 2021). Its default
+        // IconVSROptions build the same heavy conv stack as MIAVSR/MGLDVSR — 30 residual blocks
+        // (NumResBlocks=30) with 4x pixel-shuffle upsampling (ScaleFactor=4), conv-only (no
+        // O(n^2)-attention pathology). Verified locally: Training_ShouldReduceLoss,
+        // LossStrictlyDecreasesOnMemorizationTask, MoreData (250 iters) and TrainingError all
+        // time out at 180000ms — genuine heavy conv compute, gradients flow, not a correctness
+        // bug. Runs in the nightly heavy lane, matching its VSR siblings MGLDVSR / MIAVSR / DualXVSR.
+        "IconVSR",
         // ParaformerLarge: foundation-scale CIF ASR (Alibaba 2023). Its default
         // ParaformerLargeOptions build a genuinely huge stack — a warm-up forward reports
         // ~661M trainable parameters (GetParameters().Length = 661,219,029; ~2.6 GB as float),
