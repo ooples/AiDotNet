@@ -676,6 +676,30 @@ public class RAFT<T> : OpticalFlowBase<T>
         if (_upsampleConv is not null) Layers.Add(_upsampleConv);
     }
 
+    private bool _shapesProbed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// RAFT's forward is non-linear — a per-frame feature/context encoder, a correlation volume over
+    /// the 6-channel feature pair, and GRU update convs — so the base linear Layers-walk mis-sizes the
+    /// correlation / GRU convs (it resolved one to 3 while the real forward feeds 6, throwing
+    /// "Expected input depth 3, but got 6"). Resolve every lazy conv through a real forward on a small
+    /// dummy frame-pair instead, so each conv sees exactly the input its production forward feeds it.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_shapesProbed || _featureEncoder.Count == 0) return;
+        _shapesProbed = true;
+        int c = _channels > 0 ? _channels : 3;
+        // Keep the probe cheap: ONE GRU iteration resolves every conv (the update convs are reused
+        // each iteration), and a 32×32 pair downsamples to 4×4 features so the all-pairs correlation
+        // is trivial — the full 12-iteration / 64×64 forward here made construction blow the test timeout.
+        int savedIters = NumIterations;
+        NumIterations = 1;
+        try { _ = PredictCore(new Tensor<T>([1, c * 2, 32, 32])); }
+        finally { NumIterations = savedIters; }
+    }
+
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
