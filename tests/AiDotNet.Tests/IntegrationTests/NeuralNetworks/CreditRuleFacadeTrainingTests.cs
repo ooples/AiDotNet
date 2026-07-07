@@ -265,24 +265,43 @@ public class CreditRuleFacadeTrainingTests
     }
 
     [Fact]
-    public void CreditRuleGradients_PositivelyAlignWithBackprop_OnFixedNet()
+    public void CreditRuleGradients_PositivelyAlignWithBackprop_AfterTraining()
     {
+        // Feedback-Alignment / Direct-Feedback-Alignment theory (Lillicrap et al. 2016; Nøkland 2016):
+        // a credit rule's gradient is NOT guaranteed to align with back-prop at RANDOM initialization —
+        // with fixed random feedback the expected alignment there is ~0. Alignment is an emergent
+        // property that DEVELOPS as the forward weights adapt to the fixed feedback matrices during
+        // training (the network learns to make its own forward path agree with the feedback path). So
+        // we train each rule briefly, then assert its gradient has become positively aligned with the
+        // true (back-prop) gradient — the property the rules actually guarantee, and the one that makes
+        // them learn (verified end-to-end by the held-out-accuracy tests above).
+        var ops = MathHelper.GetNumericOperations<double>();
+        var (trainX, trainY, _) = MakeBlobs(300, seed: 1);
         var (x, y, _) = MakeBlobs(64, seed: 7);
-        var mlp = BuildMlp();
-        _ = mlp.Predict(x); // resolve shapes; weights are identical across all measurements below
-
-        mlp.SetCreditRule(null);
-        var backpropGrad = mlp.ComputeGradients(x, y);
+        var lr = ops.FromDouble(0.05);
 
         foreach (var rule in new[] { CreditRule.DirectFeedbackAlignment, CreditRule.FeedbackAlignment, CreditRule.SignSymmetric })
         {
-            mlp.SetCreditRule(CreditRuleFactory<double>.Create(rule, seed: 123));
-            var g = mlp.ComputeGradients(x, y);
-            mlp.SetCreditRule(null);
+            // Fresh network per rule so training under one rule does not carry over to the next.
+            var mlp = BuildMlp();
+            _ = mlp.Predict(trainX); // resolve shapes
 
-            double cos = Cosine(backpropGrad, g);
+            // Train with the credit rule so feedback alignment develops.
+            mlp.SetCreditRule(CreditRuleFactory<double>.Create(rule, seed: 123));
+            for (int step = 0; step < 60; step++)
+            {
+                var stepGrad = mlp.ComputeGradients(trainX, trainY);
+                mlp.ApplyGradients(stepGrad, lr);
+            }
+
+            // At the trained weights, the credit-rule gradient must positively align with back-prop.
+            var ruleGrad = mlp.ComputeGradients(x, y);
+            mlp.SetCreditRule(null);
+            var backpropGrad = mlp.ComputeGradients(x, y);
+
+            double cos = Cosine(backpropGrad, ruleGrad);
             Assert.True(cos > 0.0,
-                $"{rule} gradient should be positively aligned with back-prop (cosine={cos:F4}).");
+                $"{rule} gradient should be positively aligned with back-prop after training (cosine={cos:F4}).");
         }
     }
 
