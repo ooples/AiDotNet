@@ -230,7 +230,32 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
         foreach (var (markedType, sectionName) in visitor.DiscoveredTypes)
         {
             // Skip if a Configure method already covers this section name.
-            if (existingNames.Contains(sectionName)) continue;
+            if (existingNames.Contains(sectionName))
+            {
+                // Collision case: a Configure-method section already claims this name. If that
+                // section is a POCO/options section (no registry entries of its own) and the marked
+                // type is an INTERFACE with concrete implementations, merge those implementations
+                // onto the existing section so the type registry exposes them under this name — while
+                // leaving the section's strongly-typed POCO config property intact. This is what lets
+                // ConfigureAutoML(AutoMLOptions) (the "AutoML" POCO section) and IAutoMLModel
+                // (marked [YamlConfigurable("AutoML")]) share one "AutoML" section that BOTH configures
+                // via options AND resolves concrete IAutoMLModel implementations from YAML.
+                if (markedType.TypeKind == TypeKind.Interface)
+                {
+                    var existing = existingSections.FirstOrDefault(s =>
+                        string.Equals(s.Method.SectionName, sectionName, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null && existing.ConcreteImplementations.Count == 0)
+                    {
+                        var mergedImpls = FindImplementations(markedType, compilation);
+                        if (mergedImpls.Count > 0)
+                        {
+                            existing.ConcreteImplementations = mergedImpls;
+                            existing.Method.RegistryMerged = true;
+                        }
+                    }
+                }
+                continue;
+            }
 
             var info = new ConfigureMethodInfo
             {
@@ -623,7 +648,8 @@ internal static class YamlParamsHelper
             .Where(s => s.ConcreteImplementations.Count > 0 &&
                 (s.Method.Category == SectionCategory.Interface ||
                  (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract) ||
-                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered)))
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered) ||
+                 s.Method.RegistryMerged))
             .ToList();
 
         var sb = new StringBuilder();
@@ -863,7 +889,8 @@ internal static class YamlParamsHelper
             .Where(s => s.ConcreteImplementations.Count > 0 &&
                 (s.Method.Category == SectionCategory.Interface ||
                  (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract) ||
-                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered)))
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered) ||
+                 s.Method.RegistryMerged))
             .ToList();
 
         var sb = new StringBuilder();
@@ -1215,6 +1242,16 @@ internal static class YamlParamsHelper
         public SectionCategory Category { get; set; }
         public ITypeSymbol? ActionInnerType { get; set; }
         public bool IsAttributeDiscovered { get; set; }
+
+        /// <summary>
+        /// Set when a [YamlConfigurable]-marked INTERFACE's section name collides with an existing
+        /// POCO/options Configure section (e.g. ConfigureAutoML(AutoMLOptions) claims "AutoML" while
+        /// IAutoMLModel is marked [YamlConfigurable("AutoML")]). The interface's concrete
+        /// implementations are merged onto the existing section so the TYPE REGISTRY exposes them
+        /// under this name — WITHOUT flipping <see cref="IsAttributeDiscovered"/>, which would drop
+        /// the section's strongly-typed POCO config property from YamlModelConfig (see EmitYamlModelConfig).
+        /// </summary>
+        public bool RegistryMerged { get; set; }
     }
 
     private class SectionInfo
