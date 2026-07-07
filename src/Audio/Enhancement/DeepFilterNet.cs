@@ -396,23 +396,38 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 numGruLayers: _numGruLayers, dfBins: _dfBins, dfOrder: _dfOrder).ToList();
 
         Layers.Clear();
+        Layers.AddRange(layers);
+        DistributeLayersIntoSubLists();
+    }
+
+    /// <summary>
+    /// (Re)populates the role sub-lists (<see cref="_erbEncoder"/>, <see cref="_gruLayers"/>,
+    /// <see cref="_dfLayers"/>, <see cref="_gainLayer"/>, <see cref="_decoder"/>) from the current
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> list. Idempotent. Called from InitializeLayers AND at
+    /// the start of the forward pass: deserialize / DeepCopy REPLACES the Layers list with fresh layer
+    /// objects, so the sub-lists (captured at construction) would otherwise point at stale, pre-copy
+    /// layers — making a clone compute from un-restored weights while GetParameters (which walks Layers)
+    /// reports the restored ones (the Clone_ShouldProduceIdenticalOutput divergence).
+    /// </summary>
+    private void DistributeLayersIntoSubLists()
+    {
         _erbEncoder.Clear();
         _gruLayers.Clear();
         _dfLayers.Clear();
         _decoder.Clear();
-        Layers.AddRange(layers);
+        _gainLayer = null;
 
-        // Distribute to internal sub-lists for forward pass
+        var layers = Layers;
         int idx = 0;
-        for (int i = 0; i < 6 && idx < layers.Count; i++) // ERB encoder: 2x (Dense + BN + Activation)
+        for (int i = 0; i < 6 && idx < layers.Count; i++)                 // ERB encoder: 2x (Dense + Norm + Activation)
             _erbEncoder.Add(layers[idx++]);
         for (int i = 0; i < _numGruLayers && idx < layers.Count; i++)
             _gruLayers.Add(layers[idx++]);
-        for (int i = 0; i < 2 && idx < layers.Count; i++) // DF layers: Dense + Activation
+        for (int i = 0; i < 2 && idx < layers.Count; i++)                 // DF layers: Dense + Activation
             _dfLayers.Add(layers[idx++]);
         if (idx < layers.Count)
-            _gainLayer = layers[idx++]; // Gain estimation
-        while (idx < layers.Count) // Decoder: Dense + BN + Activation
+            _gainLayer = layers[idx++];                                   // Gain estimation
+        while (idx < layers.Count)                                        // Decoder: Dense + Norm + Activation
             _decoder.Add(layers[idx++]);
     }
 
@@ -628,6 +643,12 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         // single Predict/Train call processes the whole sequence from a clean state. Without this the
         // GRU state persists across calls, so the same input yields slightly different outputs run to
         // run (breaks Clone_ShouldProduceIdenticalOutput). Streaming inference uses ProcessChunk.
+        // Re-sync the role sub-lists from Layers: a deserialized / cloned instance has a fresh Layers
+        // list, and the sub-lists captured at construction would otherwise reference stale pre-copy
+        // layers (see DistributeLayersIntoSubLists).
+        if (_erbEncoder.Count == 0 || !ReferenceEquals(_erbEncoder[0], Layers.Count > 0 ? Layers[0] : null))
+            DistributeLayersIntoSubLists();
+
         foreach (var layer in _gruLayers)
             if (layer is GRULayer<T> gru) gru.ResetState();
 

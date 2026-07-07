@@ -30239,12 +30239,16 @@ public static class LayerHelper<T>
         IActivationFunction<T> tanh = (IActivationFunction<T>)new TanhActivation<T>();
         int[] hiddenShape = [hiddenDim];
 
-        // ERB Encoder
+        // ERB Encoder. LayerNorm (not BatchNorm): DeepFilterNet runs per-frame on a rank-3
+        // [batch=1, T, features] sequence, where BatchNorm would normalize over the size-1 batch axis
+        // (degenerate — zero batch variance, and its running statistics don't clone deterministically).
+        // LayerNorm normalizes over the feature axis, is batch-independent, and is the standard choice
+        // for per-frame / recurrent sequence models.
         yield return new DenseLayer<T>(hiddenDim, elu);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new ActivationLayer<T>(elu);
         yield return new DenseLayer<T>(hiddenDim, elu);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new ActivationLayer<T>(elu);
 
         // GRU layers — ALL return sequences: DeepFilterNet estimates per-frame ERB gains and
@@ -30267,9 +30271,9 @@ public static class LayerHelper<T>
         // Gain estimation
         yield return new DenseLayer<T>(numErbBands);
 
-        // Decoder
+        // Decoder (LayerNorm for the same batch-independence reason as the encoder).
         yield return new DenseLayer<T>(hiddenDim, elu);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new ActivationLayer<T>(elu);
     }
 
