@@ -52,6 +52,43 @@ public class CheckpointManagerTests : IDisposable
         public ModelMetadata<double> GetModelMetadata() => new() { Name = Name };
     }
 
+    /// <summary>
+    /// A model that opts in to <see cref="ICheckpointableModel"/> by round-tripping its
+    /// weights through the state stream, so we can verify typed restore reproduces state.
+    /// </summary>
+    private class CheckpointableMockModel : IModel<double[], double, ModelMetadata<double>>, ICheckpointableModel
+    {
+        public string Name { get; set; } = "CheckpointableMockModel";
+        public double[] Weights { get; set; } = new double[] { 1.0, 2.0, 3.0 };
+
+        public void Train(double[] input, double expectedOutput) { }
+        public double Predict(double[] input) => Weights.Sum();
+        public ModelMetadata<double> GetModelMetadata() => new() { Name = Name };
+
+        public void SaveState(Stream stream)
+        {
+            var writer = new BinaryWriter(stream);
+            writer.Write(Weights.Length);
+            foreach (var w in Weights)
+            {
+                writer.Write(w);
+            }
+            writer.Flush();
+        }
+
+        public void LoadState(Stream stream)
+        {
+            var reader = new BinaryReader(stream);
+            var count = reader.ReadInt32();
+            var restored = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                restored[i] = reader.ReadDouble();
+            }
+            Weights = restored;
+        }
+    }
+
     private class MockOptimizer : IOptimizer<double, double[], double>
     {
         public double LearningRate { get; set; } = 0.001;
@@ -616,6 +653,136 @@ public class CheckpointManagerTests : IDisposable
         // Assert
         Assert.Equal(0, deletedCount);
         Assert.Equal(2, _manager.ListCheckpoints().Count);
+    }
+
+    #endregion
+
+    #region RestoreModelState Tests
+
+    [Fact(Timeout = 60000)]
+    public async Task RestoreModelState_WithCheckpointableModel_RestoresSavedState()
+    {
+        await Task.Yield();
+
+        // Arrange - a checkpointable model with distinctive weights
+        var model = new CheckpointableMockModel { Weights = new[] { 3.14, 2.71, 1.41, 1.61 } };
+        var optimizer = new MockOptimizer();
+        var checkpointId = _manager.SaveCheckpoint(model, optimizer, epoch: 7, step: 700,
+            new Dictionary<string, double> { ["loss"] = 0.05 });
+
+        // Act - restore into a FRESH model with different weights
+        var target = new CheckpointableMockModel { Weights = new[] { 0.0 } };
+        var restored = _manager.RestoreModelState(checkpointId, target);
+
+        // Assert - the fresh model now reproduces the saved model's state exactly
+        Assert.True(restored);
+        Assert.Equal(model.Weights, target.Weights);
+        Assert.Equal(model.Predict(Array.Empty<double>()), target.Predict(Array.Empty<double>()));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task RestoreLatestModelState_RestoresNewestCheckpointState()
+    {
+        await Task.Yield();
+
+        // Arrange - three checkpoints; the newest has distinctive weights
+        var optimizer = new MockOptimizer();
+        _manager.SaveCheckpoint(new CheckpointableMockModel { Weights = new[] { 1.0 } },
+            optimizer, epoch: 1, step: 10, new Dictionary<string, double> { ["loss"] = 0.9 });
+        Thread.Sleep(50);
+        _manager.SaveCheckpoint(new CheckpointableMockModel { Weights = new[] { 2.0 } },
+            optimizer, epoch: 2, step: 20, new Dictionary<string, double> { ["loss"] = 0.7 });
+        Thread.Sleep(50);
+        _manager.SaveCheckpoint(new CheckpointableMockModel { Weights = new[] { 10.0, 20.0, 30.0 } },
+            optimizer, epoch: 3, step: 30, new Dictionary<string, double> { ["loss"] = 0.5 });
+
+        // Act
+        var target = new CheckpointableMockModel();
+        var restored = _manager.RestoreLatestModelState(target);
+
+        // Assert - restores the NEWEST checkpoint's state
+        Assert.True(restored);
+        Assert.Equal(new[] { 10.0, 20.0, 30.0 }, target.Weights);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task RestoreLatestModelState_WhenNoCheckpoints_ReturnsFalse()
+    {
+        await Task.Yield();
+
+        // Act
+        var target = new CheckpointableMockModel();
+        var restored = _manager.RestoreLatestModelState(target);
+
+        // Assert
+        Assert.False(restored);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task RestoreModelState_WhenNoStateSidecar_ReturnsFalse()
+    {
+        await Task.Yield();
+
+        // Arrange - a non-checkpointable model writes no state sidecar
+        var model = new MockModel();
+        var optimizer = new MockOptimizer();
+        var checkpointId = _manager.SaveCheckpoint(model, optimizer, epoch: 1, step: 10,
+            new Dictionary<string, double> { ["loss"] = 0.5 });
+
+        // Act
+        var target = new CheckpointableMockModel();
+        var restored = _manager.RestoreModelState(checkpointId, target);
+
+        // Assert - no sidecar to restore from
+        Assert.False(restored);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task RestoreModelState_WithInvalidId_ThrowsArgumentException()
+    {
+        await Task.Yield();
+
+        // Act & Assert
+        var target = new CheckpointableMockModel();
+        Assert.Throws<ArgumentException>(() => _manager.RestoreModelState("nonexistent-id", target));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task RestoreModelState_WithNullTarget_ThrowsArgumentNullException()
+    {
+        await Task.Yield();
+
+        // Arrange
+        var model = new CheckpointableMockModel();
+        var optimizer = new MockOptimizer();
+        var checkpointId = _manager.SaveCheckpoint(model, optimizer, epoch: 1, step: 10,
+            new Dictionary<string, double> { ["loss"] = 0.5 });
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => _manager.RestoreModelState(checkpointId, null!));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DeleteCheckpoint_RemovesStateSidecar()
+    {
+        await Task.Yield();
+
+        // Arrange
+        var model = new CheckpointableMockModel { Weights = new[] { 5.0, 6.0 } };
+        var optimizer = new MockOptimizer();
+        var checkpointId = _manager.SaveCheckpoint(model, optimizer, epoch: 1, step: 10,
+            new Dictionary<string, double> { ["loss"] = 0.5 });
+
+        // Sanity: a sidecar exists to restore from
+        var probe = new CheckpointableMockModel();
+        Assert.True(_manager.RestoreModelState(checkpointId, probe));
+
+        // Act
+        _manager.DeleteCheckpoint(checkpointId);
+
+        // Assert - the sidecar is gone along with the checkpoint
+        var sidecars = Directory.GetFiles(_testDirectory, "*" + ".state");
+        Assert.Empty(sidecars);
     }
 
     #endregion
