@@ -2041,6 +2041,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         Training.CompiledTapeTrainingStep<T>.Invalidate();
         _fusedTrainingDisabled = false;
         _fusedTrainingCommitted = false;
+        _fusedPersistenceVerified = false;
     }
 
     /// <summary>
@@ -7965,6 +7966,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private bool _fusedTrainingCommitted;
 
     /// <summary>
+    /// #1822 silent-no-op guard. The fused compiled-training fast path is
+    /// contracted to mutate the LIVE parameter tensors in place (exactly like
+    /// the eager <c>opt.Step</c>). For some model graphs — notably
+    /// token/embedding <see cref="Transformer{T}"/>s whose specialized
+    /// compiled forward captures parameter DATA by copy rather than aliasing
+    /// the live backing array — <c>plan.Step()</c> trains an internal buffer
+    /// and reports a decreasing loss, yet NEVER writes the update back to the
+    /// network's parameters. That is a SILENT no-op: <see cref="GetParameters"/>,
+    /// serialization, and the eager Predict path all see an untrained model
+    /// even though <c>Train()</c> "ran". No kernel throws, so the
+    /// exception-based fallbacks never fire. We therefore verify persistence
+    /// directly on the FIRST fused step (snapshot a parameter checksum before
+    /// and after); once a model is proven to persist, this latch is set and the
+    /// O(params) check is never repeated. See <see cref="TryTrainWithFusedOptimizer"/>.
+    /// Reset alongside <see cref="_fusedTrainingCommitted"/> at every explicit
+    /// training-state reset point.
+    /// </summary>
+    private bool _fusedPersistenceVerified;
+
+    /// <summary>
     /// Reason string set by <see cref="EmitFusedMissAndFallback"/> when
     /// <see cref="TryTrainWithFusedOptimizer"/> bails out early, consumed
     /// (and cleared) by the post-success diagnostic block in
@@ -8111,6 +8132,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return false;
     }
 
+    /// <summary>
+    /// #1822: sum-of-squares checksum over the LIVE trainable parameter tensors
+    /// (the exact set the fused kernel and the eager <c>opt.Step</c> both mutate).
+    /// Used once per model, on the first fused step, to detect a fused compiled
+    /// step that reported a loss but did not actually write its update back to the
+    /// parameters — a silent no-op. Any real parameter change (even a tiny
+    /// warmup-LR one) shifts the sum, so an unchanged checksum is a reliable
+    /// "nothing was persisted" signal.
+    /// </summary>
+    private double FusedTrainableParamChecksum(IReadOnlyList<ITrainableLayer<T>> layers)
+    {
+        double acc = 0.0;
+        for (int li = 0; li < layers.Count; li++)
+        {
+            foreach (var p in layers[li].GetTrainableParameters())
+            {
+                if (p is null) continue;
+                var span = p.AsSpan();
+                for (int i = 0; i < span.Length; i++)
+                {
+                    double v = NumOps.ToDouble(span[i]);
+                    acc += v * v;
+                }
+            }
+        }
+        return acc;
+    }
+
     private bool TryTrainWithFusedOptimizer(
         Tensor<T> input,
         Tensor<T> expected,
@@ -8193,6 +8242,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // transient ring alive across the switch would waste memory under pressure and
         // nest the streaming path inside a transient scope. try/finally also releases the
         // arena if the fused call throws.
+        // #1822: on the first fused step for this model, snapshot a checksum of
+        // the live trainable parameters so we can verify AFTER the step that the
+        // fused kernel actually persisted its update (see _fusedPersistenceVerified).
+        bool verifyFusedPersistence = !_fusedPersistenceVerified && !_fusedTrainingCommitted;
+        double fusedParamChecksumBefore = verifyFusedPersistence
+            ? FusedTrainableParamChecksum(trainableLayers)
+            : 0.0;
+
         bool ran;
         T lossValue;
         try
@@ -8239,6 +8296,42 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         if (ran)
         {
+            // #1822 silent-no-op guard: confirm the fused step actually moved the
+            // live parameters before we COMMIT to the fused path. If the compiled
+            // plan reported a real (finite) loss but left every trainable parameter
+            // byte-for-byte unchanged, its optimizer step is decoupled from the
+            // network's live tensors — a silent no-op. Sticky-disable fused and let
+            // this step (and all subsequent ones) run on the eager tape, which
+            // mutates the live tensors correctly. Not yet committed here, so this
+            // is a clean fall-through (no plan-embedded moment state to lose).
+            if (verifyFusedPersistence)
+            {
+                double fusedParamChecksumAfter = FusedTrainableParamChecksum(trainableLayers);
+                bool persisted = fusedParamChecksumAfter != fusedParamChecksumBefore;
+                // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
+                // squares, so 0.0 means every trainable parameter starts exactly at zero. A
+                // non-persisting fused step then leaves it at 0.0 too (persisted == false),
+                // which is exactly the silent no-op we must catch — skipping it for all-zero
+                // init would commit the decoupled path unverified (ooples/AiDotNet#1822 review).
+                if (!persisted && !NumOps.IsNaN(lossValue))
+                {
+                    _fusedTrainingDisabled = true;
+                    _pendingFusedMissReason =
+                        "fused compiled step ran (loss " + NumOps.ToDouble(lossValue).ToString("G6") +
+                        ") but did not persist ANY parameter update — the compiled plan is decoupled " +
+                        "from the model's live parameter tensors; routing to the eager tape so Train() " +
+                        "actually learns (ooples/AiDotNet#1822)";
+                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "[AiDotNet] " + _pendingFusedMissReason + " (model: " + GetType().Name + ").");
+                    }
+                    return false; // fall through to the eager tape path in TrainWithTape
+                }
+                // Proven to persist for this model — never re-run the check.
+                _fusedPersistenceVerified = true;
+            }
+
             LastLoss = lossValue;
             // First successful fused step commits this model to the fused
             // path for the rest of the session — Adam m/v are now
@@ -8390,6 +8483,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // the eager/streaming fallback allocates its first backward buffers.
         _fusedTrainingDisabled = stickyDisableFused;
         _fusedTrainingCommitted = false;
+        _fusedPersistenceVerified = false;
         ReclaimGpuTransientsAfterFusedFailure();
     }
 
@@ -9333,6 +9427,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // is no longer needed, and the next run can engage fused fresh.
         _fusedTrainingDisabled = false;
         _fusedTrainingCommitted = false;
+        _fusedPersistenceVerified = false;
     }
 
     /// <summary>
