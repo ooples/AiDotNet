@@ -659,26 +659,6 @@ public class GMFlow<T> : OpticalFlowBase<T>
         foreach (var layer in _refinement) Layers.Add(layer);
     }
 
-    private bool _shapesProbed;
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// GMFlow's real graph is <see cref="EstimateFlow"/> (encode → global self/cross-attention
-    /// matching → decode → refine), not a sequential pass over the flat Layers list — so the base
-    /// linear walk mis-sizes the matching/decoder convs and the real forward throws
-    /// "Expected input depth 3, but got 6". Resolve every lazy conv through a real forward on a small
-    /// dummy frame-pair instead, so each conv sees exactly the input its production forward feeds it.
-    /// </remarks>
-    protected override void ResolveLazyLayerShapes()
-    {
-        if (_shapesProbed || _encoder.Count == 0) return;
-        _shapesProbed = true;
-        int c = _channels > 0 ? _channels : 3;
-        // Small 32×32 probe keeps the attention/matching resolution pass cheap enough to stay well
-        // under the per-test construction budget while still exercising every conv.
-        _ = PredictCore(new Tensor<T>([1, c * 2, 32, 32]));
-    }
-
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
