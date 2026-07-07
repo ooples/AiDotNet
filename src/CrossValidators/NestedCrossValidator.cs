@@ -155,18 +155,24 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
                 YTest = emptyYVal
             };
 
-            var optimizationResult = optimizer.Optimize(optimizationInput);
-
-            // Throw exception if optimization failed to prevent evaluating untrained models
-            if (optimizationResult.BestSolution == null)
+            // Zero-alloc training scope (#1804): reuse Engine-op scratch across this outer fold's steps.
+            // Scope covers SetParameters so the optimized parameters are copied into the model
+            // before the arena's scratch is released (the copied params are plain-heap).
+            using (var __trainArena = AiDotNet.Tensors.Helpers.TensorArena.Create())
             {
-                throw new InvalidOperationException(
-                    $"Optimization failed for outer fold {outerFoldIndex} in nested cross-validation: BestSolution is null. " +
-                    "Cannot evaluate an untrained model. " +
-                    "This indicates the optimizer was unable to find a valid solution.");
-            }
+                var optimizationResult = optimizer.Optimize(optimizationInput);
 
-            InterfaceGuard.Parameterizable(bestModel).SetParameters(InterfaceGuard.Parameterizable(optimizationResult.BestSolution).GetParameters());
+                // Throw exception if optimization failed to prevent evaluating untrained models
+                if (optimizationResult.BestSolution == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Optimization failed for outer fold {outerFoldIndex} in nested cross-validation: BestSolution is null. " +
+                        "Cannot evaluate an untrained model. " +
+                        "This indicates the optimizer was unable to find a valid solution.");
+                }
+
+                InterfaceGuard.Parameterizable(bestModel).SetParameters(InterfaceGuard.Parameterizable(optimizationResult.BestSolution).GetParameters());
+            }
 
             var validationIndices = outerFoldResult.ValidationIndices ?? throw new InvalidOperationException(
                 $"ValidationIndices not available for outer fold {outerFoldResult.FoldIndex}. " +

@@ -2053,9 +2053,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                     // Train with current hyperparameters
 #pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
-                    var trialResult = finalOptimizer.Optimize(
-                        OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
-                            XTrain, yTrain, XVal, yVal, XTest, yTest));
+                    OptimizationResult<T, TInput, TOutput> trialResult;
+                    // Zero-alloc training scope (#1804): reuse Engine-op scratch across the trial's steps.
+                    using (var __trainArena = AiDotNet.Tensors.Helpers.TensorArena.Create())
+                    {
+                        trialResult = finalOptimizer.Optimize(
+                            OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
+                                XTrain, yTrain, XVal, yVal, XTest, yTest));
+                    }
 #pragma warning restore CS8604
 
                     // Return validation MSE as objective (minimizing)
@@ -2076,6 +2081,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
 
                 // Run hyperparameter optimization
+                // No arena scope here (#1804): the HPO sampler runs no tensor ops of its own;
+                // all actual training happens inside ObjectiveFunction -> finalOptimizer.Optimize,
+                // which is already arena-scoped above. An outer arena here would only redundantly
+                // enclose the per-trial arena.
                 hyperparameterOptimizationResult = _hyperparameterOptimizer.Optimize(
                     ObjectiveFunction,
                     _hyperparameterSearchSpace,
@@ -2475,6 +2484,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 epochHookOptimizer.SetEpochProgressCallback(epochBridge.OnEpoch);
                 try
                 {
+                    // Zero-alloc training scope (#1804): reuse Engine-op scratch across steps.
+                    using var __trainArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
                     optimizationResult = finalOptimizer.Optimize(optimizationInputData);
                 }
                 finally
@@ -2485,6 +2496,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             else
             {
                 // Optimize the final model on the full training set
+                // Zero-alloc training scope (#1804): reuse Engine-op scratch across steps.
+                using var __trainArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
                 optimizationResult = finalOptimizer.Optimize(optimizationInputData);
             }
         }

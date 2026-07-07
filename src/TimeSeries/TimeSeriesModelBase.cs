@@ -314,6 +314,22 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
         try
         {
+            // Zero-alloc training after warmup (AiDotNet #1804): activate a
+            // TensorArena for the whole TrainCore so every per-op forward /
+            // backward temporary is served from a reused pool instead of a
+            // fresh GC allocation — the PyTorch caching-allocator equivalent,
+            // and the ~25% per-op allocation cost that made N-BEATS training
+            // ~3x slower than PyTorch on CPU. Activation is BASE-CLASS level,
+            // so EVERY TimeSeries model inherits it transparently (mirrors what
+            // NeuralNetworkBase already does for neural-network models); the
+            // per-step recycle is automatic via GradientTape.Dispose ->
+            // TensorArena.Reset (Tensors), so models that run one tape per step
+            // need no arena code of their own. Model weights and optimizer
+            // moments are plain-heap Tensors (new Tensor<T>), so they persist
+            // across the per-step reset; only Engine-op scratch comes from the
+            // arena, and nothing arena-backed escapes TrainCore.
+            using var trainingArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+
             // Perform model-specific training (implemented by derived classes)
             TrainCore(x, y);
         }
