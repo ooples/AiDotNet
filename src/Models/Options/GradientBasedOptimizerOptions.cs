@@ -282,6 +282,39 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// </para>
     /// </remarks>
     public SchedulerStepMode SchedulerStepMode { get; set; } = SchedulerStepMode.StepPerEpoch;
+
+    /// <summary>
+    /// Gets or sets whether the optimizer uses the running mean of the per-mini-batch
+    /// training loss as each epoch's fitness, instead of running a separate full-dataset
+    /// forward pass every epoch.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// By default (false) a gradient-based optimizer evaluates the WHOLE dataset once per
+    /// epoch to compute the fitness score used for progress reporting, best-solution
+    /// tracking and early stopping. For a mini-batch trainer this doubles the forward cost
+    /// (every sample is run through the model an extra time) AND — because the evaluation
+    /// step deep-copies the model and retains O(N) predictions in the model cache — it
+    /// grows per-epoch memory and wall-clock on large datasets.
+    /// </para>
+    /// <para>
+    /// When this is true the optimizer instead accumulates the loss the model already
+    /// computes during each mini-batch's forward/backward pass (via
+    /// <c>GetLastLoss</c>) and averages it over the epoch. No extra full-dataset forward
+    /// pass is run, no per-epoch model deep-copy or prediction cache entry is created, and
+    /// the returned model is the in-place-trained working model. Per-epoch cost is therefore
+    /// O(tokens trained), and epoch wall-clock stays flat across a long run.
+    /// </para>
+    /// <para><b>For Beginners:</b> Turn this on when you are training a large model on a lot
+    /// of data with mini-batches (e.g. a language model). It skips a redundant "grade the
+    /// whole dataset again" step each epoch, using the loss the model already measured while
+    /// learning. Pair it with an error-style fitness calculator (lower = better, e.g.
+    /// mean-squared-error) so the reported best fitness is meaningful. Leave it off for
+    /// closed-form / small-data models where a full-dataset validation score each epoch is
+    /// cheap and desirable.
+    /// </para>
+    /// </remarks>
+    public bool UseTrainingLossAsFitness { get; set; } = false;
 }
 
 /// <summary>

@@ -221,9 +221,29 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // instance in the finally block. (PR #1364 review.)
         (currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
 
+        // MINI-BATCH-LM FITNESS MODE (Options.UseTrainingLossAsFitness): skip the redundant
+        // full-dataset forward pass that EvaluateSolution runs every epoch. Instead accumulate
+        // the loss the model already computes during each batch's forward/backward (GetLastLoss)
+        // and use its epoch mean as the fitness. This eliminates (a) the O(N) extra forward,
+        // (b) the per-epoch model DeepCopy, and (c) the O(N) prediction cache entry — the three
+        // costs that made per-epoch wall-clock grow on large datasets. The returned model is the
+        // in-place-trained working solution (Adam's single-trajectory contract), so no best-
+        // solution deep copy is needed. See GradientBasedOptimizerOptions.UseTrainingLossAsFitness.
+        bool useTrainingLoss = _options.UseTrainingLossAsFitness;
+
         try
         {
-            var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+            // Baseline eval: the full-dataset PrepareAndEvaluateSolution also runs an initial
+            // full Train pass and a full forward; skip it entirely in mini-batch-loss mode.
+            var previousStepData = useTrainingLoss
+                ? BuildTrainingLossStepData(currentSolution, NumOps.FromDouble(double.MaxValue))
+                : PrepareAndEvaluateSolution(currentSolution, inputData);
+            if (useTrainingLoss)
+            {
+                // Gradient-based optimizers skip Train() inside evaluation; mark the flag so any
+                // shared code that consults it behaves as it would after the first real eval.
+                OnInitialTrainingCompleted();
+            }
 
             for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
             {
@@ -233,11 +253,27 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 // Create batcher for the current epoch using DataLoader infrastructure
                 var batcher = CreateBatcher(inputData, _options.BatchSize, epoch);
 
+                double epochLossSum = 0.0;
+                int epochBatchCount = 0;
+
                 foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
                 {
                     _t++;
                     // Calculate gradient on the batch
                     var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+
+                    // Mini-batch-loss mode: read the loss the model just computed on this batch
+                    // (ComputeGradients/tape step sets LastLoss) BEFORE UpdateSolution swaps the
+                    // live instance. Skipped and zero-cost when the mode is off.
+                    if (useTrainingLoss && currentSolution is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnLoss)
+                    {
+                        double batchLoss = NumOps.ToDouble(nnLoss.GetLastLoss());
+                        if (!double.IsNaN(batchLoss) && !double.IsInfinity(batchLoss))
+                        {
+                            epochLossSum += batchLoss;
+                            epochBatchCount++;
+                        }
+                    }
 
                     // Update solution using Adam algorithm
                     var newSolution = UpdateSolution(currentSolution, gradient);
@@ -258,9 +294,34 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                     OnBatchEnd();
                 }
 
-                // Evaluate after processing all batches in the epoch
-                var currentStepData = EvaluateSolution(currentSolution, inputData);
+                // Evaluate after processing all batches in the epoch. Mini-batch-loss mode uses
+                // the accumulated per-batch training loss (no extra forward / no deep copy / no
+                // cache entry); the default path runs the full-dataset fitness forward.
+                OptimizationStepData<T, TInput, TOutput> currentStepData;
+                if (useTrainingLoss)
+                {
+                    T epochLoss = epochBatchCount > 0
+                        ? NumOps.FromDouble(epochLossSum / epochBatchCount)
+                        : NumOps.FromDouble(double.MaxValue);
+                    FitnessList.Add(epochLoss);
+                    currentStepData = BuildTrainingLossStepData(currentSolution, epochLoss);
+                }
+                else
+                {
+                    currentStepData = EvaluateSolution(currentSolution, inputData);
+                }
                 UpdateBestSolution(currentStepData, ref bestStepData);
+                // Mini-batch-loss mode does not deep-copy the model per epoch, and each Adam
+                // step returns a fresh WithParameters(...) instance, so the reference captured
+                // by UpdateBestSolution on an earlier epoch would go stale. Point the best
+                // solution at the current live (in-place-trained) instance every epoch — this
+                // matches Adam's single-trajectory contract of returning the final trained
+                // model. (Best-epoch weight restoration would require per-epoch deep copies,
+                // which this mode deliberately avoids.)
+                if (useTrainingLoss)
+                {
+                    bestStepData.Solution = currentSolution;
+                }
                 UpdateAdaptiveParameters(currentStepData, previousStepData);
 
                 // Check early stopping criteria
@@ -315,6 +376,25 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             // accidentally engage dropout / batchnorm-train-stats.
             (currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Builds a lightweight step-data record for the mini-batch-loss fitness mode
+    /// (<see cref="AdamOptimizerOptions{T, TInput, TOutput}.UseTrainingLossAsFitness"/>).
+    /// It carries the live trained solution and the epoch's mean per-batch training loss as
+    /// the fitness score, with no full-dataset <c>EvaluationData</c> and no model deep copy —
+    /// the whole point of the mode is to avoid the per-epoch full-dataset forward pass and the
+    /// unbounded prediction/model retention it drives.
+    /// </summary>
+    private OptimizationStepData<T, TInput, TOutput> BuildTrainingLossStepData(
+        IFullModel<T, TInput, TOutput> solution, T loss)
+    {
+        return new OptimizationStepData<T, TInput, TOutput>
+        {
+            Solution = solution,
+            FitnessScore = loss,
+            IsUninitializedPlaceholder = false
+        };
     }
 
     /// <summary>
