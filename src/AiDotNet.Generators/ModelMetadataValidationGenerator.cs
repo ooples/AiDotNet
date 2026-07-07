@@ -162,6 +162,24 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         if (candidates.IsDefaultOrEmpty)
             return;
 
+        // Scope governance to AiDotNet's OWN shipped models only.
+        //
+        // This generator is meant to enforce metadata on the models AiDotNet SHIPS. When the
+        // generator is referenced as an analyzer by any OTHER compilation (the test project's
+        // IFullModel doubles like FakeCodeModel/TestExposingTransformer, or a downstream user's
+        // own IFullModel subclasses), it must NOT fire — those types legitimately lack the
+        // metadata attributes and the AIDN001 Error would spuriously break their builds.
+        //
+        // Detection: the required attribute types (e.g. ModelDomainAttribute) are DEFINED in the
+        // AiDotNet core library. If the compilation being analyzed is that library, the attribute
+        // symbol's ContainingAssembly is the compilation's OWN assembly. In any consumer/test
+        // compilation the attribute is merely REFERENCED (defined in the referenced AiDotNet
+        // assembly), so ContainingAssembly != compilation.Assembly. This is sturdier than a raw
+        // AssemblyName == "AiDotNet" string check (survives renames). When it's not the library
+        // assembly, the generator no-ops entirely (AIDN001/AIDN020 + AIDN010/011/012).
+        if (!IsAiDotNetLibraryCompilation(compilation))
+            return;
+
         // Resolve attribute type symbols for comparison
         var domainAttr = compilation.GetTypeByMetadataName(ModelDomainAttributeName);
         var categoryAttr = compilation.GetTypeByMetadataName(ModelCategoryAttributeName);
@@ -196,6 +214,23 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             ValidatePaperUrls(context, modelClass, paperAttr);
             ValidateXmlDocumentation(context, modelClass);
         }
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> only when the compilation being analyzed IS the AiDotNet core library
+    /// — i.e. the assembly that DEFINES the model-metadata attributes — rather than a consumer or
+    /// test assembly that merely references it. Governance (AIDN001/AIDN020 and the AIDN010/011/012
+    /// warnings) applies exclusively to AiDotNet's own shipped models.
+    /// </summary>
+    private static bool IsAiDotNetLibraryCompilation(Compilation compilation)
+    {
+        var domainAttr = compilation.GetTypeByMetadataName(ModelDomainAttributeName);
+
+        // The attribute type must be DEFINED in this compilation's own assembly. When AiDotNet is
+        // referenced (test project, downstream consumers), the symbol resolves to the referenced
+        // assembly instead, so the equality is false and the generator no-ops.
+        return domainAttr is not null &&
+               SymbolEqualityComparer.Default.Equals(domainAttr.ContainingAssembly, compilation.Assembly);
     }
 
     private static void ValidateRequiredAttributes(
