@@ -204,6 +204,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (2 layers / 64-dim / 64-vocab) in seconds.
         "UniSpeech",
 
+        // Data2VecASR (Baevski et al. 2022): foundation-scale ASR — 768-dim / 12-layer / 12-head /
+        // 3072-FFN transformer encoder + CTC head. Its MoreData invariant times out on CPU at that
+        // scale. The manual Data2VecASRTests scaffold runs the same encoder+CTC architecture at reduced
+        // scale (2 layers / 64-dim / 64-vocab) in seconds.
+        "Data2VecASR",
+
+        // InternImage (Wang et al. 2023): even the Tiny variant is a 30-block DCNv3 deformable-conv
+        // backbone at 512x512 whose training invariants time out on CPU. The manual InternImageTests
+        // scaffold runs the full Tiny architecture (all 30 blocks) at a 32x32 / 4-class reduced spatial
+        // resolution in seconds.
+        "InternImage",
+
         // GAN models with non-default latent / image shapes that the generic
         // GAN-family scaffold ([16] rank-1 input) can't supply correctly.
         // Manual test classes in ModelFamilyTests/NeuralNetworks supply the
