@@ -231,7 +231,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 NotifyEpochStart(epoch);
 
                 // Create batcher for the current epoch using DataLoader infrastructure
-                var batcher = CreateBatcher(inputData, _options.BatchSize);
+                var batcher = CreateBatcher(inputData, _options.BatchSize, epoch);
 
                 foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
                 {

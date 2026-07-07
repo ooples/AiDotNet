@@ -50,6 +50,49 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #endregion
 
+        #region Determinism (S0.7 bit-reproducibility)
+
+        /// <summary>
+        /// Regression: under AiDotNetEngine.SetDeterministicMode(true), an unseeded shuffling batcher
+        /// MUST produce the SAME minibatch order on every run. Before the fix an unseeded batcher used a
+        /// secure (non-reproducible) RNG, so identical-seed training diverged run-to-run purely from
+        /// shuffle order — the exact nondeterminism SetDeterministicMode is supposed to eliminate.
+        /// </summary>
+        [Fact(Timeout = 60000)]
+        public async Task Shuffle_UnseededUnderDeterministicMode_IsReproducibleAcrossInstances()
+        {
+            // [Fact(Timeout)] is only enforced for async tests — a synchronous void method silently
+            // ignores it (and can fail at collection startup under xUnit v2.7+), so keep this async.
+            await Task.Yield();
+            bool prev = AiDotNet.Tensors.Engines.AiDotNetEngine.DeterministicMode;
+            try
+            {
+                AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(true);
+                var data = CreateTestData(257, 4);
+
+                int[] Flatten(OptimizationDataBatcher<double, Matrix<double>, Vector<double>> b)
+                    => b.GetBatchIndices().SelectMany(x => x).ToArray();
+
+                // Two independent unseeded shuffling batchers (seed: null) must agree bit-for-bit.
+                var a = Flatten(new OptimizationDataBatcher<double, Matrix<double>, Vector<double>>(data, batchSize: 16, shuffle: true));
+                var c = Flatten(new OptimizationDataBatcher<double, Matrix<double>, Vector<double>>(data, batchSize: 16, shuffle: true));
+
+                Assert.Equal(a.Length, c.Length);
+                Assert.Equal(a, c); // identical shuffle order across instances under deterministic mode
+                // And it is an actual permutation (shuffle happened, not just identity fallback).
+                Assert.Equal(Enumerable.Range(0, 257).OrderBy(i => i), a.OrderBy(i => i));
+                // The sorted-coverage check above also passes for the identity ordering [0,1,2,...],
+                // so assert the result actually DIFFERS from sequential — a real shuffle must reorder.
+                Assert.NotEqual(Enumerable.Range(0, 257).ToArray(), a);
+            }
+            finally
+            {
+                AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(prev);
+            }
+        }
+
+        #endregion
+
         #region Constructor Tests
 
         [Fact(Timeout = 60000)]

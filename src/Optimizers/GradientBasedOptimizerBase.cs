@@ -517,7 +517,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     protected OptimizationDataBatcher<T, TInput, TOutput> CreateBatcher(
         OptimizationInputData<T, TInput, TOutput> inputData,
-        int batchSize)
+        int batchSize,
+        int epoch = 0)
     {
         return new OptimizationDataBatcher<T, TInput, TOutput>(
             inputData,
@@ -525,7 +526,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             shuffle: GradientOptions.ShuffleData,
             dropLast: GradientOptions.DropLastBatch,
             seed: GradientOptions.RandomSeed,
-            sampler: GradientOptions.DataSampler);
+            sampler: GradientOptions.DataSampler,
+            epoch: epoch);
     }
 
     /// <summary>
@@ -554,7 +556,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected OptimizationDataBatcher<T, TInput, TOutput> CreateBatcher(
         OptimizationInputData<T, TInput, TOutput> inputData,
         int batchSize,
-        IDataSampler sampler)
+        IDataSampler sampler,
+        int epoch = 0)
     {
         return new OptimizationDataBatcher<T, TInput, TOutput>(
             inputData,
@@ -562,7 +565,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             shuffle: GradientOptions.ShuffleData,
             dropLast: GradientOptions.DropLastBatch,
             seed: GradientOptions.RandomSeed,
-            sampler: sampler);
+            sampler: sampler,
+            epoch: epoch);
     }
 
     /// <summary>

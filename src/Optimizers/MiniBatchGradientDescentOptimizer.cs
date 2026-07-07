@@ -124,7 +124,7 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
 
             // Create batcher for the current epoch using DataLoader infrastructure
             // This handles shuffling, sampling strategies, and batch creation
-            var batcher = CreateBatcher(inputData, _options.BatchSize);
+            var batcher = CreateBatcher(inputData, _options.BatchSize, epoch);
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
