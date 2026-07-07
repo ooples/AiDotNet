@@ -1298,8 +1298,14 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // FC2: matmul + bias (no activation, outputs transformation params)
         var transformParamsGpu = gpuEngine.FusedLinearGpu(localization1Gpu, _localizationWeights2, _localizationBias2, FusedActivationType.None);
 
-        // Step 4: Reshape to theta [batch, 2, 3] for affine transformation
-        var thetaGpu = gpuEngine.ReshapeGpu(transformParamsGpu, [flatBatch, 2, 3]);
+        // Step 4: Convert the raw [batch, 6] localization output into the affine theta [batch, 2, 3]
+        // using the SAME shared conversion as the CPU path (ConvertToTransformationMatrix):
+        // theta = tanh(0.1 * params) with +1 added to the two diagonal scale terms so the identity
+        // transform is the zero-parameter default. Previously the GPU path reshaped the raw params
+        // directly, skipping the bounded-tanh + identity bias — that produced an unbounded transform
+        // with a different range than the CPU path and broke CPU/GPU parity. ConvertToTransformationMatrix
+        // uses ambient Engine ops, which dispatch on the GPU engine and keep the result GPU-resident.
+        var thetaGpu = ConvertToTransformationMatrix(transformParamsGpu);
 
         // Step 5: Generate affine sampling grid on GPU (GPU-resident)
         var gridGpu = gpuEngine.AffineGridGpu(thetaGpu, flatBatch, _outputHeight, _outputWidth);

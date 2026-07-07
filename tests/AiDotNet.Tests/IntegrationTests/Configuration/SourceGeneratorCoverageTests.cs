@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Reflection;
 using Xunit;
 using AiDotNet.Configuration;
@@ -311,6 +312,36 @@ programSynthesis:
         Assert.True(registries["Model"].Count >= 100,
             $"Model section only has {registries["Model"].Count} implementations. " +
             $"Expected at least 100.");
+    }
+
+    /// <summary>
+    /// The "AutoML" registry section is a merged POCO+interface section: ConfigureAutoML(AutoMLOptions)
+    /// owns the options config, and IAutoMLModel is registered on the same section so a YAML
+    /// <c>autoML.type</c> resolves a concrete search engine through the type registry and is passed to
+    /// the ConfigureAutoML(IAutoMLModel) overload. This pins that a tabular (Matrix/Vector) pipeline can
+    /// actually resolve at least one registered AutoML engine to that interface — i.e. the merge exposes
+    /// genuinely instantiable implementations for the type: binding, not just discoverability metadata.
+    /// (Like every registry section, it also holds impls for other TInput/TOutput combinations — e.g.
+    /// Tensor-based DiffusionAutoML — which resolve only under a matching pipeline instantiation.)
+    /// </summary>
+    [Fact]
+    public void TypeRegistry_AutoMLSection_ResolvesAtLeastOneIAutoMLModelForTabularPipeline()
+    {
+        var registries = YamlTypeRegistry<double, Matrix<double>, Vector<double>>.GetAllRegistries();
+
+        Assert.True(registries.ContainsKey("AutoML"), "AutoML section missing from type registry.");
+        Assert.True(registries["AutoML"].Count > 0, "AutoML section has zero registered implementations.");
+
+        var interfaceType = typeof(IAutoMLModel<double, Matrix<double>, Vector<double>>);
+        var assignable = registries["AutoML"]
+            .Where(kvp => interfaceType.IsAssignableFrom(kvp.Value))
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        Assert.True(assignable.Count > 0,
+            "No registered AutoML implementation is assignable to IAutoMLModel<double, Matrix<double>, Vector<double>>, " +
+            "so a tabular pipeline's YAML 'autoML.type' binding could never resolve a valid engine. Registered: " +
+            string.Join(", ", registries["AutoML"].Keys));
     }
 
     /// <summary>

@@ -142,6 +142,14 @@ internal static class CreditAssignmentGradientComputer<T>
             // graph still silently dropped the EmbeddingLayer's scatter-add backward. A per-layer
             // single-shot tape is the same well-tested path normal training uses, so every layer type
             // — embeddings included — produces a correct gradient.
+            //
+            // The isolated re-forwards run in EVAL mode: the main forward above already advanced any
+            // stateful layer's running buffers once this step (e.g. BatchNormalizationLayer's
+            // _runningMean/_runningVariance), and re-running in training mode would replay that update a
+            // second time, corrupting the statistics. Eval mode captures the same local Jacobian w.r.t.
+            // the layer's parameters without the state mutation (and deterministically, without dropout
+            // masks diverging from the main pass). Restored by the finally below.
+            network.SetTrainingMode(false);
             for (int k = 0; k < trainableLayers.Count - 1; k++)
             {
                 var teaching = creditLayers[k].TeachingSignal

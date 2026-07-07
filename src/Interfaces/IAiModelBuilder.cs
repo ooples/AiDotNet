@@ -914,6 +914,20 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
+    /// Configures AutoML with a custom <see cref="IAutoMLModel{T,TInput,TOutput}"/> search engine (advanced).
+    /// </summary>
+    /// <param name="autoMLModel">A concrete AutoML search engine to drive the search. Must not be null.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Use this overload to plug in a specific AutoML implementation instead of the strategy-selected default
+    /// built by <see cref="ConfigureAutoML(AutoMLOptions{T,TInput,TOutput})"/>. It is also the overload the YAML
+    /// loader targets when an <c>autoML.type</c> names a registered implementation.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+
+    /// <summary>
     /// Configures reinforcement learning options for training an RL agent.
     /// </summary>
     /// <param name="options">The reinforcement learning configuration options.</param>
