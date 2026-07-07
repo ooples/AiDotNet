@@ -207,11 +207,16 @@
          kernel this PR's FusedOptimizerConfig.UseBf16Moments path dispatches to (half the optimizer-state
          footprint at fp32 update precision on the CPU float fused kernel). Superset of 0.104.6, so all
          deps above are retained. NOTE: 0.106.0 (and the lockstep native packages below) is already
-         PUBLISHED to NuGet, so this bump does not gate CI on an unreleased dependency. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.110.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.110.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.110.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.110.0" />
+         PUBLISHED to NuGet, so this bump does not gate CI on an unreleased dependency.
+
+         Bumped 0.110.0 -> 0.111.0: brings AiDotNet.Tensors #739 —
+         DirectGpuTensorEngine.InvalidateResidentWeightBuffer, which this PR calls after every in-place
+         optimizer update to force a weight re-upload on the resident-GPU path (fixes stale-weight GPU
+         transformer training). 0.111.0 is PUBLISHED to NuGet and is a superset of 0.110.x. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.111.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.111.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.111.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.111.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
