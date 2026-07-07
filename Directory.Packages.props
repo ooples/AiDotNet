@@ -207,8 +207,13 @@
          kernel this PR's FusedOptimizerConfig.UseBf16Moments path dispatches to (half the optimizer-state
          footprint at fp32 update precision on the CPU float fused kernel). Superset of 0.104.6, so all
          deps above are retained. NOTE: 0.106.0 (and the lockstep native packages below) is already
-         PUBLISHED to NuGet, so this bump does not gate CI on an unreleased dependency. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.110.0" />
+         PUBLISHED to NuGet, so this bump does not gate CI on an unreleased dependency.
+
+         Bumped 0.110.0 -> 0.111.0 (managed only; native packages stay 0.110.0 — the AffineGrid
+         change is pure managed CpuEngine code): brings AiDotNet.Tensors #747 — 2D AffineGrid is
+         now differentiable w.r.t. theta, unblocking SpatialTransformerLayer tape-gradient flow.
+         0.111.0 is PUBLISHED on NuGet. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.111.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.110.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.110.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.110.0" />
