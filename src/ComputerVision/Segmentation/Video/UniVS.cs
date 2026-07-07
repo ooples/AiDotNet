@@ -73,7 +73,10 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     private readonly string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly bool _hasUserSuppliedOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
     private bool _disposed;
+    private bool _lazyShapesWarmed;
     private int _encoderLayerEnd;
     #endregion
 
@@ -121,9 +124,16 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _hasUserSuppliedOptimizer = optimizer is not null;
+        _optimizer = optimizer;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
+        // Materialize every lazy conv/BN layer up front (one real eval-mode forward). DeepCopy /
+        // Clone serialize the trained weights then rebuild a fresh instance and apply them via
+        // SetParameters — which silently skips any layer still in its lazy, shape-unresolved state,
+        // dropping those weights (Clone_AfterTraining, #1221 class). Resolving here guarantees the
+        // freshly-constructed clone target already has concrete-shaped layers to receive them.
+        ResolveLazyLayerShapes();
     }
 
     /// <summary>
@@ -175,7 +185,17 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
     /// </para>
     /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        if (!_useNativeMode) return PredictOnnx(input);
+        // Ensure inference runs in eval mode so any per-layer inference-weight cache is
+        // (re)synced to the latest trained weights. Without this a Predict issued right after a
+        // Train step can serve stale cached packs — the trained model then predicts differently
+        // from a freshly-deserialized clone that re-packs from current weights
+        // (Clone_AfterTraining, #1221 class).
+        SetTrainingMode(false);
+        return Forward(input);
+    }
 
     /// <summary>
     /// Performs one training step.
@@ -200,6 +220,69 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Supplies the training optimizer. Honors a constructor-supplied optimizer; otherwise
+    /// uses a linear-warmup Adam at 1e-3 rather than the framework-default rate.
+    /// </summary>
+    /// <remarks>
+    /// The from-scratch ResNet-50 backbone + Mask2Former-style decoder is a deep encoder-decoder
+    /// whose per-pixel cross-entropy does NOT descend under a plain high-rate step — a loss probe
+    /// showed the CE loss holding / rising (10.95 -> 11.11) with the default optimizer, i.e. the
+    /// deep stack overshoots. A small linear warmup into 1e-3 gives a stable monotonic descent
+    /// (same fix as ODISE's from-scratch SD-U-Net). Without this override the constructor-built
+    /// optimizer was never consulted at all (GetOrCreateBaseOptimizer fell through to the base
+    /// default), so training used an untuned rate.
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        if (_hasUserSuppliedOptimizer && _optimizer is not null)
+            return _optimizer;
+
+        // Small warmup into 3e-4, then linear DECAY to ~0 over the training horizon. A loss probe
+        // showed a held 1e-3 rate lets the deep from-scratch backbone DIVERGE over longer training
+        // (MoreData: 50-iter loss 11.9 -> 200-iter loss 18.9). The lower peak rate plus a decay
+        // phase keeps the descent monotonic across both the short (Training_ShouldReduceLoss) and
+        // long (MoreData) invariants. totalSteps=300 comfortably covers MoreData's 200 iterations.
+        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = false,
+                InitialLearningRate = 0.0001,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: 0.0001,
+                    warmupSteps: 5,
+                    totalSteps: 300,
+                    warmupInitLr: 0.00001)
+            });
+    }
+
+    /// <summary>
+    /// Resolves each layer's lazy shape by running the REAL forward once, so serialize/clone
+    /// round-trips preserve trained weights.
+    /// </summary>
+    /// <remarks>
+    /// UniVS's backbone mixes BottleneckBlock / MaxPooling / BatchNorm layers whose output shapes
+    /// the base's sequential shape walk cannot always advance, leaving some conv layers lazy
+    /// (input depth unresolved). SetParameters silently skips an unresolved layer, so a
+    /// serialize -> new-instance -> deserialize clone dropped those layers' trained weights and the
+    /// clone predicted differently (Clone_AfterTraining, #1221 class). One real eval-mode forward
+    /// materializes every layer up front. Idempotent.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesWarmed || !_useNativeMode) return;
+        _lazyShapesWarmed = true; // set first so any reentrancy is a no-op
+
+        var dummy = new Tensor<T>([1, _channels, _height, _width]);
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try { Forward(dummy); }
+        catch { /* best-effort; a genuine forward failure surfaces on the real Train/Predict */ }
+        finally { if (wasTraining) SetTrainingMode(true); }
     }
     #endregion
 
@@ -332,6 +415,7 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new UniVS<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new UniVS<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

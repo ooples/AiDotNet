@@ -187,6 +187,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // reduced scale (fewer blocks, 2x upscale, small resolution) in seconds.
         "IconVSR",
 
+        // WavLMSpeaker (Chen et al. 2022, WavLM) and UniVS (Li et al. 2024, universal video
+        // segmentation): foundation-scale models whose ModelFamily training invariants time out on
+        // CPU. WavLMSpeaker's defaults are a 12-layer / 768-dim / 3072-FFN transformer encoder;
+        // UniVS uses a full ResNet-50 backbone (R50) + Mask2Former-style decoder. Manual
+        // WavLMSpeakerTests / UniVSTests scaffolds in ModelFamilyTests/NeuralNetworks run the same
+        // architecture shape at reduced scale (WavLMSpeaker: 2 layers / 64-dim; UniVS: 4 classes,
+        // small resolution), exercising every code path in seconds. (WavLMSpeaker's separate
+        // inference-determinism bug — dropout active in Predict — is fixed in the model itself.)
+        "WavLMSpeaker", "UniVS",
+
         // GAN models with non-default latent / image shapes that the generic
         // GAN-family scaffold ([16] rank-1 input) can't supply correctly.
         // Manual test classes in ModelFamilyTests/NeuralNetworks supply the
