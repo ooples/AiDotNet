@@ -335,7 +335,12 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         {
             data[i] = NumOps.FromDouble(initValue);
         }
-        return new Tensor<T>(new[] { size }, new Vector<T>(data));
+        // Store column-shaped [size, 1] up-front so ForwardTape can feed the bias
+        // straight into TensorBroadcastAdd ([hidden, B] + [hidden, 1]) without an
+        // Engine.Reshape on every forward pass (re-profile #4: the per-forward
+        // reshape node was ~1% of driver wall). Same contiguous data as [size],
+        // so gradient flow / optimizer moments are bit-identical.
+        return new Tensor<T>(new[] { size, 1 }, new Vector<T>(data));
     }
 
     /// <summary>
@@ -424,22 +429,21 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         for (int layer = 0; layer < _numHiddenLayers; layer++)
         {
             var linear = Engine.TensorMatMul(_fcWeights[layer], x);  // [hidden, B]
-            var biasCol = Engine.Reshape(_fcBiases[layer], [_hiddenLayerSize, 1]);
-            linear = Engine.TensorBroadcastAdd(linear, biasCol);
+            // Biases are stored column-shaped [hidden, 1] (see CreateBiasTensor), so
+            // they feed TensorBroadcastAdd directly — no per-forward Engine.Reshape.
+            linear = Engine.TensorBroadcastAdd(linear, _fcBiases[layer]);
             x = Engine.ReLU(linear);
         }
 
         // theta_backcast = W_bc x + b_bc         shape [theta_bc, B]
         int backcastLayerIdx = _numHiddenLayers;
         var thetaBackcast = Engine.TensorMatMul(_fcWeights[backcastLayerIdx], x);
-        var bcBiasCol = Engine.Reshape(_fcBiases[backcastLayerIdx], [_thetaSizeBackcast, 1]);
-        thetaBackcast = Engine.TensorBroadcastAdd(thetaBackcast, bcBiasCol);
+        thetaBackcast = Engine.TensorBroadcastAdd(thetaBackcast, _fcBiases[backcastLayerIdx]);
 
         // theta_forecast = W_fc x + b_fc        shape [theta_fc, B]
         int forecastLayerIdx = _numHiddenLayers + 1;
         var thetaForecast = Engine.TensorMatMul(_fcWeights[forecastLayerIdx], x);
-        var fcBiasCol = Engine.Reshape(_fcBiases[forecastLayerIdx], [_thetaSizeForecast, 1]);
-        thetaForecast = Engine.TensorBroadcastAdd(thetaForecast, fcBiasCol);
+        thetaForecast = Engine.TensorBroadcastAdd(thetaForecast, _fcBiases[forecastLayerIdx]);
 
         // Basis expansion (paper §3.3): backcast = V_b @ theta_bc,
         // forecast = V_f @ theta_fc. Output shapes [L, B] and [H, B].
@@ -750,7 +754,10 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             {
                 data[i] = parameters[idx++];
             }
-            _fcBiases[b] = new Tensor<T>(new[] { len }, new Vector<T>(data));
+            // Preserve the column-shaped [len, 1] layout CreateBiasTensor establishes
+            // so ForwardTape's reshape-free TensorBroadcastAdd keeps working after a
+            // SetParameters round-trip. Same data order; Length is unchanged.
+            _fcBiases[b] = new Tensor<T>(new[] { len, 1 }, new Vector<T>(data));
         }
 
         // Generic blocks: restore trainable V_b / V_f bases. Must match the
