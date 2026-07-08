@@ -414,11 +414,8 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 sampleRate: SampleRate, maxAudioLengthSeconds: _maxAudioLengthSeconds).ToList();
 
         Layers.Clear();
-        _featureEncoderLayers.Clear();
-        _transformerLayers.Clear();
         Layers.AddRange(layers);
 
-        // Distribute to internal sub-lists for forward pass
         // Feature encoder: 7 conv layers + 1 projection = 8
         int featureEncoderCount = 8;
         // Transformer layers: numTransformerLayers * 3 (selfAttn + ff + ffOut) + 1 CTC projection
@@ -432,16 +429,33 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 $"but got {layers.Count}. Layer distribution may be incorrect.");
         }
 
-        for (int i = 0; i < featureEncoderCount && i < layers.Count; i++)
-            _featureEncoderLayers.Add(layers[i]);
+        DistributeLayersToSubLists();
+    }
+
+    // Re-links the typed forward-path sub-lists (_featureEncoderLayers / _transformerLayers /
+    // _ctcProjection) to the CURRENT contents of Layers. The forward reads these fields, NOT Layers,
+    // so they must be rebuilt whenever Layers is replaced — critically after deserialization, where the
+    // base clears Layers and adds freshly-deserialized (trained) layers. Without this, a cloned/loaded
+    // model keeps its ctor's random-init sub-list layers and predicts as if untrained (#1221 class:
+    // Clone_AfterTraining). Distribution order matches CreateWav2Vec2Layers: [0..7]=feature encoder,
+    // [8..8+3N-1]=transformer, [^1]=CTC projection.
+    private void DistributeLayersToSubLists()
+    {
+        _featureEncoderLayers.Clear();
+        _transformerLayers.Clear();
+
+        int featureEncoderCount = 8;
+        int transformerCount = _numTransformerLayers * 3;
+
+        for (int i = 0; i < featureEncoderCount && i < Layers.Count; i++)
+            _featureEncoderLayers.Add(Layers[i]);
 
         int transformerStart = featureEncoderCount;
-        for (int i = 0; i < transformerCount && transformerStart + i < layers.Count; i++)
-            _transformerLayers.Add(layers[transformerStart + i]);
+        for (int i = 0; i < transformerCount && transformerStart + i < Layers.Count; i++)
+            _transformerLayers.Add(Layers[transformerStart + i]);
 
-        // CTC projection: last layer
-        if (layers.Count > 0)
-            _ctcProjection = layers[^1];
+        if (Layers.Count > 0)
+            _ctcProjection = Layers[^1];
     }
 
     private static string[] GetDefaultVocabulary()
@@ -546,33 +560,36 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // Wav2Vec2 processes raw audio directly
-        // Normalize to [-1, 1] range
+        // Wav2Vec2 processes raw audio as a flat 1-D sample stream. Flatten on the TOTAL element
+        // count (rawAudio.Length), not Shape[0]: callers (and the model-family tests) may pass the
+        // audio as a shaped tensor like [1, frames, samples] whose Shape[0] is a batch dim of 1 —
+        // keying off Shape[0] collapsed the whole clip to a single sample, so Predict (which
+        // preprocesses) and Train (which now also preprocesses, below) diverged in both shape and
+        // value. Read via flat span so any input rank maps to the same 1-D normalized stream.
         int targetLength = SampleRate * _maxAudioLengthSeconds;
+        int length = Math.Min(rawAudio.Length, targetLength);
 
-        var normalized = new Tensor<T>([Math.Min(rawAudio.Shape[0], targetLength)]);
+        var normalized = new Tensor<T>([length]);
+        var src = rawAudio.Data.Span;
 
-        // Find max for normalization
+        // Normalize to [-1, 1] range by the peak magnitude.
         double maxVal = 0;
-        for (int i = 0; i < normalized.Shape[0]; i++)
+        for (int i = 0; i < length; i++)
         {
-            double val = Math.Abs(NumOps.ToDouble(rawAudio[i]));
+            double val = Math.Abs(NumOps.ToDouble(src[i]));
             if (val > maxVal) maxVal = val;
         }
 
+        var dst = normalized.Data.Span;
         if (maxVal > 0)
         {
-            for (int i = 0; i < normalized.Shape[0]; i++)
-            {
-                normalized[i] = NumOps.FromDouble(NumOps.ToDouble(rawAudio[i]) / maxVal);
-            }
+            for (int i = 0; i < length; i++)
+                dst[i] = NumOps.FromDouble(NumOps.ToDouble(src[i]) / maxVal);
         }
         else
         {
-            for (int i = 0; i < normalized.Shape[0]; i++)
-            {
-                normalized[i] = rawAudio[i];
-            }
+            for (int i = 0; i < length; i++)
+                dst[i] = src[i];
         }
 
         return normalized;
@@ -651,7 +668,11 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
                 ?? throw new InvalidOperationException(
                     "Wav2Vec2Model training requires an optimizer implementing IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
-            TrainWithTape(input, expectedOutput, gradientOptimizer);
+            // Train on the SAME preprocessed feature stream inference runs on (PredictCore ->
+            // PreprocessAudio -> Forward). Feeding raw input straight to the tape produced a
+            // different-shaped forward than Predict ([1,64,34] vs the preprocessed [.,34]), so the
+            // MSE loss shape-mismatched and every training-based invariant failed.
+            TrainWithTape(PreprocessAudio(input), expectedOutput, gradientOptimizer);
         }
         finally
         {
@@ -710,10 +731,16 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         _vocabSize = reader.ReadInt32();
         _language = reader.ReadString();
 
-        // Reinitialize layers if needed for native mode
-        if (_useNativeMode && (_featureEncoderLayers is null || _featureEncoderLayers.Count == 0))
+        // Reinitialize / re-link layers for native mode. The base deserialize has already populated
+        // Layers with the trained layers; re-link the typed forward-path sub-lists to THEM (the ctor
+        // populated them from fresh random layers, and the forward reads the sub-lists, not Layers —
+        // so without this a cloned/loaded model predicts untrained: #1221 Clone_AfterTraining).
+        if (_useNativeMode)
         {
-            InitializeLayers();
+            if (Layers.Count > 0)
+                DistributeLayersToSubLists();
+            else
+                InitializeLayers();
         }
     }
 
