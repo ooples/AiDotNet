@@ -2461,6 +2461,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
                     "imageSize: 64, backboneChannels: 32, numClasses: 4, hiddenDim: 16)";
             }
+            else if (model.ClassName == "ProPainter" && model.TypeParameterCount == 1)
+            {
+                // ProPainter (Zhou et al. 2023) defaults (parameterless ctor) to the paper scale:
+                // numFeatures=128 => featChannels=512, a 1x1 QKV conv projecting to 1536 channels,
+                // and 6 transformer blocks. On the [4, 3, 32, 32] smoke clip every training iteration
+                // runs that full-width stack, so LossStrictlyDecreases sat at ~69 s and
+                // MoreData_ShouldNotDegrade (50 + 200 = 250 iterations) ran past the xUnit 120 s
+                // timeout. The per-iteration cost is driven ENTIRELY by the channel widths
+                // (numFeatures / numTransformerBlocks / numHeads) — the spatial dims come from the
+                // 32x32 input, not the architecture — so build the identical encoder -> transformer
+                // -> upsampling-decoder image path at CI-smoke width (numFeatures=32 => featChannels
+                // 128, QKV 384; 2 blocks; 4 heads, headDim 32) so all 26 invariants run well inside
+                // the timeout. Mirrors the DualXVSR / VideoMAE reduced-scale smoke fixtures.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
+                    "numFeatures: 32, numTransformerBlocks: 2, numHeads: 4)";
+            }
             else if (model.HasParameterlessConstructor)
             {
                 // Zero-arg constructor: simple instantiation

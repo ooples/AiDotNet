@@ -252,9 +252,25 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // For single-frame prediction, use zero mask (no inpainting)
+        // Inference must run the SAME differentiable image path that training optimizes
+        // (RunImagePath), not the hand-rolled InpaintFrame. InpaintFrame ends in BlendWithMask,
+        // which under a zero mask returns the input frame verbatim — so training (which optimizes
+        // RunImagePath's convolutions) had NO effect on what Predict emitted, and the model could
+        // never reproduce a memorized frame at inference (failing TrainingError_ShouldNotExceedTestError
+        // and making MoreData_ShouldNotDegrade's Predict-based loss parameter-independent). Routing
+        // inference through RunImagePath makes Predict reflect the learned weights, exactly as
+        // ForwardForTraining does, so the two agree. The flow/warp/blend branch of InpaintFrame is
+        // a non-differentiable, dead pathway and is intentionally omitted here too.
+        return RunReconstruction(input);
+    }
+
+    // Shared entry for BOTH inference (PredictCore) and training (ForwardForTraining): apply the
+    // (zero) mask, concatenate the single-channel mask, and run the differentiable image path so the
+    // two forwards are bit-identical and inference reflects exactly what training optimized.
+    private Tensor<T> RunReconstruction(Tensor<T> input)
+    {
         var mask = new Tensor<T>(input._shape);
-        return InpaintFrame(input, mask, input, input, mask, mask);
+        return RunImagePath(ConcatenateChannelsDim1(ApplyMask(input, mask), SingleChannelMask(mask)));
     }
 
     private bool _shapesProbed;
@@ -290,8 +306,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         // decoder convolution parameters and the memorization loss can decrease. Inference (PredictCore)
         // is unchanged. Same masked-frame->encoder->transformer->upsampling-decoder->output-conv
         // structure as InpaintFrame's image branch, minus the (dead, non-differentiable) flow pathway.
-        var mask = new Tensor<T>(input._shape);
-        return RunImagePath(ConcatenateChannelsDim1(ApplyMask(input, mask), SingleChannelMask(mask)));
+        return RunReconstruction(input);
     }
 
     // Shared, fully tape-compatible image reconstruction path used by BOTH inference (PredictCore)
@@ -331,7 +346,15 @@ public class ProPainter<T> : VideoInpaintingBase<T>
             x = Engine.Upsample(Relu(dec.Forward(x)), 2, 2);
 
         var outputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
-        return outputConv.Forward(x);
+
+        // Bound the reconstruction to (0, 1) with a sigmoid. Frames are inpainted in normalized
+        // [0, 1] space, so a bounded output head both matches the data range (standard for image
+        // reconstruction decoders) and, crucially, keeps the training loss bounded: without it the
+        // un-normalized encoder->decoder conv stack lets activations — and the Charbonnier loss —
+        // grow without limit over long training, so more iterations DIVERGED instead of improving
+        // (MoreData_ShouldNotDegrade: 200-iter loss exploded to 56 vs 50-iter 0.08). A saturating
+        // output head makes additional training monotonically refine the fit.
+        return Engine.TensorSigmoid(outputConv.Forward(x));
     }
 
     // Tape-recording ReLU (max(x, 0)) for the differentiable training path.
@@ -373,7 +396,26 @@ public class ProPainter<T> : VideoInpaintingBase<T>
             Layers.AddRange(layers);
         }
 
-        // Distribute layers to sub-lists for forward pass
+        DistributeLayersToSubLists();
+    }
+
+    // Re-links the per-role sublist fields (_flowEncoder, _imageEncoder, _transformerQKV, ...,
+    // _outputConv) to the CURRENT contents of Layers, in the CreateProPainterLayers order. The
+    // forward path (RunImagePath / InpaintFrame) reads these cached fields, NOT Layers directly, so
+    // they must be rebuilt any time Layers is replaced — most importantly after deserialization,
+    // where the base clears Layers and adds freshly-deserialized layer objects. Without this rebuild
+    // the fields keep pointing at the CreateNewInstance random-init layers and a deserialized/cloned
+    // model predicts with untrained weights (Clone_AfterTraining #1221 class).
+    private void DistributeLayersToSubLists()
+    {
+        _flowEncoder.Clear();
+        _flowDecoder.Clear();
+        _imageEncoder.Clear();
+        _imageDecoder.Clear();
+        _transformerQKV.Clear();
+        _transformerProj.Clear();
+        _transformerFFN.Clear();
+
         int idx = 0;
 
         // Flow encoder (3 layers)
@@ -1014,6 +1056,13 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
+
+        // The base deserialize replaced Layers with freshly-created layer objects, so the cached
+        // per-role sublist fields the forward path reads (_imageEncoder, _transformerQKV, _outputConv,
+        // ...) are stale (they still point at the CreateNewInstance random-init layers). Re-link them
+        // to the deserialized Layers so a cloned/loaded model predicts with the restored weights.
+        if (Layers.Count > 0)
+            DistributeLayersToSubLists();
     }
 
     /// <inheritdoc/>
