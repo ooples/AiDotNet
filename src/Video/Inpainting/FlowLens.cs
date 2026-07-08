@@ -101,9 +101,16 @@ public class FlowLens<T> : VideoInpaintingBase<T>
     public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
     {
         ThrowIfDisposed();
-        var combined = ConcatFramesAndMasks(frames, masks);
+        // Inference MUST apply the same normalize -> concat-mask -> forward -> denormalize pipeline that
+        // ForwardForTraining trains on (and that every sibling model — STTN/AVID/FuseFormer — uses).
+        // Omitting PreprocessFrames/PostprocessOutput here left Predict measuring the model in a
+        // different value space than training optimized, so trained improvements did not show up at
+        // inference (Training_ShouldReduceLoss saw loss go 0.19 -> 0.34 even though the model was
+        // learning identically to STTN).
+        var preprocessed = PreprocessFrames(frames);
+        var combined = ConcatFramesAndMasks(preprocessed, masks);
         var output = IsOnnxMode ? RunOnnxInference(combined) : Forward(combined);
-        return output;
+        return PostprocessOutput(output);
     }
 
     /// <inheritdoc/>
