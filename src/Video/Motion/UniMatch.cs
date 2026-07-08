@@ -253,15 +253,25 @@ public class UniMatch<T> : OpticalFlowBase<T>
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
-        // Reinitialize native layers from deserialized parameters
-        int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-        int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
-        int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
-        _featureExtract = new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1);
+
+        // Re-link the typed role fields to the layers the BASE already deserialized (trained,
+        // shape-resolved) rather than allocating FRESH random-init convolutions here — the fresh convs
+        // left the typed fields (which EstimateFlow reads directly) pointing at untrained weights while
+        // the trained weights sat unused in Layers, so a cloned/loaded model predicted from random init
+        // (#1221 class). Order matches InitializeLayers: [featureExtract, ...processingBlocks, outputConv].
+        if (Layers.Count < _numLayers + 2)
+            throw new InvalidDataException(
+                $"UniMatch serialized layer count {Layers.Count} is too small for {_numLayers} processing blocks.");
+        _featureExtract = Layers[0] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("UniMatch feature extractor layer is missing or has the wrong type.");
         _processingBlocks.Clear();
         for (int i = 0; i < _numLayers; i++)
-            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1));
-        _outputConv = new ConvolutionalLayer<T>(2, 3, 1, 1);
+        {
+            _processingBlocks.Add(Layers[i + 1] as ConvolutionalLayer<T>
+                ?? throw new InvalidDataException($"UniMatch processing block {i} is missing or has the wrong type."));
+        }
+        _outputConv = Layers[_numLayers + 1] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("UniMatch output layer is missing or has the wrong type.");
     }
 
     /// <inheritdoc/>

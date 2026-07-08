@@ -263,8 +263,25 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
+
+        // Re-link the typed role fields to the layers the BASE already deserialized (trained,
+        // shape-resolved) rather than calling InitializeNativeLayers, which allocates FRESH random-init
+        // convolutions and replaces the deserialized layers — so a cloned/loaded model predicted from
+        // random init (#1221 class). EstimateFlow reads these fields directly, not Layers. Order matches
+        // InitializeLayers: [featureExtract, ...processingBlocks, outputConv].
+        if (Layers.Count < _numLayers + 2)
+            throw new InvalidDataException(
+                $"FlowFormerPlusPlus serialized layer count {Layers.Count} is too small for {_numLayers} processing blocks.");
+        _featureExtract = Layers[0] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("FlowFormerPlusPlus feature extractor layer is missing or has the wrong type.");
         _processingBlocks.Clear();
-        InitializeNativeLayers(Architecture);
+        for (int i = 0; i < _numLayers; i++)
+        {
+            _processingBlocks.Add(Layers[i + 1] as ConvolutionalLayer<T>
+                ?? throw new InvalidDataException($"FlowFormerPlusPlus processing block {i} is missing or has the wrong type."));
+        }
+        _outputConv = Layers[_numLayers + 1] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("FlowFormerPlusPlus output layer is missing or has the wrong type.");
     }
 
     /// <inheritdoc/>
