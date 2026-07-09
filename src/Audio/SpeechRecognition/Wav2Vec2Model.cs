@@ -740,7 +740,10 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             if (Layers.Count > 0)
                 DistributeLayersToSubLists();
             else
-                InitializeLayers();
+                // Layers.Count == 0 (older/empty native payload): rebuild the default native layers.
+                // InitializeLayers() is the ONNX no-op and would leave a native model with no
+                // feature-encoder/transformer/CTC layers at all — a silently broken model.
+                InitializeNativeLayers();
         }
     }
 

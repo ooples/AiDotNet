@@ -259,6 +259,11 @@ public class UniMatch<T> : OpticalFlowBase<T>
         // left the typed fields (which EstimateFlow reads directly) pointing at untrained weights while
         // the trained weights sat unused in Layers, so a cloned/loaded model predicted from random init
         // (#1221 class). Order matches InitializeLayers: [featureExtract, ...processingBlocks, outputConv].
+        // Validate the untrusted deserialized count first: a negative value would slip past the
+        // size check below (Layers.Count < negative is false) and then throw a raw
+        // IndexOutOfRangeException at Layers[_numLayers + 1].
+        if (_numLayers < 0)
+            throw new InvalidDataException($"UniMatch serialized layer count {_numLayers} is invalid.");
         if (Layers.Count < _numLayers + 2)
             throw new InvalidDataException(
                 $"UniMatch serialized layer count {Layers.Count} is too small for {_numLayers} processing blocks.");

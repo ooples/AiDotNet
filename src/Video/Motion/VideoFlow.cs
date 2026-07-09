@@ -261,6 +261,11 @@ public class VideoFlow<T> : OpticalFlowBase<T>
         // convolutions and replaces the deserialized layers — so a cloned/loaded model predicted from
         // random init (#1221 class). EstimateFlow reads these fields directly, not Layers. Order matches
         // InitializeLayers: [featureExtract, ...processingBlocks, outputConv].
+        // Validate the untrusted deserialized count first: a negative value would slip past the
+        // size check below (Layers.Count < negative is false) and then throw a raw
+        // IndexOutOfRangeException at Layers[_numLayers + 1]. The ctor already enforces numLayers > 0.
+        if (_numLayers < 0)
+            throw new InvalidDataException($"VideoFlow serialized layer count {_numLayers} is invalid.");
         if (Layers.Count < _numLayers + 2)
             throw new InvalidDataException(
                 $"VideoFlow serialized layer count {Layers.Count} is too small for {_numLayers} processing blocks.");
