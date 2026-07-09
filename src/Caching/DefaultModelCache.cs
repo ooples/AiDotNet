@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using CacheEvictionPolicy = AiDotNet.Enums.CacheEvictionPolicy;
 namespace AiDotNet.Caching;
 
 /// <summary>
@@ -28,52 +29,63 @@ namespace AiDotNet.Caching;
 public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOutput>
 {
     /// <summary>
-    /// The internal dictionary that stores optimization step data, allowing concurrent access from multiple threads.
-    /// </summary>
-    /// <remarks>
-    /// ConcurrentDictionary is used to ensure thread safety when multiple operations might access the cache simultaneously.
-    /// </remarks>
-    private readonly ConcurrentDictionary<string, OptimizationStepData<T, TInput, TOutput>> _cache = new();
-
-    /// <summary>
-    /// Default maximum number of distinct step-data entries retained before the oldest are evicted.
+    /// Default maximum number of distinct step-data entries retained before eviction.
     /// </summary>
     public const int DefaultCapacity = 8;
 
-    /// <summary>
-    /// Maximum number of distinct keys retained. Once exceeded, the oldest-inserted entries are evicted.
-    /// </summary>
-    private readonly int _capacity;
+    /// <summary>Recommended default eviction policy: oldest-inserted first.</summary>
+    public const CacheEvictionPolicy DefaultEvictionPolicy = CacheEvictionPolicy.FIFO;
+
+    /// <summary>Bounded, policy-evicting backing store (capacity + FIFO/LRU/LFU live here).</summary>
+    private readonly BoundedEvictingStore<OptimizationStepData<T, TInput, TOutput>> _store;
+
+    /// <summary>When false the cache is a pass-through: every lookup misses and stores are dropped.</summary>
+    private readonly bool _enabled;
+
+    /// <summary>Whether the cache actually stores entries (false = disabled pass-through).</summary>
+    public bool Enabled => _enabled;
+
+    /// <summary>Maximum number of distinct keys retained before an entry is evicted.</summary>
+    public int Capacity => _store.Capacity;
+
+    /// <summary>The policy used to choose the eviction victim once the cache is full.</summary>
+    public CacheEvictionPolicy EvictionPolicy => _store.EvictionPolicy;
 
     /// <summary>
-    /// Insertion-order record of cache keys, used to evict the oldest entry when the cache is full.
+    /// Initializes a new cache with the recommended defaults: <see cref="DefaultCapacity"/> entries,
+    /// <see cref="DefaultEvictionPolicy"/> eviction.
     /// </summary>
-    private readonly ConcurrentQueue<string> _insertionOrder = new();
-
-    /// <summary>
-    /// Initializes a new cache with the <see cref="DefaultCapacity"/> bound.
-    /// </summary>
-    public DefaultModelCache() : this(DefaultCapacity)
+    public DefaultModelCache() : this(DefaultCapacity, DefaultEvictionPolicy)
     {
     }
 
     /// <summary>
-    /// Initializes a new cache that retains at most <paramref name="capacity"/> distinct entries.
+    /// Initializes a new cache that retains at most <paramref name="capacity"/> distinct entries,
+    /// evicting with the recommended <see cref="DefaultEvictionPolicy"/>.
     /// </summary>
     /// <param name="capacity">
-    /// Maximum number of step-data entries to keep. Once exceeded, the oldest-inserted entry is
-    /// evicted (FIFO). This bounds memory: an optimizer's per-epoch evaluation writes a fresh
-    /// entry every epoch (the parameter-content key changes as the model trains), so without a
-    /// bound the cache — which retains a deep-copied model and O(N) predictions per entry — would
-    /// grow without limit across a long training run, driving per-epoch memory and wall-clock up.
-    /// A gradient optimizer never re-queries a prior epoch's key (parameters keep changing), and
-    /// population optimizers only hit on exact-duplicate parameter vectors (rare in continuous
-    /// search), so a small bound preserves the cache's real value while eliminating the leak.
-    /// Values &lt;= 0 fall back to <see cref="DefaultCapacity"/>.
+    /// Maximum number of step-data entries to keep. This bounds memory: an optimizer's per-epoch
+    /// evaluation writes a fresh entry every epoch (the parameter-content key changes as the model
+    /// trains), so without a bound the cache — which retains a deep-copied model and O(N) predictions
+    /// per entry — would grow without limit across a long training run. Values &lt;= 0 fall back to
+    /// <see cref="DefaultCapacity"/>.
     /// </param>
-    public DefaultModelCache(int capacity)
+    public DefaultModelCache(int capacity) : this(capacity, DefaultEvictionPolicy)
     {
-        _capacity = capacity > 0 ? capacity : DefaultCapacity;
+    }
+
+    /// <summary>
+    /// Initializes a new cache that retains at most <paramref name="capacity"/> distinct entries,
+    /// evicting per <paramref name="evictionPolicy"/>.
+    /// </summary>
+    /// <param name="capacity">Maximum entries to keep; values &lt;= 0 fall back to <see cref="DefaultCapacity"/>.</param>
+    /// <param name="evictionPolicy">Which entry to evict once the cache is full (FIFO / LRU / LFU).</param>
+    /// <param name="enabled">When false the cache is a pass-through that never stores (always recomputes).</param>
+    public DefaultModelCache(int capacity, CacheEvictionPolicy evictionPolicy, bool enabled = true)
+    {
+        _store = new BoundedEvictingStore<OptimizationStepData<T, TInput, TOutput>>(
+            capacity > 0 ? capacity : DefaultCapacity, evictionPolicy);
+        _enabled = enabled;
     }
 
     /// <summary>
@@ -87,8 +99,7 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     /// </remarks>
     public void ClearCache()
     {
-        _cache.Clear();
-        while (_insertionOrder.TryDequeue(out _)) { }
+        _store.Clear();
     }
 
     /// <summary>
@@ -111,8 +122,7 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     public OptimizationStepData<T, TInput, TOutput>? GetCachedStepData(string key)
     {
         if (key == null) throw new ArgumentNullException(nameof(key), "Cache key cannot be null.");
-
-        return _cache.TryGetValue(key, out var model) ? model : null;
+        return _enabled ? _store.Get(key) : null;
     }
 
     /// <summary>
@@ -136,25 +146,7 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     {
         if (key == null) throw new ArgumentNullException(nameof(key), "Cache key cannot be null.");
         if (stepData == null) throw new ArgumentNullException(nameof(stepData), "Step data cannot be null.");
-
-        bool isNewKey = !_cache.ContainsKey(key);
-        _cache[key] = stepData;
-
-        // Bound the cache (FIFO eviction). Only track insertion order for genuinely new keys so
-        // re-writing an existing key (an in-place update of the same entry) doesn't inflate the
-        // count. Overshoot by one transiently under concurrency is harmless — the loop trims back
-        // to capacity. A dequeued key that was already removed (or re-added) simply no-ops.
-        if (isNewKey)
-        {
-            _insertionOrder.Enqueue(key);
-            while (_cache.Count > _capacity && _insertionOrder.TryDequeue(out var oldestKey))
-            {
-                if (!string.Equals(oldestKey, key, StringComparison.Ordinal))
-                {
-                    _cache.TryRemove(oldestKey, out _);
-                }
-            }
-        }
+        if (_enabled) _store.Set(key, stepData);
     }
 
     /// <summary>

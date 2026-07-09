@@ -114,4 +114,43 @@ public class CacheConfig
     /// </para>
     /// </remarks>
     public bool TrackStatistics { get; set; } = true;
+
+    // ---------------------------------------------------------------------------------------------
+    // Optimizer (training-time) caches
+    //
+    // The fields above govern the model-serving cache (loaded models kept in RAM). The fields below
+    // govern the two IN-TRAINING optimizer caches, which are a separate concern and independently
+    // tunable:
+    //   * the gradient cache (per-step gradients, DefaultGradientCache), and
+    //   * the model-evaluation cache (per-epoch fitness/step data, DefaultModelCache).
+    // These caches are numerically transparent — a miss simply recomputes the same deterministic
+    // value — so they exist purely to bound memory/time. Their defaults are the recommended values
+    // (small FIFO windows) that fix the unbounded-growth training-loop leak; raise them only if a
+    // workload legitimately re-queries older keys. When Enabled is false, both are disabled (every
+    // lookup misses and recomputes).
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Maximum number of per-step gradients retained by the optimizer's gradient cache
+    /// (<c>DefaultGradientCache</c>). Default 8 — enough to cover every legitimate short-window reuse
+    /// (gradient-check double-eval, line-search / trust-region re-eval, DDP AllReduce read-back) while
+    /// keeping the footprint independent of the number of training steps. Values &lt;= 0 fall back to the default.
+    /// </summary>
+    public int GradientCacheCapacity { get; set; } = 8;
+
+    /// <summary>
+    /// Maximum number of per-evaluation step-data entries retained by the optimizer's model-evaluation
+    /// cache (<c>DefaultModelCache</c>). Default 8. Each entry retains a deep-copied model plus O(N)
+    /// predictions, so a small bound removes the per-epoch leak; a gradient optimizer never re-queries a
+    /// prior epoch's key anyway. Values &lt;= 0 fall back to the default.
+    /// </summary>
+    public int ModelCacheCapacity { get; set; } = 8;
+
+    /// <summary>
+    /// Eviction policy for BOTH optimizer caches (default: <see cref="Enums.CacheEvictionPolicy.FIFO"/>).
+    /// FIFO is recommended for training-time caches because reuse is a short consecutive window; LRU/LFU
+    /// are available for workloads that re-hit older keys. This is intentionally separate from
+    /// <see cref="EvictionPolicy"/> (which governs the serving cache and defaults to LRU).
+    /// </summary>
+    public Enums.CacheEvictionPolicy OptimizerCacheEvictionPolicy { get; set; } = Enums.CacheEvictionPolicy.FIFO;
 }

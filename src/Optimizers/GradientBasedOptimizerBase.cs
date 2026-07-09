@@ -1,4 +1,6 @@
 using AiDotNet.Helpers;
+using AiDotNet.Caching;
+using AiDotNet.Deployment.Configuration;
 using AiDotNet.Data.Sampling;
 using AiDotNet.Engines;
 using AiDotNet.LearningRateSchedulers;
@@ -120,6 +122,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// A cache for storing and retrieving gradients to improve performance.
     /// </summary>
     protected IGradientCache<T> GradientCache;
+
+    /// <summary>
+    /// Applies a <see cref="CacheConfig"/> to this optimizer's caches. Extends the base (which handles
+    /// the model-evaluation cache) by also replacing the gradient cache with one bounded to the
+    /// configured <see cref="CacheConfig.GradientCacheCapacity"/> + <see cref="CacheConfig.OptimizerCacheEvictionPolicy"/>
+    /// (or a disabled pass-through when <see cref="CacheConfig.Enabled"/> is false).
+    /// </summary>
+    /// <param name="config">The cache configuration to apply (must not be null).</param>
+    internal override void ApplyCacheConfiguration(CacheConfig config)
+    {
+        base.ApplyCacheConfiguration(config);
+        int capacity = config.GradientCacheCapacity > 0
+            ? config.GradientCacheCapacity
+            : DefaultGradientCache<T>.DefaultCapacity;
+        GradientCache = new DefaultGradientCache<T>(capacity, config.OptimizerCacheEvictionPolicy, config.Enabled);
+    }
 
     /// <summary>
     /// A method used to compare the predicted values vs the actual values.
