@@ -2091,6 +2091,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "outputSize: 4), " +
                     "numClasses: 4, embedDim: 64, numHeads: 4, numLayers: 2, numFrames: 4, patchSize: 8)";
             }
+            else if (model.ClassName == "Wav2Vec2Model" && model.TypeParameterCount == 1)
+            {
+                // wav2vec 2.0 (Baevski et al. 2020) native default is BERT-base scale — 768-wide, 12
+                // transformer layers, 512-channel conv encoder. On the tiny [1,64,32] smoke clip that
+                // 12-deep stack attenuates the input signal below the 1e-12 DifferentInputs/ScaledInput
+                // threshold (measured diff 5e-31 at 768/12 vs 2.5e-5 at 64/2), AND the per-step cost
+                // times out MoreData. Build the IDENTICAL architecture (Conv1D feature encoder ->
+                // transpose -> transformer -> CTC) at CI-smoke width/depth so the invariants run inside
+                // the timeout and the input signal survives. Mirrors the FasterWhisper reduced-scale
+                // fixture. Raw-waveform InputShape [1,64,32] is emitted by the isAudio branch below.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "hiddenDim: 64, numTransformerLayers: 2, numHeads: 4, ffDim: 128)";
+            }
             else if (model.ClassName == "FasterWhisper" && model.TypeParameterCount == 1)
             {
                 // FasterWhisper's production defaults mirror a large Whisper

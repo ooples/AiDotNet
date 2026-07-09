@@ -30157,13 +30157,21 @@ public static class LayerHelper<T>
         featureEncoderStrides ??= [5, 2, 2, 2, 2, 2, 2];
         featureEncoderChannels ??= [512, 512, 512, 512, 512, 512, 512];
 
-        // Convolutional feature encoder
-        int currentDim = 1;
+        // Convolutional feature encoder (Baevski et al. 2020, wav2vec 2.0 §2): a stack of temporal
+        // Conv1D blocks over the RAW waveform [B, 1, T], each with GELU. The paper strides
+        // [5,2,2,2,2,2,2] downsample by 320x while the channels widen to 512, producing a latent
+        // feature sequence [B, 512, T']. (The previous DenseLayer stack collapsed the whole waveform
+        // to a single vector — no temporal sequence — so the model's output was input-independent.)
+        // The model's custom forward transposes [B,512,T'] -> [B,T',512] before the transformer.
         for (int i = 0; i < featureEncoderKernelSizes.Length; i++)
         {
-            int outputDim = featureEncoderChannels[i];
-            yield return new DenseLayer<T>(outputDim, gelu);
-            currentDim = outputDim;
+            yield return new Conv1DLayer<T>(
+                outputChannels: featureEncoderChannels[i],
+                kernelSize: featureEncoderKernelSizes[i],
+                dilation: 1,
+                stride: featureEncoderStrides[i],
+                padding: 0,
+                activation: gelu);
         }
 
         // Feature projection
