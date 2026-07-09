@@ -2106,6 +2106,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
                     "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32)";
             }
+            else if (model.ClassName == "LayoutXLM" && model.TypeParameterCount == 1)
+            {
+                // LayoutXLM (Xu et al. 2022) is multilingual LayoutLMv2 — XLM-RoBERTa scale (768-wide,
+                // 12 layers, vocab 250002, 224px). ~180M params; each CPU training iteration is seconds
+                // and the heavy invariants time out. Build the identical two-stream architecture (visual
+                // backbone + text embedding -> multimodal transformer) at CI-smoke scale. Token-ID
+                // InputShape [16] is emitted by the token-based document branch below.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 16, outputSize: 4), " +
+                    "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
+                    "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32)";
+            }
             else if (model.ClassName == "Wav2Vec2Model" && model.TypeParameterCount == 1)
             {
                 // wav2vec 2.0 (Baevski et al. 2020) native default is BERT-base scale — 768-wide, 12
@@ -3116,19 +3130,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 16 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
 
-            if (model.ClassName == "LayoutLMv2")
+            if (model.ClassName == "LayoutLMv2" || model.ClassName == "LayoutXLM")
             {
                 // EXCEED the reference: the default invariants above feed a TOKEN-ONLY input (the model
                 // degrades gracefully to its text stream). This extra test exercises the FULL two-stream
                 // fusion — a token-ID sequence AND a document image together — through EncodeMultimodal,
-                // which reference LayoutLMv2 requires and our modality-robust forward also supports.
+                // which the reference model requires and our modality-robust forward also supports.
                 sb.AppendLine();
                 sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
                 sb.AppendLine("    public async System.Threading.Tasks.Task MultiModal_FullFusion_ShouldProduceFiniteOutput()");
                 sb.AppendLine("    {");
                 sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
                 sb.AppendLine("        var rng = ModelTestHelpers.CreateSeededRandom();");
-                sb.AppendLine("        var model = (AiDotNet.Document.LayoutAware.LayoutLMv2<double>)CreateNetwork();");
+                sb.AppendLine($"        var model = (AiDotNet.Document.LayoutAware.{model.ClassName}<double>)CreateNetwork();");
+                sb.AppendLine("        model.SetTrainingMode(false);");
                 sb.AppendLine("        var tokens = CreateRandomTensor(new[] { 16 }, rng);");
                 sb.AppendLine("        var image = CreateRandomTensor(new[] { 3, 32, 32 }, rng);");
                 sb.AppendLine("        var output = model.EncodeMultimodal(tokens, image);");

@@ -316,10 +316,17 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         Tensor<T> seq;
         if (textSeq is not null && visualSeq is not null)
         {
-            // Fuse: visual tokens first, then text tokens, along the sequence axis (last-but-one for the
-            // channels-last [.., seq, hidden] layout both streams produce).
-            int seqAxis = textSeq.Rank - 2;
-            seq = Engine.TensorConcatenate([visualSeq, textSeq], axis: seqAxis);
+            // Fuse the way LayoutLMv2 (Xu et al. 2021, §3.1) does: stack the visual and text token
+            // sequences along the SEQUENCE axis (visual first, then text) into one joint sequence for
+            // the shared multimodal transformer. Normalize both streams to a batched [B, L, D] first —
+            // the visual backbone emits [B, Lvis, D] while the text stream can emit an unbatched
+            // [Ltext, D] (and a continuous-valued token tensor projects to [1, D]) — so the
+            // concatenation matches on batch and hidden and only grows the sequence axis. The prior
+            // axis-(Rank-2) concat on unequal-rank streams was invalid and only appeared to work when
+            // the output buffer's unwritten tail happened to be zero.
+            var vis = AlignToBatchedSequence(visualSeq);
+            var txt = AlignToBatchedSequence(textSeq);
+            seq = Engine.TensorConcatenate([vis, txt], axis: 1);
         }
         else
         {
@@ -331,6 +338,17 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         foreach (var layer in _transformerLayers)
             seq = layer.Forward(seq);
         return seq;
+    }
+
+    // Normalizes a token sequence to a batched [B, L, D] layout so the two fusion streams concatenate
+    // cleanly on the sequence axis. A [L, D] stream (unbatched, e.g. the text embedding on a rank-1
+    // token vector) gains a leading batch of 1; a continuous [1, D] projection becomes a single-token
+    // [1, 1, D]; an already-batched [B, L, D] passes through unchanged.
+    private Tensor<T> AlignToBatchedSequence(Tensor<T> t)
+    {
+        if (t.Rank == 3) return t;
+        if (t.Rank == 2) return Engine.Reshape(t, new[] { 1, t.Shape[0], t.Shape[1] });
+        throw new ArgumentException($"Fusion stream must be rank 2 or 3, got rank {t.Rank}.");
     }
 
     // Text stream: token IDs -> word embedding -> position -> layernorm -> dropout => [seq, hidden].
@@ -381,6 +399,13 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     /// </summary>
     public Tensor<T> EncodeMultimodal(Tensor<T> textTokens, Tensor<T> documentImage)
     {
+        // Inference entry: mirror Predict()/PredictCore by suppressing gradient-tape recording
+        // (PyTorch torch.no_grad() semantics). RunMultimodal issues raw Engine.Reshape/Permute/
+        // Concatenate ops that would otherwise record onto the shared autodiff tape; if a prior
+        // training pass left that singleton tape non-empty, replaying it here poisons the fusion
+        // forward with stale/NaN buffers. NoGradScope makes this direct call as tape-clean as
+        // the Predict()-wrapped image-only path. ForwardForTraining keeps recording (no scope).
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var image = PreprocessDocument(documentImage);
         return RunMultimodal(textTokens, image);
     }
