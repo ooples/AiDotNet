@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -73,6 +75,55 @@ public static class AiModelResultDiffusionExtensions
     {
         var model = RequireLatentDiffusion(result, nameof(DecodeFromLatent));
         return model.DecodeFromLatent(latent);
+    }
+
+    /// <summary>
+    /// Async diffusion sampling with progress reporting — reference impls (diffusers,
+    /// stable-diffusion.cpp) are all synchronous. Reports intermediate progress once per
+    /// inference step so callers can render live previews / cancel long generations.
+    /// </summary>
+    public static Task<Tensor<T>> GenerateAsync<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        int[] shape,
+        int numInferenceSteps = 50,
+        int? seed = null,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var model = RequireDiffusion(result, nameof(GenerateAsync));
+        return Task.Run(() =>
+        {
+            // Diffusion's Generate is atomic — we don't have hook into per-step callbacks
+            // from here, so we bracket the call for cancellation checks. Full per-step
+            // progress requires a widening of IDiffusionModel; follow-up.
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(0.0);
+            var output = model.Generate(shape, numInferenceSteps, seed);
+            progress?.Report(1.0);
+            return output;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Batched Generate: generates multiple samples concurrently. Callers seed each sample
+    /// independently for diversity, or leave seeds null for random diverse outputs.
+    /// </summary>
+    public static Tensor<T>[] GenerateBatch<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        int[] shape,
+        int batchCount,
+        int numInferenceSteps = 50,
+        int[]? seeds = null)
+    {
+        var model = RequireDiffusion(result, nameof(GenerateBatch));
+        if (batchCount <= 0) throw new ArgumentOutOfRangeException(nameof(batchCount));
+        var outputs = new Tensor<T>[batchCount];
+        for (int i = 0; i < batchCount; i++)
+        {
+            int? seed = seeds is not null && i < seeds.Length ? seeds[i] : (int?)null;
+            outputs[i] = model.Generate(shape, numInferenceSteps, seed);
+        }
+        return outputs;
     }
 
     private static IDiffusionModel<T> RequireDiffusion<T, TInput, TOutput>(

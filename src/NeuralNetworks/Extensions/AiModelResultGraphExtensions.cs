@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Tasks.Graph;
 
@@ -91,6 +94,46 @@ public static class AiModelResultGraphExtensions
             score = numOps.Add(score, numOps.Multiply(predictions[sourceNode, d], predictions[targetNode, d]));
         }
         return score;
+    }
+
+    /// <summary>
+    /// Async graph inference for pipelines that need to score many graphs concurrently
+    /// without blocking the caller. Reference impls (PyG, DGL) are synchronous per-graph;
+    /// this dispatches to the thread pool with cancellation support.
+    /// </summary>
+    public static Task<Tensor<T>> PredictOnGraphAsync<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        Tensor<T> adjacencyMatrix,
+        Tensor<T> nodeFeatures,
+        CancellationToken cancellationToken = default)
+    {
+        var graph = RequireGraphModel(result, nameof(PredictOnGraphAsync));
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            graph.SetAdjacencyMatrix(adjacencyMatrix);
+            return graph.Forward(nodeFeatures);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Batched graph inference: score N graphs by iterating the pairs. Reference impls
+    /// require the caller to hand-roll this loop.
+    /// </summary>
+    public static Tensor<T>[] PredictOnGraphBatch<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        IEnumerable<(Tensor<T> Adjacency, Tensor<T> NodeFeatures)> graphs)
+    {
+        var graph = RequireGraphModel(result, nameof(PredictOnGraphBatch));
+        if (graphs is null) throw new ArgumentNullException(nameof(graphs));
+        var list = new List<(Tensor<T>, Tensor<T>)>(graphs);
+        var outputs = new Tensor<T>[list.Count];
+        for (int i = 0; i < list.Count; i++)
+        {
+            graph.SetAdjacencyMatrix(list[i].Item1);
+            outputs[i] = graph.Forward(list[i].Item2);
+        }
+        return outputs;
     }
 
     private static NodeClassificationModel<T> RequireGraphModel<T, TInput, TOutput>(

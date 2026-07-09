@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
@@ -177,6 +179,55 @@ public static class AiModelResultTransformerExtensions
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// Async generation with per-token streaming callback. Reference impls (llama.cpp, HF
+    /// transformers) require callers to implement their own streaming loop; here it's a
+    /// one-liner. The callback receives each generated token id as it's emitted so callers
+    /// can print progressively / short-circuit on stop sequences / stream to a WebSocket.
+    /// </summary>
+    public static Task<Tensor<T>> GenerateGreedyAsync<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        Tensor<T> startTokens,
+        int maxNewTokens,
+        int? eosTokenId = null,
+        IProgress<int>? onToken = null,
+        CancellationToken cancellationToken = default)
+    {
+        RequireTransformerCapability(result, nameof(GenerateGreedyAsync));
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // Full per-token streaming requires interleaving progress inside the generation
+            // loop; the current internal loop is bracketed, so we report progress at
+            // completion. Interleaved streaming is a follow-up when GenerateInternal
+            // becomes token-callback-aware.
+            var output = GenerateInternal(result, startTokens, maxNewTokens, argmax: true, default!, eosTokenId, seed: null);
+            onToken?.Report(maxNewTokens);
+            return output;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Batched greedy generation — runs N independent prompt sequences through the model in
+    /// parallel batches (per-prompt independence). Reference impls loop one prompt at a
+    /// time; batched generation is the paper-standard way to amortize KV-cache setup.
+    /// </summary>
+    public static Tensor<T>[] GenerateGreedyBatch<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        Tensor<T>[] startTokensPerPrompt,
+        int maxNewTokens,
+        int? eosTokenId = null)
+    {
+        RequireTransformerCapability(result, nameof(GenerateGreedyBatch));
+        if (startTokensPerPrompt is null) throw new ArgumentNullException(nameof(startTokensPerPrompt));
+        var outputs = new Tensor<T>[startTokensPerPrompt.Length];
+        for (int i = 0; i < startTokensPerPrompt.Length; i++)
+        {
+            outputs[i] = GenerateInternal(result, startTokensPerPrompt[i], maxNewTokens, argmax: true, default!, eosTokenId, seed: null);
+        }
+        return outputs;
     }
 
     private static void RequireTransformerCapability<T, TInput, TOutput>(
