@@ -13,8 +13,8 @@ namespace AiDotNet.NeuralRadianceFields.Helpers;
 /// the code common across <c>NeRF</c>, <c>InstantNGP</c>, and <c>GaussianSplatting</c> so each
 /// model's <c>TrainOnImageBatch</c> is a thin adapter over its own <c>RenderRays</c> +
 /// per-attribute update path, and every model gets the same engine-backed loss computation
-/// (which auto-records on the gradient tape — critical for the follow-up backprop-through-
-/// render lands in #1834's paper-faithful continuation).
+/// (which auto-records on the gradient tape — the mechanism NeRF/InstantNGP use to
+/// backprop-through-render into the MLP weights via <c>BackwardAndStepOnPrecomputedLoss</c>).
 /// </summary>
 public static class ImageTrainingHelpers
 {
@@ -40,7 +40,7 @@ public static class ImageTrainingHelpers
     /// Engine-based MSE between rendered and target pixel color tensors. Uses
     /// <see cref="IEngine.TensorSubtract"/> + <see cref="IEngine.TensorMultiply"/> +
     /// <see cref="IEngine.TensorSum"/> so the operation is vectorized and recorded on the
-    /// gradient tape (unlocking the paper-faithful backprop follow-up).
+    /// gradient tape (feeds NeRF/InstantNGP's BackwardAndStepOnPrecomputedLoss path).
     /// </summary>
     public static T PhotometricMSE<T>(IEngine engine, Tensor<T> rendered, Tensor<T> target)
     {

@@ -15,6 +15,16 @@ namespace AiDotNet.NeuralRadianceFields.Data;
 /// COLMAP transforms.json, build camera intrinsics, sample rays, batch them. These factories
 /// give consumers a one-liner: <c>ImageTrainingDataLoaders.FromViews(views)</c>.
 /// </summary>
+/// <summary>
+/// Optional interface for image-space loaders that hold their view set in memory. Allows
+/// pose-based scene-bounds estimation without materializing the full loader.
+/// </summary>
+public interface IViewSetProvider<T>
+{
+    /// <summary>The full in-memory view set backing this loader.</summary>
+    IReadOnlyList<ImageView<T>> Views { get; }
+}
+
 public static class ImageTrainingDataLoaders
 {
     /// <summary>
@@ -34,8 +44,9 @@ public static class ImageTrainingDataLoaders
         return new InMemoryImageDataLoader<T>(array, seed);
     }
 
-    private sealed class InMemoryImageDataLoader<T> : IDataLoader<ImageView<T>, PixelBatch<T>>
+    private sealed class InMemoryImageDataLoader<T> : IDataLoader<ImageView<T>, PixelBatch<T>>, IViewSetProvider<T>
     {
+        public IReadOnlyList<ImageView<T>> Views => _views;
         private readonly ImageView<T>[] _views;
         private readonly int? _seed;
         private Random _rng;

@@ -67,7 +67,11 @@ public static class AiModelResultRadianceFieldExtensions
         if (cameraRotation is null) throw new ArgumentNullException(nameof(cameraRotation));
         if (imageWidth <= 0) throw new ArgumentOutOfRangeException(nameof(imageWidth));
         if (imageHeight <= 0) throw new ArgumentOutOfRangeException(nameof(imageHeight));
-        return field.RenderImage(cameraPosition, cameraRotation, imageWidth, imageHeight, focalLength);
+        return AiDotNet.Extensions.Telemetry.AiModelResultInferenceTelemetry.TimeAndLog(
+            result,
+            nameof(RenderImage),
+            () => field.RenderImage(cameraPosition, cameraRotation, imageWidth, imageHeight, focalLength),
+            resultCount: imageWidth * imageHeight);
     }
 
     /// <summary>

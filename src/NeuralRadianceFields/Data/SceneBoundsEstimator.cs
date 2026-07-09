@@ -19,7 +19,7 @@ public static class SceneBoundsEstimator
     /// intersection region plus a symmetric buffer around the pose centroid — a paper-quality
     /// default when no explicit bounds are supplied.
     /// </summary>
-    public static SceneBounds<T> EstimateFromViews<T>(
+    public static SceneBounds EstimateFromViews<T>(
         IEnumerable<ImageView<T>> views,
         double margin = 0.25)
     {
@@ -70,7 +70,7 @@ public static class SceneBoundsEstimator
         double near = Math.Max(0.1, minDist - radius);
         double far  = maxDist + radius;
 
-        return new SceneBounds<T>(
+        return new SceneBounds(
             center: (cx, cy, cz),
             radius: radius,
             near: near,
@@ -80,8 +80,10 @@ public static class SceneBoundsEstimator
 
 /// <summary>
 /// Auto-derived scene bounds + near/far — output of <see cref="SceneBoundsEstimator"/>.
+/// Stored as doubles because pose-derived geometry is unit-agnostic and doesn't need to
+/// carry the model's numeric type.
 /// </summary>
-public sealed class SceneBounds<T>
+public sealed class SceneBounds
 {
     public (double X, double Y, double Z) Center { get; }
     public double Radius { get; }

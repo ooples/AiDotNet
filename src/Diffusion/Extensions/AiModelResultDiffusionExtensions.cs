@@ -36,7 +36,11 @@ public static class AiModelResultDiffusionExtensions
         var model = RequireDiffusion(result, nameof(Generate));
         if (shape is null) throw new ArgumentNullException(nameof(shape));
         if (numInferenceSteps <= 0) throw new ArgumentOutOfRangeException(nameof(numInferenceSteps));
-        return model.Generate(shape, numInferenceSteps, seed);
+        return AiDotNet.Extensions.Telemetry.AiModelResultInferenceTelemetry.TimeAndLog(
+            result,
+            nameof(Generate),
+            () => model.Generate(shape, numInferenceSteps, seed),
+            resultCount: numInferenceSteps);
     }
 
     /// <summary>
@@ -97,14 +101,14 @@ public static class AiModelResultDiffusionExtensions
         CancellationToken cancellationToken = default)
     {
         var model = RequireDiffusion(result, nameof(GenerateAsync));
+        if (shape is null) throw new ArgumentNullException(nameof(shape));
+        if (numInferenceSteps <= 0) throw new ArgumentOutOfRangeException(nameof(numInferenceSteps));
         return Task.Run(() =>
         {
-            // Diffusion's Generate is atomic — we don't have hook into per-step callbacks
-            // from here, so we bracket the call for cancellation checks. Full per-step
-            // progress requires a widening of IDiffusionModel; follow-up.
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(0.0);
             var output = model.Generate(shape, numInferenceSteps, seed);
+            cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(1.0);
             return output;
         }, cancellationToken);

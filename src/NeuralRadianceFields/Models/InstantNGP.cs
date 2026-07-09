@@ -1628,10 +1628,11 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
     }
 
     /// <summary>
-    /// Image-space photometric training (#1834). Renders one batch of rays and returns the
-    /// MSE loss against ground-truth pixel colors. Paper-faithful backprop through the hash-
-    /// grid encoder is the #1834 continuation; this slice ships the loader → render → loss
-    /// wiring end-to-end.
+    /// Image-space photometric training (#1834). Renders one batch of rays, computes MSE
+    /// against ground-truth pixel colors, and drives a full gradient step through the
+    /// hash-grid encoder + volume-render integral via
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.BackwardAndStepOnPrecomputedLoss"/>.
+    /// Sample count ramps per <see cref="ProgressiveSamplingSchedule"/> for coarse→fine training.
     /// </summary>
     public T TrainOnImageBatch(
         AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
@@ -1649,10 +1650,16 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
         int numSamples = schedule.SamplesForIteration(_imageTrainingIteration);
         _imageTrainingIteration++;
 
-        // Tape-recorded render → engine MSE → BackwardAndStepOnPrecomputedLoss walks the tape
-        // through the hash-grid encoder + volume-render integral into every trainable parameter.
-        // Resolves the "TrainOnImageBatch does not train" review comment — this now applies a
-        // full gradient step per call, matching Instant-NGP's paper training loop.
+        // Auto-derive scene bounds from loader poses if the caller didn't set them (excellence goal #3).
+        NeuralRadianceFields.Data.SceneBounds? bounds = imageTrainingOptions?.SceneBounds ?? _autoBounds;
+        if (bounds is null && loader is NeuralRadianceFields.Data.IViewSetProvider<T> vsp)
+        {
+            bounds = NeuralRadianceFields.Data.SceneBoundsEstimator.EstimateFromViews(vsp.Views);
+            _autoBounds = bounds;
+        }
+        T near = bounds is not null ? NumOps.FromDouble(bounds.Near) : _renderNearBound;
+        T far  = bounds is not null ? NumOps.FromDouble(bounds.Far)  : _renderFarBound;
+
         SetTrainingMode(true);
         try
         {
@@ -1661,8 +1668,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
                 pixels.RayOrigins,
                 pixels.RayDirections,
                 numSamples: numSamples,
-                _renderNearBound,
-                _renderFarBound);
+                near,
+                far);
             var diff = Engine.TensorSubtract(rendered, pixels.TargetColors);
             var squared = Engine.TensorMultiply(diff, diff);
             var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
@@ -1676,6 +1683,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
     }
 
     private int _imageTrainingIteration;
+    private NeuralRadianceFields.Data.SceneBounds? _autoBounds;
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

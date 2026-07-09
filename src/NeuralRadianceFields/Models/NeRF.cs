@@ -1111,14 +1111,15 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
 
     /// <summary>
     /// Image-space photometric training (#1834). Pulls one batch from the loader, volume-
-    /// renders each sampled ray, and computes the MSE against the ground-truth pixel colors.
+    /// renders each sampled ray, computes MSE against ground-truth pixel colors, and drives
+    /// a full gradient step through the volume-rendering integral into the MLP weights via
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.BackwardAndStepOnPrecomputedLoss"/>.
     /// </summary>
     /// <remarks>
-    /// This slice wires the loader → render → loss pipeline end-to-end so the facade can drive
-    /// image-space iterations and observers see the loss curve. Paper-faithful backprop through
-    /// the volume-rendering integral into the MLP weights lands as follow-up work referenced
-    /// against #1834; for image-space training with genuine convergence today, callers can
-    /// combine this method's loss signal with the existing supervised <see cref="Train"/> path.
+    /// This is the paper-standard NeRF training path — every call applies a real Adam step
+    /// to the density + color MLPs from the photometric residual. Sample count ramps
+    /// automatically per <see cref="ProgressiveSamplingSchedule"/> (coarse → fine) so early
+    /// iterations use fewer samples for speed and late iterations use more for quality.
     /// </remarks>
     public T TrainOnImageBatch(
         AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
@@ -1138,13 +1139,29 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
         int numSamples = schedule.SamplesForIteration(_imageTrainingIteration);
         _imageTrainingIteration++;
 
+        // Excellence goal #3: auto scene bounds. If caller supplied SceneBounds, use its
+        // near/far; otherwise derive them once on first call from the loader's view set
+        // (nerfstudio-standard pose-frustum intersection) and cache. Skip if the loader
+        // isn't a rich in-memory image loader (streaming loaders don't expose all views).
+        NeuralRadianceFields.Data.SceneBounds? bounds = imageTrainingOptions?.SceneBounds ?? _autoBounds;
+        if (bounds is null)
+        {
+            bounds = TryEstimateBoundsFromLoader(loader);
+            _autoBounds = bounds; // cache for the remaining iterations
+        }
+        T near = bounds is not null ? NumOps.FromDouble(bounds.Near) : _renderNearBound;
+        T far  = bounds is not null ? NumOps.FromDouble(bounds.Far)  : _renderFarBound;
+
+        // Excellence goal #4 (LearnedPrior single-image mode): blend hallucinated per-ray
+        // colors from the current-view prior into the target when the caller opts in.
+        var targetColors = pixels.TargetColors;
+        // (Per-ray prior blending needs the model's current view — the loader emits ImageView
+        // + PixelBatch but PullOneBatch discards the view. Wire prior blending only when the
+        // helper can carry the view; skipped here for the per-ray training path. GS uses the
+        // camera-mode route where the view is available and applies prior blending there.)
+
         // Tape-recorded forward + photometric MSE → BackwardAndStepOnPrecomputedLoss drives a
-        // real gradient step through RenderRays into the MLP weights. RenderRays uses Engine
-        // ops (positional encoding, volume rendering integral), which record on the tape;
-        // the backward walk propagates the RGB residuals through the render integral so the
-        // density MLP + color MLP both receive gradient signal from the photometric loss —
-        // exactly the paper-standard training path. (Resolves the "TrainOnImageBatch is a
-        // non-training stub" review comment.)
+        // real gradient step through RenderRays into the MLP weights.
         SetTrainingMode(true);
         try
         {
@@ -1153,9 +1170,9 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
                 pixels.RayOrigins,
                 pixels.RayDirections,
                 numSamples: numSamples,
-                _renderNearBound,
-                _renderFarBound);
-            var diff = Engine.TensorSubtract(rendered, pixels.TargetColors);
+                near,
+                far);
+            var diff = Engine.TensorSubtract(rendered, targetColors);
             var squared = Engine.TensorMultiply(diff, diff);
             var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
             var meanLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
@@ -1165,6 +1182,21 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
         {
             SetTrainingMode(false);
         }
+    }
+
+    private NeuralRadianceFields.Data.SceneBounds? _autoBounds;
+
+    private static NeuralRadianceFields.Data.SceneBounds? TryEstimateBoundsFromLoader(
+        AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader)
+    {
+        // Only the in-memory loader factory produces a loader that exposes its full view
+        // set. For streaming loaders we skip bounds estimation and let the caller pass
+        // ImageTrainingOptions.SceneBounds explicitly.
+        if (loader is NeuralRadianceFields.Data.IViewSetProvider<T> vs)
+        {
+            return NeuralRadianceFields.Data.SceneBoundsEstimator.EstimateFromViews(vs.Views);
+        }
+        return null;
     }
 
     // Per-model image-space training step counter used to drive the progressive schedule.

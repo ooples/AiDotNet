@@ -37,8 +37,15 @@ public static class AiModelResultGraphExtensions
         if (adjacencyMatrix is null) throw new ArgumentNullException(nameof(adjacencyMatrix));
         if (nodeFeatures is null) throw new ArgumentNullException(nameof(nodeFeatures));
 
-        graph.SetAdjacencyMatrix(adjacencyMatrix);
-        return graph.ForwardOnGraph(nodeFeatures);
+        return AiDotNet.Extensions.Telemetry.AiModelResultInferenceTelemetry.TimeAndLog(
+            result,
+            nameof(PredictOnGraph),
+            () =>
+            {
+                graph.SetAdjacencyMatrix(adjacencyMatrix);
+                return graph.ForwardOnGraph(nodeFeatures);
+            },
+            resultCount: nodeFeatures.Shape.Length > 0 ? nodeFeatures.Shape[0] : (int?)null);
     }
 
     /// <summary>

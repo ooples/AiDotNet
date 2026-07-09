@@ -11,10 +11,11 @@ namespace AiDotNet.NeuralRadianceFields.Data;
 public sealed class ImageTrainingOptions
 {
     /// <summary>
-    /// Explicit scene bounds + near/far. When null, <see cref="SceneBoundsEstimator.EstimateFromViews"/>
-    /// derives them from the pose set — reference NeRF impls make callers supply these by hand.
+    /// Explicit scene bounds + near/far. When null, the model auto-derives them from the
+    /// loader's pose set via <see cref="SceneBoundsEstimator.EstimateFromViews"/>. Reference
+    /// NeRF impls make callers supply these by hand.
     /// </summary>
-    public object? SceneBounds { get; set; }
+    public SceneBounds? SceneBounds { get; set; }
 
     /// <summary>
     /// Progressive coarse→fine schedule. When null, uses <see cref="ProgressiveSamplingSchedule.Paper"/>

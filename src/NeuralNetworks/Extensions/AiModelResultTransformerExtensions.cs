@@ -43,7 +43,7 @@ public static class AiModelResultTransformerExtensions
         int? eosTokenId = null)
     {
         RequireTransformerCapability(result, nameof(GenerateGreedy));
-        return GenerateInternal(result, startTokens, maxNewTokens, argmax: true, temperature: default!, eosTokenId, seed: null);
+        return GenerateInternal(result, startTokens, maxNewTokens, argmax: true, temperature: default!, eosTokenId, seed: null, onToken: null, cancellationToken: default);
     }
 
     /// <summary>
@@ -62,7 +62,7 @@ public static class AiModelResultTransformerExtensions
         int? seed = null)
     {
         RequireTransformerCapability(result, nameof(GenerateSampled));
-        return GenerateInternal(result, startTokens, maxNewTokens, argmax: false, temperature, eosTokenId, seed);
+        return GenerateInternal(result, startTokens, maxNewTokens, argmax: false, temperature, eosTokenId, seed, onToken: null, cancellationToken: default);
     }
 
     private static Tensor<T> GenerateInternal<T, TInput, TOutput>(
@@ -72,7 +72,9 @@ public static class AiModelResultTransformerExtensions
         bool argmax,
         T temperature,
         int? eosTokenId,
-        int? seed)
+        int? seed,
+        IProgress<int>? onToken,
+        CancellationToken cancellationToken)
     {
         if (startTokens is null) throw new ArgumentNullException(nameof(startTokens));
         if (maxNewTokens <= 0) throw new ArgumentOutOfRangeException(nameof(maxNewTokens), "Must be positive.");
@@ -100,6 +102,7 @@ public static class AiModelResultTransformerExtensions
 
         for (int step = 0; step < maxNewTokens; step++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var logits = lm.ForwardLogits(current);
             if (logits.Shape.Length != 3)
             {
@@ -173,6 +176,10 @@ public static class AiModelResultTransformerExtensions
             }
             current = new Tensor<T>(new[] { batch, newLen }, new Vector<T>(appendedTyped));
 
+            // Streaming: report each generated token id as it emits (first batch's token for
+            // multi-batch generation; per-batch callback would require IProgress<int[]>).
+            onToken?.Report(nextIds[0]);
+
             if (eosTokenId.HasValue && Array.TrueForAll(nextIds, id => id == eosTokenId.Value))
             {
                 break;
@@ -197,17 +204,10 @@ public static class AiModelResultTransformerExtensions
         CancellationToken cancellationToken = default)
     {
         RequireTransformerCapability(result, nameof(GenerateGreedyAsync));
-        return Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            // Full per-token streaming requires interleaving progress inside the generation
-            // loop; the current internal loop is bracketed, so we report progress at
-            // completion. Interleaved streaming is a follow-up when GenerateInternal
-            // becomes token-callback-aware.
-            var output = GenerateInternal(result, startTokens, maxNewTokens, argmax: true, default!, eosTokenId, seed: null);
-            onToken?.Report(maxNewTokens);
-            return output;
-        }, cancellationToken);
+        return Task.Run(
+            () => GenerateInternal(result, startTokens, maxNewTokens, argmax: true, default!, eosTokenId,
+                seed: null, onToken: onToken, cancellationToken: cancellationToken),
+            cancellationToken);
     }
 
     /// <summary>
@@ -226,7 +226,7 @@ public static class AiModelResultTransformerExtensions
         var outputs = new Tensor<T>[startTokensPerPrompt.Length];
         for (int i = 0; i < startTokensPerPrompt.Length; i++)
         {
-            outputs[i] = GenerateInternal(result, startTokensPerPrompt[i], maxNewTokens, argmax: true, default!, eosTokenId, seed: null);
+            outputs[i] = GenerateInternal(result, startTokensPerPrompt[i], maxNewTokens, argmax: true, default!, eosTokenId, seed: null, onToken: null, cancellationToken: default);
         }
         return outputs;
     }
