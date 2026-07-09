@@ -267,6 +267,188 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             imageSize: ImageSize,
             visualBackboneChannels: _visualBackboneChannels,
             numClasses: _numClasses));
+
+        DistributeLayers();
+    }
+
+    // CreateDefaultLayoutLMv2Layers emits the layers in three role groups, in this order:
+    //   [0 .. VisualBackboneLayerCount)                        = ResNeXt-FPN visual backbone
+    //                                                            (conv/BN/pool stack + a final C->hidden projection Dense),
+    //   [.. + TextEmbeddingLayerCount)                          = word-embedding / position / layernorm / dropout,
+    //   [rest]                                                  = multimodal transformer encoder + classification head.
+    private const int VisualBackboneLayerCount = 12;
+    private const int TextEmbeddingLayerCount = 4;
+
+    // Re-links the per-role forward-path sublists to the CURRENT Layers. The two-stream forward reads
+    // these lists, not Layers directly, so they must be rebuilt whenever Layers is replaced — including
+    // after deserialization (the base clears Layers and adds freshly-deserialized layers).
+    private void DistributeLayers()
+    {
+        _visualBackboneLayers.Clear();
+        _textEmbeddingLayers.Clear();
+        _transformerLayers.Clear();
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (i < VisualBackboneLayerCount)
+                _visualBackboneLayers.Add(Layers[i]);
+            else if (i < VisualBackboneLayerCount + TextEmbeddingLayerCount)
+                _textEmbeddingLayers.Add(Layers[i]);
+            else
+                _transformerLayers.Add(Layers[i]);
+        }
+    }
+
+    /// <summary>
+    /// Runs LayoutLMv2's real two-stream forward and fuses whatever modalities are present.
+    /// </summary>
+    /// <remarks>
+    /// Reference LayoutLMv2 (Xu et al. 2021) REQUIRES both a document image AND text tokens and crashes
+    /// otherwise. This implementation is modality-robust: it runs the visual backbone and/or the text
+    /// embedding stream depending on which inputs are supplied, concatenates the resulting token
+    /// sequences, and runs the shared multimodal transformer + head — so it also handles OCR-text-only
+    /// or image-only documents (graceful degradation), which the reference model cannot.
+    /// </remarks>
+    private Tensor<T> RunMultimodal(Tensor<T>? textTokens, Tensor<T>? documentImage)
+    {
+        Tensor<T>? textSeq = textTokens is not null ? RunTextStream(textTokens) : null;
+        Tensor<T>? visualSeq = documentImage is not null ? RunVisualStream(documentImage) : null;
+
+        Tensor<T> seq;
+        if (textSeq is not null && visualSeq is not null)
+        {
+            // Fuse: visual tokens first, then text tokens, along the sequence axis (last-but-one for the
+            // channels-last [.., seq, hidden] layout both streams produce).
+            int seqAxis = textSeq.Rank - 2;
+            seq = Engine.TensorConcatenate([visualSeq, textSeq], axis: seqAxis);
+        }
+        else
+        {
+            seq = textSeq ?? visualSeq
+                ?? throw new ArgumentException(
+                    "LayoutLMv2 requires at least one modality: text token IDs (rank <= 2) or a document image (rank >= 3).");
+        }
+
+        foreach (var layer in _transformerLayers)
+            seq = layer.Forward(seq);
+        return seq;
+    }
+
+    // Text stream: token IDs -> word embedding -> position -> layernorm -> dropout => [seq, hidden].
+    private Tensor<T> RunTextStream(Tensor<T> textTokens)
+    {
+        var x = textTokens;
+        foreach (var layer in _textEmbeddingLayers)
+            x = layer.Forward(x);
+        return x;
+    }
+
+    // Visual stream: image -> conv/BN/pool backbone -> flatten spatial grid to a token sequence ->
+    // channel projection => [numPatches, hidden]. The final backbone layer is the C->hidden projection,
+    // applied AFTER the spatial->token reshape so it maps channels (not width) to the hidden dim.
+    private Tensor<T> RunVisualStream(Tensor<T> documentImage)
+    {
+        var x = documentImage;
+        int projIndex = _visualBackboneLayers.Count - 1;
+        for (int i = 0; i < projIndex; i++)
+            x = _visualBackboneLayers[i].Forward(x);
+
+        x = FlattenSpatialToTokens(x);
+        if (projIndex >= 0 && projIndex < _visualBackboneLayers.Count)
+            x = _visualBackboneLayers[projIndex].Forward(x);
+        return x;
+    }
+
+    // [C, H, W] -> [H*W, C]; [B, C, H, W] -> [B, H*W, C]. Puts channels last so each spatial location
+    // becomes a token whose feature vector the projection Dense maps to the hidden dim.
+    private Tensor<T> FlattenSpatialToTokens(Tensor<T> feat)
+    {
+        if (feat.Rank == 4)
+        {
+            int b = feat.Shape[0], c = feat.Shape[1], n = feat.Shape[2] * feat.Shape[3];
+            return Engine.TensorPermute(Engine.Reshape(feat, new[] { b, c, n }), new[] { 0, 2, 1 });
+        }
+        if (feat.Rank == 3)
+        {
+            int c = feat.Shape[0], n = feat.Shape[1] * feat.Shape[2];
+            return Engine.TensorPermute(Engine.Reshape(feat, new[] { c, n }), new[] { 1, 0 });
+        }
+        return feat;
+    }
+
+    /// <summary>
+    /// Full text+image fusion entry (industry-standard LayoutLMv2): encodes BOTH a token-ID sequence
+    /// and a document image and fuses them through the multimodal transformer.
+    /// </summary>
+    public Tensor<T> EncodeMultimodal(Tensor<T> textTokens, Tensor<T> documentImage)
+    {
+        var image = PreprocessDocument(documentImage);
+        return RunMultimodal(textTokens, image);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var prepared = PreprocessDocument(input);
+        var (tokens, image) = prepared.Rank <= 2 ? (prepared, (Tensor<T>?)null) : ((Tensor<T>?)null, prepared);
+        return RunMultimodal(tokens, image);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        // The base walks Layers linearly feeding the raw input, which crashes the visual conv backbone
+        // on a token-only input (rank-1). Replay the real two-stream forward, capturing each layer.
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode)
+            return activations;
+
+        var prepared = PreprocessDocument(input);
+        var (tokens, image) = prepared.Rank <= 2 ? (prepared, (Tensor<T>?)null) : ((Tensor<T>?)null, prepared);
+
+        int idx = 0;
+        Tensor<T>? textSeq = null, visualSeq = null;
+
+        if (tokens is not null)
+        {
+            var x = tokens;
+            foreach (var layer in _textEmbeddingLayers)
+            {
+                x = layer.Forward(x);
+                activations[$"Layer_{idx++}_{layer.GetType().Name}"] = x.Clone();
+            }
+            textSeq = x;
+        }
+
+        if (image is not null)
+        {
+            var x = image;
+            int projIndex = _visualBackboneLayers.Count - 1;
+            for (int i = 0; i < projIndex; i++)
+            {
+                x = _visualBackboneLayers[i].Forward(x);
+                activations[$"Layer_{idx++}_{_visualBackboneLayers[i].GetType().Name}"] = x.Clone();
+            }
+            x = FlattenSpatialToTokens(x);
+            if (projIndex >= 0 && projIndex < _visualBackboneLayers.Count)
+            {
+                x = _visualBackboneLayers[projIndex].Forward(x);
+                activations[$"Layer_{idx++}_{_visualBackboneLayers[projIndex].GetType().Name}"] = x.Clone();
+            }
+            visualSeq = x;
+        }
+
+        Tensor<T> seq;
+        if (textSeq is not null && visualSeq is not null)
+            seq = Engine.TensorConcatenate([visualSeq, textSeq], axis: textSeq.Rank - 2);
+        else
+            seq = textSeq ?? visualSeq ?? new Tensor<T>(new[] { 1, _hiddenDim });
+
+        foreach (var layer in _transformerLayers)
+        {
+            seq = layer.Forward(seq);
+            activations[$"Layer_{idx++}_{layer.GetType().Name}"] = seq.Clone();
+        }
+        return activations;
     }
 
     private void InitializeEmbeddings()
@@ -620,6 +802,11 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSeqLen;
+
+        // Re-link the two-stream forward sublists to the layers the base just deserialized (the forward
+        // reads _visualBackboneLayers/_textEmbeddingLayers/_transformerLayers, not Layers directly).
+        if (Layers.Count > 0)
+            DistributeLayers();
     }
 
     /// <inheritdoc/>
@@ -637,7 +824,14 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        if (!_useNativeMode)
+            return RunOnnxInference(preprocessed);
+
+        // Route through the real two-stream forward (RunMultimodal) instead of the base linear walk,
+        // which would feed the visual conv backbone the text tokens (or vice versa). A single input is
+        // disambiguated by rank: rank <= 2 = token IDs (text-only), rank >= 3 = document image.
+        var (tokens, image) = preprocessed.Rank <= 2 ? (preprocessed, (Tensor<T>?)null) : ((Tensor<T>?)null, preprocessed);
+        return RunMultimodal(tokens, image);
     }
 
     /// <inheritdoc/>
@@ -646,11 +840,20 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        // TrainWithTape runs the full forward (ForwardForTraining -> the two-stream RunMultimodal),
+        // backprop through the autodiff tape, and the optimizer parameter update. The previous code
+        // ALSO ran a manual UpdateParameters(CollectGradients()) afterwards — a redundant second
+        // gradient-descent step whose hand-collected gradient vector didn't match GetParameters'
+        // length (Expected N params, got N+12288), crashing every training step. Use the tape path only.
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -664,14 +867,6 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         
         currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
     }
 
     #endregion

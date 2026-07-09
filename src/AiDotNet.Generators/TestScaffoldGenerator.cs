@@ -2091,6 +2091,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "outputSize: 4), " +
                     "numClasses: 4, embedDim: 64, numHeads: 4, numLayers: 2, numFrames: 4, patchSize: 8)";
             }
+            else if (model.ClassName == "LayoutLMv2" && model.TypeParameterCount == 1)
+            {
+                // LayoutLMv2 (Xu et al. 2021) native default is BERT-base scale — 768-wide, 12 layers,
+                // vocab 30522, 224px image, ~114M params. Each CPU training iteration is multiple seconds
+                // so the heavier invariants (LossStrictlyDecreases, MoreData) time out. Build the IDENTICAL
+                // two-stream architecture (ResNeXt-FPN visual backbone + text embedding -> multimodal
+                // transformer, run via the modality-robust RunMultimodal) at CI-smoke width/depth/vocab.
+                // Token-ID InputShape [16] is emitted by the token-based document branch below.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 16, outputSize: 4), " +
+                    "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
+                    "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32)";
+            }
             else if (model.ClassName == "Wav2Vec2Model" && model.TypeParameterCount == 1)
             {
                 // wav2vec 2.0 (Baevski et al. 2020) native default is BERT-base scale — 768-wide, 12
