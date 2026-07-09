@@ -45,16 +45,36 @@ public sealed class ImageView<T>
     /// </summary>
     public T? FocalLength { get; init; }
 
+    /// <summary>
+    /// Optional EXIF metadata bundle (35mm-equivalent focal length in mm + sensor width). When
+    /// present, <see cref="ResolveFocalLengthInPixels"/> prefers this over the size fallback,
+    /// giving physically-correct intrinsics for photos exported straight from a camera. Reference
+    /// NeRF impls require the caller to pass focal in pixels — this excellence path adds the
+    /// EXIF derivation as a first-class ImageView concern.
+    /// </summary>
+    public ExifIntrinsics? Exif { get; init; }
+
+    /// <summary>
+    /// Optional single-image reconstruction prior (Zero123 / TripoSR-style). When non-null, the
+    /// radiance-field training loop composes the prior's novel-view hallucination with the
+    /// caller's real photos so single-photo reconstruction produces walkable 3D scenes.
+    /// </summary>
+    public LearnedPrior<T>? Prior { get; init; }
+
     public ImageView(
         Tensor<T> photo,
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,
-        T? focalLength = default)
+        T? focalLength = default,
+        ExifIntrinsics? exif = null,
+        LearnedPrior<T>? prior = null)
     {
         Photo          = photo          ?? throw new ArgumentNullException(nameof(photo));
         CameraPosition = cameraPosition ?? throw new ArgumentNullException(nameof(cameraPosition));
         CameraRotation = cameraRotation ?? throw new ArgumentNullException(nameof(cameraRotation));
         FocalLength    = focalLength;
+        Exif           = exif;
+        Prior          = prior;
 
         if (photo.Shape.Length != 3 || (photo.Shape[2] != 3 && photo.Shape[2] != 4))
         {
@@ -81,4 +101,59 @@ public sealed class ImageView<T>
 
     /// <summary>Image width (pixels).</summary>
     public int Width => Photo.Shape[1];
+
+    /// <summary>
+    /// Resolves the effective focal length in pixels using the precedence order the loader +
+    /// facade rely on: (1) explicit <see cref="FocalLength"/> the caller passed, (2) EXIF-derived
+    /// focal computed from <see cref="Exif"/> and the photo's pixel dimensions, (3) nerfstudio-
+    /// standard <c>max(H, W) * 0.7</c> fallback. Reference impls require the caller to pass focal
+    /// in pixels explicitly — surfacing this three-tier auto-detect as an API concern is #1834's
+    /// beyond-industry excellence goal.
+    /// </summary>
+    public double ResolveFocalLengthInPixels()
+    {
+        if (FocalLength is not null)
+        {
+            var numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+            if (!numOps.Equals(FocalLength!, numOps.Zero))
+            {
+                return numOps.ToDouble(FocalLength!);
+            }
+        }
+        if (Exif is not null)
+        {
+            // f_px = (f_mm * pixel_width) / sensor_width_mm
+            return Exif.FocalLengthMm * Width / Exif.SensorWidthMm;
+        }
+        return System.Math.Max(Height, Width) * 0.7;
+    }
+}
+
+/// <summary>
+/// EXIF intrinsics bundle used to derive per-photo focal-in-pixels when the loader was populated
+/// from a camera JPEG. Both values are required together — focal length in millimeters combined
+/// with sensor width in millimeters yields an unambiguous pixel-space focal via the pinhole
+/// intrinsic formula.
+/// </summary>
+public sealed class ExifIntrinsics
+{
+    /// <summary>Focal length in millimeters (as reported by EXIF).</summary>
+    public double FocalLengthMm { get; init; }
+
+    /// <summary>Sensor width in millimeters (camera-body constant; look up per model).</summary>
+    public double SensorWidthMm { get; init; }
+
+    public ExifIntrinsics(double focalLengthMm, double sensorWidthMm)
+    {
+        if (focalLengthMm <= 0.0)
+        {
+            throw new System.ArgumentOutOfRangeException(nameof(focalLengthMm), "Focal length must be positive.");
+        }
+        if (sensorWidthMm <= 0.0)
+        {
+            throw new System.ArgumentOutOfRangeException(nameof(sensorWidthMm), "Sensor width must be positive.");
+        }
+        FocalLengthMm = focalLengthMm;
+        SensorWidthMm = sensorWidthMm;
+    }
 }

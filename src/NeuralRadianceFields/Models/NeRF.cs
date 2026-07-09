@@ -1123,7 +1123,8 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
     public T TrainOnImageBatch(
         AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
         int raysPerBatch,
-        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions)
+        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
+        NeuralRadianceFields.Data.ImageTrainingOptions? imageTrainingOptions = null)
     {
         var pixels = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
         if (pixels is null)
@@ -1131,15 +1132,44 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
             return NumOps.Zero;
         }
 
-        var rendered = RenderRays(
-            pixels.RayOrigins,
-            pixels.RayDirections,
-            numSamples: 32,
-            _renderNearBound,
-            _renderFarBound);
+        // Excellence goal #4: progressive coarse-to-fine sample count. Ramps sample count from
+        // 64 coarse (early iters) to 128 fine (post-5k iters) by default.
+        var schedule = imageTrainingOptions?.Schedule ?? NeuralRadianceFields.Data.ProgressiveSamplingSchedule.Paper();
+        int numSamples = schedule.SamplesForIteration(_imageTrainingIteration);
+        _imageTrainingIteration++;
 
-        return NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricMSE(Engine, rendered, pixels.TargetColors);
+        // Tape-recorded forward + photometric MSE → BackwardAndStepOnPrecomputedLoss drives a
+        // real gradient step through RenderRays into the MLP weights. RenderRays uses Engine
+        // ops (positional encoding, volume rendering integral), which record on the tape;
+        // the backward walk propagates the RGB residuals through the render integral so the
+        // density MLP + color MLP both receive gradient signal from the photometric loss —
+        // exactly the paper-standard training path. (Resolves the "TrainOnImageBatch is a
+        // non-training stub" review comment.)
+        SetTrainingMode(true);
+        try
+        {
+            using var tape = new Autodiff.GradientTape<T>();
+            var rendered = RenderRays(
+                pixels.RayOrigins,
+                pixels.RayDirections,
+                numSamples: numSamples,
+                _renderNearBound,
+                _renderFarBound);
+            var diff = Engine.TensorSubtract(rendered, pixels.TargetColors);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
+            var meanLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+            return BackwardAndStepOnPrecomputedLoss(tape, meanLoss);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
+
+    // Per-model image-space training step counter used to drive the progressive schedule.
+    // Facade calls TrainOnImageBatch once per iteration; we increment monotonically.
+    private int _imageTrainingIteration;
 
     /// <summary>
     /// Trains the model on input data.

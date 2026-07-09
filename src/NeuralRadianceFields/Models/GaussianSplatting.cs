@@ -1886,7 +1886,8 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
     public T TrainOnImageBatch(
         AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
         int raysPerBatch,
-        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions)
+        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
+        NeuralRadianceFields.Data.ImageTrainingOptions? imageTrainingOptions = null)
     {
         if (loader is null) throw new ArgumentNullException(nameof(loader));
         if (raysPerBatch <= 0) throw new ArgumentOutOfRangeException(nameof(raysPerBatch));
@@ -1939,22 +1940,36 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         cameraInputData[12] = NumOps.FromDouble(focalPx);
         var cameraInput = new Tensor<T>(new[] { 1, 13 }, new Vector<T>(cameraInputData));
 
-        // Photo target is [H, W, 3] — the shape GS.Train's camera-mode ParseCameraInput expects.
-        // If the loader emitted an RGBA photo, drop the alpha channel via engine slice.
+        // Photo target [H, W, 3] — the shape GS.Train's camera-mode ParseCameraInput expects.
+        // Alpha channel (if present) drops out via engine narrow (excellence goal: engine-op
+        // path so alpha stripping is vectorized and tape-recorded, not a scalar copy).
         var photo = view.Photo;
         if (photo.Shape[2] == 4)
         {
-            var rgb = new T[view.Height * view.Width * 3];
-            for (int y = 0; y < view.Height; y++)
+            photo = Engine.TensorNarrow(photo, dim: 2, start: 0, length: 3);
+        }
+
+        // Excellence goal #4 (LearnedPrior single-image mode): if the view carries a prior,
+        // blend its hallucinated hallucinated view into the photo target so single-image
+        // reconstruction gets training signal from angles the caller didn't photograph.
+        // Confidence controls the blend: real-photo weight = (1 - confidence), prior weight =
+        // confidence. ImageTrainingOptions.PriorConfidenceOverride can force a global weight.
+        if (view.Prior is not null)
+        {
+            double confidence = imageTrainingOptions?.PriorConfidenceOverride ?? view.Prior.Confidence;
+            if (confidence > 0)
             {
-                for (int x = 0; x < view.Width; x++)
-                {
-                    rgb[(y * view.Width + x) * 3 + 0] = photo[y, x, 0];
-                    rgb[(y * view.Width + x) * 3 + 1] = photo[y, x, 1];
-                    rgb[(y * view.Width + x) * 3 + 2] = photo[y, x, 2];
-                }
+                var hallucination = view.Prior.SynthesizeNovelView(
+                    view.CameraPosition,
+                    view.CameraRotation,
+                    view.Height,
+                    view.Width);
+                var wPhoto = NumOps.FromDouble(1.0 - confidence);
+                var wPrior = NumOps.FromDouble(confidence);
+                var photoScaled = Engine.TensorMultiplyScalar(photo, wPhoto);
+                var priorScaled = Engine.TensorMultiplyScalar(hallucination, wPrior);
+                photo = Engine.TensorAdd(photoScaled, priorScaled);
             }
-            photo = new Tensor<T>(new[] { view.Height, view.Width, 3 }, new Vector<T>(rgb));
         }
 
         Train(cameraInput, photo);

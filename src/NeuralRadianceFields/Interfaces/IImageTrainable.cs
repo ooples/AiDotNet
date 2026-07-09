@@ -37,5 +37,6 @@ public interface IImageTrainable<T>
     T TrainOnImageBatch(
         IDataLoader<ImageView<T>, PixelBatch<T>> loader,
         int raysPerBatch,
-        OptimizationAlgorithmOptions<T, LinearAlgebra.Tensor<T>, LinearAlgebra.Tensor<T>>? optimizerOptions);
+        OptimizationAlgorithmOptions<T, LinearAlgebra.Tensor<T>, LinearAlgebra.Tensor<T>>? optimizerOptions,
+        ImageTrainingOptions? imageTrainingOptions = null);
 }

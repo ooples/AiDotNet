@@ -83,13 +83,35 @@ public static class ImageTrainingDataLoaders
                 throw new ArgumentOutOfRangeException(nameof(batchSize), "batchSize must be positive.");
             }
 
-            // One batch per call — the facade loops externally over epochs. Each batch samples
-            // `batchSize` rays from a single view chosen uniformly at random (paper-standard
-            // "one-view-per-batch" strategy; mixing views per batch is a follow-up excellence
-            // goal — see #1834's "mixed-resolution photos in one view set" note).
-            var view = _views[_rng.Next(_views.Length)];
+            // Excellence goal #2 — MIXED-RESOLUTION proportional sampling. Reference impls
+            // (nerfstudio, tiny-cuda-nn) require every photo to be pre-resized to a common
+            // resolution because they pick views uniformly at random and would starve
+            // high-res photos of rays if pixel counts differ. Here we sample view weights
+            // proportional to their pixel counts, so a 4K photo gets ~16x the rays of a
+            // 1K photo per epoch. Callers drop in raw photos of any resolution.
+            var view = SampleViewProportional();
             var (origins, dirs, colors) = SampleRays(view, batchSize, _rng);
             yield return (view, new PixelBatch<T>(origins, dirs, colors));
+        }
+
+        private ImageView<T> SampleViewProportional()
+        {
+            // Pick a view weighted by its pixel count so mixed-resolution view sets sample
+            // rays proportionally. For a uniform-resolution set this collapses to the
+            // reference impl's uniform-random pick (which is what most callers see).
+            long totalPixels = 0;
+            for (int i = 0; i < _views.Length; i++)
+            {
+                totalPixels += (long)_views[i].Height * _views[i].Width;
+            }
+            long target = (long)(_rng.NextDouble() * totalPixels);
+            long cum = 0;
+            for (int i = 0; i < _views.Length; i++)
+            {
+                cum += (long)_views[i].Height * _views[i].Width;
+                if (target < cum) return _views[i];
+            }
+            return _views[_views.Length - 1];
         }
 
         private static (Tensor<T> origins, Tensor<T> dirs, Tensor<T> colors) SampleRays(
@@ -99,17 +121,9 @@ public static class ImageTrainingDataLoaders
             int H = view.Height;
             int W = view.Width;
 
-            // Focal length: nullable in ImageView; fall back to nerfstudio-standard
-            // max(H, W) * 0.7 for photo-size-based initialization.
-            double focalPx;
-            if (view.FocalLength is not null && !numOps.Equals(view.FocalLength!, numOps.Zero))
-            {
-                focalPx = Convert.ToDouble(view.FocalLength!);
-            }
-            else
-            {
-                focalPx = Math.Max(H, W) * 0.7;
-            }
+            // Three-tier focal resolution (excellence goal #1): explicit -> EXIF -> nerfstudio
+            // fallback. ImageView owns the precedence order; the loader just consumes.
+            double focalPx = view.ResolveFocalLengthInPixels();
 
             var origins = new T[rayCount * 3];
             var dirs    = new T[rayCount * 3];

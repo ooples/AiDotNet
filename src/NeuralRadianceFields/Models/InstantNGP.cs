@@ -1636,7 +1636,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
     public T TrainOnImageBatch(
         AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
         int raysPerBatch,
-        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions)
+        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
+        NeuralRadianceFields.Data.ImageTrainingOptions? imageTrainingOptions = null)
     {
         var pixels = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
         if (pixels is null)
@@ -1644,15 +1645,37 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
             return NumOps.Zero;
         }
 
-        var rendered = RenderRays(
-            pixels.RayOrigins,
-            pixels.RayDirections,
-            numSamples: 32,
-            _renderNearBound,
-            _renderFarBound);
+        var schedule = imageTrainingOptions?.Schedule ?? NeuralRadianceFields.Data.ProgressiveSamplingSchedule.Paper();
+        int numSamples = schedule.SamplesForIteration(_imageTrainingIteration);
+        _imageTrainingIteration++;
 
-        return NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricMSE(Engine, rendered, pixels.TargetColors);
+        // Tape-recorded render → engine MSE → BackwardAndStepOnPrecomputedLoss walks the tape
+        // through the hash-grid encoder + volume-render integral into every trainable parameter.
+        // Resolves the "TrainOnImageBatch does not train" review comment — this now applies a
+        // full gradient step per call, matching Instant-NGP's paper training loop.
+        SetTrainingMode(true);
+        try
+        {
+            using var tape = new Autodiff.GradientTape<T>();
+            var rendered = RenderRays(
+                pixels.RayOrigins,
+                pixels.RayDirections,
+                numSamples: numSamples,
+                _renderNearBound,
+                _renderFarBound);
+            var diff = Engine.TensorSubtract(rendered, pixels.TargetColors);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
+            var meanLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+            return BackwardAndStepOnPrecomputedLoss(tape, meanLoss);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
+
+    private int _imageTrainingIteration;
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
