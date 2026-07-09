@@ -458,11 +458,15 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         _outputHeight = (h - _kernelSize) / _stride + 1;
         _outputWidth = (w - _kernelSize) / _stride + 1;
 
-        _weights = AllocateLazyWeight([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
-        _biases = AllocateLazyWeight([_outputChannels]);
-        InitializeParameters();
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_weights, _outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels))
+        {
+            _weights = AllocateLazyWeight([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
+            _biases = AllocateLazyWeight([_outputChannels]);
+            InitializeParameters();
+            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { h, w, c }, new[] { _outputHeight, _outputWidth, _outputChannels });
     }

@@ -571,13 +571,17 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int outH = (h - _kernelSize + 2 * _padding) / _stride + 1;
         int outW = (w - _kernelSize + 2 * _padding) / _stride + 1;
 
-        _depthwiseKernels = AllocateLazyWeight([_inputDepth, 1, _kernelSize, _kernelSize]);
-        _pointwiseKernels = AllocateLazyWeight([_outputDepth, _inputDepth, 1, 1]);
-        _biases = AllocateLazyWeight([_outputDepth]);
-        InitializeParameters();
-        RegisterTrainableParameter(_depthwiseKernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_pointwiseKernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_depthwiseKernels, _inputDepth, 1, _kernelSize, _kernelSize))
+        {
+            _depthwiseKernels = AllocateLazyWeight([_inputDepth, 1, _kernelSize, _kernelSize]);
+            _pointwiseKernels = AllocateLazyWeight([_outputDepth, _inputDepth, 1, 1]);
+            _biases = AllocateLazyWeight([_outputDepth]);
+            InitializeParameters();
+            RegisterTrainableParameter(_depthwiseKernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_pointwiseKernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { c, h, w }, new[] { _outputDepth, outH, outW });
     }
