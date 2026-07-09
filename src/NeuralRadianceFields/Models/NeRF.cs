@@ -1228,7 +1228,14 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
                 { "LayerCount", Layers.Count },
                 { "TotalParameters", ParameterCount }
             },
-            ModelData = Serialize()
+            // Use SerializeForMetadata (license-safe): returns [] instead of
+            // throwing when the persistence license has expired. Without this
+            // guard, AiModelBuilder.BuildAsync — which unconditionally calls
+            // GetModelMetadata to wrap the trained model in AiModelResult —
+            // throws LicenseRequiredException on the very first facade Build,
+            // even when the caller has no intention of saving the model.
+            // Matches Transformer.GetModelMetadata. Fixes #1826.
+            ModelData = SerializeForMetadata()
         };
     }
 

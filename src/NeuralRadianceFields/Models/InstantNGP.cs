@@ -1719,7 +1719,9 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
                 { "LayerCount", Layers.Count },
                 { "TotalParameters", ParameterCount + hashParameterCount }
             },
-            ModelData = Serialize()
+            // License-safe metadata bytes — see NeRF.GetModelMetadata for the
+            // same rationale. Fixes #1826.
+            ModelData = SerializeForMetadata()
         };
     }
 
