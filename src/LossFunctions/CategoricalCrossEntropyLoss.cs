@@ -181,6 +181,11 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         // a tiny NEGATIVE value (-1e-7). Categorical cross-entropy is mathematically ≥ 0;
         // a model that learns perfectly (p[target]→1) must not produce a negative loss.
         // Clamping (not adding) fixes both ends: log(0) is bounded below, log(>1) above.
+        // NOTE (stable-log audit): the two-sided TensorClamp is REQUIRED here — the floor-only
+        // ops (TensorClampMin / TensorMax(tensor, scalar)) do not record a tape backward in the
+        // shipped Tensors build, so substituting them silently zeros the loss gradient and
+        // training stops learning (Issue1559 label-smoothing convergence). TensorClamp is the
+        // tape-aware primitive, so it stays.
         var safePredicted = Engine.TensorClamp(predicted, NumOps.FromDouble(1e-7), NumOps.One);
         var logP = Engine.TensorLog(safePredicted);
         var product = Engine.TensorMultiply(target, logP);

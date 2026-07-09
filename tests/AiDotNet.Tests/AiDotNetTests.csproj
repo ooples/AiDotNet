@@ -7,9 +7,6 @@
 	  <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
 	  <LangVersion>latest</LangVersion>
-	  <!-- Suppress AIDN001 (missing model metadata) for test mock classes.
-	       Mock/fake IFullModel implementations in tests don't need real metadata. -->
-	  <NoWarn>$(NoWarn);AIDN001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -53,6 +50,11 @@
        compiled assembly is not callable from tests; this pulls in just the pure-string helper. -->
   <ItemGroup>
     <Compile Include="..\..\src\AiDotNet.Generators\GeneratedTestFloatify.cs" Link="Generators\GeneratedTestFloatify.cs" />
+    <!-- Shared-compile the model-metadata validator so its assembly-scoping logic (AIDN001 must
+         fire for AiDotNet's own library models but NOT for consumer/test IFullModel doubles) can
+         be driven directly in a Roslyn generator unit test. Referenced above only as an analyzer,
+         whose compiled assembly is not callable from tests. -->
+    <Compile Include="..\..\src\AiDotNet.Generators\ModelMetadataValidationGenerator.cs" Link="Generators\ModelMetadataValidationGenerator.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">

@@ -2041,6 +2041,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         Training.CompiledTapeTrainingStep<T>.Invalidate();
         _fusedTrainingDisabled = false;
         _fusedTrainingCommitted = false;
+        _fusedPersistenceVerified = false;
     }
 
     /// <summary>
@@ -3717,6 +3718,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                 var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+                try {
+                    int _miss = 0; foreach (var pp in trainableParams) if (!allGrads.ContainsKey(pp)) _miss++;
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+                        $"[CHUNKED] engine={Engine.GetType().Name} nParams={trainableParams.Count} nGrads={allGrads.Count} missed={_miss}\n");
+                } catch { }
                 // Walk both the layer-collected params AND any network-
                 // level trainable tensors so the latter actually receive
                 // accumulated gradient updates.
@@ -6867,6 +6873,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var lossTensor = loss.ComputeTapeLoss(output, expected);
         LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+            $"[STREAMING-PATH-TAKEN] engine={Engine.GetType().Name}\n"); } catch { }
 
         // Sources = layer-owned trainable params + network-level extras
         // (cls/pos tokens, etc.), exactly the set the eager path optimizes.
@@ -6906,14 +6914,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // full weight set has to fit in RAM, which is what makes a model whose
             // gradients exceed memory trainable at all. The 8-bit StreamingAdam
             // epilogue runs inside the callback at each gradient's release point.
+            int _covOk = 0, _covMiss = 0;
             tape.ComputeGradientsStreaming(lossTensor, sources,
                 (source, grad) =>
                 {
-                    if (grad is null || grad.Length == 0) return;
+                    if (grad is null || grad.Length == 0) { _covMiss++; return; }
+                    _covOk++;
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
+                    // GPU resident-weight coherence: the streaming optimizer just mutated this
+                    // weight's CPU backing in place; invalidate its resident device buffer so the
+                    // next forward re-uploads current weights (parity with the eager/fused fixes).
+                    if (Engine is DirectGpuTensorEngine _sg) _sg.InvalidateResidentWeightBuffer(source);
                 });
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+                $"[STREAMING clip=false] engine={Engine.GetType().Name} nSources={sources.Count} gradOk={_covOk} gradMiss={_covMiss}\n"); } catch { }
         }
         else if (twoPass)
         {
@@ -7085,7 +7101,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // scale loss, unscale gradients, overflow detection) actually runs.
         if (_mixedPrecisionContext is null
             && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer, useStreamingDefaults))
+        {
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+                $"[FUSED-PATH-TAKEN] engine={Engine.GetType().Name}\n"); } catch { }
             return;
+        }
 
         // Loud one-time fallback warning. The fused path above is the fast path;
         // when it doesn't engage we drop to the eager tape every step — a large,
@@ -7510,6 +7530,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Passing sources directly can miss parameters when the tape backward
             // can't match view tensor references through the GradFn chain.
             var allGrads = tape.ComputeGradients(lossForBackward, sources: null);
+            try {
+                int _miss = 0; foreach (var pp in trainableParams) if (!allGrads.ContainsKey(pp)) _miss++;
+                System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
+                    $"[EAGER] engine={Engine.GetType().Name} nParams={trainableParams.Count} nGrads={allGrads.Count} missed={_miss}\n");
+            } catch { }
             var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var param in trainableParams)
@@ -7677,6 +7702,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
                 MarkTrainMutationStarted();
                 opt.Step(context);
+
+                // GPU RESIDENT-WEIGHT COHERENCE: the eager tape optimizer mutates each weight
+                // tensor's CPU backing in place (Adam SIMD via GetLiveBackingArrayOrNull) and bumps
+                // Tensor.Version (#1810). But in a GPU resident/capture scope the forward's upload
+                // fast-path returns the cached device buffer WITHOUT consulting Version (the
+                // ResidentStepActive bypass in DirectGpuTensorEngine.GetOrAllocateBuffer), so the
+                // version bump alone does NOT force a re-upload — the next forward keeps reading the
+                // STALE pre-step device weights and the model trains against frozen weights (drift
+                // without descent → held-out accuracy pinned at chance on GPU while CPU learns).
+                // Fully invalidate each updated weight's resident device buffer so the next forward
+                // re-uploads the current CPU weights.
+                if (Engine is DirectGpuTensorEngine residentGpuEngine)
+                {
+                    foreach (var wtensor in trainableParams)
+                        residentGpuEngine.InvalidateResidentWeightBuffer(wtensor);
+                }
             }
 
             // Apply gradient updates to network-level RAW trainable
@@ -8069,6 +8110,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private bool _fusedTrainingCommitted;
 
     /// <summary>
+    /// #1822 silent-no-op guard. The fused compiled-training fast path is
+    /// contracted to mutate the LIVE parameter tensors in place (exactly like
+    /// the eager <c>opt.Step</c>). For some model graphs — notably
+    /// token/embedding <see cref="Transformer{T}"/>s whose specialized
+    /// compiled forward captures parameter DATA by copy rather than aliasing
+    /// the live backing array — <c>plan.Step()</c> trains an internal buffer
+    /// and reports a decreasing loss, yet NEVER writes the update back to the
+    /// network's parameters. That is a SILENT no-op: <see cref="GetParameters"/>,
+    /// serialization, and the eager Predict path all see an untrained model
+    /// even though <c>Train()</c> "ran". No kernel throws, so the
+    /// exception-based fallbacks never fire. We therefore verify persistence
+    /// directly on the FIRST fused step (snapshot a parameter checksum before
+    /// and after); once a model is proven to persist, this latch is set and the
+    /// O(params) check is never repeated. See <see cref="TryTrainWithFusedOptimizer"/>.
+    /// Reset alongside <see cref="_fusedTrainingCommitted"/> at every explicit
+    /// training-state reset point.
+    /// </summary>
+    private bool _fusedPersistenceVerified;
+
+    /// <summary>
     /// Reason string set by <see cref="EmitFusedMissAndFallback"/> when
     /// <see cref="TryTrainWithFusedOptimizer"/> bails out early, consumed
     /// (and cleared) by the post-success diagnostic block in
@@ -8215,6 +8276,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return false;
     }
 
+    /// <summary>
+    /// #1822: sum-of-squares checksum over the LIVE trainable parameter tensors
+    /// (the exact set the fused kernel and the eager <c>opt.Step</c> both mutate).
+    /// Used once per model, on the first fused step, to detect a fused compiled
+    /// step that reported a loss but did not actually write its update back to the
+    /// parameters — a silent no-op. Any real parameter change (even a tiny
+    /// warmup-LR one) shifts the sum, so an unchanged checksum is a reliable
+    /// "nothing was persisted" signal.
+    /// </summary>
+    private double FusedTrainableParamChecksum(IReadOnlyList<ITrainableLayer<T>> layers)
+    {
+        double acc = 0.0;
+        for (int li = 0; li < layers.Count; li++)
+        {
+            foreach (var p in layers[li].GetTrainableParameters())
+            {
+                if (p is null) continue;
+                var span = p.AsSpan();
+                for (int i = 0; i < span.Length; i++)
+                {
+                    double v = NumOps.ToDouble(span[i]);
+                    acc += v * v;
+                }
+            }
+        }
+        return acc;
+    }
+
     private bool TryTrainWithFusedOptimizer(
         Tensor<T> input,
         Tensor<T> expected,
@@ -8297,6 +8386,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // transient ring alive across the switch would waste memory under pressure and
         // nest the streaming path inside a transient scope. try/finally also releases the
         // arena if the fused call throws.
+        // #1822: on the first fused step for this model, snapshot a checksum of
+        // the live trainable parameters so we can verify AFTER the step that the
+        // fused kernel actually persisted its update (see _fusedPersistenceVerified).
+        bool verifyFusedPersistence = !_fusedPersistenceVerified && !_fusedTrainingCommitted;
+        double fusedParamChecksumBefore = verifyFusedPersistence
+            ? FusedTrainableParamChecksum(trainableLayers)
+            : 0.0;
+
         bool ran;
         T lossValue;
         try
@@ -8343,6 +8440,42 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         if (ran)
         {
+            // #1822 silent-no-op guard: confirm the fused step actually moved the
+            // live parameters before we COMMIT to the fused path. If the compiled
+            // plan reported a real (finite) loss but left every trainable parameter
+            // byte-for-byte unchanged, its optimizer step is decoupled from the
+            // network's live tensors — a silent no-op. Sticky-disable fused and let
+            // this step (and all subsequent ones) run on the eager tape, which
+            // mutates the live tensors correctly. Not yet committed here, so this
+            // is a clean fall-through (no plan-embedded moment state to lose).
+            if (verifyFusedPersistence)
+            {
+                double fusedParamChecksumAfter = FusedTrainableParamChecksum(trainableLayers);
+                bool persisted = fusedParamChecksumAfter != fusedParamChecksumBefore;
+                // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
+                // squares, so 0.0 means every trainable parameter starts exactly at zero. A
+                // non-persisting fused step then leaves it at 0.0 too (persisted == false),
+                // which is exactly the silent no-op we must catch — skipping it for all-zero
+                // init would commit the decoupled path unverified (ooples/AiDotNet#1822 review).
+                if (!persisted && !NumOps.IsNaN(lossValue))
+                {
+                    _fusedTrainingDisabled = true;
+                    _pendingFusedMissReason =
+                        "fused compiled step ran (loss " + NumOps.ToDouble(lossValue).ToString("G6") +
+                        ") but did not persist ANY parameter update — the compiled plan is decoupled " +
+                        "from the model's live parameter tensors; routing to the eager tape so Train() " +
+                        "actually learns (ooples/AiDotNet#1822)";
+                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "[AiDotNet] " + _pendingFusedMissReason + " (model: " + GetType().Name + ").");
+                    }
+                    return false; // fall through to the eager tape path in TrainWithTape
+                }
+                // Proven to persist for this model — never re-run the check.
+                _fusedPersistenceVerified = true;
+            }
+
             LastLoss = lossValue;
             // First successful fused step commits this model to the fused
             // path for the rest of the session — Adam m/v are now
@@ -8494,6 +8627,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // the eager/streaming fallback allocates its first backward buffers.
         _fusedTrainingDisabled = stickyDisableFused;
         _fusedTrainingCommitted = false;
+        _fusedPersistenceVerified = false;
         ReclaimGpuTransientsAfterFusedFailure();
     }
 
@@ -9052,6 +9186,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
     {
         GpuEngine?.InvalidateAllWeightCaches();
+        // InvalidateAllWeightCaches only clears the PERSISTENT + activation caches. It does NOT
+        // clear each weight tensor's per-tensor `_gpuBuffer` fast-path field, which
+        // GetWeightBufferPreferResident returns (line ~2417) whenever `_gpuBufferVersion == Version`.
+        // An in-place layer.SetParameters / optimizer update that does not bump Version (raw-array
+        // write) leaves that gate satisfied, so the GPU forward serves the STALE per-tensor device
+        // buffer and the model trains against frozen device weights (host GetParameters is correct
+        // but the GPU prediction never reflects the update — verified via a per-step console-harness
+        // probe: at step 2 the host weight matches the CPU engine bit-for-bit while the GPU forward
+        // prediction diverges). Fully invalidate each trainable weight's resident device buffer so the
+        // next forward re-uploads the current host weights. No-op on the CPU engine.
+        if (GpuEngine is { } gpuForInvalidate)
+        {
+            foreach (var wtensor in Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion))
+                gpuForInvalidate.InvalidateResidentWeightBuffer(wtensor);
+        }
         // CPU-side mirror of the same contract: the CPU engine's inference
         // fast paths cache DERIVED weight forms (SgemmWithCachedB's
         // pre-packed B panels, Conv2D's transposed kernels) keyed by the
@@ -9422,6 +9571,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // is no longer needed, and the next run can engage fused fresh.
         _fusedTrainingDisabled = false;
         _fusedTrainingCommitted = false;
+        _fusedPersistenceVerified = false;
     }
 
     /// <summary>
