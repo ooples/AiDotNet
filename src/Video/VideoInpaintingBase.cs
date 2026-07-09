@@ -319,15 +319,14 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         return Engine.TensorClamp(restored, NumOps.Zero, NumOps.FromDouble(scale));
     }
 
-    // Picks the normalization scale from the data: any value clearly above [0, 1] means the frames are
+    // Picks the normalization scale from the data: a max value clearly above [0, 1] means the frames are
     // in [0, 255] pixel space (scale 255); otherwise they are already normalized (scale 1, no-op). Only
-    // selects a scalar — the actual divide/multiply stays a differentiable Engine op.
+    // selects a scalar — the actual divide/multiply stays a differentiable Engine op. Uses the vectorized
+    // tensor max rather than a per-element scan so it stays negligible on the per-forward training path.
     private double InferFrameScale(Tensor<T> frames)
     {
-        var span = frames.Data.Span;
-        for (int i = 0; i < span.Length; i++)
-            if (NumOps.ToDouble(span[i]) > 1.5) return 255.0;
-        return 1.0;
+        if (frames.Length == 0) return 1.0;
+        return NumOps.ToDouble(frames.Max().maxVal) > 1.5 ? 255.0 : 1.0;
     }
 
     /// <inheritdoc />
