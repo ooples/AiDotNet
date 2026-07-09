@@ -299,6 +299,71 @@ public class LayoutAwareDocumentTests
 
     #endregion
 
+    #region LiLT BiACM (paper-faithful dual-stream)
+    // LiLT (Wang et al. 2022) couples a text stream and a layout stream through BiACM: the two streams
+    // SHARE attention scores (text += layout; layout += detach(text)). These tests prove the layout
+    // stream actually influences the text-stream output (coupling is live) and that both streams stay
+    // finite, with token-aligned integer token IDs so the [seq, seq] score matrices are addable.
+
+    private static Tensor<float> CreateIntTokenVector(int count, int vocab = 50)
+    {
+        var data = new Vector<float>(count);
+        for (int i = 0; i < count; i++) data[i] = i % vocab;
+        return new Tensor<float>(new[] { count }, data);
+    }
+
+    private static Tensor<float> CreateBoxFeatures(int count, int boxDim = 6)
+    {
+        var t = new Tensor<float>(new[] { count, boxDim });
+        for (int i = 0; i < t.Length; i++) t[i] = 0.1f * ((i % 7) + 1);
+        return t;
+    }
+
+    private static LiLT<float> CreateSmallLiLT()
+        => new LiLT<float>(CreateArchitecture(imageSize: 32), numClasses: 4, maxSequenceLength: 64,
+            hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100);
+
+    [Fact(Timeout = 120000)]
+    public async Task LiLT_BiACM_LayoutStreamInfluencesTextOutput()
+    {
+        await Task.Yield();
+        var model = CreateSmallLiLT();
+        model.SetTrainingMode(false);
+        var tokens = CreateIntTokenVector(8);
+
+        var textOnly = model.EncodeDualStream(tokens, layoutBoxes: null);
+        var fused = model.EncodeDualStream(tokens, CreateBoxFeatures(8));
+
+        // Same shape, both finite.
+        Assert.Equal(textOnly.Length, fused.Length);
+        var f = fused.ToArray();
+        for (int i = 0; i < f.Length; i++)
+            Assert.True(!float.IsNaN(f[i]) && !float.IsInfinity(f[i]), $"BiACM output[{i}] = {f[i]} not finite.");
+
+        // BiACM coupling must be LIVE: adding the layout stream changes the text-stream output.
+        double l2 = 0;
+        var t = textOnly.ToArray();
+        for (int i = 0; i < f.Length; i++) { double d = f[i] - t[i]; l2 += d * d; }
+        Assert.True(System.Math.Sqrt(l2) > 1e-6,
+            "Layout stream did not influence the text output — BiACM score sharing is not active.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LiLT_TextOnly_IsFiniteAndDegradesGracefully()
+    {
+        await Task.Yield();
+        var model = CreateSmallLiLT();
+        model.SetTrainingMode(false);
+
+        var output = model.EncodeDualStream(CreateIntTokenVector(8), layoutBoxes: null);
+        Assert.True(output.Length > 0);
+        var d = output.ToArray();
+        for (int i = 0; i < d.Length; i++)
+            Assert.True(!float.IsNaN(d[i]) && !float.IsInfinity(d[i]), $"text-only output[{i}] not finite.");
+    }
+
+    #endregion
+
     #region Multimodal Fusion Regression
     // The LayoutLMv2 / LayoutXLM two-stream fusion (Xu et al. 2021, §3.1) must join the visual
     // token sequence and the text token sequence along the SEQUENCE axis, preserving the batch

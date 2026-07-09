@@ -1030,6 +1030,129 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    // ── Faithful LiLT dual-stream forward with BiACM (Wang et al. 2022, §3.2) ──────────────────────────
+    // Layer layout from CreateDefaultLiLTLayers: [0]=text EmbeddingLayer, [1]=text PositionalEncoding,
+    // [2]=layout Dense(box→hidden), [3]=layout LayerNorm, then numLayers blocks of 7 layers
+    // [textMHA, textLN, layoutMHA, layoutLN, ffn1, ffn2, ffnLN], then [Dropout, Dense(head)].
+    private const int LiLTPrefixLayers = 4;
+    private const int LiLTBlockLayers = 7;
+    private int HeadDim => _hiddenDim / _numHeads;
+
+    // BiACM is LiLT's contribution: the two streams SHARE attention scores. The text stream's scores get
+    // the layout scores added (layout complements text); the layout stream's scores get the text scores
+    // added but DETACHED (StopGradient), so the reusable pre-trained text encoder is not perturbed by the
+    // layout branch's gradient — exactly the asymmetric coupling in the paper.
+    private Tensor<T> RunDualStream(Tensor<T> textTokens, Tensor<T>? layoutBoxes)
+    {
+        // Text stream embeddings: token embedding + positional encoding.
+        var text = Layers[1].Forward(Layers[0].Forward(textTokens));
+
+        // Layout stream embeddings from bounding boxes: Dense(box→hidden) + LayerNorm. Absent boxes ⇒
+        // text-only operation (graceful degradation the reference model lacks); BiACM then reduces to a
+        // standard text self-attention transformer.
+        Tensor<T>? layout = null;
+        if (layoutBoxes is not null)
+            layout = Layers[3].Forward(Layers[2].Forward(layoutBoxes));
+
+        int numBlocks = (Layers.Count - LiLTPrefixLayers - 2) / LiLTBlockLayers;
+        for (int b = 0; b < numBlocks; b++)
+            (text, layout) = BiACMBlock(text, layout, LiLTPrefixLayers + b * LiLTBlockLayers);
+
+        // Classification head runs on the TEXT stream (the paper's task head consumes the language flow).
+        int headStart = LiLTPrefixLayers + numBlocks * LiLTBlockLayers;
+        var output = text;
+        for (int i = headStart; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+        return output;
+    }
+
+    private (Tensor<T> text, Tensor<T>? layout) BiACMBlock(Tensor<T> text, Tensor<T>? layout, int baseIdx)
+    {
+        var tMHA = (MultiHeadAttentionLayer<T>)Layers[baseIdx];
+        var tLN = Layers[baseIdx + 1];
+        var lMHA = (MultiHeadAttentionLayer<T>)Layers[baseIdx + 2];
+        var lLN = Layers[baseIdx + 3];
+        var ffn1 = Layers[baseIdx + 4];
+        var ffn2 = Layers[baseIdx + 5];
+        var ffnLN = Layers[baseIdx + 6];
+
+        int seqT = text.Shape[0];
+        var st = SelfAttentionScores(text, tMHA, seqT, out var vt);
+
+        Tensor<T>? sl = null, vl = null; int seqL = 0;
+        if (layout is not null)
+        {
+            seqL = layout.Shape[0];
+            sl = SelfAttentionScores(layout, lMHA, seqL, out vl);
+        }
+
+        // BiACM score sharing requires the two streams to be token-aligned (one layout box per text
+        // token) so the [heads, seq, seq] score matrices are addable — the paper's assumption. If a
+        // caller supplies mismatched lengths the streams run independently rather than crashing.
+        bool coupled = sl is not null && seqL == seqT;
+        var stShared = coupled ? Engine.TensorAdd(st, sl!) : st;
+        var ctxT = ApplyAttention(stShared, vt, seqT, tMHA);
+        text = tLN.Forward(Engine.TensorAdd(text, ctxT));
+        text = ffnLN.Forward(Engine.TensorAdd(text, ffn2.Forward(ffn1.Forward(text))));
+
+        if (layout is not null)
+        {
+            // Text scores DETACHED into the layout stream so the language encoder stays reusable.
+            var slShared = coupled ? Engine.TensorAdd(sl!, Engine.StopGradient(st)) : sl!;
+            var ctxL = ApplyAttention(slShared, vl!, seqL, lMHA);
+            layout = lLN.Forward(Engine.TensorAdd(layout, ctxL));
+            layout = ffnLN.Forward(Engine.TensorAdd(layout, ffn2.Forward(ffn1.Forward(layout))));
+        }
+        return (text, layout);
+    }
+
+    // Projects x[seq,D] to per-head Q/K/V via the MHA layer's weights, returns scaled QKᵀ scores
+    // [heads,seq,seq] and the per-head values V [heads,seq,headDim].
+    private Tensor<T> SelfAttentionScores(Tensor<T> x, MultiHeadAttentionLayer<T> mha, int seq, out Tensor<T> v)
+    {
+        var q = SplitHeads(Engine.TensorMatMul(x, mha.GetQueryWeights()), seq);
+        var k = SplitHeads(Engine.TensorMatMul(x, mha.GetKeyWeights()), seq);
+        v = SplitHeads(Engine.TensorMatMul(x, mha.GetValueWeights()), seq);
+        var scores = Engine.BatchMatMul(q, Engine.TensorPermute(k, new[] { 0, 2, 1 }));
+        return Engine.TensorMultiplyScalar(scores, NumOps.FromDouble(1.0 / Math.Sqrt(HeadDim)));
+    }
+
+    // softmax(scores)·V → merge heads → output projection.
+    private Tensor<T> ApplyAttention(Tensor<T> scores, Tensor<T> v, int seq, MultiHeadAttentionLayer<T> mha)
+    {
+        var ctx = Engine.BatchMatMul(Engine.Softmax(scores, axis: -1), v);   // [heads, seq, headDim]
+        var merged = MergeHeads(ctx, seq);                                    // [seq, D]
+        return Engine.TensorMatMul(merged, mha.GetOutputWeights());
+    }
+
+    private Tensor<T> SplitHeads(Tensor<T> x, int seq)
+        => Engine.TensorPermute(Engine.Reshape(x, new[] { seq, _numHeads, HeadDim }), new[] { 1, 0, 2 });
+
+    private Tensor<T> MergeHeads(Tensor<T> x, int seq)
+        => Engine.Reshape(Engine.TensorPermute(x, new[] { 1, 0, 2 }), new[] { seq, _hiddenDim });
+
+    /// <summary>
+    /// Full dual-stream fusion entry (industry-standard LiLT): encodes text token IDs AND their layout
+    /// bounding boxes through the coupled BiACM transformer. <paramref name="layoutBoxes"/> is the
+    /// per-token box feature tensor the layout Dense consumes; pass null for text-only operation.
+    /// </summary>
+    public Tensor<T> EncodeDualStream(Tensor<T> textTokens, Tensor<T>? layoutBoxes)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return RunDualStream(textTokens, layoutBoxes);
+    }
+
+    // LiLT is a text + layout model: a rank-1/2 token-ID input drives the BiACM dual-stream (text-only
+    // when no boxes accompany it). A higher-rank input (e.g. a raw image handed to Predict) isn't LiLT's
+    // modality, so defer to the base sequential walk rather than forcing it through the token path.
+    /// <inheritdoc/>
+    protected override Tensor<T> Forward(Tensor<T> input)
+        => (_useNativeMode && input.Rank <= 2) ? RunDualStream(input, null) : base.Forward(input);
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => (_useNativeMode && input.Rank <= 2) ? RunDualStream(input, null) : base.ForwardForTraining(input);
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
