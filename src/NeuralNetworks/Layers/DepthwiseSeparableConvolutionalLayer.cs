@@ -572,7 +572,12 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int outW = (w - _kernelSize + 2 * _padding) / _stride + 1;
 
         // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
-        if (!WeightsAlreadyAllocated(_depthwiseKernels, _inputDepth, 1, _kernelSize, _kernelSize))
+        // Validate ALL THREE parameter tensors, not just the depthwise kernels: a partial restore that
+        // installed depthwise weights but left _pointwiseKernels/_biases null or mis-shaped would
+        // otherwise pass this guard and skip allocating them, crashing (or reading stale state) downstream.
+        if (!(WeightsAlreadyAllocated(_depthwiseKernels, _inputDepth, 1, _kernelSize, _kernelSize)
+              && WeightsAlreadyAllocated(_pointwiseKernels, _outputDepth, _inputDepth, 1, 1)
+              && WeightsAlreadyAllocated(_biases, _outputDepth)))
         {
             _depthwiseKernels = AllocateLazyWeight([_inputDepth, 1, _kernelSize, _kernelSize]);
             _pointwiseKernels = AllocateLazyWeight([_outputDepth, _inputDepth, 1, 1]);

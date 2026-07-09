@@ -764,9 +764,17 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
         // and applies the optimizer update itself. The earlier UpdateParameters(CollectGradients())
         // was a redundant SECOND update whose hand-collected gradient vector did not line up with
         // GetParameters(), corrupting the step. TrainWithTape alone is the correct single update.
+        // Restore eval mode in a finally: if TrainWithTape throws, the instance must not be stranded in
+        // training mode (dropout active, BN in train stats) so subsequent Predict calls stay correct.
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

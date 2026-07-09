@@ -287,6 +287,14 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _visualBackboneLayers.Clear();
         _textEmbeddingLayers.Clear();
         _transformerLayers.Clear();
+        // Fail loudly if the factory's emission order/count drifts below the hardcoded split, rather
+        // than silently misclassifying layers into the wrong role list (which would corrupt fusion).
+        if (Layers.Count < VisualBackboneLayerCount + TextEmbeddingLayerCount)
+            throw new InvalidOperationException(
+                $"LayoutLMv2 expects at least {VisualBackboneLayerCount + TextEmbeddingLayerCount} layers " +
+                $"({VisualBackboneLayerCount} visual + {TextEmbeddingLayerCount} text embedding) before the " +
+                $"transformer stack, but only {Layers.Count} were present. The CreateDefaultLayoutLMv2Layers " +
+                "emission order/count must stay in sync with these role-split constants.");
         for (int i = 0; i < Layers.Count; i++)
         {
             if (i < VisualBackboneLayerCount)

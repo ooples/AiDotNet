@@ -254,7 +254,10 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
         // at Layers[numLayers + 1]. The ctor already enforces numLayers > 0.
         if (numLayers < 0)
             throw new InvalidDataException($"{modelName} serialized layer count {numLayers} is invalid.");
-        if (Layers.Count < numLayers + 2)
+        // Compare in long space: numLayers + 2 as unchecked int wraps negative for numLayers near
+        // int.MaxValue, bypassing this guard and throwing a raw IndexOutOfRangeException at
+        // Layers[numLayers + 1] below. (long)numLayers + 2 cannot overflow for any int input.
+        if (Layers.Count < (long)numLayers + 2)
             throw new InvalidDataException(
                 $"{modelName} serialized layer count {Layers.Count} is too small for {numLayers} processing blocks.");
         featureExtract = Layers[0] as ConvolutionalLayer<T>

@@ -30239,11 +30239,11 @@ public static class LayerHelper<T>
     // and DeepFilterNet's deserialize re-link (which splits the flat Layers list back into role sub-lists
     // by these counts) — keeping them here stops the emit order and the split from drifting apart.
     /// <summary>Number of DeepFilterNet ERB-encoder layers (Dense, LayerNorm, Activation ×2).</summary>
-    public const int DeepFilterNetErbEncoderLayers = 6;
+    internal const int DeepFilterNetErbEncoderLayers = 6;
     /// <summary>Number of DeepFilterNet deep-filtering layers (Dense, Activation).</summary>
-    public const int DeepFilterNetDeepFilterLayers = 2;
+    internal const int DeepFilterNetDeepFilterLayers = 2;
     /// <summary>Number of DeepFilterNet gain-estimation layers (Dense).</summary>
-    public const int DeepFilterNetGainLayers = 1;
+    internal const int DeepFilterNetGainLayers = 1;
 
     /// <summary>
     /// Creates DeepFilterNet encoder, GRU, deep filtering, and decoder layers. Emits, in order:

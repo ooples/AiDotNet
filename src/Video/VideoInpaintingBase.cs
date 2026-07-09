@@ -316,6 +316,16 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         var restored = scale == 1.0
             ? frames
             : Engine.TensorMultiplyScalar(frames, NumOps.FromDouble(scale));
+
+        // The pixel-range clamp is an INFERENCE-only step. Engine.TensorClamp is a hard clamp with ZERO
+        // gradient outside [0, scale], so applying it on the training forward path (PostprocessOutput is
+        // called inside ForwardForTraining in AVID/FlowLens/FuseFormer/STTN) would stop the loss from
+        // correcting any pixel the model pushed past the valid range — the reconstruction gradient for
+        // over/undershoot pixels vanishes. During training, return the raw continuous denormalized frames
+        // so those gradients flow; only clamp for inference output that must be valid pixels.
+        if (IsTrainingMode)
+            return restored;
+
         return Engine.TensorClamp(restored, NumOps.Zero, NumOps.FromDouble(scale));
     }
 
