@@ -1121,7 +1121,17 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     // "PatchEmbeddingLayer requires rank-3/rank-4 input; got rank 1" and never exercised the text stream.
     private Tensor<T> RunModalityForward(Tensor<T> input)
     {
-        // Fallback to sequential processing if groups not populated.
+        // The layer groups are transient state populated at construction, NOT by the clone/deserialize
+        // path (base DeepCopy reconstructs Layers as NEW layer objects but never re-runs
+        // PopulateLayerGroups). A cloned model's groups would otherwise hold STALE references to the
+        // source model's layers: the reference-equality exclusion below then fails to exclude the
+        // clone's patch embedding, and the head loop runs it on a rank-2 transformer output ("got rank
+        // 2"). Repopulate from the current Layers whenever they are present so the routing tracks the
+        // live layer objects across Clone() and load-from-bytes.
+        if (Layers.Count > 0)
+            PopulateLayerGroups();
+
+        // Fallback to sequential processing if groups still not populated (no Layers yet).
         if (_imageEmbeddingLayers.Count == 0 && _textEmbeddingLayers.Count == 0 && _transformerLayers.Count == 0)
             return base.Forward(input);
 
@@ -1164,6 +1174,11 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
+
+        // Repopulate the transient layer groups from the current Layers so routing tracks the live
+        // layer objects across Clone()/load-from-bytes (see RunModalityForward remarks).
+        if (Layers.Count > 0)
+            PopulateLayerGroups();
 
         if (!_useNativeMode
             || (_imageEmbeddingLayers.Count == 0 && _textEmbeddingLayers.Count == 0 && _transformerLayers.Count == 0))
