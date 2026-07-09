@@ -273,22 +273,6 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         return RunImagePath(ConcatenateChannelsDim1(ApplyMask(input, mask), SingleChannelMask(mask)));
     }
 
-    private bool _shapesProbed;
-
-    /// <inheritdoc/>
-    protected override void ResolveLazyLayerShapes()
-    {
-        // ProPainter's Layers list is NOT a linear pipeline: the real forward (InpaintFrame) runs the
-        // flow encoder/decoder on flow tensors and the image encoder on a mask-concatenated frame in
-        // a custom order. The base linear walk would feed the image encoder the flow-decoder output
-        // (wrong depth) and resolve the lazy convs inconsistently — corrupting inference the first
-        // time GetParameters/serialization runs. Probe the real forward once so every conv resolves
-        // to what InpaintFrame actually feeds it.
-        if (_shapesProbed || Layers.Count == 0) return;
-        _shapesProbed = true;
-        int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-        _ = PredictCore(new Tensor<T>([1, c, 32, 32]));
-    }
 
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)

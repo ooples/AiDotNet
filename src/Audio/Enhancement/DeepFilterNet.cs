@@ -417,15 +417,17 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _decoder.Clear();
         _gainLayer = null;
 
+        // Split the flat Layers list back into role sub-lists using the SAME segment counts the factory
+        // (LayerHelper.CreateDeepFilterNetLayers) emitted them in, so the two can't drift silently.
         var layers = Layers;
         int idx = 0;
-        for (int i = 0; i < 6 && idx < layers.Count; i++)                 // ERB encoder: 2x (Dense + Norm + Activation)
+        for (int i = 0; i < LayerHelper<T>.DeepFilterNetErbEncoderLayers && idx < layers.Count; i++)
             _erbEncoder.Add(layers[idx++]);
         for (int i = 0; i < _numGruLayers && idx < layers.Count; i++)
             _gruLayers.Add(layers[idx++]);
-        for (int i = 0; i < 2 && idx < layers.Count; i++)                 // DF layers: Dense + Activation
+        for (int i = 0; i < LayerHelper<T>.DeepFilterNetDeepFilterLayers && idx < layers.Count; i++)
             _dfLayers.Add(layers[idx++]);
-        if (idx < layers.Count)
+        for (int i = 0; i < LayerHelper<T>.DeepFilterNetGainLayers && idx < layers.Count; i++)
             _gainLayer = layers[idx++];                                   // Gain estimation
         while (idx < layers.Count)                                        // Decoder: Dense + Norm + Activation
             _decoder.Add(layers[idx++]);

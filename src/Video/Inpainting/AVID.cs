@@ -131,21 +131,6 @@ public class AVID<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeInpaintFrames(modelOutput);
 
-    private bool _shapesProbed;
-
-    /// <inheritdoc/>
-    protected override void ResolveLazyLayerShapes()
-    {
-        // AVID's inference path (PredictCore -> Inpaint) concatenates a 1-channel mask before the
-        // encoder, so the lazy first conv must resolve to InputDepth+1 — not the InputDepth the base
-        // linear walk infers from the architecture input shape. Probe the real inference forward once
-        // on a tiny dummy frame so callers that run before any real forward (GetParameters,
-        // serialization, Clone) resolve the encoder to the same depth training and inference feed it.
-        if (_shapesProbed || Layers.Count == 0) return;
-        _shapesProbed = true;
-        int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-        _ = PredictCore(new Tensor<T>([1, c, 32, 32]));
-    }
 
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)

@@ -329,6 +329,26 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         return NumOps.ToDouble(frames.Max().maxVal) > 1.5 ? 255.0 : 1.0;
     }
 
+    private bool _shapesProbed;
+
+    /// <summary>
+    /// Resolves lazy layer shapes for these mask-conditioned models. Their inference path
+    /// (<see cref="PredictCore"/> -> <see cref="Inpaint(Tensor{T}, Tensor{T})"/>) concatenates a
+    /// 1-channel mask before the encoder, so the lazy first conv must resolve to <c>InputDepth + 1</c> —
+    /// not the <c>InputDepth</c> the base linear shape-walk infers from the architecture input shape.
+    /// Probe the real inference forward once on a tiny dummy frame so callers that run before any real
+    /// forward (GetParameters, serialization, Clone) resolve the encoder to the same depth training and
+    /// inference feed it. The probe dispatches through the virtual <see cref="PredictCore"/>, so a model
+    /// with its own PredictCore override is probed through its own path.
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_shapesProbed || Layers.Count == 0) return;
+        _shapesProbed = true;
+        int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        _ = PredictCore(new Tensor<T>([1, c, 32, 32]));
+    }
+
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {

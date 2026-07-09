@@ -30233,8 +30233,23 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(freqBins, (IActivationFunction<T>)new SigmoidActivation<T>());
     }
 
+    // Fixed-size segments of the DeepFilterNet layer layout, in emission order:
+    // [ERB encoder | GRU ×numGruLayers | deep-filter | gain | decoder]. These are the single source of
+    // truth shared by CreateDeepFilterNetLayers (which emits the layers in this order and these counts)
+    // and DeepFilterNet's deserialize re-link (which splits the flat Layers list back into role sub-lists
+    // by these counts) — keeping them here stops the emit order and the split from drifting apart.
+    /// <summary>Number of DeepFilterNet ERB-encoder layers (Dense, LayerNorm, Activation ×2).</summary>
+    public const int DeepFilterNetErbEncoderLayers = 6;
+    /// <summary>Number of DeepFilterNet deep-filtering layers (Dense, Activation).</summary>
+    public const int DeepFilterNetDeepFilterLayers = 2;
+    /// <summary>Number of DeepFilterNet gain-estimation layers (Dense).</summary>
+    public const int DeepFilterNetGainLayers = 1;
+
     /// <summary>
-    /// Creates DeepFilterNet encoder, GRU, deep filtering, and decoder layers.
+    /// Creates DeepFilterNet encoder, GRU, deep filtering, and decoder layers. Emits, in order:
+    /// <see cref="DeepFilterNetErbEncoderLayers"/> ERB-encoder layers, <paramref name="numGruLayers"/>
+    /// GRU layers, <see cref="DeepFilterNetDeepFilterLayers"/> deep-filter layers,
+    /// <see cref="DeepFilterNetGainLayers"/> gain layer, then the remaining decoder layers.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDeepFilterNetLayers(
         int numErbBands = 32,
