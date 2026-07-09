@@ -9,6 +9,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Models.Options;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.HuggingFace;
@@ -164,7 +165,8 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _textBackbone = textBackbone;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
         MaxSequenceLength = maxSequenceLength;
 
@@ -211,7 +213,8 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _textBackbone = textBackbone;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
         MaxSequenceLength = maxSequenceLength;
 
@@ -1033,11 +1036,20 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        // TrainWithTape runs the forward, backprops, and applies the optimizer update itself. The
+        // earlier UpdateParameters(CollectGradients()) applied a redundant SECOND naive SGD step (lr 5e-5)
+        // over every parameter on top of the Adam update — counting each gradient twice and driving the
+        // network into a degenerate collapsed state (DifferentInputs_AfterTraining saw identical output
+        // for distinct inputs). TrainWithTape alone is the correct single update.
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -1048,17 +1060,9 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
 
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.00005);
-        
+
         currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
     }
 
     #endregion
