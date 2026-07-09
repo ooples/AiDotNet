@@ -176,6 +176,84 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Null(cache.GetCachedGradient($"k{steps / 2}"));
     }
 
+    #endregion
+
+    #region Eviction Policy + Customization
+
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_CapacityAndPolicy_AreExposed()
+    {
+        await Task.Yield();
+        var cache = new DefaultGradientCache<double>(4, AiDotNet.Enums.CacheEvictionPolicy.LRU);
+
+        Assert.Equal(4, cache.Capacity);
+        Assert.Equal(AiDotNet.Enums.CacheEvictionPolicy.LRU, cache.EvictionPolicy);
+        Assert.True(cache.Enabled);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DefaultEvictionPolicy_IsFifo()
+    {
+        await Task.Yield();
+        Assert.Equal(AiDotNet.Enums.CacheEvictionPolicy.FIFO, new DefaultGradientCache<double>().EvictionPolicy);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LruPolicy_EvictsLeastRecentlyUsed()
+    {
+        await Task.Yield();
+        var cache = new DefaultGradientCache<double>(3, AiDotNet.Enums.CacheEvictionPolicy.LRU);
+        cache.CacheGradient("k0", new TestGradientModel<double>(0));
+        cache.CacheGradient("k1", new TestGradientModel<double>(1));
+        cache.CacheGradient("k2", new TestGradientModel<double>(2));
+
+        // Touch k0 so it becomes most-recently-used; k1 is now the least-recently-used.
+        Assert.NotNull(cache.GetCachedGradient("k0"));
+
+        // Inserting a 4th key evicts the LRU victim (k1), not the oldest-inserted (k0).
+        cache.CacheGradient("k3", new TestGradientModel<double>(3));
+
+        Assert.Null(cache.GetCachedGradient("k1"));      // least-recently-used → evicted
+        Assert.NotNull(cache.GetCachedGradient("k0"));   // recently touched → retained
+        Assert.NotNull(cache.GetCachedGradient("k2"));
+        Assert.NotNull(cache.GetCachedGradient("k3"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LfuPolicy_EvictsLeastFrequentlyUsed()
+    {
+        await Task.Yield();
+        var cache = new DefaultGradientCache<double>(3, AiDotNet.Enums.CacheEvictionPolicy.LFU);
+        cache.CacheGradient("k0", new TestGradientModel<double>(0));
+        cache.CacheGradient("k1", new TestGradientModel<double>(1));
+        cache.CacheGradient("k2", new TestGradientModel<double>(2));
+
+        // Raise use counts: k0 used most, k1 once, k2 not at all.
+        cache.GetCachedGradient("k0");
+        cache.GetCachedGradient("k0");
+        cache.GetCachedGradient("k1");
+
+        // A 4th key evicts the least-frequently-used (k2), leaving the hot keys.
+        cache.CacheGradient("k3", new TestGradientModel<double>(3));
+
+        Assert.Null(cache.GetCachedGradient("k2"));      // never re-used → evicted
+        Assert.NotNull(cache.GetCachedGradient("k0"));
+        Assert.NotNull(cache.GetCachedGradient("k1"));
+        Assert.NotNull(cache.GetCachedGradient("k3"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Disabled_Cache_IsPassThrough()
+    {
+        await Task.Yield();
+        var cache = new DefaultGradientCache<double>(8, AiDotNet.Enums.CacheEvictionPolicy.FIFO, enabled: false);
+
+        cache.CacheGradient("k", new TestGradientModel<double>(1));
+
+        Assert.False(cache.Enabled);
+        Assert.Null(cache.GetCachedGradient("k")); // stores are dropped → always a miss (recompute)
+    }
+
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_UpdatingSameKey_DoesNotConsumeCapacity()
     {

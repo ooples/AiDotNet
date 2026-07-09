@@ -2,6 +2,7 @@ global using System.Collections.Concurrent;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
+using CacheEvictionPolicy = AiDotNet.Enums.CacheEvictionPolicy;
 namespace AiDotNet.Caching;
 
 /// <summary>
@@ -59,45 +60,59 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     public const int DefaultCapacity = 8;
 
     /// <summary>
-    /// The internal dictionary that stores gradient models, allowing concurrent access from multiple threads.
+    /// Recommended default eviction policy: oldest-inserted first. A gradient key is reused only within
+    /// a handful of consecutive calls, so FIFO retains exactly the recent window that legitimately hits.
     /// </summary>
-    /// <remarks>
-    /// ConcurrentDictionary is used to ensure thread safety when multiple operations might access the cache simultaneously.
-    /// </remarks>
-    private readonly ConcurrentDictionary<string, IGradientModel<T>> _cache = new();
+    public const CacheEvictionPolicy DefaultEvictionPolicy = CacheEvictionPolicy.FIFO;
+
+    /// <summary>Bounded, policy-evicting backing store (capacity + FIFO/LRU/LFU live here).</summary>
+    private readonly BoundedEvictingStore<IGradientModel<T>> _store;
+
+    /// <summary>When false the cache is a pass-through: every lookup misses and stores are dropped, so
+    /// the optimizer always recomputes (numerically identical, just uncached).</summary>
+    private readonly bool _enabled;
+
+    /// <summary>Whether the cache actually stores entries (false = disabled pass-through).</summary>
+    public bool Enabled => _enabled;
 
     /// <summary>
-    /// FIFO record of the order in which keys were first inserted, used to pick the eviction victim
-    /// when the cache is over capacity. Only NEW keys are enqueued (updates to an existing key keep
-    /// their original position), so the queue length tracks the live-entry insertion history.
+    /// Maximum number of gradient entries retained before an entry is evicted.
     /// </summary>
-    private readonly ConcurrentQueue<string> _insertionOrder = new();
+    public int Capacity => _store.Capacity;
 
-    /// <summary>Guards the compound "insert + evict-to-capacity" sequence so the bound holds under concurrency.</summary>
-    private readonly object _writeLock = new();
+    /// <summary>The policy used to choose the eviction victim once the cache is full.</summary>
+    public CacheEvictionPolicy EvictionPolicy => _store.EvictionPolicy;
 
     /// <summary>
-    /// Maximum number of gradient entries retained before the oldest entry is evicted.
+    /// Creates a gradient cache with the recommended defaults: <see cref="DefaultCapacity"/> entries,
+    /// <see cref="DefaultEvictionPolicy"/> eviction.
     /// </summary>
-    public int Capacity { get; }
-
-    /// <summary>
-    /// Creates a gradient cache bounded to <see cref="DefaultCapacity"/> entries.
-    /// </summary>
-    public DefaultGradientCache() : this(DefaultCapacity)
+    public DefaultGradientCache() : this(DefaultCapacity, DefaultEvictionPolicy)
     {
     }
 
     /// <summary>
-    /// Creates a gradient cache bounded to <paramref name="capacity"/> entries.
+    /// Creates a gradient cache bounded to <paramref name="capacity"/> entries with the recommended
+    /// <see cref="DefaultEvictionPolicy"/> eviction.
     /// </summary>
     /// <param name="capacity">Maximum number of gradient entries to retain (must be positive).</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="capacity"/> is not positive.</exception>
-    public DefaultGradientCache(int capacity)
+    public DefaultGradientCache(int capacity) : this(capacity, DefaultEvictionPolicy)
     {
-        if (capacity <= 0)
-            throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Gradient cache capacity must be positive.");
-        Capacity = capacity;
+    }
+
+    /// <summary>
+    /// Creates a gradient cache bounded to <paramref name="capacity"/> entries evicting per
+    /// <paramref name="evictionPolicy"/>.
+    /// </summary>
+    /// <param name="capacity">Maximum number of gradient entries to retain (must be positive).</param>
+    /// <param name="evictionPolicy">Which entry to evict once the cache is full (FIFO / LRU / LFU).</param>
+    /// <param name="enabled">When false the cache is a pass-through that never stores (always recomputes).</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="capacity"/> is not positive.</exception>
+    public DefaultGradientCache(int capacity, CacheEvictionPolicy evictionPolicy, bool enabled = true)
+    {
+        _store = new BoundedEvictingStore<IGradientModel<T>>(capacity, evictionPolicy);
+        _enabled = enabled;
     }
 
     /// <summary>
@@ -117,9 +132,7 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     public IGradientModel<T>? GetCachedGradient(string key)
     {
         if (key == null) throw new ArgumentNullException(nameof(key), "Cache key cannot be null.");
-
-        _cache.TryGetValue(key, out var gradient);
-        return gradient;
+        return _enabled ? _store.Get(key) : null;
     }
 
     /// <summary>
@@ -143,28 +156,7 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     {
         if (key == null) throw new ArgumentNullException(nameof(key), "Cache key cannot be null.");
         if (gradient == null) throw new ArgumentNullException(nameof(gradient), "Gradient cannot be null.");
-
-        lock (_writeLock)
-        {
-            // TryAdd distinguishes a brand-new key (needs an insertion-order slot + a
-            // capacity check) from an update to an existing key (payload swapped in place,
-            // position unchanged, no growth).
-            if (_cache.TryAdd(key, gradient))
-            {
-                _insertionOrder.Enqueue(key);
-
-                // Evict oldest-first until back within capacity. A dequeued key that is no
-                // longer present (already evicted or explicitly cleared) is simply skipped.
-                while (_cache.Count > Capacity && _insertionOrder.TryDequeue(out var oldest))
-                {
-                    _cache.TryRemove(oldest, out _);
-                }
-            }
-            else
-            {
-                _cache[key] = gradient;
-            }
-        }
+        if (_enabled) _store.Set(key, gradient);
     }
 
     /// <summary>
@@ -178,10 +170,6 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     /// </remarks>
     public void ClearCache()
     {
-        lock (_writeLock)
-        {
-            _cache.Clear();
-            while (_insertionOrder.TryDequeue(out _)) { }
-        }
+        _store.Clear();
     }
 }

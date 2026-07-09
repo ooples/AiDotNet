@@ -1249,6 +1249,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             optimizer = new NormalOptimizer<T, TInput, TOutput>(_model);
         }
 
+        // Wire ConfigureCaching through to the optimizer's in-training caches (gradient + model-eval).
+        // ConfigureCaching stored a CacheConfig on the builder but nothing consumed it, so the bounded
+        // gradient/model caches always ran at their built-in defaults. Apply the user's capacity /
+        // eviction-policy / enabled choices here; ApplyCacheConfiguration swaps the caches at runtime so
+        // an optimizer constructed before ConfigureCaching was called still honors the config.
+        if (_cacheConfig is not null
+            && optimizer is Optimizers.OptimizerBase<T, TInput, TOutput> optForCache)
+        {
+            optForCache.ApplyCacheConfiguration(_cacheConfig);
+        }
+
         // Wire ConfigureRegularization through to the optimizer. Without
         // this, the user's regularization was stored on the builder
         // (_regularization) but the gradient-application loop inside

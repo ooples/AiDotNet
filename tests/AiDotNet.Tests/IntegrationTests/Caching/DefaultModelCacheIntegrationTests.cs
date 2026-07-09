@@ -475,4 +475,37 @@ public class DefaultModelCacheIntegrationTests
     }
 
     #endregion
+
+    #region Eviction Policy + Config Customization
+
+    [Fact(Timeout = 120000)]
+    public async Task Constructor_PolicyAndEnabled_AreHonored()
+    {
+        await Task.Yield();
+        var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>(
+            3, AiDotNet.Enums.CacheEvictionPolicy.LRU, enabled: false);
+
+        Assert.Equal(3, cache.Capacity);
+        Assert.Equal(AiDotNet.Enums.CacheEvictionPolicy.LRU, cache.EvictionPolicy);
+        Assert.False(cache.Enabled);
+
+        // Disabled → pass-through: stores are dropped, lookups always miss.
+        cache.CacheStepData("k", CreateStepData());
+        Assert.Null(cache.GetCachedStepData("k"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheConfig_OptimizerCacheDefaults_AreRecommended()
+    {
+        await Task.Yield();
+        var config = new AiDotNet.Deployment.Configuration.CacheConfig();
+
+        // The recommended training-cache defaults that fix the unbounded-growth training-loop leak.
+        Assert.Equal(8, config.GradientCacheCapacity);
+        Assert.Equal(8, config.ModelCacheCapacity);
+        Assert.Equal(AiDotNet.Enums.CacheEvictionPolicy.FIFO, config.OptimizerCacheEvictionPolicy);
+        Assert.True(config.Enabled);
+    }
+
+    #endregion
 }
