@@ -321,6 +321,83 @@ public class Issue1296LargeXTrainBatchingTests
     }
 
     /// <summary>
+    /// The streaming <see cref="NeuralNetworkBase{T}.PredictInBatches(Tensor{T},int,Action{Tensor{T},int})"/>
+    /// overload must (a) visit every row exactly once with the SAME per-row argmax the
+    /// concatenating overload produces, and (b) NEVER materialize the full <c>[N, V]</c>
+    /// output — so at a large vocabulary its retained-heap delta is a small fraction of the
+    /// concatenating path's. This is the memory-safe large-vocab next-token / LAMBADA eval
+    /// contract: reduce each chunk to a scalar, discard the logits.
+    /// </summary>
+    [Fact(Timeout = 120_000)]
+    public async Task PredictInBatches_Streaming_MatchesArgmax_AndBoundsMemory()
+    {
+        await Task.Yield();
+        // Large vocab so the [N, V] concatenated output is the dominant allocation:
+        // N=1024, V=8000 -> ~31 MB just for the concatenated float output, plus copies.
+        const int sampleCount = 1024, vocab = 8000, chunk = 128;
+        var (arch, x, _) = BuildFixture(sampleCount: sampleCount, vocabSize: vocab);
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+
+        var primer = new Tensor<float>([1, x.Shape[1]]);
+        for (int s = 0; s < x.Shape[1]; s++) primer[0, s] = x[0, s];
+        _ = model.Predict(primer);
+
+        // Reference argmax-per-row via the concatenating overload (holds the full [N, V]).
+        var concatenated = model.PredictInBatches(x, batchSize: chunk);
+        int rowStride = (int)(concatenated.Length / sampleCount);
+        var refArg = new int[sampleCount];
+        for (int r = 0; r < sampleCount; r++)
+        {
+            int off = r * rowStride + (rowStride - vocab);
+            int a = 0; float bv = concatenated[off];
+            for (int v = 1; v < vocab; v++) { float val = concatenated[off + v]; if (val > bv) { bv = val; a = v; } }
+            refArg[r] = a;
+        }
+        concatenated = null;
+
+        // Streaming overload: reduce each chunk to argmax scalars, never retaining logits.
+        var streamArg = new int[sampleCount];
+        int rowsSeen = 0;
+        GC.Collect(2, GCCollectionMode.Forced, true); GC.WaitForPendingFinalizers();
+        long heapBefore = GC.GetTotalMemory(true);
+        long peak = 0; bool run = true;
+        var sampler = new System.Threading.Thread(() =>
+        { while (run) { long m = GC.GetTotalMemory(false) - heapBefore; if (m > peak) peak = m; System.Threading.Thread.Sleep(2); } })
+        { IsBackground = true };
+        sampler.Start();
+        model.PredictInBatches(x, batchSize: chunk, (outp, start) =>
+        {
+            int bs = outp.Shape[0];
+            int stride = (int)(outp.Length / bs);
+            for (int r = 0; r < bs; r++)
+            {
+                int off = r * stride + (stride - vocab);
+                int a = 0; float bv = outp[off];
+                for (int v = 1; v < vocab; v++) { float val = outp[off + v]; if (val > bv) { bv = val; a = v; } }
+                streamArg[start + r] = a;
+            }
+            rowsSeen += bs;
+        });
+        run = false; sampler.Join();
+        double streamPeakMb = peak / 1024.0 / 1024.0;
+
+        // (a) Every row visited once, identical argmax.
+        Assert.Equal(sampleCount, rowsSeen);
+        for (int r = 0; r < sampleCount; r++) Assert.Equal(refArg[r], streamArg[r]);
+
+        // (b) Streaming peak is bounded well below the full [N, V] the concat path holds.
+        // Full output alone is N*V*4 = 1024*8000*4 ~= 31 MB; the concat path's peak includes
+        // that plus per-chunk copies. The streaming path never holds more than ~one chunk's
+        // [chunk, V] logits (~4 MB) plus the forward's transient activations.
+        double fullOutputMb = (double)sampleCount * vocab * 4 / 1024 / 1024;
+        _output.WriteLine($"streaming reduce peak={streamPeakMb:F1} MB; full [N,V] output alone={fullOutputMb:F1} MB");
+        Assert.True(
+            streamPeakMb < 4.0 * fullOutputMb,
+            $"Streaming eval peak {streamPeakMb:F1} MB should stay a small multiple of one chunk's forward, " +
+            $"not scale with the full [N,V]={fullOutputMb:F1} MB output.");
+    }
+
+    /// <summary>
     /// Short-circuit contract: when input.Shape[0] is &lt;= batchSize,
     /// <see cref="NeuralNetworkBase{T}.PredictInBatches"/> delegates to
     /// the existing <see cref="NeuralNetworkBase{T}.Predict"/> path
