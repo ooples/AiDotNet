@@ -89,8 +89,8 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Cache_MultipleKeys_EachRetrievableIndependently()
     {
-        // Arrange
-        var cache = new DefaultGradientCache<double>();
+        // Arrange - capacity sized above the working set so every key stays resident.
+        var cache = new DefaultGradientCache<double>(capacity: 200);
         var gradients = new Dictionary<string, TestGradientModel<double>>();
 
         for (int i = 0; i < 100; i++)
@@ -108,6 +108,113 @@ public class DefaultGradientCacheIntegrationTests
             Assert.NotNull(retrieved);
             Assert.Same(kvp.Value, retrieved);
         }
+    }
+
+    #endregion
+
+    #region Bounded-Capacity / Eviction Tests
+
+    // Regression guard for the managed-heap leak in the batched Optimize training
+    // loop: GradientBasedOptimizerBase.GenerateGradientCacheKey folds a per-step
+    // parameter-state fingerprint plus per-batch tensor identities into every key,
+    // so each training step produces a brand-new key that is never looked up again.
+    // With an unbounded cache the dictionary grew by one full parameter-sized
+    // gradient every step (only ever cleared by Reset(), which the training loop
+    // never calls), so per-epoch GC cost — and wall-time — climbed roughly linearly
+    // with the epoch index. The cache must therefore retain at most Capacity entries.
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheGradient_ExceedingCapacity_EvictsOldestFirst()
+    {
+        // Arrange
+        const int capacity = 8;
+        var cache = new DefaultGradientCache<double>(capacity);
+
+        // Act - insert far more distinct keys than capacity (mirrors a training run
+        // where every step is a unique key).
+        const int inserted = 500;
+        for (int i = 0; i < inserted; i++)
+        {
+            cache.CacheGradient($"step_{i}", new TestGradientModel<double>(i));
+        }
+
+        // Assert - only the most recent `capacity` keys survive; everything older is evicted.
+        for (int i = 0; i < inserted - capacity; i++)
+        {
+            Assert.Null(cache.GetCachedGradient($"step_{i}"));
+        }
+        for (int i = inserted - capacity; i < inserted; i++)
+        {
+            Assert.NotNull(cache.GetCachedGradient($"step_{i}"));
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheGradient_ManyUniqueKeys_DoesNotGrowUnbounded()
+    {
+        // Arrange
+        const int capacity = 16;
+        var cache = new DefaultGradientCache<double>(capacity);
+
+        // Act - a large number of unique keys, like a long training run.
+        const int steps = 100_000;
+        for (int i = 0; i < steps; i++)
+        {
+            cache.CacheGradient($"k{i}", new TestGradientModel<double>(i));
+        }
+
+        // Assert - live-entry count is bounded by capacity regardless of how many
+        // keys were inserted: everything except the last `capacity` keys is gone.
+        int survivors = 0;
+        for (int i = steps - capacity - 50; i < steps; i++)
+        {
+            if (cache.GetCachedGradient($"k{i}") is not null) survivors++;
+        }
+        Assert.Equal(capacity, survivors);
+        // Far-past keys are definitively evicted.
+        Assert.Null(cache.GetCachedGradient("k0"));
+        Assert.Null(cache.GetCachedGradient($"k{steps / 2}"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CacheGradient_UpdatingSameKey_DoesNotConsumeCapacity()
+    {
+        // Arrange - repeatedly refreshing ONE key (e.g. line-search re-evaluation of
+        // the same solution) must not evict the other resident entries.
+        const int capacity = 4;
+        var cache = new DefaultGradientCache<double>(capacity);
+        cache.CacheGradient("a", new TestGradientModel<double>(1));
+        cache.CacheGradient("b", new TestGradientModel<double>(2));
+        cache.CacheGradient("c", new TestGradientModel<double>(3));
+
+        // Act - hammer key "a" many times (updates in place, no new slots).
+        for (int i = 0; i < 1000; i++)
+        {
+            cache.CacheGradient("a", new TestGradientModel<double>(100 + i));
+        }
+
+        // Assert - a, b, c all still present (updates never grew the entry count).
+        Assert.NotNull(cache.GetCachedGradient("a"));
+        Assert.NotNull(cache.GetCachedGradient("b"));
+        Assert.NotNull(cache.GetCachedGradient("c"));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DefaultCapacity_IsPositiveAndBounded()
+    {
+        Assert.True(DefaultGradientCache<double>.DefaultCapacity > 0);
+        var cache = new DefaultGradientCache<double>();
+        Assert.Equal(DefaultGradientCache<double>.DefaultCapacity, cache.Capacity);
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-100)]
+    public async Task Constructor_NonPositiveCapacity_Throws(int capacity)
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new DefaultGradientCache<double>(capacity));
+        Assert.Equal("capacity", ex.ParamName);
     }
 
     #endregion
