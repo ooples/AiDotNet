@@ -625,6 +625,17 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
     public double SplitOpacityMax { get; set; }
     public int MaxGaussians { get; set; }
 
+    // #1835 densification-schedule getters. Each returns the caller's explicit override
+    // from GaussianSplattingOptions if set, else the paper default (Kerbl et al. 2023).
+    // Reading via these getters (not the raw fields) lets DensifyAndPrune honor the new
+    // schedule knobs without breaking legacy callers who set only the original fields.
+    internal int EffectiveDensificationStartIteration => _options.DensificationStartIteration ?? 500;
+    internal int EffectiveDensificationEndIteration   => _options.DensificationEndIteration   ?? 15000;
+    internal double EffectiveGradientNormThreshold    => _options.GradientNormThreshold      ?? SplitGradientThreshold;
+    internal double EffectiveOpacityPruneThreshold    => _options.OpacityPruneThreshold      ?? PruneOpacityThreshold;
+    internal int EffectiveMaxGaussianCount            => _options.MaxGaussianCount           ?? MaxGaussians;
+    internal int EffectiveGradientAccumulationWindow  => _options.GradientAccumulationWindow ?? 100;
+
     public double PositionLearningRate { get; set; }
     public double ColorLearningRate { get; set; }
     public double OpacityLearningRate { get; set; }
@@ -1877,32 +1888,76 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         int raysPerBatch,
         Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions)
     {
+        if (loader is null) throw new ArgumentNullException(nameof(loader));
+        if (raysPerBatch <= 0) throw new ArgumentOutOfRangeException(nameof(raysPerBatch));
+
         if (optimizerOptions is not null)
         {
             ((IHyperparameterAware<T, Tensor<T>, Tensor<T>>)this).ApplyOptimizerHyperparameters(optimizerOptions);
         }
 
-        var pixels = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
-        if (pixels is null)
+        // Route through GS's paper-faithful CAMERA-mode Train — that's the path that runs
+        // the #1835 densification loop (DensifyAndPrune fires every DensificationInterval
+        // iterations, gated by the [StartIter, EndIter] window and OpacityPruneThreshold /
+        // GradientNormThreshold from the extended options). RAY-mode training bypasses
+        // densification by design (see TrainOnRays remarks — screen-space gradient signal
+        // isn't present in ray-mode).
+        var enumerator = loader.IterateBatches(raysPerBatch).GetEnumerator();
+        if (!enumerator.MoveNext())
         {
             return NumOps.Zero;
         }
+        var (view, pixels) = enumerator.Current;
 
+        // Photometric loss for telemetry (engine-op backed, tape-recorded).
         var rendered = RenderRays(
             pixels.RayOrigins,
             pixels.RayDirections,
             numSamples: 32,
             NumOps.FromDouble(0.1),
             NumOps.FromDouble(10.0));
-
         var loss = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricMSE(Engine, rendered, pixels.TargetColors);
 
-        // GS's existing Train() has a RAY mode ([N, 6] input, [N, 3] target) — reuse it so
-        // the update goes through the per-attribute Adam schedule that ApplyOptimizerHyper
-        // parameters just configured. Full backprop through the splat rendering integral is
-        // the #1835 continuation.
-        var rayInput = NeuralRadianceFields.Helpers.ImageTrainingHelpers.RayOriginsDirectionsToNBy6(Engine, pixels);
-        Train(rayInput, pixels.TargetColors);
+        // Build the [1, 13] camera-mode input GS.Train recognizes: pos[3] + rot[9] + focal[1].
+        double focalPx = view.FocalLength is not null && !NumOps.Equals(view.FocalLength!, NumOps.Zero)
+            ? NumOps.ToDouble(view.FocalLength!)
+            : Math.Max(view.Height, view.Width) * 0.7;
+
+        var cameraInputData = new T[13];
+        cameraInputData[0] = view.CameraPosition[0];
+        cameraInputData[1] = view.CameraPosition[1];
+        cameraInputData[2] = view.CameraPosition[2];
+        cameraInputData[3]  = view.CameraRotation[0, 0];
+        cameraInputData[4]  = view.CameraRotation[0, 1];
+        cameraInputData[5]  = view.CameraRotation[0, 2];
+        cameraInputData[6]  = view.CameraRotation[1, 0];
+        cameraInputData[7]  = view.CameraRotation[1, 1];
+        cameraInputData[8]  = view.CameraRotation[1, 2];
+        cameraInputData[9]  = view.CameraRotation[2, 0];
+        cameraInputData[10] = view.CameraRotation[2, 1];
+        cameraInputData[11] = view.CameraRotation[2, 2];
+        cameraInputData[12] = NumOps.FromDouble(focalPx);
+        var cameraInput = new Tensor<T>(new[] { 1, 13 }, new Vector<T>(cameraInputData));
+
+        // Photo target is [H, W, 3] — the shape GS.Train's camera-mode ParseCameraInput expects.
+        // If the loader emitted an RGBA photo, drop the alpha channel via engine slice.
+        var photo = view.Photo;
+        if (photo.Shape[2] == 4)
+        {
+            var rgb = new T[view.Height * view.Width * 3];
+            for (int y = 0; y < view.Height; y++)
+            {
+                for (int x = 0; x < view.Width; x++)
+                {
+                    rgb[(y * view.Width + x) * 3 + 0] = photo[y, x, 0];
+                    rgb[(y * view.Width + x) * 3 + 1] = photo[y, x, 1];
+                    rgb[(y * view.Width + x) * 3 + 2] = photo[y, x, 2];
+                }
+            }
+            photo = new Tensor<T>(new[] { view.Height, view.Width, 3 }, new Vector<T>(rgb));
+        }
+
+        Train(cameraInput, photo);
 
         return loss;
     }
@@ -3070,7 +3125,16 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
 
     private void DensifyAndPrune(List<GaussianGradient> gradients)
     {
-        double pruneThreshold = Math.Max(0.0, PruneOpacityThreshold);
+        // #1835 schedule window: skip densification before the start iteration (let the
+        // random cloud stabilize) and after the end iteration (freeze the cloud for final
+        // convergence). Paper: [500, 15000]. Callers override via GaussianSplattingOptions.
+        if (_trainingStep < EffectiveDensificationStartIteration
+            || _trainingStep > EffectiveDensificationEndIteration)
+        {
+            return;
+        }
+
+        double pruneThreshold = Math.Max(0.0, EffectiveOpacityPruneThreshold);
         for (int i = _gaussians.Count - 1; i >= 0; i--)
         {
             double alpha = Sigmoid(NumOps.ToDouble(_gaussians[i].Opacity));
@@ -3080,19 +3144,21 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             }
         }
 
-        if (_gaussians.Count >= MaxGaussians)
+        int cap = EffectiveMaxGaussianCount;
+        if (_gaussians.Count >= cap)
         {
             return;
         }
 
+        double splitThresh = EffectiveGradientNormThreshold;
         foreach (var gradient in gradients.OrderByDescending(g => g.Magnitude))
         {
-            if (_gaussians.Count >= MaxGaussians)
+            if (_gaussians.Count >= cap)
             {
                 break;
             }
 
-            if (gradient.Magnitude < SplitGradientThreshold)
+            if (gradient.Magnitude < splitThresh)
             {
                 break;
             }
