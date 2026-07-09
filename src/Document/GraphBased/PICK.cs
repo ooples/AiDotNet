@@ -9,6 +9,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Models.Options;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
@@ -140,7 +141,8 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         _numGcnLayers = numGcnLayers;
         _numHeads = numHeads;
         _vocabSize = vocabSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -187,7 +189,8 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         _numGcnLayers = numGcnLayers;
         _numHeads = numHeads;
         _vocabSize = vocabSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -486,10 +489,16 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         // TrainWithTape already runs the forward, backprop, and optimizer update. The manual
         // UpdateParameters(CollectGradients()) that followed was a redundant SECOND gradient step whose
         // hand-collected vector length didn't match GetParameters, crashing training. Use the tape only.
+        //
+        // Pass PICK's configured optimizer explicitly: the no-optimizer overload falls back to the base
+        // default Adam at lr 1e-3, which OVERSHOOTS PICK's sharp early descent (BiLSTM + CRF produce
+        // large early gradients) and then diverges to a worse plateau — MoreData_ShouldNotDegrade saw
+        // loss(200) > loss(50). PICK's own optimizer is a lower-lr (1e-4) Adam suited to sequence-model
+        // training, which converges monotonically instead.
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         }
         finally
         {
