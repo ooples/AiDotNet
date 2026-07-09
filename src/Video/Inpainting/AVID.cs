@@ -126,10 +126,10 @@ public class AVID<T> : VideoInpaintingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeInpaintFrames(rawFrames);
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeInpaintFrames(modelOutput);
 
     private bool _shapesProbed;
 
