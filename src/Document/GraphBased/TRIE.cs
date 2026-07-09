@@ -653,16 +653,119 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    // Layer roles in CreateDefaultTRIELayers order: [0..VisualEncoderLayerCount) = visual backbone
+    // (conv/BN/pool + a channel conv), then the text encoder, then the shared graph-reasoning and
+    // extraction heads. TRIE (Zhang et al. 2020) reads BOTH a document image and its text tokens;
+    // this native forward is modality-robust — it routes by input rank so a token-only input goes to
+    // the text encoder and an image goes through the visual backbone, both feeding the shared graph +
+    // extraction stack. Without this the base linear walk sends the rank-1 token vector into the
+    // rank-4-only Conv backbone and throws ("expected input depth 1, got 16").
+    private const int VisualEncoderLayerCount = 4;
+    private const int TextEncoderLayerCount = 2;
+
+    private Tensor<T> RunModalityForward(Tensor<T> input)
+    {
+        Tensor<T> feats;
+        if (input.Rank <= 2)
+        {
+            // Token/text stream: skip the visual conv backbone.
+            feats = input;
+            for (int i = VisualEncoderLayerCount; i < VisualEncoderLayerCount + TextEncoderLayerCount && i < Layers.Count; i++)
+                feats = Layers[i].Forward(feats);
+        }
+        else
+        {
+            // Visual stream: conv backbone -> flatten spatial grid to a token sequence.
+            feats = input;
+            for (int i = 0; i < VisualEncoderLayerCount && i < Layers.Count; i++)
+                feats = Layers[i].Forward(feats);
+            feats = FlattenSpatialToTokens(feats);
+        }
+        // Shared graph reasoning + extraction heads.
+        for (int i = VisualEncoderLayerCount + TextEncoderLayerCount; i < Layers.Count; i++)
+            feats = Layers[i].Forward(feats);
+        return feats;
+    }
+
+    // [C, H, W] -> [H*W, C]; [B, C, H, W] -> [B, H*W, C]. Puts channels last so each spatial location
+    // becomes a token whose feature vector the downstream Dense layers map over.
+    private Tensor<T> FlattenSpatialToTokens(Tensor<T> feat)
+    {
+        if (feat.Rank == 4)
+        {
+            int b = feat.Shape[0], c = feat.Shape[1], n = feat.Shape[2] * feat.Shape[3];
+            return Engine.TensorPermute(Engine.Reshape(feat, new[] { b, c, n }), new[] { 0, 2, 1 });
+        }
+        if (feat.Rank == 3)
+        {
+            int c = feat.Shape[0], n = feat.Shape[1] * feat.Shape[2];
+            return Engine.TensorPermute(Engine.Reshape(feat, new[] { c, n }), new[] { 1, 0 });
+        }
+        return feat;
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> Forward(Tensor<T> input)
+        => _useNativeMode ? RunModalityForward(input) : base.Forward(input);
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _useNativeMode ? RunModalityForward(input) : base.ForwardForTraining(input);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Diagnostic counterpart of the modality routing in <see cref="RunModalityForward"/>: the base
+    /// implementation walks <c>Layers</c> from index 0, sending a token-only input into the rank-4-only
+    /// Conv backbone and throwing before it records anything. Record only the layers that actually fire
+    /// for the supplied modality so the activations dictionary is non-empty and meaningful.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input;
+        if (input.Rank <= 2)
+        {
+            for (int i = VisualEncoderLayerCount; i < VisualEncoderLayerCount + TextEncoderLayerCount && i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+        }
+        else
+        {
+            for (int i = 0; i < VisualEncoderLayerCount && i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+            current = FlattenSpatialToTokens(current);
+        }
+        for (int i = VisualEncoderLayerCount + TextEncoderLayerCount; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+        return activations;
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        // TrainWithTape runs the full forward (ForwardForTraining -> RunModalityForward), backprops,
+        // and applies the optimizer update itself. The earlier UpdateParameters(CollectGradients())
+        // was a redundant SECOND update whose hand-collected gradient vector did not line up with
+        // GetParameters(), corrupting the step. TrainWithTape alone is the correct single update.
         SetTrainingMode(true);
         TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
         SetTrainingMode(false);
     }
 
@@ -677,14 +780,6 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
         
         currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
     }
 
     #endregion
