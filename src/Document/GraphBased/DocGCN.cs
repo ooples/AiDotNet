@@ -492,11 +492,18 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        // TrainWithTape already runs the forward, backprop, and optimizer update. The manual
+        // UpdateParameters(CollectGradients()) that followed was a redundant SECOND gradient step whose
+        // hand-collected vector length didn't match GetParameters, crashing training. Use the tape only.
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -512,13 +519,6 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         SetParameters(currentParams);
     }
 
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
 
     #endregion
 
