@@ -4,6 +4,7 @@ global using AiDotNet.Models.Inputs;
 using AiDotNet.Helpers;
 using AiDotNet.Caching;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralRadianceFields.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
@@ -376,9 +377,25 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// break the shape contract. Used by <see cref="PrepareAndEvaluateSolutionCore"/> and
     /// <see cref="ApplyFeatureSelection"/> to skip feature selection/subsetting entirely,
     /// generalizing the embedding-only <see cref="IsEmbeddingBasedModel"/> handling. Fixes #1468.
+    ///
+    /// <para>Also treats <see cref="IRadianceField{T}"/> models (NeRF, GaussianSplatting,
+    /// InstantNGP) as non-flat regardless of the first layer's shape rank. Radiance-field
+    /// inputs are semantically multi-dimensional (a 3D position + a viewing direction),
+    /// but that <c>[N, 6]</c> input tensor gets positionally-encoded into a 1-D feature
+    /// vector before the first dense layer — so the shape-rank check alone would fail to
+    /// exclude them, feature indices up to 5 (or beyond, after encoding) would reach
+    /// <see cref="NeuralNetworkBase{T}.SetActiveFeatureIndices"/>, and it would throw
+    /// "Feature index N exceeds the input dimension 1" mid-<c>BuildAsync</c>. Fixes #1826.</para>
     /// </summary>
     protected static bool HasNonFlatNeuralInput(IFullModel<T, TInput, TOutput> model)
     {
+        // Radiance-field models are semantically non-flat even when their first dense
+        // layer sees a 1-D positionally-encoded vector. Check the interface directly
+        // rather than the layer shape; adding a new radiance-field type shouldn't have
+        // to re-teach this guard.
+        if (model is IRadianceField<T>)
+            return true;
+
         return model is NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.Layers.Count > 0
             && nn.Layers[0].GetInputShape() is { Length: > 1 };
