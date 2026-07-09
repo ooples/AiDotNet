@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Transformers.Extensions;
 
@@ -88,7 +89,9 @@ public static class AiModelResultTransformerExtensions
 
         int batch = startTokens.Shape[0];
         var current = startTokens;
-        var rng = seed.HasValue ? new Random(seed.Value) : new Random();
+        var rng = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
 
         for (int step = 0; step < maxNewTokens; step++)

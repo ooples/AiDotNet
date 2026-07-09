@@ -2443,7 +2443,37 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 hyperparameterAwareModel.ApplyOptimizerHyperparameters(configuredOptimizerOptions);
             }
 
-            if (_trainingGroups is not null
+            // #1834 IMAGE-SPACE branch: if the caller registered an image loader AND the model
+            // implements IImageTrainable, drive training via TrainOnImageBatch per iteration.
+            // Image-space training has photometric-MSE semantics (rendered pixels vs ground-
+            // truth photo pixels) that don't fit the standard (input, target) row shape, so we
+            // route around the supervised optimizer.Optimize flow. Paper-standard AdamOptimizer
+            // BatchSize is the rays-per-batch count for radiance fields.
+            bool imageSpaceHandled = false;
+            if (_imageDataLoader is not null
+                && model is NeuralRadianceFields.Interfaces.IImageTrainable<T> imageTrainable
+                && _imageDataLoader is IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> typedImageLoader)
+            {
+                int imageEpochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                int raysPerBatch = configuredOptimizerOptions is AdamOptimizerOptions<T, TInput, TOutput> adamOpts && adamOpts.BatchSize > 0
+                    ? adamOpts.BatchSize
+                    : 1024;
+                for (int epoch = 0; epoch < imageEpochs; epoch++)
+                {
+                    imageTrainable.TrainOnImageBatch(typedImageLoader, raysPerBatch, configuredOptimizerOptions);
+                }
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                };
+                imageSpaceHandled = true;
+            }
+
+            if (imageSpaceHandled)
+            {
+                // handled above — skip the standard-supervised branches
+            }
+            else if (_trainingGroups is not null
                 && model is NeuralNetworks.NeuralNetworkBase<T> groupedNet
                 && XTrain is Tensor<T> groupedX && yTrain is Tensor<T> groupedY)
             {

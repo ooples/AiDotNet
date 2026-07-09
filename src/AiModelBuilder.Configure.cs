@@ -897,6 +897,25 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Configures an image-shaped data loader for photometric radiance-field training (#1834).
+    /// When paired with a model implementing <see cref="NeuralRadianceFields.Interfaces.IImageTrainable{T}"/>
+    /// (NeRF, InstantNGP, GaussianSplatting), the facade drives training via each iteration's
+    /// <c>TrainOnImageBatch</c> call instead of the standard supervised path.
+    /// </summary>
+    /// <param name="dataLoader">
+    /// A loader emitting <see cref="NeuralRadianceFields.Data.ImageView{T}"/> +
+    /// <see cref="NeuralRadianceFields.Data.PixelBatch{T}"/> pairs, e.g. from
+    /// <see cref="NeuralRadianceFields.Data.ImageTrainingDataLoaders.FromViews{T}"/>.
+    /// </param>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataLoader(
+        IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> dataLoader)
+    {
+        if (dataLoader is null) throw new ArgumentNullException(nameof(dataLoader));
+        _imageDataLoader = dataLoader;
+        return this;
+    }
+
+    /// <summary>
     /// Configures data preparation operations that change row count (outlier removal, augmentation).
     /// </summary>
     /// <param name="pipelineBuilder">Action to configure the data preparation pipeline.</param>

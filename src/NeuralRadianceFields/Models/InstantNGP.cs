@@ -152,7 +152,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Instant Neural Graphics Primitives with a Multiresolution Hash Encoding", "https://doi.org/10.1145/3528223.3530127", Year = 2022, Authors = "Thomas Müller, Alex Evans, Christoph Schied, Alexander Keller")]
-public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
+public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
     private readonly InstantNGPOptions<T> _options;
 
@@ -1625,6 +1625,33 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         }
 
         return new Tensor<T>(output, [numPoints, 4]);
+    }
+
+    /// <summary>
+    /// Image-space photometric training (#1834). Renders one batch of rays and returns the
+    /// MSE loss against ground-truth pixel colors. Paper-faithful backprop through the hash-
+    /// grid encoder is the #1834 continuation; this slice ships the loader → render → loss
+    /// wiring end-to-end.
+    /// </summary>
+    public T TrainOnImageBatch(
+        AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
+        int raysPerBatch,
+        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions)
+    {
+        var pixels = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
+        if (pixels is null)
+        {
+            return NumOps.Zero;
+        }
+
+        var rendered = RenderRays(
+            pixels.RayOrigins,
+            pixels.RayDirections,
+            numSamples: 32,
+            _renderNearBound,
+            _renderFarBound);
+
+        return NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricMSE(Engine, rendered, pixels.TargetColors);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)

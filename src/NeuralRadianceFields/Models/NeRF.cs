@@ -133,7 +133,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis", "https://doi.org/10.1007/978-3-030-58452-8_24", Year = 2020, Authors = "Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, Ren Ng")]
-public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
+public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
     private readonly NeRFOptions _options;
 
@@ -1107,6 +1107,38 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         }
 
         return new Tensor<T>(output, [numPoints, 4]);
+    }
+
+    /// <summary>
+    /// Image-space photometric training (#1834). Pulls one batch from the loader, volume-
+    /// renders each sampled ray, and computes the MSE against the ground-truth pixel colors.
+    /// </summary>
+    /// <remarks>
+    /// This slice wires the loader → render → loss pipeline end-to-end so the facade can drive
+    /// image-space iterations and observers see the loss curve. Paper-faithful backprop through
+    /// the volume-rendering integral into the MLP weights lands as follow-up work referenced
+    /// against #1834; for image-space training with genuine convergence today, callers can
+    /// combine this method's loss signal with the existing supervised <see cref="Train"/> path.
+    /// </remarks>
+    public T TrainOnImageBatch(
+        AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
+        int raysPerBatch,
+        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions)
+    {
+        var pixels = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
+        if (pixels is null)
+        {
+            return NumOps.Zero;
+        }
+
+        var rendered = RenderRays(
+            pixels.RayOrigins,
+            pixels.RayDirections,
+            numSamples: 32,
+            _renderNearBound,
+            _renderFarBound);
+
+        return NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricMSE(Engine, rendered, pixels.TargetColors);
     }
 
     /// <summary>

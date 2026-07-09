@@ -189,7 +189,9 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("3D Gaussian Splatting for Real-Time Radiance Field Rendering", "https://doi.org/10.1145/3592433", Year = 2023, Authors = "Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, George Drettakis")]
-public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>, IHyperparameterAware<T, Tensor<T>, Tensor<T>>
+public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
+    IHyperparameterAware<T, Tensor<T>, Tensor<T>>,
+    NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
     private readonly GaussianSplattingOptions _options;
 
@@ -1855,6 +1857,54 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>, IHy
         OpacityLearningRate  = PaperBasePositionLR * OpacityRatio  * scale;
         ScaleLearningRate    = PaperBasePositionLR * ScaleRatio    * scale;
         RotationLearningRate = PaperBasePositionLR * RotationRatio * scale;
+    }
+
+    /// <summary>
+    /// Image-space photometric training (#1834). Pulls one batch from the loader, volume-
+    /// renders each sampled ray via <see cref="RenderRays"/>, computes MSE against the
+    /// ground-truth pixel colors, and routes the resulting per-ray targets through the
+    /// existing supervised <see cref="Train"/> path so gradients reach the Gaussians via the
+    /// per-attribute LR schedule set up by <see cref="ApplyOptimizerHyperparameters"/> (#1833).
+    /// </summary>
+    /// <remarks>
+    /// This slice ships the wired scaffolding (loader → render → loss → param update) so the
+    /// facade + tests can exercise the full image-space path end-to-end. Full paper-standard
+    /// backprop through volume rendering (with the split/prune densification loop from #1835)
+    /// lands via follow-up work on this same interface.
+    /// </remarks>
+    public T TrainOnImageBatch(
+        AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
+        int raysPerBatch,
+        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions)
+    {
+        if (optimizerOptions is not null)
+        {
+            ((IHyperparameterAware<T, Tensor<T>, Tensor<T>>)this).ApplyOptimizerHyperparameters(optimizerOptions);
+        }
+
+        var pixels = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
+        if (pixels is null)
+        {
+            return NumOps.Zero;
+        }
+
+        var rendered = RenderRays(
+            pixels.RayOrigins,
+            pixels.RayDirections,
+            numSamples: 32,
+            NumOps.FromDouble(0.1),
+            NumOps.FromDouble(10.0));
+
+        var loss = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricMSE(Engine, rendered, pixels.TargetColors);
+
+        // GS's existing Train() has a RAY mode ([N, 6] input, [N, 3] target) — reuse it so
+        // the update goes through the per-attribute Adam schedule that ApplyOptimizerHyper
+        // parameters just configured. Full backprop through the splat rendering integral is
+        // the #1835 continuation.
+        var rayInput = NeuralRadianceFields.Helpers.ImageTrainingHelpers.RayOriginsDirectionsToNBy6(Engine, pixels);
+        Train(rayInput, pixels.TargetColors);
+
+        return loss;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
