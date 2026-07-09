@@ -464,7 +464,11 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
 
         Tensor<T> seq;
         if (textSeq is not null && visualSeq is not null)
-            seq = Engine.TensorConcatenate([visualSeq, textSeq], axis: textSeq.Rank - 2);
+            // Same sequence-axis fusion as RunMultimodal: normalize both streams to [B, L, D] and
+            // concatenate along the sequence axis (concatenating on axis 0 with unequal-rank streams
+            // grows the batch dimension and leaves an uninitialized output tail).
+            seq = Engine.TensorConcatenate(
+                [AlignToBatchedSequence(visualSeq), AlignToBatchedSequence(textSeq)], axis: 1);
         else
             seq = textSeq ?? visualSeq ?? new Tensor<T>(new[] { 1, _hiddenDim });
 
