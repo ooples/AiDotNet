@@ -2120,6 +2120,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
                     "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32)";
             }
+            else if (model.ClassName == "DocFormer" && model.TypeParameterCount == 1)
+            {
+                // DocFormer (Appalaraju et al. 2021) native default is BERT-base scale — 768-wide, 12
+                // transformer layers, vocab 30522, 224px ResNet-50 visual backbone. Each CPU training
+                // iteration is multiple seconds so MoreData (250 train steps) times out. Build the
+                // IDENTICAL architecture (visual backbone + text embeddings -> shared spatial encodings ->
+                // multimodal transformer, run via the modality-robust RunModalityForward) at CI-smoke
+                // width/depth/vocab. Token-ID InputShape [16] is emitted by the token-based document branch.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 16, outputSize: 4), " +
+                    "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
+                    "numLayers: 2, numHeads: 4, vocabSize: 100, spatialDim: 32)";
+            }
             else if (model.ClassName == "Wav2Vec2Model" && model.TypeParameterCount == 1)
             {
                 // wav2vec 2.0 (Baevski et al. 2020) native default is BERT-base scale — 768-wide, 12
