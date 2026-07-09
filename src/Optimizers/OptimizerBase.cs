@@ -3,6 +3,7 @@ global using AiDotNet.Evaluation;
 global using AiDotNet.Models.Inputs;
 using AiDotNet.Helpers;
 using AiDotNet.Caching;
+using AiDotNet.Deployment.Configuration;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralRadianceFields.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -104,9 +105,11 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     private bool _hasObservedFitness;
 
     /// <summary>
-    /// Caches evaluated models to avoid redundant calculations.
+    /// Caches evaluated models to avoid redundant calculations. Reconfigured once at build time via
+    /// <see cref="ApplyCacheConfiguration"/> (the facade's <c>ConfigureCaching</c>) before any training
+    /// starts — it is not intended to be swapped concurrently with in-flight cache reads/writes.
     /// </summary>
-    protected readonly IModelCache<T, TInput, TOutput> ModelCache;
+    protected IModelCache<T, TInput, TOutput> ModelCache;
 
     /// <summary>
     /// The current learning rate used in the optimization process.
@@ -248,6 +251,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="inputData">The input data for the optimization process.</param>
     /// <returns>The result of the optimization process.</returns>
     public abstract OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData);
+
+    /// <summary>
+    /// Applies a <see cref="CacheConfig"/> to this optimizer's caches, replacing the model-evaluation
+    /// cache with one bounded to the configured capacity + eviction policy (or a disabled pass-through
+    /// when <see cref="CacheConfig.Enabled"/> is false). Builder-only plumbing — called once from
+    /// <c>AiModelBuilder.BuildPipeline</c> (the facade's <c>ConfigureCaching</c>) before training starts,
+    /// not a public user API. Derived optimizers that own additional caches override this and call
+    /// <c>base</c> first.
+    /// </summary>
+    /// <param name="config">The cache configuration to apply (must not be null).</param>
+    internal virtual void ApplyCacheConfiguration(CacheConfig config)
+    {
+        if (config is null) throw new ArgumentNullException(nameof(config));
+        ModelCache = new DefaultModelCache<T, TInput, TOutput>(
+            config.ModelCacheCapacity, config.OptimizerCacheEvictionPolicy, config.Enabled);
+    }
 
     /// <summary>
     /// Retrieves cached step data for a given solution.
