@@ -364,8 +364,34 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             // Use default transformer layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultTransformerLayers(_transformerArchitecture));
+
+            // OPT-IN log-softmax-cross-entropy head (numerically-stable training on LOGITS).
+            // When the caller supplies CrossEntropyWithLogitsLoss — which fuses a stable
+            // log-softmax + NLL over the class axis — the head must emit LOGITS, not a softmax
+            // probability distribution, or the loss would log-softmax an already-softmaxed input.
+            // The default classification head appends a final Softmax ActivationLayer; drop it so
+            // the forward (training AND the tape/compiled loss) sees logits. Inference re-applies
+            // softmax in PredictCore, so Predict() still returns a probability distribution —
+            // callers, LAMBADA/held-out eval, and Probabilities()/LogProbabilities() are UNCHANGED.
+            // Purely opt-in: any other loss (the default CategoricalCrossEntropy included) leaves
+            // the softmax head in place, so the default output path is byte-for-byte identical.
+            if (LossFunction is LossFunctions.CrossEntropyWithLogitsLoss<T>
+                && Layers.Count > 0
+                && Layers[Layers.Count - 1] is Layers.ActivationLayer<T>)
+            {
+                Layers.RemoveAt(Layers.Count - 1);
+                _headEmitsLogits = true;
+            }
         }
     }
+
+    /// <summary>
+    /// True when the output head emits raw LOGITS (the final Softmax activation layer was dropped
+    /// for the opt-in <see cref="LossFunctions.CrossEntropyWithLogitsLoss{T}"/> training path).
+    /// Inference (<see cref="PredictCore"/>) re-applies softmax so Predict() output is unchanged.
+    /// Round-trips via serialization; defaults false (the standard softmax-probability head).
+    /// </summary>
+    private bool _headEmitsLogits;
 
     /// <summary>
     /// Ensures that custom layers provided for the Transformer are shape-compatible.
@@ -627,6 +653,25 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             return gpuResult;
 
         return RunLayerWalk(input);
+    }
+
+    /// <summary>
+    /// Inference funnel. When the opt-in logits head is active
+    /// (<see cref="_headEmitsLogits"/> — set only when the caller supplied
+    /// <see cref="LossFunctions.CrossEntropyWithLogitsLoss{T}"/>), the layer stack ends at the
+    /// logits (the final Softmax layer was removed so training/loss operate on logits). Re-apply
+    /// softmax over the class axis HERE so <c>Predict</c> still returns a probability distribution.
+    /// Overriding <see cref="PredictCore"/> (rather than only <see cref="PredictEager"/>) applies
+    /// the softmax on EVERY inference path — eager, GPU-optimized, and the auto-compiled inference
+    /// plan — since they all funnel through PredictCore. For the default (softmax-head) path
+    /// <c>_headEmitsLogits</c> is false and this is a passthrough — inference output is unchanged.
+    /// </summary>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        var output = base.PredictCore(input);
+        if (_headEmitsLogits)
+            output = Engine.Softmax(output, output.Shape.Length - 1);
+        return output;
     }
 
     /// <summary>
@@ -1032,6 +1077,12 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Write loss function and optimizer types
         SerializationHelper<T>.SerializeInterface(writer, LossFunction);
         SerializationHelper<T>.SerializeInterface(writer, _optimizer);
+
+        // Opt-in logits head marker (trailing so older readers that stop after the optimizer are
+        // unaffected; new readers guard the read on stream position). Records whether the final
+        // Softmax layer was dropped for CrossEntropyWithLogitsLoss training so inference re-applies
+        // softmax after deserialize.
+        writer.Write(_headEmitsLogits);
     }
 
     /// <summary>
@@ -1085,6 +1136,12 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // load-then-resume-training flow needs the deserialized optimizer
         // installed on both sides.
         SetBaseTrainOptimizer(_optimizer);
+
+        // Opt-in logits-head marker (trailing field). Guard on stream position so a state-dict
+        // written before this field existed (stream ends after the optimizer) reads back with the
+        // default false (standard softmax head) instead of throwing EndOfStream.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _headEmitsLogits = reader.ReadBoolean();
     }
 
     /// <summary>
