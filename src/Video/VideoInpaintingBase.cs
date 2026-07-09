@@ -1,4 +1,5 @@
-﻿using AiDotNet.Interfaces;
+﻿using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 
@@ -189,18 +190,68 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         return 10.0 * Math.Log10(1.0 / mse);
     }
 
+    // Lazily-created RNG for the per-training-step synthetic mask (see CreateTrainingMask). Seeded from
+    // the architecture seed when one is set (so seeded training runs are reproducible), else a
+    // cryptographically-secure RNG per the project RNG policy.
+    private Random? _trainingMaskRng;
+
+    private Random TrainingMaskRng =>
+        _trainingMaskRng ??= Architecture?.RandomSeed is int seed
+            ? RandomHelper.CreateSeededRandom(seed)
+            : RandomHelper.CreateSecureRandom();
+
     /// <summary>
-    /// Builds the default single-channel hole mask <c>[n, 1, h, w]</c> used when no explicit mask is
-    /// supplied — by both the generic inference path (<see cref="PredictCore"/>) and each model's
-    /// training forward (<c>ForwardForTraining</c>). A centred rectangular hole covering roughly
-    /// <see cref="MaxMaskRatio"/> of the frame area gives the mask channel a real, spatially-structured
-    /// signal (1 = hole to fill, 0 = keep) that flows gradients through the encoder's mask-channel
-    /// weights — replacing the all-zero mask that left the channel dead during training, so the model
-    /// no longer trains as if it were doing plain identity reconstruction. It is deterministic (no
-    /// per-call RNG), so training a fixed input still converges and inference reproduces the exact
-    /// value space the model was trained in (the loss-reduction and Clone/determinism invariants
-    /// hold). Callers that have a real mask supply it directly through
-    /// <see cref="Inpaint(Tensor{T}, Tensor{T})"/>.
+    /// Builds a fresh, RANDOM single-channel hole mask <c>[n, 1, h, w]</c> for one training step — a
+    /// randomly sized and positioned rectangular hole (1 = hole, 0 = keep) re-drawn on every call. This
+    /// is the PyTorch video-inpainting training recipe (STTN / FuseFormer / E2FGVI / ProPainter train
+    /// on random per-sample synthetic masks): because the mask varies every step the model cannot treat
+    /// it as a constant shortcut and zero out its frame-channel weights, so training keeps using the
+    /// frame content (the encoder's mask-channel weights are exercised with real gradient, and the model
+    /// stays input-sensitive). Reproducible under a seeded architecture (see <see cref="TrainingMaskRng"/>).
+    /// Inference uses the deterministic <see cref="CreateDefaultInpaintingMask"/> instead.
+    /// </summary>
+    /// <param name="n">Batch / frame count.</param>
+    /// <param name="h">Frame height.</param>
+    /// <param name="w">Frame width.</param>
+    protected Tensor<T> CreateTrainingMask(int n, int h, int w)
+    {
+        var mask = new Tensor<T>([n, 1, h, w]);
+        double ratio = MaxMaskRatio;
+        if (ratio < 0.0) ratio = 0.0;
+        if (ratio > 1.0) ratio = 1.0;
+        double maxSide = Math.Sqrt(ratio);
+        var rng = TrainingMaskRng;
+        var span = mask.Data.Span;
+        var one = NumOps.One;
+        int plane = h * w;
+        for (int b = 0; b < n; b++)
+        {
+            // Random box: 50-100% of the max side, at a random position — varies every training step.
+            double side = maxSide * (0.5 + 0.5 * rng.NextDouble());
+            int holeH = Math.Max(1, (int)(h * side));
+            int holeW = Math.Max(1, (int)(w * side));
+            if (holeH > h) holeH = h;
+            if (holeW > w) holeW = w;
+            int top = h > holeH ? rng.Next(h - holeH + 1) : 0;
+            int left = w > holeW ? rng.Next(w - holeW + 1) : 0;
+            int baseOffset = b * plane;
+            for (int y = top; y < top + holeH; y++)
+            {
+                int rowOffset = baseOffset + y * w;
+                for (int x = left; x < left + holeW; x++)
+                    span[rowOffset + x] = one;
+            }
+        }
+        return mask;
+    }
+
+    /// <summary>
+    /// Builds the deterministic single-channel hole mask <c>[n, 1, h, w]</c> used by the generic
+    /// inference path (<see cref="PredictCore"/>) when no explicit mask is supplied: a centred
+    /// rectangular hole covering roughly <see cref="MaxMaskRatio"/> of the frame area (1 = hole to fill,
+    /// 0 = keep). It is deterministic (no per-call RNG) so inference is reproducible for the
+    /// Clone/determinism invariants. Training uses the RANDOM <see cref="CreateTrainingMask"/> instead;
+    /// callers that have a real mask supply it directly through <see cref="Inpaint(Tensor{T}, Tensor{T})"/>.
     /// </summary>
     /// <param name="n">Batch / frame count.</param>
     /// <param name="h">Frame height.</param>

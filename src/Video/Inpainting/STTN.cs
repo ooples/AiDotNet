@@ -158,10 +158,11 @@ public class STTN<T> : VideoInpaintingBase<T>
         // different value space, so the two paths would diverge. Delegate the actual layer walk
         // (autodiff tape, gradient checkpointing, seed-wiring) to the base by handing it the
         // mask-concatenated tensor; normalize/denormalize are Engine ops so gradients still flow.
-        // Use the shared default hole mask (the same one inference's PredictCore feeds) so the mask
-        // channel carries a real, structured signal during training instead of the all-zero mask that
-        // left it dead and reduced training to plain identity reconstruction.
-        var mask = CreateDefaultInpaintingMask(input.Shape[0], input.Shape[2], input.Shape[3]);
+        // Use a fresh RANDOM per-step hole mask (PyTorch video-inpainting recipe). A mask that varies
+        // every step exercises the encoder's mask-channel weights without becoming a constant the model
+        // can exploit as a shortcut — so training keeps using the frame content and stays input-sensitive.
+        // Inference's PredictCore uses the deterministic CreateDefaultInpaintingMask.
+        var mask = CreateTrainingMask(input.Shape[0], input.Shape[2], input.Shape[3]);
         var combined = ConcatFramesAndMasks(PreprocessFrames(input), mask);
         return PostprocessOutput(base.ForwardForTraining(combined));
     }
