@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # Skip draft PRs
-    if: github.event.pull_request.draft != true
+    if: ${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') }}
     permissions:
       contents: read
       security-events: write

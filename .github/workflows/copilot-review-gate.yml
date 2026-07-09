@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   gate:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - name: Check unresolved Copilot review threads
