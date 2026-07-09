@@ -285,6 +285,51 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         return mask;
     }
 
+    // Frame-normalization scale last chosen by NormalizeInpaintFrames, so DenormalizeInpaintFrames
+    // inverts the SAME mapping within a single forward. Defaults to 255 for a denormalize with no prior
+    // normalize. Only ever set/read on the sequential normalize -> forward -> denormalize path.
+    private double _frameNormalizationScale = 255.0;
+
+    /// <summary>
+    /// Scale-adaptive frame normalization for these mask-conditioned models. Divides [0, 255] pixel
+    /// frames by 255, but passes frames that are already in [0, 1] through unchanged — so the frame
+    /// signal stays on the same scale as the concatenated single-channel 0/1 mask. Dividing an already
+    /// normalized frame by 255 drives it to ~0.004, which the 0/1 mask channel (~1.0) then numerically
+    /// swamps through the network, collapsing the model to input-independent output. Records the applied
+    /// scale so <see cref="DenormalizeInpaintFrames"/> applies the exact inverse.
+    /// </summary>
+    protected Tensor<T> NormalizeInpaintFrames(Tensor<T> frames)
+    {
+        _frameNormalizationScale = InferFrameScale(frames);
+        return _frameNormalizationScale == 1.0
+            ? frames
+            : Engine.TensorDivideScalar(frames, NumOps.FromDouble(_frameNormalizationScale));
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="NormalizeInpaintFrames"/>: rescales the model output by the scale the
+    /// matching normalize used and clamps to that scale's valid pixel range ([0, 1] or [0, 255]).
+    /// </summary>
+    protected Tensor<T> DenormalizeInpaintFrames(Tensor<T> frames)
+    {
+        double scale = _frameNormalizationScale;
+        var restored = scale == 1.0
+            ? frames
+            : Engine.TensorMultiplyScalar(frames, NumOps.FromDouble(scale));
+        return Engine.TensorClamp(restored, NumOps.Zero, NumOps.FromDouble(scale));
+    }
+
+    // Picks the normalization scale from the data: any value clearly above [0, 1] means the frames are
+    // in [0, 255] pixel space (scale 255); otherwise they are already normalized (scale 1, no-op). Only
+    // selects a scalar — the actual divide/multiply stays a differentiable Engine op.
+    private double InferFrameScale(Tensor<T> frames)
+    {
+        var span = frames.Data.Span;
+        for (int i = 0; i < span.Length; i++)
+            if (NumOps.ToDouble(span[i]) > 1.5) return 255.0;
+        return 1.0;
+    }
+
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
