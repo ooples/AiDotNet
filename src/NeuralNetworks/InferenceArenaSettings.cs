@@ -35,6 +35,29 @@ public static class InferenceArenaSettings
             StringComparison.Ordinal);
 
     /// <summary>
+    /// Whether the eager inference forward Resets the per-call <c>TensorArena</c> BETWEEN layers
+    /// so a single forward reuses one block's scratch for every layer — making the forward's peak
+    /// memory ~O(one block) instead of O(depth · per-block churn) (#1824). Default <c>ON</c>; the
+    /// output is bit-identical either way (each boundary is detached to GC before the Reset).
+    /// Requires <see cref="Enabled"/>. Set <c>AIDOTNET_INFERENCE_ARENA_RECYCLE=0</c> to disable
+    /// (escape hatch / A-B allocation measurement).
+    /// </summary>
+    /// <remarks>
+    /// This is what bounds the encoder eager forward that dominates large-vocab / LAMBADA-style
+    /// evaluation: before it, the arena never Reset mid-forward, so every <c>TransformerEncoderBlock</c>'s
+    /// ~O(batch·(seq·dim + heads·seq²)) intermediates accumulated live for the whole pass (~817 MB
+    /// at eval batch, unchanged whether the arena was on or off — the arena only recycled ACROSS
+    /// calls). With recycling on, the existing chunked <see cref="NeuralNetworkBase{T}.PredictInBatches(Tensor{T}, int)"/>
+    /// and the streaming overload are both memory-bounded by construction: each chunk's forward
+    /// peaks at one block, independent of depth.
+    /// </remarks>
+    public static bool RecycleLayerScratch { get; set; } =
+        !string.Equals(
+            Environment.GetEnvironmentVariable("AIDOTNET_INFERENCE_ARENA_RECYCLE"),
+            "0",
+            StringComparison.Ordinal);
+
+    /// <summary>
     /// Whether the multi-step diffusion denoise loop (<c>DiffusionModelBase.Generate</c>) opens a
     /// per-step <c>TensorArena</c> (recycling each step's noise-predictor + scheduler intermediates
     /// instead of GC-churning them). Default <c>ON</c>; set

@@ -212,11 +212,17 @@
          Bumped 0.110.0 -> 0.111.0: brings AiDotNet.Tensors #739 —
          DirectGpuTensorEngine.InvalidateResidentWeightBuffer, which this PR calls after every in-place
          optimizer update to force a weight re-upload on the resident-GPU path (fixes stale-weight GPU
-         transformer training). 0.111.0 is PUBLISHED to NuGet and is a superset of 0.110.x. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.111.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.111.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.111.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.111.0" />
+         transformer training). 0.111.0 is PUBLISHED to NuGet and is a superset of 0.110.x.
+
+         Bumped 0.111.0 -> 0.111.1: brings AiDotNet.Tensors #753 (AiDotNet#1824) —
+         TensorArena.DetachBoundaryAndReset, the per-layer scratch-recycling primitive this PR's
+         memory-bounded transformer forward uses: it carries the layer boundary out of the recyclable
+         scratch region, then resets the pool so the next layer reuses it (peak ~= O(one layer)).
+         0.111.1 is PUBLISHED to NuGet and is a superset of 0.111.0. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.111.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.111.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.111.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.111.1" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
