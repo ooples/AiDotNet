@@ -2422,6 +2422,27 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // This is required for InitializeRandomSolution to access model.ParameterCount
             finalOptimizer.SetModel(model);
 
+            // #1833: propagate the configured optimizer's hyperparameters into models with
+            // SPECIALIZED internal update paths (e.g. GaussianSplatting's per-attribute LR
+            // schedule for position/scale/opacity/spherical-harmonics; DDPM's noise-prediction
+            // schedule). Without this hook, those models silently ignore every
+            // AdamOptimizerOptions knob except MaxIterations — the facade's Adam step runs
+            // but finds no chunks to update because it walks the standard Layers path that
+            // specialized models bypass, and the model's own internal update uses whatever
+            // defaults its constructor was built with. See #1833 for the full diagnostic.
+            //
+            // Runs immediately after SetModel and before any Optimize call so per-attribute
+            // LR schedules etc. are in place for the FIRST gradient step. Hook is a no-op
+            // for models that don't implement IHyperparameterAware — every neural-network
+            // model that fits the standard Layers walk (NeRF, InstantNGP, Transformer) picks
+            // up hyperparameters via the normal Adam.Step path and doesn't need this route.
+            var configuredOptimizerOptions = finalOptimizer.GetOptions();
+            if (configuredOptimizerOptions is not null
+                && model is IHyperparameterAware<T, TInput, TOutput> hyperparameterAwareModel)
+            {
+                hyperparameterAwareModel.ApplyOptimizerHyperparameters(configuredOptimizerOptions);
+            }
+
             if (_trainingGroups is not null
                 && model is NeuralNetworks.NeuralNetworkBase<T> groupedNet
                 && XTrain is Tensor<T> groupedX && yTrain is Tensor<T> groupedY)

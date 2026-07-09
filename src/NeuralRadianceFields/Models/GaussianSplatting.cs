@@ -189,7 +189,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("3D Gaussian Splatting for Real-Time Radiance Field Rendering", "https://doi.org/10.1145/3592433", Year = 2023, Authors = "Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, George Drettakis")]
-public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
+public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>, IHyperparameterAware<T, Tensor<T>, Tensor<T>>
 {
     private readonly GaussianSplattingOptions _options;
 
@@ -1792,6 +1792,69 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         }
 
         return new Tensor<T>(output, [numPoints, 4]);
+    }
+
+    /// <summary>
+    /// Consume the configured facade optimizer's hyperparameters into GS's per-attribute
+    /// learning-rate schedule (#1833). Called once by <c>AiModelBuilder.BuildAsync</c>
+    /// immediately after <c>SetModel</c> and before the first <c>Optimize</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The 3D Gaussian Splatting paper (Kerbl et al. 2023) uses per-attribute learning rates —
+    /// position ≈ base, color ≈ 15×, opacity ≈ 300×, scale ≈ 30×, rotation ≈ 6× — because
+    /// scale, opacity, and color live on very different manifolds than position and a
+    /// single LR either explodes fast attributes or under-trains slow ones. Reference
+    /// implementations require the caller to construct parameter groups by hand
+    /// (<c>Adam([{params: pos, lr: 1.6e-4}, {params: opacity, lr: 5e-2}, ...])</c>). Here,
+    /// the caller passes ONE base LR via <c>ConfigureOptimizer</c> and this method derives
+    /// the per-attribute schedule automatically, anchored on the paper's canonical base of
+    /// 1.6e-4. If the caller wants exact per-attribute control they can still construct
+    /// <c>GaussianSplattingOptions</c> directly (bypasses this scaling).
+    /// </para>
+    /// <para>
+    /// If <c>options.InitialLearningRate</c> is at the base class default (0.01) the caller
+    /// almost certainly didn't set it explicitly — in that case we leave GS's existing
+    /// per-attribute defaults untouched. Any value the caller set explicitly (including 0.01
+    /// if that's genuinely what they want) triggers full re-derivation.
+    /// </para>
+    /// </remarks>
+    public void ApplyOptimizerHyperparameters(OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>> options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        // Paper anchor: base LR = 1.6e-4 → per-attribute ratios below. Ratios are the
+        // published Kerbl et al. 2023 defaults expressed relative to the position LR.
+        const double PaperBasePositionLR = 1.6e-4;
+        const double ColorRatio = 15.625;     // 2.5e-3 / 1.6e-4
+        const double OpacityRatio = 312.5;    // 5.0e-2 / 1.6e-4
+        const double ScaleRatio = 31.25;      // 5.0e-3 / 1.6e-4
+        const double RotationRatio = 6.25;    // 1.0e-3 / 1.6e-4
+
+        // OptimizationAlgorithmOptions.InitialLearningRate defaults to 0.01 (a value tuned
+        // for MLPs, NOT for GS — 62× the paper's position LR of 1.6e-4). Treat that exact
+        // default as "caller didn't touch it" and leave GS's constructor-set schedule
+        // (from GaussianSplattingOptions) intact — the caller's Build() call should use
+        // paper-quality defaults, not destabilize with an MLP-shaped LR. Any other value
+        // (including 0.01 if the caller genuinely wants it) triggers full re-derivation.
+        const double OptimizerBaseClassDefaultLR = 0.01;
+        double callerLR = options.InitialLearningRate;
+        if (callerLR == OptimizerBaseClassDefaultLR)
+        {
+            return;
+        }
+
+        // Scale factor so ratios stay stable regardless of the caller's chosen base.
+        double scale = callerLR / PaperBasePositionLR;
+
+        PositionLearningRate = callerLR;
+        ColorLearningRate    = PaperBasePositionLR * ColorRatio    * scale;
+        OpacityLearningRate  = PaperBasePositionLR * OpacityRatio  * scale;
+        ScaleLearningRate    = PaperBasePositionLR * ScaleRatio    * scale;
+        RotationLearningRate = PaperBasePositionLR * RotationRatio * scale;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
