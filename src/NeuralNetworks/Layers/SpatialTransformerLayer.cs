@@ -469,12 +469,16 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _inputHeight = input.Shape[rank - 2];
         _inputWidth = input.Shape[rank - 1];
 
-        _localizationWeights1 = AllocateLazyWeight([_inputHeight * _inputWidth, 32]);
-        InitializeParameters();
-        RegisterTrainableParameter(_localizationWeights1, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_localizationBias1, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_localizationWeights2, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_localizationBias2, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_localizationWeights1, _inputHeight * _inputWidth, 32))
+        {
+            _localizationWeights1 = AllocateLazyWeight([_inputHeight * _inputWidth, 32]);
+            InitializeParameters();
+            RegisterTrainableParameter(_localizationWeights1, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_localizationBias1, PersistentTensorRole.Biases);
+            RegisterTrainableParameter(_localizationWeights2, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_localizationBias2, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { _inputHeight, _inputWidth }, new[] { _outputHeight, _outputWidth });
     }
