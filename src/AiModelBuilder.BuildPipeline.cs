@@ -2144,7 +2144,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ? _model.DeepCopy()
             : null;
 
-        OptimizationResult<T, TInput, TOutput> optimizationResult;
+        OptimizationResult<T, TInput, TOutput> optimizationResult = null!;
         FederatedLearningMetadata? federatedLearningMetadata = null;
 #pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
         var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
@@ -2458,9 +2458,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 int raysPerBatch = configuredOptimizerOptions is AdamOptimizerOptions<T, TInput, TOutput> adamOpts && adamOpts.BatchSize > 0
                     ? adamOpts.BatchSize
                     : 1024;
+                // OptimizerOptions type-alignment: IImageTrainable wants
+                // OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>. The builder is generic
+                // over TInput/TOutput which for image-space training is expected to be
+                // Tensor<T>/Tensor<T> at the call site — cast conditionally, pass null on
+                // mismatch (model uses its constructor defaults). No lossy fallback here.
+                var imageOptimizerOptions = configuredOptimizerOptions as AiDotNet.Models.Options.OptimizationAlgorithmOptions<
+                    T,
+                    AiDotNet.Tensors.LinearAlgebra.Tensor<T>,
+                    AiDotNet.Tensors.LinearAlgebra.Tensor<T>>;
                 for (int epoch = 0; epoch < imageEpochs; epoch++)
                 {
-                    imageTrainable.TrainOnImageBatch(typedImageLoader, raysPerBatch, configuredOptimizerOptions);
+                    imageTrainable.TrainOnImageBatch(typedImageLoader, raysPerBatch, imageOptimizerOptions);
                 }
 
                 // #1835 excellence goal #3: post-training compression pass when the caller
@@ -2470,7 +2479,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 // cloud flows through to AiModelResult.Model without a separate post-processing
                 // script.
                 if (model is NeuralRadianceFields.Models.GaussianSplatting<T> gsForCompress
-                    && gsForCompress.GetOptions() is Models.Options.GaussianSplattingOptions gsOpts
+                    && gsForCompress.GetOptions() is AiDotNet.Models.Options.GaussianSplattingOptions gsOpts
                     && gsOpts.CompressOnBuildComplete)
                 {
                     gsForCompress.RunCompressionPass();

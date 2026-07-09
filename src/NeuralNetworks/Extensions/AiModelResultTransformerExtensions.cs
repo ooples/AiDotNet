@@ -94,7 +94,7 @@ public static class AiModelResultTransformerExtensions
         var rng = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
-        var numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
 
         for (int step = 0; step < maxNewTokens; step++)
         {

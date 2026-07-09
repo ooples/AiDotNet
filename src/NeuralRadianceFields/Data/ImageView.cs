@@ -39,11 +39,12 @@ public sealed class ImageView<T>
     public Matrix<T> CameraRotation { get; init; }
 
     /// <summary>
-    /// Focal length in pixels. Nullable — null asks the loader to auto-detect from EXIF or
-    /// fall back to a size-based default (<c>max(H, W) * 0.7</c> is a paper-standard fallback
-    /// used by nerfstudio).
+    /// Focal length in pixels. A value that equals <c>NumOps.Zero</c> is treated as
+    /// "unset" — the loader falls back to EXIF-derived or size-based auto-detect. Not
+    /// using <c>T?</c> because T is unconstrained (may be reference-nullable or value-
+    /// nullable) and mixing produces ambiguous overload resolution at call sites.
     /// </summary>
-    public T? FocalLength { get; init; }
+    public T FocalLength { get; init; } = default!;
 
     /// <summary>
     /// Optional EXIF metadata bundle (35mm-equivalent focal length in mm + sensor width). When
@@ -65,7 +66,7 @@ public sealed class ImageView<T>
         Tensor<T> photo,
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,
-        T? focalLength = default,
+        T focalLength = default!,
         ExifIntrinsics? exif = null,
         LearnedPrior<T>? prior = null)
     {
@@ -112,13 +113,10 @@ public sealed class ImageView<T>
     /// </summary>
     public double ResolveFocalLengthInPixels()
     {
-        if (FocalLength is not null)
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        if (FocalLength is not null && !numOps.Equals(FocalLength, numOps.Zero))
         {
-            var numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
-            if (!numOps.Equals(FocalLength!, numOps.Zero))
-            {
-                return numOps.ToDouble(FocalLength!);
-            }
+            return numOps.ToDouble(FocalLength);
         }
         if (Exif is not null)
         {

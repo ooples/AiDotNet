@@ -1636,7 +1636,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
     public T TrainOnImageBatch(
         AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
         int raysPerBatch,
-        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
+        AiDotNet.Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
         NeuralRadianceFields.Data.ImageTrainingOptions? imageTrainingOptions = null)
     {
         var pixels = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
@@ -1656,7 +1656,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
         SetTrainingMode(true);
         try
         {
-            using var tape = new Autodiff.GradientTape<T>();
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
             var rendered = RenderRays(
                 pixels.RayOrigins,
                 pixels.RayDirections,

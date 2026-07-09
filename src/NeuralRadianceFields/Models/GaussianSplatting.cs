@@ -1886,7 +1886,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
     public T TrainOnImageBatch(
         AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
         int raysPerBatch,
-        Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
+        AiDotNet.Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
         NeuralRadianceFields.Data.ImageTrainingOptions? imageTrainingOptions = null)
     {
         if (loader is null) throw new ArgumentNullException(nameof(loader));
@@ -1920,9 +1920,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         var loss = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricMSE(Engine, rendered, pixels.TargetColors);
 
         // Build the [1, 13] camera-mode input GS.Train recognizes: pos[3] + rot[9] + focal[1].
-        double focalPx = view.FocalLength is not null && !NumOps.Equals(view.FocalLength!, NumOps.Zero)
-            ? NumOps.ToDouble(view.FocalLength!)
-            : Math.Max(view.Height, view.Width) * 0.7;
+        double focalPx = view.ResolveFocalLengthInPixels();
 
         var cameraInputData = new T[13];
         cameraInputData[0] = view.CameraPosition[0];
@@ -2065,7 +2063,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
     /// </summary>
     public void RunCompressionPass()
     {
-        var opts = _options.CompressionOptions ?? new Models.Options.GaussianCompressionOptions();
+        var opts = _options.CompressionOptions ?? new AiDotNet.Models.Options.GaussianCompressionOptions();
 
         if (opts.PruneLowOpacity)
         {
@@ -3316,7 +3314,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             // step to converge). Reference impls apply the multipliers as persistent per-
             // Gaussian LR state; folding into the initial perturbation is a stateless
             // approximation that reaches the same steady state after a few iterations.
-            var childScales = _options.SplitChildLearningRateScales ?? new Models.Options.SplitChildLearningRateScales();
+            var childScales = _options.SplitChildLearningRateScales ?? new AiDotNet.Models.Options.SplitChildLearningRateScales();
 
             double jitter = SplitPositionJitter * childScales.Position;
             if (gx == 0.0 && gy == 0.0 && gz == 0.0)

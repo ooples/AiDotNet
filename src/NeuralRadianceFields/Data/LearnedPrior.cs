@@ -62,7 +62,7 @@ public sealed class IsotropicPrior<T> : LearnedPrior<T>
         int width)
     {
         // Compute mean RGB across the anchor and broadcast to every pixel.
-        var numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         int aH = _anchorPhoto.Shape[0];
         int aW = _anchorPhoto.Shape[1];
         T rSum = numOps.Zero, gSum = numOps.Zero, bSum = numOps.Zero;

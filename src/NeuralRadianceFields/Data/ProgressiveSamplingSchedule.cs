@@ -10,7 +10,7 @@ namespace AiDotNet.NeuralRadianceFields.Data;
 /// <see cref="ProgressiveSamplingSchedule"/> and hand it to the image-space training call — the
 /// facade selects the coarse count while density is still forming, then ramps to the fine count.
 /// </summary>
-public sealed class ProgressiveSamplingSchedule
+public class ProgressiveSamplingSchedule
 {
     /// <summary>Sample count in the coarse phase (early iterations). Paper default: 64.</summary>
     public int CoarseSamples { get; init; } = 64;

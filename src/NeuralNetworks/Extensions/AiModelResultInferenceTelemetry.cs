@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Extensions.Telemetry;
 

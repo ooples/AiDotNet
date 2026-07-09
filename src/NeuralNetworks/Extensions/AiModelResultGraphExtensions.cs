@@ -87,7 +87,7 @@ public static class AiModelResultGraphExtensions
         }
 
         // Dot product of the two nodes' representations as the link score.
-        var numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         T score = numOps.Zero;
         for (int d = 0; d < dim; d++)
         {

@@ -55,6 +55,17 @@ public static class ImageTrainingDataLoaders
         public bool   IsLoaded    { get; private set; }
         public int    Count       => _views.Length;
 
+        // ICountable — image-space iteration is per-batch of rays (raysPerBatch), not per-
+        // view, so the "sample" unit is the ray. We advertise TotalCount = view count for
+        // caller-side progress bars (which typically want epochs measured in view counts).
+        // Batch tracking is best-effort — image loaders emit exactly one batch per call.
+        public int TotalCount => _views.Length;
+        public int CurrentIndex => _iterations;
+        public int BatchCount => 1;
+        public int CurrentBatchIndex => 0;
+        public double Progress => TotalCount > 0 ? Math.Min(1.0, (double)_iterations / TotalCount) : 1.0;
+        private int _iterations;
+
         public Task LoadAsync(CancellationToken cancellationToken = default)
         {
             IsLoaded = true;
@@ -89,6 +100,7 @@ public static class ImageTrainingDataLoaders
             // high-res photos of rays if pixel counts differ. Here we sample view weights
             // proportional to their pixel counts, so a 4K photo gets ~16x the rays of a
             // 1K photo per epoch. Callers drop in raw photos of any resolution.
+            _iterations++;
             var view = SampleViewProportional();
             var (origins, dirs, colors) = SampleRays(view, batchSize, _rng);
             yield return (view, new PixelBatch<T>(origins, dirs, colors));
@@ -117,7 +129,7 @@ public static class ImageTrainingDataLoaders
         private static (Tensor<T> origins, Tensor<T> dirs, Tensor<T> colors) SampleRays(
             ImageView<T> view, int rayCount, Random rng)
         {
-            var numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+            var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             int H = view.Height;
             int W = view.Width;
 

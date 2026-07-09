@@ -26,17 +26,13 @@ public class ImageTrainingPathTests
             var photo = new float[H * W * 3];
             for (int i = 0; i < photo.Length; i++) photo[i] = 0.5f;
             var pose = new float[] { 0f, 0f, v * -1f };
-            var rot = new float[]
-            {
-                1f, 0f, 0f,
-                0f, 1f, 0f,
-                0f, 0f, 1f,
-            };
+            var rot = new Matrix<float>(3, 3);
+            rot[0, 0] = 1f; rot[1, 1] = 1f; rot[2, 2] = 1f;
             views[v] = new ImageView<float>(
                 new Tensor<float>(new[] { H, W, 3 }, new Vector<float>(photo)),
                 new Vector<float>(pose),
-                new Matrix<float>(3, 3, new Vector<float>(rot)),
-                focalLength: null);
+                rot,
+                focalLength: 0f);
         }
         return views;
     }
@@ -46,7 +42,7 @@ public class ImageTrainingPathTests
     {
         var loader = ImageTrainingDataLoaders.FromViews(BuildViews(), seed: 42);
         Assert.True(loader.IsLoaded);
-        Assert.Equal(2, loader.Count);
+        Assert.Equal(2, loader.TotalCount);
 
         var enumerator = loader.IterateBatches(batchSize: 8).GetEnumerator();
         Assert.True(enumerator.MoveNext());

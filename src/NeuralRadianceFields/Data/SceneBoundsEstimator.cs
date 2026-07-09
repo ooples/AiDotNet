@@ -25,7 +25,7 @@ public static class SceneBoundsEstimator
     {
         if (views is null) throw new ArgumentNullException(nameof(views));
 
-        var numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var viewList = new List<ImageView<T>>();
         foreach (var v in views) viewList.Add(v);
         if (viewList.Count == 0)
