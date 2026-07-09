@@ -1291,20 +1291,33 @@ public static class DeserializationHelper
             // [B,C,H,W] post-batch.
             if (instance is NeuralNetworks.Layers.DeformableConvolutionalLayer<T> dcn && inputShape != null && inputShape.Length >= 3)
             {
-                int inC, inH, inW;
+                int savedInC, savedInH, savedInW;
                 if (inputShape.Length == 4)
                 {
-                    inC = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inH = inputShape[2] > 0 ? inputShape[2] : 1;
-                    inW = inputShape[3] > 0 ? inputShape[3] : 1;
+                    savedInC = inputShape[1];
+                    savedInH = inputShape[2];
+                    savedInW = inputShape[3];
                 }
                 else
                 {
-                    inC = inputShape[0] > 0 ? inputShape[0] : 1;
-                    inH = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inW = inputShape[2] > 0 ? inputShape[2] : 1;
+                    savedInC = inputShape[0];
+                    savedInH = inputShape[1];
+                    savedInW = inputShape[2];
                 }
-                dcn.ResolveShapesOnly(new[] { inC, inH, inW });
+
+                // Only pre-resolve when the saved input-channel count is concrete. Mirror the
+                // sibling ConvolutionalLayer branch: falling back to inC=1 here would mark the
+                // layer resolved with the wrong channel count, so SetParameters bypasses its
+                // pending-parameter auto-resolve path and writes into 0-length/mis-sized weights.
+                // When channels are unresolved (layer serialized before its first Forward, saved
+                // as <= 0), leave the layer lazy so SetParameters / the first real Forward size it.
+                if (savedInC > 0)
+                {
+                    int spatialFallback = Math.Max(1, kernelSize);
+                    int inH = savedInH > 0 ? savedInH : spatialFallback;
+                    int inW = savedInW > 0 ? savedInW : spatialFallback;
+                    dcn.ResolveShapesOnly(new[] { savedInC, inH, inW });
+                }
             }
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.DeconvolutionalLayer<>))
