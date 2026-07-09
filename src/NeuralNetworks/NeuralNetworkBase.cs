@@ -10351,21 +10351,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
-            // A COW-shared lazy layer must be RESOLVED here so the shared (trained) tensors survive.
-            // Some layers (Conv1DLayer, MultiHeadAttentionLayer, ...) allocate/resolve their weights in
-            // Forward, NOT in ResolveFromShape — so the destination is still unresolved at this point.
-            // SetTrainableParameters below WOULD install the shared trained tensors, but the clone's
-            // first forward re-runs that lazy allocation and overwrites them with fresh RANDOM weights,
-            // silently dropping the training (Clone_AfterTraining #1221 for fused-trained conv/attention
-            // stacks). When we cannot resolve a parameter-bearing lazy destination, bail to the eager
-            // full-copy path, which round-trips via GetParameters/SetParameters into a clone that is
-            // itself forward-resolved (so nothing re-initializes over the copied weights).
-            if (dst is LayerBase<T> dstLazyGuard && !dstLazyGuard.IsShapeResolved && src.ParameterCount > 0)
-            {
-                (copy as IDisposable)?.Dispose();
-                return false;
-            }
-
             // Share trainable tensors copy-on-write (privatizes on the first in-place write to either side).
             var sp = src.GetTrainableParameters();
             var dp = dst.GetTrainableParameters();
