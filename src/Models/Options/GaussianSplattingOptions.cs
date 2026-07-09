@@ -74,6 +74,38 @@ public class GaussianSplattingOptions : ModelOptions
     /// </summary>
     public int? GradientAccumulationWindow { get; set; }
 
+    /// <summary>
+    /// Excellence goal #2 — swappable densification schedule strategy. When null, the model
+    /// uses <see cref="AiDotNet.NeuralRadianceFields.Data.FixedIntervalDensificationSchedule"/>
+    /// with <see cref="DensificationInterval"/> as the period — identical to reference-impl
+    /// behavior. Set to an <see cref="AiDotNet.NeuralRadianceFields.Data.AdaptiveDensificationSchedule"/>
+    /// (or a caller-authored implementation) to fire based on loss / gradient signals.
+    /// </summary>
+    public AiDotNet.NeuralRadianceFields.Data.IDensificationSchedule? DensificationSchedule { get; set; }
+
+    /// <summary>
+    /// Excellence goal #3 — run a compression pass at the end of training that prunes low-
+    /// opacity Gaussians, merges nearby overlapping ellipses, and quantizes spherical
+    /// harmonics coefficients. Reference impls make callers run this as a post-processing
+    /// script; setting this to true makes it a first-class Build outcome. Default false so
+    /// industry-standard behavior is preserved for callers who want raw uncompressed output.
+    /// </summary>
+    public bool CompressOnBuildComplete { get; set; }
+
+    /// <summary>
+    /// Per-technique on/off + tuning for the post-training compression pass (only consulted
+    /// when <see cref="CompressOnBuildComplete"/> is true). Null uses defaults.
+    /// </summary>
+    public GaussianCompressionOptions? CompressionOptions { get; set; }
+
+    /// <summary>
+    /// Excellence goal #4 — per-attribute LR multipliers applied to a Gaussian's children
+    /// immediately after it splits. Reference impls encode these paper-standard defaults
+    /// hardcoded inside their split routines; here they're first-class options callers can
+    /// override. Null uses the paper defaults (position: 0.7, scale: 1.5, others: 1.0).
+    /// </summary>
+    public SplitChildLearningRateScales? SplitChildLearningRateScales { get; set; }
+
     public int TileSize { get; set; } = 16;
     public bool EnableSpatialIndex { get; set; } = true;
     public int SpatialIndexRadius { get; set; } = 1;

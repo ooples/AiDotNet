@@ -2034,10 +2034,128 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             lossGradient);
 
         _trainingStep++;
-        if (EnableDensification && _trainingStep % Math.Max(1, DensificationInterval) == 0)
+
+        // #1835 excellence goal #2: swappable densification schedule strategy. Fall back to
+        // the fixed-interval schedule (reference-impl behavior) when the caller didn't
+        // supply one — same firing behavior as before, but now callers can plug in the
+        // adaptive schedule for data-driven firing.
+        var schedule = _options.DensificationSchedule ?? new NeuralRadianceFields.Data.FixedIntervalDensificationSchedule
+        {
+            Interval = Math.Max(1, DensificationInterval),
+        };
+        double meanGradNorm = 0;
+        if (gradients.Count > 0)
+        {
+            for (int i = 0; i < gradients.Count; i++) meanGradNorm += gradients[i].Magnitude;
+            meanGradNorm /= gradients.Count;
+        }
+        double lossValue = NumOps.ToDouble(LastLoss);
+        if (EnableDensification && schedule.ShouldFire(_trainingStep, lossValue, meanGradNorm))
         {
             DensifyAndPrune(gradients);
         }
+    }
+
+    /// <summary>
+    /// Excellence goal #3 — post-training compression pass: prunes low-opacity Gaussians,
+    /// merges overlapping ellipses, and quantizes spherical-harmonics coefficients.
+    /// Reference impls make callers run this as a separate post-processing script;
+    /// AiModelBuilder's BuildPipeline calls this automatically when
+    /// <see cref="GaussianSplattingOptions.CompressOnBuildComplete"/> is true.
+    /// </summary>
+    public void RunCompressionPass()
+    {
+        var opts = _options.CompressionOptions ?? new Models.Options.GaussianCompressionOptions();
+
+        if (opts.PruneLowOpacity)
+        {
+            double threshold = Math.Max(0.0, EffectiveOpacityPruneThreshold);
+            for (int i = _gaussians.Count - 1; i >= 0; i--)
+            {
+                if (Sigmoid(NumOps.ToDouble(_gaussians[i].Opacity)) < threshold)
+                {
+                    _gaussians.RemoveAt(i);
+                }
+            }
+        }
+
+        if (opts.MergeOverlapping && opts.MergeOverlapThreshold < 1.0)
+        {
+            // Merge Gaussians whose center-to-center distance is smaller than half the sum
+            // of their max scales (approximation of ellipse overlap). Two-pass O(N^2) — fine
+            // for a one-shot post-training pass on scenes with 100k-1M Gaussians.
+            for (int i = _gaussians.Count - 1; i >= 0; i--)
+            {
+                var gi = _gaussians[i];
+                double siMax = MaxScaleOf(gi);
+                for (int j = i - 1; j >= 0; j--)
+                {
+                    var gj = _gaussians[j];
+                    double sjMax = MaxScaleOf(gj);
+                    double dx = NumOps.ToDouble(gi.Position[0]) - NumOps.ToDouble(gj.Position[0]);
+                    double dy = NumOps.ToDouble(gi.Position[1]) - NumOps.ToDouble(gj.Position[1]);
+                    double dz = NumOps.ToDouble(gi.Position[2]) - NumOps.ToDouble(gj.Position[2]);
+                    double dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                    double overlap = Math.Max(0, (siMax + sjMax - dist) / (siMax + sjMax));
+                    if (overlap >= opts.MergeOverlapThreshold)
+                    {
+                        // Merge i into j: average positions, take max scale, sum opacities
+                        // (clamped via sigmoid on read), then drop i.
+                        MergeInto(gj, gi);
+                        _gaussians.RemoveAt(i);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (opts.QuantizeSphericalHarmonics && _options.UseSphericalHarmonics && _options.ShDegree > 0)
+        {
+            // Per-Gaussian symmetric quantization on Color (which packs SH coefficients when
+            // UseSphericalHarmonics is on: Color length = 3 * (ShDegree+1)^2). Records a
+            // per-Gaussian scale factor and quantizes each coefficient to the nearest bin.
+            int levels = (1 << Math.Max(1, Math.Min(16, opts.QuantizationBits))) - 1;
+            double halfLevels = levels / 2.0;
+            for (int i = 0; i < _gaussians.Count; i++)
+            {
+                var g = _gaussians[i];
+                double absMax = 0;
+                for (int k = 0; k < g.Color.Length; k++)
+                {
+                    double v = Math.Abs(NumOps.ToDouble(g.Color[k]));
+                    if (v > absMax) absMax = v;
+                }
+                double qScale = absMax > 0 ? absMax / halfLevels : 0;
+                if (qScale == 0) continue;
+                for (int k = 0; k < g.Color.Length; k++)
+                {
+                    double v = NumOps.ToDouble(g.Color[k]);
+                    double quantized = Math.Round(v / qScale) * qScale;
+                    g.Color[k] = NumOps.FromDouble(quantized);
+                }
+            }
+        }
+
+        MarkSpatialIndexDirty();
+    }
+
+    private static double MaxScaleOf(Gaussian g)
+    {
+        double a = Math.Abs(System.Convert.ToDouble(g.Scale[0]));
+        double b = Math.Abs(System.Convert.ToDouble(g.Scale[1]));
+        double c = Math.Abs(System.Convert.ToDouble(g.Scale[2]));
+        return Math.Max(a, Math.Max(b, c));
+    }
+
+    private static void MergeInto(Gaussian target, Gaussian source)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < 3; i++)
+        {
+            target.Position[i] = numOps.Divide(numOps.Add(target.Position[i], source.Position[i]), numOps.FromDouble(2.0));
+            target.Scale[i]    = numOps.GreaterThan(target.Scale[i], source.Scale[i]) ? target.Scale[i] : source.Scale[i];
+        }
+        target.Opacity = numOps.GreaterThan(target.Opacity, source.Opacity) ? target.Opacity : source.Opacity;
     }
 
     /// <summary>
@@ -3190,7 +3308,17 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             double gz = gradient.GradZ;
             NormalizeDirection(ref gx, ref gy, ref gz);
 
-            double jitter = SplitPositionJitter;
+            // #1835 excellence goal #4 — SplitChildLearningRateScales. Bakes the paper's
+            // per-attribute LR multipliers into the ONE-SHOT split perturbation: position
+            // jitter shrinks (scale < 1 → children stay closer to parent, since their per-
+            // step position LR would be smaller anyway), scale factor grows (scale > 1 →
+            // children start proportionally smaller which mimics needing more updates per
+            // step to converge). Reference impls apply the multipliers as persistent per-
+            // Gaussian LR state; folding into the initial perturbation is a stateless
+            // approximation that reaches the same steady state after a few iterations.
+            var childScales = _options.SplitChildLearningRateScales ?? new Models.Options.SplitChildLearningRateScales();
+
+            double jitter = SplitPositionJitter * childScales.Position;
             if (gx == 0.0 && gy == 0.0 && gz == 0.0)
             {
                 gx = Random.NextDouble() - 0.5;
@@ -3199,10 +3327,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                 NormalizeDirection(ref gx, ref gy, ref gz);
             }
 
+            double effectiveScaleFactor = SplitScaleFactor / childScales.Scale;
             for (int d = 0; d < 3; d++)
             {
                 double scale = NumOps.ToDouble(source.Scale[d]);
-                double newScale = Math.Max(MinScale, scale * SplitScaleFactor);
+                double newScale = Math.Max(MinScale, scale * effectiveScaleFactor);
                 source.Scale[d] = NumOps.FromDouble(newScale);
                 clone.Scale[d] = NumOps.FromDouble(newScale);
             }

@@ -2462,6 +2462,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 {
                     imageTrainable.TrainOnImageBatch(typedImageLoader, raysPerBatch, configuredOptimizerOptions);
                 }
+
+                // #1835 excellence goal #3: post-training compression pass when the caller
+                // opted in via GaussianSplattingOptions.CompressOnBuildComplete. Prunes
+                // low-opacity Gaussians, merges nearby overlapping ellipses, quantizes SH
+                // coefficients. Runs once at the end of image-space training so the compressed
+                // cloud flows through to AiModelResult.Model without a separate post-processing
+                // script.
+                if (model is NeuralRadianceFields.Models.GaussianSplatting<T> gsForCompress
+                    && gsForCompress.GetOptions() is Models.Options.GaussianSplattingOptions gsOpts
+                    && gsOpts.CompressOnBuildComplete)
+                {
+                    gsForCompress.RunCompressionPass();
+                }
+
                 optimizationResult = new OptimizationResult<T, TInput, TOutput>
                 {
                     BestSolution = model,
