@@ -38,4 +38,39 @@ public static class CreditRules
     /// </summary>
     /// <param name="seed">Unused (kept for signature symmetry); Sign-Symmetric holds no random state.</param>
     public static ICreditRule<T> SignSymmetric<T>(int? seed = null) => new SignSymmetricCreditRule<T>(seed);
+
+    /// <summary>
+    /// Kolen-Pollack (Kolen &amp; Pollack, 1994; Akrout et al., 2019): sequential feedback whose matrices are
+    /// <i>learned</i> — each converges to its forward weight — so credit assignment approaches back-propagation on
+    /// deep dense stacks.
+    /// </summary>
+    /// <param name="seed">Optional RNG seed for the initial feedback matrices (reproducibility).</param>
+    /// <param name="feedbackLearningRate">Step size for the feedback-matrix (alignment) update.</param>
+    /// <param name="weightDecay">Weight decay applied to the feedback matrices (drives convergence to the forward weights).</param>
+    public static ICreditRule<T> KolenPollack<T>(int? seed = null, double feedbackLearningRate = 0.05, double weightDecay = 0.001)
+        => new KolenPollackCreditRule<T>(seed, feedbackLearningRate, weightDecay);
+
+    /// <summary>
+    /// Direct Kolen-Pollack: Kolen-Pollack learning in the Direct Feedback Alignment topology (direct
+    /// output→layer feedback matrices that are <i>learned</i> rather than fixed). Scales to attention like DFA.
+    /// </summary>
+    /// <param name="seed">Optional RNG seed for the initial feedback matrices (reproducibility).</param>
+    /// <param name="feedbackLearningRate">Step size for the feedback-matrix (alignment) update.</param>
+    /// <param name="weightDecay">Weight decay applied to the feedback matrices.</param>
+    public static ICreditRule<T> DirectKolenPollack<T>(int? seed = null, double feedbackLearningRate = 0.05, double weightDecay = 0.001)
+        => new DirectKolenPollackCreditRule<T>(seed, feedbackLearningRate, weightDecay);
+
+    /// <summary>
+    /// Direct Random Target Projection (Frenkel &amp; Bol, 2021): each hidden layer's teaching signal is a fixed
+    /// random projection of the one-hot target — no backward error path is needed.
+    /// </summary>
+    /// <param name="seed">Optional RNG seed for the fixed feedback matrices (reproducibility).</param>
+    public static ICreditRule<T> DRTP<T>(int? seed = null) => new DrtpCreditRule<T>(seed);
+
+    /// <summary>
+    /// Normalized Direct Feedback Alignment (Launay et al., 2020 style): DFA with unit-norm feedback columns and
+    /// per-layer teaching-signal rescaling so the signal magnitude stays stable across depth.
+    /// </summary>
+    /// <param name="seed">Optional RNG seed for the fixed feedback matrices (reproducibility).</param>
+    public static ICreditRule<T> DFANormalized<T>(int? seed = null) => new NormalizedDfaCreditRule<T>(seed);
 }

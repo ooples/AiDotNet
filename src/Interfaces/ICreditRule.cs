@@ -91,6 +91,34 @@ public interface ICreditAssignmentContext<T>
 
     /// <summary>A deterministic random source the rule may use to build fixed feedback matrices, for reproducibility.</summary>
     Random Random { get; }
+
+    /// <summary>
+    /// The training target aligned to the prediction shape <c>[batchSize, outputFeatures]</c> — a one-hot matrix
+    /// for classification, or the raw regression target. Related to <see cref="OutputError"/> by
+    /// <c>OutputError = prediction − Target</c>. Used by target-driven rules such as Direct Random Target
+    /// Projection (DRTP), which project the target rather than the error.
+    /// </summary>
+    Tensor<T> Target { get; }
+}
+
+/// <summary>
+/// Optional extension of <see cref="ICreditRule{T}"/> for rules whose feedback state is <b>learned</b> across
+/// training steps (e.g. Kolen-Pollack and Direct Kolen-Pollack, whose feedback matrices are updated each step to
+/// align with the forward weights). The training engine calls <see cref="OnParametersUpdated"/> once per gradient
+/// computation, after the step's teaching signals and gradients have been produced, while the per-layer forward
+/// activations are still available on the context. Rules with fixed (non-learned) feedback do not implement this
+/// interface, so existing rules are entirely unaffected.
+/// </summary>
+/// <typeparam name="T">The numeric data type.</typeparam>
+public interface IFeedbackLearningRule<T> : ICreditRule<T>
+{
+    /// <summary>
+    /// Updates the rule's learned feedback state for this training step, using the same context (forward
+    /// activations, output error and teaching signals) that produced the step's gradients. Invoked once per
+    /// gradient computation. Must not mutate the network's forward weights.
+    /// </summary>
+    /// <param name="context">The credit-assignment context for the just-computed step.</param>
+    void OnParametersUpdated(ICreditAssignmentContext<T> context);
 }
 
 /// <summary>
@@ -114,6 +142,14 @@ public interface ICreditLayer<T>
 
     /// <summary>The layer's forward output tensor for this step (available if a rule needs the activations; most rules use only shapes).</summary>
     Tensor<T> Output { get; }
+
+    /// <summary>
+    /// The tensor fed <i>into</i> this layer's forward pass for this step — the activation from the previous
+    /// (sub-)layer, shaped like this layer's input. Feedback-learning rules such as Kolen-Pollack need it to form
+    /// the outer-product update <c>Δfeedback ∝ teachingSignalᵀ · input</c> that aligns a learned feedback matrix to
+    /// the forward weight. Fixed-feedback rules can ignore it.
+    /// </summary>
+    Tensor<T> Input { get; }
 
     /// <summary>
     /// The layer's weight matrix (shape <c>[outputDim, inputDim]</c>) if it exposes a single one (dense layers),

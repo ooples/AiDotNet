@@ -50,41 +50,48 @@ internal static class CreditAssignmentGradientComputer<T>
                 "CategoricalCrossEntropyLoss or MeanSquaredErrorLoss).");
         }
 
-        IEngine engine = AiDotNetEngine.Current;
         var layers = network.Layers;
         bool prevTrainingMode = network.IsTrainingMode;
         network.SetTrainingMode(true);
 
         try
         {
-            using var tape = new GradientTape<T>();
-
-            // Forward pass under the tape, capturing each layer's output node.
-            var outputs = new Tensor<T>[layers.Count];
-            var current = input;
-            for (int i = 0; i < layers.Count; i++)
-            {
-                current = layers[i].Forward(current);
-                outputs[i] = current;
-            }
-            var predictionNode = current; // final (post-softmax) network output, tracked
-
-            // Constant output error e = prediction - target (detached from the tape).
-            var predConst = Detach(predictionNode);
-            var targetTensor = BuildTargetTensor(target, predConst.Shape.ToArray());
-            var outputError = SubtractConst(predConst, targetTensor);
-
-            // Collect the trainable layers (those with at least one trainable parameter tensor), in order.
+            // ---- Capture pass: run the full forward once to identify the trainable layers, each layer's input
+            // activation, and the network's output error. Values are detached to constants; graph is discarded.
             var trainableLayers = new List<ILayer<T>>();
             var trainableParams = new List<IReadOnlyList<Tensor<T>>>();
-            var trainableOutputs = new List<Tensor<T>>();
-            for (int i = 0; i < layers.Count; i++)
+            var trainableInputs = new List<Tensor<T>>();   // detached (constant) input to each trainable layer
+            var trainableOutputs = new List<Tensor<T>>();  // detached (constant) output of each trainable layer
+            var trainableLayerIndex = new List<int>();      // index into `layers` of each trainable layer
+            Tensor<T> targetTensor;
+            Tensor<T> outputError;
+
+            using (var captureTape = new GradientTape<T>())
             {
-                var ps = CollectParameters(layers[i]);
-                if (ps.Count == 0) continue;
-                trainableLayers.Add(layers[i]);
-                trainableParams.Add(ps);
-                trainableOutputs.Add(outputs[i]);
+                var inputs = new Tensor<T>[layers.Count];
+                var outputs = new Tensor<T>[layers.Count];
+                var current = input;
+                for (int i = 0; i < layers.Count; i++)
+                {
+                    inputs[i] = current;
+                    current = layers[i].Forward(current);
+                    outputs[i] = current;
+                }
+
+                var predConst = Detach(current);
+                targetTensor = BuildTargetTensor(target, predConst.Shape.ToArray());
+                outputError = SubtractConst(predConst, targetTensor);
+
+                for (int i = 0; i < layers.Count; i++)
+                {
+                    var ps = CollectParameters(layers[i]);
+                    if (ps.Count == 0) continue;
+                    trainableLayers.Add(layers[i]);
+                    trainableParams.Add(ps);
+                    trainableInputs.Add(Detach(inputs[i]));
+                    trainableOutputs.Add(Detach(outputs[i]));
+                    trainableLayerIndex.Add(i);
+                }
             }
 
             if (trainableLayers.Count == 0)
@@ -101,32 +108,71 @@ internal static class CreditAssignmentGradientComputer<T>
                 creditLayers.Add(new CreditLayer<T>(
                     index: k,
                     isOutputLayer: isOutput,
+                    input: trainableInputs[k],
                     output: trainableOutputs[k],
                     weights: TryGetWeightMatrix(trainableLayers[k])));
             }
 
-            var context = new CreditAssignmentContext<T>(creditLayers, outputError, Ops, random);
+            var context = new CreditAssignmentContext<T>(creditLayers, outputError, targetTensor, Ops, random);
             rule.Initialize(context);
             rule.ComputeTeachingSignals(context);
 
-            var grads = new Dictionary<Tensor<T>, Tensor<T>>();
+            int last = trainableLayers.Count - 1;
+
+            // ---- Gradient pass: a SINGLE combined objective backpropagated once. The teaching-driven design needs
+            // each trainable layer's gradient to be a LOCAL VJP (its output treated as a function of only its own
+            // parameters). We achieve that by re-running the forward and DETACHING the input immediately before each
+            // trainable layer, so that layer's output depends on nothing below it. The objective is
+            //     loss(prediction)  +  Σ_hidden  sum(output_k ⊙ teachingSignal_k)
+            // whose gradient w.r.t. each layer's parameters is exactly that layer's intended update: the exact loss
+            // gradient for the output layer, the teaching-driven VJP for every hidden layer, with no cross-layer
+            // leakage. A single backward pass is required because GradientTape is single-use — one backward frees
+            // the graph, so calling it once per layer silently zeroed every layer after the first.
+            var isTrainable = new bool[layers.Count];
+            var trainOrderOf = new int[layers.Count];
+            for (int t = 0; t < trainableLayerIndex.Count; t++)
+            {
+                isTrainable[trainableLayerIndex[t]] = true;
+                trainOrderOf[trainableLayerIndex[t]] = t;
+            }
+
+            using var tape = new GradientTape<T>();
+            IEngine engine = AiDotNetEngine.Current; // the tape's recording engine (installed for this scope)
+
+            var trainOutputNode = new Tensor<T>[trainableLayers.Count];
+            var current2 = input;
+            for (int i = 0; i < layers.Count; i++)
+            {
+                if (isTrainable[i])
+                    current2 = Detach(current2); // isolate this trainable layer's params from everything below
+                current2 = layers[i].Forward(current2);
+                if (isTrainable[i])
+                    trainOutputNode[trainOrderOf[i]] = current2;
+            }
+            var predictionNode = current2;
 
             // Output layer: exact loss gradient (handles the softmax head + matched loss correctly).
-            var lossTensor = tapeLoss.ComputeTapeLoss(predictionNode, targetTensor);
-            Merge(grads, tape.ComputeGradients(lossTensor, sources: trainableParams[trainableLayers.Count - 1]));
+            Tensor<T> combined = ReduceToScalar(engine, tapeLoss.ComputeTapeLoss(predictionNode, targetTensor));
+            var allSources = new List<Tensor<T>>(trainableParams[last]);
 
-            // Hidden layers: local VJP seeded by the rule's teaching signal.
-            for (int k = 0; k < trainableLayers.Count - 1; k++)
+            // Hidden layers: teaching-driven local VJP, seeded by the rule's teaching signal.
+            for (int k = 0; k < last; k++)
             {
                 var teaching = creditLayers[k].TeachingSignal
                     ?? throw new InvalidOperationException(
                         $"Credit rule '{rule.Name}' did not set a teaching signal for hidden layer {k}.");
-
-                var prod = engine.TensorMultiply(trainableOutputs[k], teaching);
-                var allAxes = Enumerable.Range(0, prod.Shape.Length).ToArray();
-                var scalar = engine.ReduceSum(prod, allAxes, keepDims: false);
-                Merge(grads, tape.ComputeGradients(scalar, sources: trainableParams[k]));
+                var prod = engine.TensorMultiply(trainOutputNode[k], teaching);
+                combined = engine.TensorAdd(combined, ReduceToScalar(engine, prod));
+                allSources.AddRange(trainableParams[k]);
             }
+
+            var grads = new Dictionary<Tensor<T>, Tensor<T>>();
+            Merge(grads, tape.ComputeGradients(combined, sources: allSources));
+
+            // Feedback-learning rules (Kolen-Pollack / Direct Kolen-Pollack) update their learned feedback state
+            // once per step, using the same activations, output error and teaching signals just consumed above.
+            if (rule is IFeedbackLearningRule<T> feedbackLearner)
+                feedbackLearner.OnParametersUpdated(context);
 
             return Flatten(network, grads);
         }
@@ -142,6 +188,14 @@ internal static class CreditAssignmentGradientComputer<T>
     {
         foreach (var kv in from)
             into[kv.Key] = kv.Value;
+    }
+
+    /// <summary>Reduces a tensor to a single scalar (sum over every axis) so heterogeneous terms can be added into one objective.</summary>
+    private static Tensor<T> ReduceToScalar(IEngine engine, Tensor<T> t)
+    {
+        if (t.Shape.Length == 0) return t;
+        var axes = Enumerable.Range(0, t.Shape.Length).ToArray();
+        return engine.ReduceSum(t, axes, keepDims: false);
     }
 
     /// <summary>Recursively collects a layer's trainable parameter tensors (including composite sub-layers), deduped by reference.</summary>
