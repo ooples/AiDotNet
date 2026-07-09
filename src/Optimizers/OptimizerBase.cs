@@ -105,8 +105,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     private bool _hasObservedFitness;
 
     /// <summary>
-    /// Caches evaluated models to avoid redundant calculations. Reconfigurable post-construction via
-    /// <see cref="ApplyCacheConfiguration"/> (e.g. from the facade's <c>ConfigureCaching</c>).
+    /// Caches evaluated models to avoid redundant calculations. Reconfigured once at build time via
+    /// <see cref="ApplyCacheConfiguration"/> (the facade's <c>ConfigureCaching</c>) before any training
+    /// starts — it is not intended to be swapped concurrently with in-flight cache reads/writes.
     /// </summary>
     protected IModelCache<T, TInput, TOutput> ModelCache;
 
@@ -254,11 +255,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <summary>
     /// Applies a <see cref="CacheConfig"/> to this optimizer's caches, replacing the model-evaluation
     /// cache with one bounded to the configured capacity + eviction policy (or a disabled pass-through
-    /// when <see cref="CacheConfig.Enabled"/> is false). Wired from the facade's <c>ConfigureCaching</c>.
-    /// Derived optimizers that own additional caches override this and call <c>base</c> first.
+    /// when <see cref="CacheConfig.Enabled"/> is false). Builder-only plumbing — called once from
+    /// <c>AiModelBuilder.BuildPipeline</c> (the facade's <c>ConfigureCaching</c>) before training starts,
+    /// not a public user API. Derived optimizers that own additional caches override this and call
+    /// <c>base</c> first.
     /// </summary>
     /// <param name="config">The cache configuration to apply (must not be null).</param>
-    public virtual void ApplyCacheConfiguration(CacheConfig config)
+    internal virtual void ApplyCacheConfiguration(CacheConfig config)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
         ModelCache = new DefaultModelCache<T, TInput, TOutput>(

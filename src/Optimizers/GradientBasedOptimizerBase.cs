@@ -130,7 +130,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// (or a disabled pass-through when <see cref="CacheConfig.Enabled"/> is false).
     /// </summary>
     /// <param name="config">The cache configuration to apply (must not be null).</param>
-    public override void ApplyCacheConfiguration(CacheConfig config)
+    internal override void ApplyCacheConfiguration(CacheConfig config)
     {
         base.ApplyCacheConfiguration(config);
         int capacity = config.GradientCacheCapacity > 0

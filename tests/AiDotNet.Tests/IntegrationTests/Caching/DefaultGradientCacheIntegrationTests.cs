@@ -18,6 +18,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GetCachedGradient_NonExistentKey_ReturnsNull()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
 
@@ -31,6 +32,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_ThenGet_ReturnsSameGradient()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         var gradient = new TestGradientModel<double>(42.0);
@@ -48,6 +50,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_OverwriteExistingKey_ReturnsNewGradient()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         var gradient1 = new TestGradientModel<double>(1.0);
@@ -67,6 +70,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ClearCache_RemovesAllEntries()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         cache.CacheGradient("key1", new TestGradientModel<double>(1.0));
@@ -89,6 +93,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Cache_MultipleKeys_EachRetrievableIndependently()
     {
+        await Task.Yield();
         // Arrange - capacity sized above the working set so every key stays resident.
         var cache = new DefaultGradientCache<double>(capacity: 200);
         var gradients = new Dictionary<string, TestGradientModel<double>>();
@@ -126,6 +131,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_ExceedingCapacity_EvictsOldestFirst()
     {
+        await Task.Yield();
         // Arrange
         const int capacity = 8;
         var cache = new DefaultGradientCache<double>(capacity);
@@ -152,6 +158,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_ManyUniqueKeys_DoesNotGrowUnbounded()
     {
+        await Task.Yield();
         // Arrange
         const int capacity = 16;
         var cache = new DefaultGradientCache<double>(capacity);
@@ -257,6 +264,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_UpdatingSameKey_DoesNotConsumeCapacity()
     {
+        await Task.Yield();
         // Arrange - repeatedly refreshing ONE key (e.g. line-search re-evaluation of
         // the same solution) must not evict the other resident entries.
         const int capacity = 4;
@@ -280,6 +288,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DefaultCapacity_IsPositiveAndBounded()
     {
+        await Task.Yield();
         Assert.True(DefaultGradientCache<double>.DefaultCapacity > 0);
         var cache = new DefaultGradientCache<double>();
         Assert.Equal(DefaultGradientCache<double>.DefaultCapacity, cache.Capacity);
@@ -291,6 +300,7 @@ public class DefaultGradientCacheIntegrationTests
     [InlineData(-100)]
     public async Task Constructor_NonPositiveCapacity_Throws(int capacity)
     {
+        await Task.Yield();
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new DefaultGradientCache<double>(capacity));
         Assert.Equal("capacity", ex.ParamName);
     }
@@ -302,6 +312,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConcurrentCacheOperations_DoesNotThrow()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         var exceptions = new List<Exception>();
@@ -350,6 +361,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConcurrentReadWrite_SameKey_ThreadSafe()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         const string sharedKey = "shared";
@@ -386,6 +398,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConcurrentClearAndAccess_ThreadSafe()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         var exceptions = new List<Exception>();
@@ -431,6 +444,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_EmptyKey_StoresSuccessfully()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         var gradient = new TestGradientModel<double>(1.0);
@@ -446,6 +460,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_VeryLongKey_StoresSuccessfully()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         var gradient = new TestGradientModel<double>(1.0);
@@ -462,6 +477,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_SpecialCharactersInKey_StoresSuccessfully()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         var gradient = new TestGradientModel<double>(1.0);
@@ -478,6 +494,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ClearCache_OnEmptyCache_DoesNotThrow()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
 
@@ -489,6 +506,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ClearCache_CalledMultipleTimes_DoesNotThrow()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         cache.CacheGradient("key", new TestGradientModel<double>(1.0));
@@ -506,6 +524,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GetCachedGradient_NullKey_ThrowsArgumentNullException()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
 
@@ -517,6 +536,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_NullKey_ThrowsArgumentNullException()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
         var gradient = new TestGradientModel<double>(1.0);
@@ -529,6 +549,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CacheGradient_NullGradient_ThrowsArgumentNullException()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<double>();
 
@@ -544,6 +565,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GradientCache_FloatType_WorksCorrectly()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<float>();
         var gradient = new TestGradientModel<float>(3.14f);
@@ -559,6 +581,7 @@ public class DefaultGradientCacheIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GradientCache_DecimalType_WorksCorrectly()
     {
+        await Task.Yield();
         // Arrange
         var cache = new DefaultGradientCache<decimal>();
         var gradient = new TestGradientModel<decimal>(3.14159265359m);
