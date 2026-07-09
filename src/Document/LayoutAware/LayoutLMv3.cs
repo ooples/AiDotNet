@@ -1112,33 +1112,88 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     /// then through transformer layers and classification head.
     /// </summary>
     protected override Tensor<T> Forward(Tensor<T> input)
-    {
-        // If layer groups are populated, use modality-aware routing
-        if (_imageEmbeddingLayers.Count > 0 || _transformerLayers.Count > 0)
-        {
-            var output = input;
+        => RunModalityForward(input);
 
-            // Route through image embedding (skip text embedding for image input)
+    // Modality-robust routing (LayoutLMv3, Huang et al. 2022): a token-ID input [Rank <= 2] runs the
+    // word-embedding stream while a document image [Rank >= 3] runs the ViT patch-embedding stream; both
+    // then flow through the shared multimodal transformer and classification head. The previous Forward
+    // ALWAYS ran the image (patch) embedding regardless of modality, so a token input hit
+    // "PatchEmbeddingLayer requires rank-3/rank-4 input; got rank 1" and never exercised the text stream.
+    private Tensor<T> RunModalityForward(Tensor<T> input)
+    {
+        // Fallback to sequential processing if groups not populated.
+        if (_imageEmbeddingLayers.Count == 0 && _textEmbeddingLayers.Count == 0 && _transformerLayers.Count == 0)
+            return base.Forward(input);
+
+        var output = input;
+
+        // Route the input through the embedding stream that matches its modality.
+        if (input.Rank <= 2)
+            foreach (var layer in _textEmbeddingLayers)
+                output = layer.Forward(output);
+        else
             foreach (var layer in _imageEmbeddingLayers)
                 output = layer.Forward(output);
 
-            // Route through transformer layers
-            foreach (var layer in _transformerLayers)
-                output = layer.Forward(output);
+        // Shared multimodal transformer.
+        foreach (var layer in _transformerLayers)
+            output = layer.Forward(output);
 
-            // Route through classification head layers (all layers not in embedding/transformer groups)
-            var excludedLayers = new HashSet<ILayer<T>>(_imageEmbeddingLayers);
-            foreach (var l in _textEmbeddingLayers) excludedLayers.Add(l);
-            foreach (var l in _transformerLayers) excludedLayers.Add(l);
+        // Classification head: every layer not in an embedding/transformer group.
+        var excludedLayers = new HashSet<ILayer<T>>(_imageEmbeddingLayers);
+        foreach (var l in _textEmbeddingLayers) excludedLayers.Add(l);
+        foreach (var l in _transformerLayers) excludedLayers.Add(l);
 
-            foreach (var layer in Layers.Where(l => !excludedLayers.Contains(l)))
-                output = layer.Forward(output);
+        foreach (var layer in Layers.Where(l => !excludedLayers.Contains(l)))
+            output = layer.Forward(output);
 
-            return output;
+        return output;
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _useNativeMode ? RunModalityForward(input) : base.ForwardForTraining(input);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Diagnostic counterpart of <see cref="RunModalityForward"/>: the base walk sends a token-only input
+    /// into the rank-3-only patch embedding and throws before recording anything. Record only the layers
+    /// that fire for the supplied modality.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (!_useNativeMode
+            || (_imageEmbeddingLayers.Count == 0 && _textEmbeddingLayers.Count == 0 && _transformerLayers.Count == 0))
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var output = input;
+        var embeddingLayers = input.Rank <= 2 ? _textEmbeddingLayers : _imageEmbeddingLayers;
+
+        var excludedLayers = new HashSet<ILayer<T>>(_imageEmbeddingLayers);
+        foreach (var l in _textEmbeddingLayers) excludedLayers.Add(l);
+        foreach (var l in _transformerLayers) excludedLayers.Add(l);
+
+        int idx = 0;
+        foreach (var layer in embeddingLayers)
+        {
+            output = layer.Forward(output);
+            activations[$"Layer_{idx++}_{layer.GetType().Name}"] = output.Clone();
         }
-
-        // Fallback to sequential processing if groups not populated
-        return base.Forward(input);
+        foreach (var layer in _transformerLayers)
+        {
+            output = layer.Forward(output);
+            activations[$"Layer_{idx++}_{layer.GetType().Name}"] = output.Clone();
+        }
+        foreach (var layer in Layers.Where(l => !excludedLayers.Contains(l)))
+        {
+            output = layer.Forward(output);
+            activations[$"Layer_{idx++}_{layer.GetType().Name}"] = output.Clone();
+        }
+        return activations;
     }
 
     /// <inheritdoc/>

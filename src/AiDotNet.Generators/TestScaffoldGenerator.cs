@@ -2135,6 +2135,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
                     "numLayers: 2, numHeads: 4, vocabSize: 100, spatialDim: 32)";
             }
+            else if (model.ClassName == "LayoutLMv3" && model.TypeParameterCount == 1)
+            {
+                // LayoutLMv3 (Huang et al. 2022) native default is BERT-base scale — 768-wide, 12
+                // transformer layers, vocab 50265, 224px ViT patch embedding. Each CPU training iteration
+                // is multiple seconds so the heavier invariants time out. Build the IDENTICAL unified
+                // text-image architecture (word embeddings + ViT patch embeddings -> shared multimodal
+                // transformer, run via the modality-robust RunModalityForward) at CI-smoke
+                // width/depth/vocab. Token-ID InputShape [16] is emitted by the token-based document branch.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 16, outputSize: 4), " +
+                    "numClasses: 4, imageSize: 32, patchSize: 16, maxSequenceLength: 64, hiddenDim: 64, " +
+                    "numLayers: 2, numHeads: 4, vocabSize: 100)";
+            }
             else if (model.ClassName == "Wav2Vec2Model" && model.TypeParameterCount == 1)
             {
                 // wav2vec 2.0 (Baevski et al. 2020) native default is BERT-base scale — 768-wide, 12
