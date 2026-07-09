@@ -82,7 +82,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1609.02907",
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]
-public class NodeClassificationModel<T> : NeuralNetworkBase<T>
+public class NodeClassificationModel<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.IGraphInferenceModel<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -242,6 +242,14 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
         }
         return current;
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Adapter for <see cref="AiDotNet.Interfaces.IGraphInferenceModel{T}"/>. Delegates to
+    /// <see cref="Forward"/> so <c>AiModelResultGraphExtensions</c> can gate on the interface
+    /// (custom GNN subclasses plug in without deriving from this class).
+    /// </remarks>
+    public Tensor<T> ForwardOnGraph(Tensor<T> nodeFeatures) => Forward(nodeFeatures);
 
     /// <summary>
     /// Tape-recorded training forward pass. Wires the graph structure into every

@@ -30,7 +30,9 @@ public static class ImageTrainingHelpers
         if (loader is null) throw new ArgumentNullException(nameof(loader));
         if (raysPerBatch <= 0) throw new ArgumentOutOfRangeException(nameof(raysPerBatch));
 
-        var enumerator = loader.IterateBatches(raysPerBatch).GetEnumerator();
+        // Dispose the enumerator — IEnumerator<T> is IDisposable and iterator-block
+        // enumerators use finally to release resources; dropping it undisposed leaks.
+        using var enumerator = loader.IterateBatches(raysPerBatch).GetEnumerator();
         return enumerator.MoveNext() ? enumerator.Current.Output : null;
     }
 

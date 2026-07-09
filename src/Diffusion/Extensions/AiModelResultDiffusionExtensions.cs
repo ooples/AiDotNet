@@ -34,6 +34,8 @@ public static class AiModelResultDiffusionExtensions
         int? seed = null)
     {
         var model = RequireDiffusion(result, nameof(Generate));
+        if (shape is null) throw new ArgumentNullException(nameof(shape));
+        if (numInferenceSteps <= 0) throw new ArgumentOutOfRangeException(nameof(numInferenceSteps));
         return model.Generate(shape, numInferenceSteps, seed);
     }
 
@@ -48,6 +50,8 @@ public static class AiModelResultDiffusionExtensions
         int timestep)
     {
         var model = RequireDiffusion(result, nameof(PredictNoise));
+        if (noisySample is null) throw new ArgumentNullException(nameof(noisySample));
+        if (timestep < 0) throw new ArgumentOutOfRangeException(nameof(timestep));
         return model.PredictNoise(noisySample, timestep);
     }
 
@@ -62,6 +66,7 @@ public static class AiModelResultDiffusionExtensions
         bool sampleMode = true)
     {
         var model = RequireLatentDiffusion(result, nameof(EncodeToLatent));
+        if (image is null) throw new ArgumentNullException(nameof(image));
         return model.EncodeToLatent(image, sampleMode);
     }
 
@@ -74,6 +79,7 @@ public static class AiModelResultDiffusionExtensions
         Tensor<T> latent)
     {
         var model = RequireLatentDiffusion(result, nameof(DecodeFromLatent));
+        if (latent is null) throw new ArgumentNullException(nameof(latent));
         return model.DecodeFromLatent(latent);
     }
 
@@ -129,45 +135,20 @@ public static class AiModelResultDiffusionExtensions
     private static IDiffusionModel<T> RequireDiffusion<T, TInput, TOutput>(
         AiModelResult<T, TInput, TOutput> result,
         string extensionName)
-    {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
-
-        if (result.Model is not IDiffusionModel<T> model)
-        {
-            var actualModelType = result.Model?.GetType().FullName ?? "<no model — result not built yet>";
-            throw new InvalidOperationException(
-                $"AiModelResult.{extensionName} requires the underlying model to implement " +
-                $"AiDotNet.Interfaces.IDiffusionModel<{typeof(T).Name}> (e.g. DDPM, LDM, DiT, " +
-                $"Stable Diffusion). The result was built with '{actualModelType}'. Either build " +
-                $"with a diffusion model or use the extension namespace matching your model family " +
-                $"(e.g. AiDotNet.NeuralRadianceFields.Extensions for radiance fields, " +
-                $"AiDotNet.Transformers.Extensions for language models).");
-        }
-        return model;
-    }
+        => AiDotNet.Extensions.Capability.AiModelResultExtensionsCapabilityGate.Require<
+            T, TInput, TOutput, IDiffusionModel<T>>(
+            result,
+            extensionName,
+            $"AiDotNet.Interfaces.IDiffusionModel<{typeof(T).Name}>",
+            hint: "(DDPM / LDM / DiT / Stable Diffusion).");
 
     private static ILatentDiffusionModel<T> RequireLatentDiffusion<T, TInput, TOutput>(
         AiModelResult<T, TInput, TOutput> result,
         string extensionName)
-    {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
-
-        if (result.Model is not ILatentDiffusionModel<T> model)
-        {
-            var actualModelType = result.Model?.GetType().FullName ?? "<no model — result not built yet>";
-            throw new InvalidOperationException(
-                $"AiModelResult.{extensionName} requires the underlying model to implement " +
-                $"AiDotNet.Interfaces.ILatentDiffusionModel<{typeof(T).Name}> (e.g. LDM, " +
-                $"Stable Diffusion). The result was built with '{actualModelType}'. Non-latent " +
-                $"diffusion models (plain DDPM operating directly on pixels) don't have an " +
-                $"encode/decode step — use Generate() instead.");
-        }
-        return model;
-    }
+        => AiDotNet.Extensions.Capability.AiModelResultExtensionsCapabilityGate.Require<
+            T, TInput, TOutput, ILatentDiffusionModel<T>>(
+            result,
+            extensionName,
+            $"AiDotNet.Interfaces.ILatentDiffusionModel<{typeof(T).Name}>",
+            hint: "(LDM / Stable Diffusion — non-latent DDPM doesn't have encode/decode).");
 }

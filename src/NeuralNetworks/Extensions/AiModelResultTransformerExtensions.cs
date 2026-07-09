@@ -83,11 +83,13 @@ public static class AiModelResultTransformerExtensions
                 nameof(startTokens));
         }
 
-        // Extensions run against the internal model directly (Model is internal but visible in-assembly).
-        // The transformer returns next-token logits of shape [B, T, V] from Predict — we sample the
-        // LAST position's distribution to get the next token, append, and repeat.
-        var model = result.Model
-            ?? throw new InvalidOperationException($"AiModelResult.{nameof(GenerateInternal)}: no model — result not built.");
+        // Use the ILanguageModel<T> interface (Transformer implements it) so custom
+        // transformer subclasses can plug in — no more shape-heuristic gating.
+        var lm = result.Model as AiDotNet.Interfaces.ILanguageModel<T>
+            ?? throw new InvalidOperationException(
+                $"AiModelResult.{nameof(GenerateInternal)}: model does not implement " +
+                $"AiDotNet.Interfaces.ILanguageModel<{typeof(T).Name}>. Attach one via " +
+                $"a Transformer<T> or a custom subclass that implements it.");
 
         int batch = startTokens.Shape[0];
         var current = startTokens;
@@ -98,7 +100,7 @@ public static class AiModelResultTransformerExtensions
 
         for (int step = 0; step < maxNewTokens; step++)
         {
-            var logits = (Tensor<T>)(object)model.Predict((TInput)(object)current)!;
+            var logits = lm.ForwardLogits(current);
             if (logits.Shape.Length != 3)
             {
                 throw new InvalidOperationException(
@@ -110,7 +112,7 @@ public static class AiModelResultTransformerExtensions
             int seqLen = logits.Shape[1];
             int vocab  = logits.Shape[2];
 
-            var nextIds = new float[batch];
+            var nextIds = new int[batch];
             for (int b = 0; b < batch; b++)
             {
                 if (argmax)
@@ -156,23 +158,22 @@ public static class AiModelResultTransformerExtensions
                 }
             }
 
-            var appended = new float[batch * (current.Shape[1] + 1)];
+            // Append per-batch nextIds directly into a T[] — token IDs stay T all the way,
+            // no float32 round-trip (avoids the 2^24 precision-loss risk on double T if
+            // vocab > 16M) and eliminates two extra array allocations per step.
+            int newLen = current.Shape[1] + 1;
+            var appendedTyped = new T[batch * newLen];
             for (int b = 0; b < batch; b++)
             {
                 for (int t = 0; t < current.Shape[1]; t++)
                 {
-                    appended[b * (current.Shape[1] + 1) + t] = Convert.ToSingle(current[b, t]);
+                    appendedTyped[b * newLen + t] = current[b, t];
                 }
-                appended[b * (current.Shape[1] + 1) + current.Shape[1]] = nextIds[b];
+                appendedTyped[b * newLen + current.Shape[1]] = numOps.FromDouble(nextIds[b]);
             }
-            var appendedTyped = new T[batch * (current.Shape[1] + 1)];
-            for (int i = 0; i < appendedTyped.Length; i++)
-            {
-                appendedTyped[i] = numOps.FromDouble(appended[i]);
-            }
-            current = new Tensor<T>(new[] { batch, current.Shape[1] + 1 }, new Vector<T>(appendedTyped));
+            current = new Tensor<T>(new[] { batch, newLen }, new Vector<T>(appendedTyped));
 
-            if (eosTokenId.HasValue && Array.TrueForAll(nextIds, id => (int)id == eosTokenId.Value))
+            if (eosTokenId.HasValue && Array.TrueForAll(nextIds, id => id == eosTokenId.Value))
             {
                 break;
             }
@@ -233,31 +234,10 @@ public static class AiModelResultTransformerExtensions
     private static void RequireTransformerCapability<T, TInput, TOutput>(
         AiModelResult<T, TInput, TOutput> result,
         string extensionName)
-    {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
-
-        // Transformer generation targets any model whose Predict returns [B, T, V] logits from
-        // a [B, T] token input — the paper-standard next-token-prediction shape. We can't cleanly
-        // gate on a single interface without inventing one (see #1836 follow-up), so gate on
-        // TInput/TOutput being Tensor<T> and leave the [B, T, V] check for GenerateInternal.
-        if (result.Model is null)
-        {
-            throw new InvalidOperationException(
-                $"AiModelResult.{extensionName}: no model — result not built yet.");
-        }
-
-        if (typeof(TInput) != typeof(Tensor<T>) || typeof(TOutput) != typeof(Tensor<T>))
-        {
-            throw new InvalidOperationException(
-                $"AiModelResult.{extensionName} requires the result to be typed as " +
-                $"AiModelResult<{typeof(T).Name}, Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>> " +
-                $"(the paper-standard token-tensor in / logits-tensor out shape). This result is " +
-                $"typed as <{typeof(T).Name}, {typeof(TInput).Name}, {typeof(TOutput).Name}>. " +
-                $"For matrix-in / vector-out regression/classification models, use " +
-                $"AiModelResult.Predict directly.");
-        }
-    }
+        => AiDotNet.Extensions.Capability.AiModelResultExtensionsCapabilityGate.Require<
+            T, TInput, TOutput, AiDotNet.Interfaces.ILanguageModel<T>>(
+            result,
+            extensionName,
+            $"AiDotNet.Interfaces.ILanguageModel<{typeof(T).Name}>",
+            hint: "(Transformer<T> or any custom decoder-only/encoder-decoder model implementing it).");
 }

@@ -35,11 +35,13 @@ public sealed class PixelBatch<T>
         RayDirections = rayDirections ?? throw new ArgumentNullException(nameof(rayDirections));
         TargetColors  = targetColors  ?? throw new ArgumentNullException(nameof(targetColors));
 
-        int n = rayOrigins.Shape[0];
+        // Shape-length must be checked BEFORE indexing Shape[0] — rank-0 tensors have an
+        // empty Shape array and would throw IndexOutOfRangeException without context.
         if (rayOrigins.Shape.Length != 2 || rayOrigins.Shape[1] != 3)
         {
             throw new ArgumentException("RayOrigins must be [N, 3].", nameof(rayOrigins));
         }
+        int n = rayOrigins.Shape[0];
         if (rayDirections.Shape.Length != 2 || rayDirections.Shape[0] != n || rayDirections.Shape[1] != 3)
         {
             throw new ArgumentException(

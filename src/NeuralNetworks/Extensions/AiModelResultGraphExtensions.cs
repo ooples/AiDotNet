@@ -38,25 +38,35 @@ public static class AiModelResultGraphExtensions
         if (nodeFeatures is null) throw new ArgumentNullException(nameof(nodeFeatures));
 
         graph.SetAdjacencyMatrix(adjacencyMatrix);
-        return graph.Forward(nodeFeatures);
+        return graph.ForwardOnGraph(nodeFeatures);
     }
 
     /// <summary>
-    /// Predicts a link (edge) between two nodes by combining their post-embedding representations
-    /// through the model's classification head. Convenience wrapper: computes
-    /// <see cref="PredictOnGraph"/> then extracts the two rows and returns their pairwise score.
+    /// Scoring strategy for <see cref="PredictLink"/>. Reference link-prediction impls (GAE,
+    /// VGAE, R-GCN) each hard-code one scorer; here callers pick per call.
     /// </summary>
-    /// <remarks>
-    /// This is a first-pass implementation using per-node logits' dot product as the link score;
-    /// a follow-up will add proper decoder-based scoring (bilinear, MLP-over-concat) when the
-    /// underlying model exposes its embedding head separately.
-    /// </remarks>
+    public enum LinkScorer
+    {
+        /// <summary>Cosine similarity between the two node embeddings — magnitude-invariant.</summary>
+        Cosine,
+        /// <summary>Dot product between the two node embeddings — the DistMult / GAE default.</summary>
+        DotProduct,
+        /// <summary>Sigmoid(dot product) — squashes the score into a probability in (0, 1).</summary>
+        SigmoidDot,
+    }
+
+    /// <summary>
+    /// Predicts a link (edge) score between two nodes by combining their post-embedding
+    /// representations through the selected scorer. Reference facades expose only a single
+    /// hardcoded scorer per implementation; AiDotNet lets callers pick per call.
+    /// </summary>
     public static T PredictLink<T, TInput, TOutput>(
         this AiModelResult<T, TInput, TOutput> result,
         Tensor<T> adjacencyMatrix,
         Tensor<T> nodeFeatures,
         int sourceNode,
-        int targetNode)
+        int targetNode,
+        LinkScorer scorer = LinkScorer.SigmoidDot)
     {
         var graph = RequireGraphModel(result, nameof(PredictLink));
         if (adjacencyMatrix is null) throw new ArgumentNullException(nameof(adjacencyMatrix));
@@ -69,7 +79,7 @@ public static class AiModelResultGraphExtensions
         }
 
         graph.SetAdjacencyMatrix(adjacencyMatrix);
-        var predictions = graph.Forward(nodeFeatures);
+        var predictions = graph.ForwardOnGraph(nodeFeatures);
         if (predictions.Shape.Length != 2)
         {
             throw new InvalidOperationException(
@@ -86,14 +96,40 @@ public static class AiModelResultGraphExtensions
                 $"Node indices ({sourceNode}, {targetNode}) exceed node count ({nNodes}).");
         }
 
-        // Dot product of the two nodes' representations as the link score.
         var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        T score = numOps.Zero;
+        T dot = numOps.Zero;
+        T normA = numOps.Zero;
+        T normB = numOps.Zero;
         for (int d = 0; d < dim; d++)
         {
-            score = numOps.Add(score, numOps.Multiply(predictions[sourceNode, d], predictions[targetNode, d]));
+            var a = predictions[sourceNode, d];
+            var b = predictions[targetNode, d];
+            dot = numOps.Add(dot, numOps.Multiply(a, b));
+            normA = numOps.Add(normA, numOps.Multiply(a, a));
+            normB = numOps.Add(normB, numOps.Multiply(b, b));
         }
-        return score;
+
+        switch (scorer)
+        {
+            case LinkScorer.DotProduct:
+                return dot;
+            case LinkScorer.Cosine:
+            {
+                double na = System.Math.Sqrt(numOps.ToDouble(normA));
+                double nb = System.Math.Sqrt(numOps.ToDouble(normB));
+                double denom = na * nb;
+                return denom > 1e-12
+                    ? numOps.FromDouble(numOps.ToDouble(dot) / denom)
+                    : numOps.Zero;
+            }
+            case LinkScorer.SigmoidDot:
+            default:
+            {
+                double x = numOps.ToDouble(dot);
+                double sig = 1.0 / (1.0 + System.Math.Exp(-x));
+                return numOps.FromDouble(sig);
+            }
+        }
     }
 
     /// <summary>
@@ -112,7 +148,7 @@ public static class AiModelResultGraphExtensions
         {
             cancellationToken.ThrowIfCancellationRequested();
             graph.SetAdjacencyMatrix(adjacencyMatrix);
-            return graph.Forward(nodeFeatures);
+            return graph.ForwardOnGraph(nodeFeatures);
         }, cancellationToken);
     }
 
@@ -131,30 +167,18 @@ public static class AiModelResultGraphExtensions
         for (int i = 0; i < list.Count; i++)
         {
             graph.SetAdjacencyMatrix(list[i].Item1);
-            outputs[i] = graph.Forward(list[i].Item2);
+            outputs[i] = graph.ForwardOnGraph(list[i].Item2);
         }
         return outputs;
     }
 
-    private static NodeClassificationModel<T> RequireGraphModel<T, TInput, TOutput>(
+    private static AiDotNet.Interfaces.IGraphInferenceModel<T> RequireGraphModel<T, TInput, TOutput>(
         AiModelResult<T, TInput, TOutput> result,
         string extensionName)
-    {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
-
-        if (result.Model is not NodeClassificationModel<T> graph)
-        {
-            var actualModelType = result.Model?.GetType().FullName ?? "<no model — result not built yet>";
-            throw new InvalidOperationException(
-                $"AiModelResult.{extensionName} requires the underlying model to be a " +
-                $"NodeClassificationModel<{typeof(T).Name}>. The result was built with " +
-                $"'{actualModelType}'. Custom graph neural network subclasses need to either " +
-                $"inherit from NodeClassificationModel<T> or implement a graph-inference " +
-                $"interface (planned #1836 follow-up).");
-        }
-        return graph;
-    }
+        => AiDotNet.Extensions.Capability.AiModelResultExtensionsCapabilityGate.Require<
+            T, TInput, TOutput, AiDotNet.Interfaces.IGraphInferenceModel<T>>(
+            result,
+            extensionName,
+            $"AiDotNet.Interfaces.IGraphInferenceModel<{typeof(T).Name}>",
+            hint: "(NodeClassificationModel or any custom GNN subclass implementing it).");
 }

@@ -63,6 +63,10 @@ public static class AiModelResultRadianceFieldExtensions
         T focalLength)
     {
         var field = RequireRadianceField(result, nameof(RenderImage));
+        if (cameraPosition is null) throw new ArgumentNullException(nameof(cameraPosition));
+        if (cameraRotation is null) throw new ArgumentNullException(nameof(cameraRotation));
+        if (imageWidth <= 0) throw new ArgumentOutOfRangeException(nameof(imageWidth));
+        if (imageHeight <= 0) throw new ArgumentOutOfRangeException(nameof(imageHeight));
         return field.RenderImage(cameraPosition, cameraRotation, imageWidth, imageHeight, focalLength);
     }
 
@@ -87,6 +91,9 @@ public static class AiModelResultRadianceFieldExtensions
         T farBound)
     {
         var field = RequireRadianceField(result, nameof(RenderRays));
+        if (rayOrigins is null) throw new ArgumentNullException(nameof(rayOrigins));
+        if (rayDirections is null) throw new ArgumentNullException(nameof(rayDirections));
+        if (numSamples <= 0) throw new ArgumentOutOfRangeException(nameof(numSamples));
         return field.RenderRays(rayOrigins, rayDirections, numSamples, nearBound, farBound);
     }
 
@@ -105,6 +112,8 @@ public static class AiModelResultRadianceFieldExtensions
         Tensor<T> viewingDirections)
     {
         var field = RequireRadianceField(result, nameof(QueryField));
+        if (positions is null) throw new ArgumentNullException(nameof(positions));
+        if (viewingDirections is null) throw new ArgumentNullException(nameof(viewingDirections));
         return field.QueryField(positions, viewingDirections);
     }
 
@@ -160,27 +169,10 @@ public static class AiModelResultRadianceFieldExtensions
     private static IRadianceField<T> RequireRadianceField<T, TInput, TOutput>(
         AiModelResult<T, TInput, TOutput> result,
         string extensionName)
-    {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
-
-        // AiModelResult.Model is internal — this extension lives in the same assembly, so the
-        // downcast succeeds cleanly without leaking the raw model back to the caller.
-        if (result.Model is not IRadianceField<T> field)
-        {
-            var actualModelType = result.Model?.GetType().FullName ?? "<no model — result not built yet>";
-            throw new InvalidOperationException(
-                $"AiModelResult.{extensionName} requires the underlying model to implement " +
-                $"AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField<{typeof(T).Name}> " +
-                $"(e.g. NeRF, InstantNGP, GaussianSplatting). The result was built with " +
-                $"'{actualModelType}'. Either build with a radiance-field model or use the " +
-                $"extension namespace matching your model family " +
-                $"(e.g. AiDotNet.Transformers.Extensions for language models, " +
-                $"AiDotNet.Diffusion.Extensions for diffusion models).");
-        }
-
-        return field;
-    }
+        => AiDotNet.Extensions.Capability.AiModelResultExtensionsCapabilityGate.Require<
+            T, TInput, TOutput, IRadianceField<T>>(
+            result,
+            extensionName,
+            $"AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField<{typeof(T).Name}>",
+            hint: "(NeRF / InstantNGP / GaussianSplatting).");
 }

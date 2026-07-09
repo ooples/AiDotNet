@@ -97,4 +97,53 @@ public class GaussianSplattingDensificationTests
         Assert.Equal(0.005, gs.EffectiveOpacityPruneThreshold);
         Assert.Equal(8, gs.EffectiveMaxGaussianCount);
     }
+
+    [Fact]
+    public void DensifyAndPrune_BeforeStartWindow_NoOps()
+    {
+        // Small run: 100 iters, start = 40, end = 90. Before iter 40, densification MUST NOT
+        // fire — DensifyAndPrune's [Start, End] gate is what makes the schedule work.
+        var o = new GaussianSplattingOptions
+        {
+            ShDegree = 0,
+            EnableDensification = true,
+            EnableSpatialIndex = false,
+            MaxGaussians = 32,
+            DensificationStartIteration = 40,
+            DensificationEndIteration = 90,
+            OpacityPruneThreshold = 0.99,   // Would prune almost everything if the gate misfires.
+            GradientNormThreshold = 1e-9,   // Would split almost everything if the gate misfires.
+        };
+        var gs = BuildGS(o);
+        int startCount = gs.GaussianCount;
+
+        // Simulate iteration 10 — inside DensifyAndPrune's window check via internal helper.
+        gs.RunDensifyAndPruneForTest(iteration: 10, gradientsMagnitude: 1.0);
+
+        // Warm-up: nothing should have been split OR pruned.
+        Assert.Equal(startCount, gs.GaussianCount);
+    }
+
+    [Fact]
+    public void DensifyAndPrune_AfterEndWindow_NoOps()
+    {
+        var o = new GaussianSplattingOptions
+        {
+            ShDegree = 0,
+            EnableDensification = true,
+            EnableSpatialIndex = false,
+            MaxGaussians = 32,
+            DensificationStartIteration = 10,
+            DensificationEndIteration = 20,
+            OpacityPruneThreshold = 0.99,
+            GradientNormThreshold = 1e-9,
+        };
+        var gs = BuildGS(o);
+        int startCount = gs.GaussianCount;
+
+        // Iteration 25 is past the freeze window — no changes should happen.
+        gs.RunDensifyAndPruneForTest(iteration: 25, gradientsMagnitude: 1.0);
+
+        Assert.Equal(startCount, gs.GaussianCount);
+    }
 }

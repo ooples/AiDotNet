@@ -108,4 +108,31 @@ public class ImageTrainingPathTests
         Assert.Throws<ArgumentNullException>(
             () => nerf.TrainOnImageBatch(null!, raysPerBatch: 16, optimizerOptions: null));
     }
+
+    [Fact]
+    public void InstantNGP_TrainOnImageBatch_ReturnsFiniteLoss()
+    {
+        var ngp = new InstantNGP<float>();
+        var loader = ImageTrainingDataLoaders.FromViews(BuildViews(), seed: 11);
+        float loss = ngp.TrainOnImageBatch(loader, raysPerBatch: 4, optimizerOptions: null);
+        Assert.True(float.IsFinite(loss), $"InstantNGP loss should be finite; got {loss}.");
+        Assert.True(loss >= 0f, "MSE loss can't be negative.");
+    }
+
+    [Fact]
+    public void GaussianSplatting_TrainOnImageBatch_ReturnsFiniteLoss()
+    {
+        var gs = new GaussianSplatting<float>(
+            new AiDotNet.Models.Options.GaussianSplattingOptions
+            {
+                EnableDensification = false,
+                EnableSpatialIndex = false,
+                MaxGaussians = 8,
+                ShDegree = 0,
+            });
+        var loader = ImageTrainingDataLoaders.FromViews(BuildViews(count: 1, H: 4, W: 4), seed: 13);
+        float loss = gs.TrainOnImageBatch(loader, raysPerBatch: 4, optimizerOptions: null);
+        Assert.True(float.IsFinite(loss), $"GS loss should be finite; got {loss}.");
+        Assert.True(loss >= 0f, "Loss can't be negative.");
+    }
 }

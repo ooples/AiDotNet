@@ -22,7 +22,7 @@ namespace AiDotNet.NeuralRadianceFields.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
-public interface IImageTrainable<T>
+internal interface IImageTrainable<T>
 {
     /// <summary>
     /// Runs one image-space training iteration over the given views. The model samples rays,

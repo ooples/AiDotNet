@@ -113,13 +113,15 @@ public class AiModelResultFamilyExtensionsTests
     }
 
     [Fact]
-    public void Graph_PredictLink_NullAdjacency_ThrowsArgumentNullException()
+    public void Graph_PredictLink_WrongFamilyBeatsNullAdjacencyCheck()
     {
+        // The wrong-family type gate fires BEFORE the arg-null check, so a wrong-family
+        // result with a null adjacency still throws InvalidOperationException from the
+        // type gate (not ArgumentNullException). Renamed test to match actual behavior;
+        // the null-adjacency-on-a-graph-model path is exercised in the separate
+        // GaussianSplattingHyperparameterAwareTests family (correct-family fixtures).
         var result = BuildWrongFamilyResult();
         var feat = new Tensor<float>(new[] { 3, 2 }, new Vector<float>(new float[6]));
-        // NOTE: type gate fires before the arg-null check because the model isn't a
-        // NodeClassificationModel — that's fine; the test's job is to prove the extension
-        // rejects the wrong-family call cleanly.
         Assert.Throws<InvalidOperationException>(
             () => result.PredictLink(null!, feat, sourceNode: 0, targetNode: 1));
     }

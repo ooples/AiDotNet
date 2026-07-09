@@ -1273,11 +1273,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return BuildProgramSynthesisInferenceOnlyResult();
         }
 
+        // #1834 IMAGE-SPACE PATH — caller configured only an image loader
+        // (IDataLoader<ImageView<T>, PixelBatch<T>>) + an IImageTrainable model. No
+        // standard supervised X/y data exists; the image-space branch inside
+        // BuildSupervisedInternalAsync drives training via TrainOnImageBatch per iteration.
+        // Route through a minimal image-only builder so preprocessing / splitting can be
+        // skipped cleanly (no synthetic-data hacks that would confuse downstream metrics).
+        if (_imageDataLoader is not null && _model is NeuralRadianceFields.Interfaces.IImageTrainable<T>)
+        {
+            result = await BuildImageOnlyInternalAsync(cancellationToken);
+            await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
+            return result;
+        }
+
         // No training path configured
         throw new InvalidOperationException(
             "BuildAsync() requires one of the following to be configured first:\n" +
             "- ConfigureReinforcementLearning() for RL training\n" +
-            "- ConfigureDataLoader() for supervised learning\n" +
+            "- ConfigureDataLoader() for supervised learning (row-scalar OR image-space)\n" +
             "- ConfigureMetaLearning() for meta-learning\n" +
             "For supervised learning, configure a data loader via ConfigureDataLoader() and then call BuildAsync().");
     }

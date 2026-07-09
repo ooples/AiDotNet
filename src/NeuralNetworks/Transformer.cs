@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
-public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>, AiDotNet.Interfaces.ILanguageModel<T>
 {
     private readonly TransformerOptions _options;
 
@@ -87,6 +87,14 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Adapter satisfying <see cref="AiDotNet.Interfaces.ILanguageModel{T}"/> — the extension
+    /// methods in <c>AiDotNet.Transformers.Extensions</c> use this over shape-heuristic gating
+    /// so custom transformer subclasses can plug in. Delegates to <see cref="NeuralNetworkBase{T}.Predict"/>.
+    /// </remarks>
+    public Tensor<T> ForwardLogits(Tensor<T> tokenIds) => Predict(tokenIds);
 
     /// <summary>
     /// Gets or sets the weight for the attention regularization auxiliary loss.

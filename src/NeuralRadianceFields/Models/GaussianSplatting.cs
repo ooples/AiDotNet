@@ -1839,6 +1839,24 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             throw new ArgumentNullException(nameof(options));
         }
 
+        // #1835 short-run adjustment: densification defaults (Start=500, End=15000) target
+        // paper-scale runs (~30k iters). If MaxIterations is much smaller, densification would
+        // NEVER fire because Start > MaxIterations. Scale the effective start / end to fractions
+        // of MaxIterations when the caller didn't explicitly set them. Explicit values override
+        // the auto-scaling — advanced users retain full control.
+        int totalIters = options.MaxIterations > 0 ? options.MaxIterations : 100;
+        if (_options.DensificationStartIteration is null && totalIters < 500)
+        {
+            // Start at ~5% of the run so the initial cloud has time to stabilize but there's
+            // still room for densification to grow it before the end freeze.
+            _options.DensificationStartIteration = Math.Max(1, totalIters / 20);
+        }
+        if (_options.DensificationEndIteration is null && totalIters < 15000)
+        {
+            // Stop densifying in the last ~15% so final iterations converge with a fixed cloud.
+            _options.DensificationEndIteration = Math.Max(2, (int)(totalIters * 0.85));
+        }
+
         // Paper anchor: base LR = 1.6e-4 → per-attribute ratios below. Ratios are the
         // published Kerbl et al. 2023 defaults expressed relative to the position LR.
         const double PaperBasePositionLR = 1.6e-4;
@@ -1903,21 +1921,16 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         // GradientNormThreshold from the extended options). RAY-mode training bypasses
         // densification by design (see TrainOnRays remarks — screen-space gradient signal
         // isn't present in ray-mode).
-        var enumerator = loader.IterateBatches(raysPerBatch).GetEnumerator();
-        if (!enumerator.MoveNext())
+        NeuralRadianceFields.Data.ImageView<T> view;
+        NeuralRadianceFields.Data.PixelBatch<T> pixels;
+        using (var enumerator = loader.IterateBatches(raysPerBatch).GetEnumerator())
         {
-            return NumOps.Zero;
+            if (!enumerator.MoveNext())
+            {
+                return NumOps.Zero;
+            }
+            (view, pixels) = enumerator.Current;
         }
-        var (view, pixels) = enumerator.Current;
-
-        // Photometric loss for telemetry (engine-op backed, tape-recorded).
-        var rendered = RenderRays(
-            pixels.RayOrigins,
-            pixels.RayDirections,
-            numSamples: 32,
-            NumOps.FromDouble(0.1),
-            NumOps.FromDouble(10.0));
-        var loss = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricMSE(Engine, rendered, pixels.TargetColors);
 
         // Build the [1, 13] camera-mode input GS.Train recognizes: pos[3] + rot[9] + focal[1].
         double focalPx = view.ResolveFocalLengthInPixels();
@@ -1972,7 +1985,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
 
         Train(cameraInput, photo);
 
-        return loss;
+        // Return the SAME loss Train recorded (camera-mode LossFunction.CalculateLoss on the
+        // rendered image vs the photo target). Avoids the previous double-render + wrong-loss
+        // problem where we returned a RAY-mode photometric MSE but the actual parameter update
+        // used CAMERA-mode image-level supervision — telemetry now matches the update signal.
+        return LastLoss ?? NumOps.Zero;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -3252,6 +3269,24 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         }
 
         MarkSpatialIndexDirty();
+    }
+
+    /// <summary>
+    /// Test-only hook that drives <see cref="DensifyAndPrune"/> with a synthesized gradient list
+    /// at a caller-specified iteration, so tests can assert the schedule window gate ([Start, End])
+    /// without threading a full training loop. Only used by the #1835 regression tests.
+    /// </summary>
+    internal void RunDensifyAndPruneForTest(int iteration, double gradientsMagnitude)
+    {
+        _trainingStep = iteration;
+        var synthetic = new List<GaussianGradient>();
+        for (int i = 0; i < _gaussians.Count; i++)
+        {
+            synthetic.Add(new GaussianGradient(
+                _gaussians[i],
+                gradX: gradientsMagnitude, gradY: 0.0, gradZ: 0.0));
+        }
+        DensifyAndPrune(synthetic);
     }
 
     private void DensifyAndPrune(List<GaussianGradient> gradients)
