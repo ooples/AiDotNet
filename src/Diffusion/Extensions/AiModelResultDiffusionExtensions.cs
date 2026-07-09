@@ -1,0 +1,122 @@
+using System;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+
+namespace AiDotNet.Diffusion.Extensions;
+
+/// <summary>
+/// Model-specific inference extensions on <see cref="AiModelResult{T, TInput, TOutput}"/> for the
+/// diffusion family (DDPM, LDM, Stable Diffusion, DiT, etc.). Part of #1836.
+/// </summary>
+/// <remarks>
+/// See <see cref="AiDotNet.NeuralRadianceFields.Extensions.AiModelResultRadianceFieldExtensions"/>
+/// for the full design rationale — extension methods live in the same assembly as
+/// <see cref="AiModelResult{T, TInput, TOutput}"/> so they access internal <c>Model</c> without
+/// exposing it, keeping IP-protection intact while giving callers discoverable domain APIs.
+/// </remarks>
+public static class AiModelResultDiffusionExtensions
+{
+    /// <summary>
+    /// Generates new samples by iteratively denoising from random noise. Requires the underlying
+    /// model to implement <see cref="IDiffusionModel{T}"/> (DDPM, LDM, DiT, etc.).
+    /// </summary>
+    /// <param name="result">The trained model result.</param>
+    /// <param name="shape">Sample tensor shape (e.g. [batch, C, H, W]).</param>
+    /// <param name="numInferenceSteps">Denoising steps; more = higher quality (typical 20–200).</param>
+    /// <param name="seed">Optional RNG seed for reproducibility.</param>
+    /// <returns>Generated samples.</returns>
+    public static Tensor<T> Generate<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        int[] shape,
+        int numInferenceSteps = 50,
+        int? seed = null)
+    {
+        var model = RequireDiffusion(result, nameof(Generate));
+        return model.Generate(shape, numInferenceSteps, seed);
+    }
+
+    /// <summary>
+    /// Predicts the noise present in a partially-noised sample at a given timestep. The
+    /// underlying primitive of the reverse process — useful for guided/controlled sampling,
+    /// custom schedulers, and diagnostic visualization.
+    /// </summary>
+    public static Tensor<T> PredictNoise<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        Tensor<T> noisySample,
+        int timestep)
+    {
+        var model = RequireDiffusion(result, nameof(PredictNoise));
+        return model.PredictNoise(noisySample, timestep);
+    }
+
+    /// <summary>
+    /// Encodes an image tensor into the latent space of a latent-diffusion model
+    /// (LDM / Stable Diffusion). Throws if the model isn't an <see cref="ILatentDiffusionModel{T}"/>.
+    /// </summary>
+    /// <param name="sampleMode">If true (default), sample from the VAE posterior; if false, return the mean.</param>
+    public static Tensor<T> EncodeToLatent<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        Tensor<T> image,
+        bool sampleMode = true)
+    {
+        var model = RequireLatentDiffusion(result, nameof(EncodeToLatent));
+        return model.EncodeToLatent(image, sampleMode);
+    }
+
+    /// <summary>
+    /// Decodes a latent tensor back into image pixels via the VAE decoder of a latent-diffusion
+    /// model. Throws if the model isn't an <see cref="ILatentDiffusionModel{T}"/>.
+    /// </summary>
+    public static Tensor<T> DecodeFromLatent<T, TInput, TOutput>(
+        this AiModelResult<T, TInput, TOutput> result,
+        Tensor<T> latent)
+    {
+        var model = RequireLatentDiffusion(result, nameof(DecodeFromLatent));
+        return model.DecodeFromLatent(latent);
+    }
+
+    private static IDiffusionModel<T> RequireDiffusion<T, TInput, TOutput>(
+        AiModelResult<T, TInput, TOutput> result,
+        string extensionName)
+    {
+        if (result is null)
+        {
+            throw new ArgumentNullException(nameof(result));
+        }
+
+        if (result.Model is not IDiffusionModel<T> model)
+        {
+            var actualModelType = result.Model?.GetType().FullName ?? "<no model — result not built yet>";
+            throw new InvalidOperationException(
+                $"AiModelResult.{extensionName} requires the underlying model to implement " +
+                $"AiDotNet.Interfaces.IDiffusionModel<{typeof(T).Name}> (e.g. DDPM, LDM, DiT, " +
+                $"Stable Diffusion). The result was built with '{actualModelType}'. Either build " +
+                $"with a diffusion model or use the extension namespace matching your model family " +
+                $"(e.g. AiDotNet.NeuralRadianceFields.Extensions for radiance fields, " +
+                $"AiDotNet.Transformers.Extensions for language models).");
+        }
+        return model;
+    }
+
+    private static ILatentDiffusionModel<T> RequireLatentDiffusion<T, TInput, TOutput>(
+        AiModelResult<T, TInput, TOutput> result,
+        string extensionName)
+    {
+        if (result is null)
+        {
+            throw new ArgumentNullException(nameof(result));
+        }
+
+        if (result.Model is not ILatentDiffusionModel<T> model)
+        {
+            var actualModelType = result.Model?.GetType().FullName ?? "<no model — result not built yet>";
+            throw new InvalidOperationException(
+                $"AiModelResult.{extensionName} requires the underlying model to implement " +
+                $"AiDotNet.Interfaces.ILatentDiffusionModel<{typeof(T).Name}> (e.g. LDM, " +
+                $"Stable Diffusion). The result was built with '{actualModelType}'. Non-latent " +
+                $"diffusion models (plain DDPM operating directly on pixels) don't have an " +
+                $"encode/decode step — use Generate() instead.");
+        }
+        return model;
+    }
+}
