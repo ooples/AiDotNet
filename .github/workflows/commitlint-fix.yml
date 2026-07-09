@@ -18,7 +18,7 @@ jobs:
     name: Check and Fix Non-Compliant Commits
     runs-on: ubuntu-latest
     # Skip for dependabot PRs (they have special handling)
-    if: github.actor != 'dependabot[bot]'
+    if: ${{ (github.actor != 'dependabot[bot]') && !startsWith(github.head_ref, 'release-please--') }}
 
     steps:
       - name: Checkout code
@@ -247,7 +247,7 @@ jobs:
     name: Handle Dependabot PR
     runs-on: ubuntu-latest
     # Only run for dependabot PRs
-    if: github.actor == 'dependabot[bot]'
+    if: ${{ (github.actor == 'dependabot[bot]') && !startsWith(github.head_ref, 'release-please--') }}
 
     steps:
       - name: Checkout code
