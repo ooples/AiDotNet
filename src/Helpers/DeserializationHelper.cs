@@ -1291,18 +1291,27 @@ public static class DeserializationHelper
             // [B,C,H,W] post-batch.
             if (instance is NeuralNetworks.Layers.DeformableConvolutionalLayer<T> dcn && inputShape != null && inputShape.Length >= 3)
             {
+                // Mirror the sibling ConvolutionalLayer branch: explicitly reject any rank other than
+                // 3 ([C, H, W]) or 4 ([N, C, H, W]) instead of treating everything non-rank-4 as rank-3,
+                // so a corrupt / forward-incompatible rank-5+ payload fails fast at the deserialization
+                // boundary rather than being silently mis-shaped.
                 int savedInC, savedInH, savedInW;
-                if (inputShape.Length == 4)
+                switch (inputShape.Length)
                 {
-                    savedInC = inputShape[1];
-                    savedInH = inputShape[2];
-                    savedInW = inputShape[3];
-                }
-                else
-                {
-                    savedInC = inputShape[0];
-                    savedInH = inputShape[1];
-                    savedInW = inputShape[2];
+                    case 4:
+                        savedInC = inputShape[1];
+                        savedInH = inputShape[2];
+                        savedInW = inputShape[3];
+                        break;
+                    case 3:
+                        savedInC = inputShape[0];
+                        savedInH = inputShape[1];
+                        savedInW = inputShape[2];
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            $"DeformableConvolutionalLayer deserialize: saved inputShape rank must be 3 ([C, H, W]) " +
+                            $"or 4 ([N, C, H, W]); got rank {inputShape.Length} ([{string.Join(", ", inputShape)}]).");
                 }
 
                 // Only pre-resolve when the saved input-channel count is concrete. Mirror the

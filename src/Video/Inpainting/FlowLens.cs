@@ -164,7 +164,10 @@ public class FlowLens<T> : VideoInpaintingBase<T>
         // different value space, so the two paths would diverge. Delegate the actual layer walk
         // (autodiff tape, gradient checkpointing, seed-wiring) to the base by handing it the
         // mask-concatenated tensor; normalize/denormalize are Engine ops so gradients still flow.
-        var mask = new Tensor<T>([input.Shape[0], 1, input.Shape[2], input.Shape[3]]);
+        // Use the shared default hole mask (the same one inference's PredictCore feeds) so the mask
+        // channel carries a real, structured signal during training instead of the all-zero mask that
+        // left it dead and reduced training to plain identity reconstruction.
+        var mask = CreateDefaultInpaintingMask(input.Shape[0], input.Shape[2], input.Shape[3]);
         var combined = ConcatFramesAndMasks(PreprocessFrames(input), mask);
         return PostprocessOutput(base.ForwardForTraining(combined));
     }

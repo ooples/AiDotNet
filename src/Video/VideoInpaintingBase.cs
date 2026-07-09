@@ -189,11 +189,58 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         return 10.0 * Math.Log10(1.0 / mse);
     }
 
+    /// <summary>
+    /// Builds the default single-channel hole mask <c>[n, 1, h, w]</c> used when no explicit mask is
+    /// supplied — by both the generic inference path (<see cref="PredictCore"/>) and each model's
+    /// training forward (<c>ForwardForTraining</c>). A centred rectangular hole covering roughly
+    /// <see cref="MaxMaskRatio"/> of the frame area gives the mask channel a real, spatially-structured
+    /// signal (1 = hole to fill, 0 = keep) that flows gradients through the encoder's mask-channel
+    /// weights — replacing the all-zero mask that left the channel dead during training, so the model
+    /// no longer trains as if it were doing plain identity reconstruction. It is deterministic (no
+    /// per-call RNG), so training a fixed input still converges and inference reproduces the exact
+    /// value space the model was trained in (the loss-reduction and Clone/determinism invariants
+    /// hold). Callers that have a real mask supply it directly through
+    /// <see cref="Inpaint(Tensor{T}, Tensor{T})"/>.
+    /// </summary>
+    /// <param name="n">Batch / frame count.</param>
+    /// <param name="h">Frame height.</param>
+    /// <param name="w">Frame width.</param>
+    protected Tensor<T> CreateDefaultInpaintingMask(int n, int h, int w)
+    {
+        var mask = new Tensor<T>([n, 1, h, w]);
+        // side = sqrt(ratio) so a centred square hole covers ~MaxMaskRatio of the area. Clamp the
+        // ratio to [0, 1] by hand (no Math.Clamp — net471) and guarantee at least a 1px hole.
+        double ratio = MaxMaskRatio;
+        if (ratio < 0.0) ratio = 0.0;
+        if (ratio > 1.0) ratio = 1.0;
+        double side = Math.Sqrt(ratio);
+        int holeH = Math.Max(1, (int)(h * side));
+        int holeW = Math.Max(1, (int)(w * side));
+        int top = (h - holeH) / 2;
+        int left = (w - holeW) / 2;
+        var span = mask.Data.Span;
+        var one = NumOps.One;
+        int plane = h * w;
+        for (int b = 0; b < n; b++)
+        {
+            int baseOffset = b * plane;
+            for (int y = top; y < top + holeH; y++)
+            {
+                int rowOffset = baseOffset + y * w;
+                for (int x = left; x < left + holeW; x++)
+                    span[rowOffset + x] = one;
+            }
+        }
+        return mask;
+    }
+
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // Default: create empty mask (no inpainting needed)
-        var mask = new Tensor<T>([input.Shape[0], 1, input.Shape[2], input.Shape[3]]);
+        // Use the same default hole mask the training forward sees (CreateDefaultInpaintingMask) so
+        // inference measures the model in the value space it was trained in. Callers with a real mask
+        // use Inpaint directly.
+        var mask = CreateDefaultInpaintingMask(input.Shape[0], input.Shape[2], input.Shape[3]);
         return Inpaint(input, mask);
     }
 }
