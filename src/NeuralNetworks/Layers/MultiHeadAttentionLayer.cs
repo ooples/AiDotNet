@@ -516,6 +516,24 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         {
             if (_isInitialized) return;
 
+            // Idempotent allocation. If correctly-shaped Q/K/V/O weights are ALREADY present — because
+            // they were installed by SetTrainableParameters (deserialize) or shared by a copy-on-write
+            // clone before this first forward — mark the layer initialized WITHOUT re-allocating. Re-
+            // initializing would overwrite restored/shared TRAINED weights with fresh random ones on a
+            // cloned or deserialized model's first forward, silently dropping the training (the #1221
+            // Clone_AfterTraining failure class for lazy attention stacks). Those install paths already
+            // register the tensors as trainable, so we only flip the initialized flag here.
+            if (_queryWeights is { Rank: 2 } q
+                && q.Shape[0] == _embeddingDimension && q.Shape[1] == _embeddingDimension
+                && _keyWeights is { Rank: 2 } kw && kw.Shape[0] == _embeddingDimension && kw.Shape[1] == _embeddingDimension
+                && _valueWeights is { Rank: 2 } vw && vw.Shape[0] == _embeddingDimension && vw.Shape[1] == _embeddingDimension
+                && _outputWeights is { Rank: 2 } ow && ow.Shape[0] == _embeddingDimension && ow.Shape[1] == _embeddingDimension
+                && _outputBias is { } ob && ob.Length == _embeddingDimension)
+            {
+                _isInitialized = true;
+                return;
+            }
+
             // Route lazy-weight allocation through AllocateLazyWeight: when
             // streaming is engaged on the parent network, this calls
             // WeightRegistry.AllocateStreaming which pre-evicts competing
