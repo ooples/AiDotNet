@@ -13,12 +13,15 @@ namespace AiDotNet.NeuralNetworks.CreditAssignment;
 /// Jacobian from that layer to the output and the routed teaching signal approaches the true error.
 /// </summary>
 /// <typeparam name="T">The numeric data type.</typeparam>
-internal sealed class DirectKolenPollackCreditRule<T> : CreditRuleBase<T>, IFeedbackLearningRule<T>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> DKP starts like DFA (a random shortcut to each layer) but then <i>trains</i> those
+/// shortcuts every step so they steadily become better estimates of the exact feedback — combining DFA's
+/// attention-friendly wiring with back-propagation-like accuracy.
+/// </para>
+/// </remarks>
+internal sealed class DirectKolenPollackCreditRule<T> : CreditRuleBase<T>
 {
-    // _feedback[i] : [outputFeatures, features_i], learned. The output layer has no feedback matrix.
-    private Matrix<T>?[]? _feedback;
-    private int[]? _shapeSignature;
-
     private readonly double _feedbackLearningRate;
     private readonly double _weightDecay;
 
@@ -31,42 +34,25 @@ internal sealed class DirectKolenPollackCreditRule<T> : CreditRuleBase<T>, IFeed
 
     public override string Name => "DirectKolenPollack";
 
-    public override void Initialize(ICreditAssignmentContext<T> context)
-    {
-        if (IsInitializedFor(context)) return;
-
-        var layers = context.Layers;
-        int outputFeatures = layers[layers.Count - 1].FlatFeatureSize;
-        var random = ResolveRandom(context);
-
-        _feedback = new Matrix<T>?[layers.Count];
-        _shapeSignature = new int[layers.Count + 1];
-        _shapeSignature[layers.Count] = outputFeatures;
-        for (int i = 0; i < layers.Count; i++)
-        {
-            _feedback[i] = layers[i].IsOutputLayer
-                ? null
-                : RandomGaussian(outputFeatures, layers[i].FlatFeatureSize, outputFeatures, random, context.NumOps);
-            _shapeSignature[i] = layers[i].FlatFeatureSize;
-        }
-    }
-
     public override void ComputeTeachingSignals(ICreditAssignmentContext<T> context)
     {
-        if (!IsInitializedFor(context)) Initialize(context);
-        var error = ErrorMatrix(context); // [B, C]
+        int outputFeatures = context.OutputError.Shape[1];
+        var feedback = EnsureFeedback(context, (layers, i) =>
+            layers[i].IsOutputLayer ? null : (outputFeatures, layers[i].FlatFeatureSize));
 
+        var error = ErrorMatrix(context); // [B, C]
         foreach (var layer in context.Layers)
         {
             if (layer.IsOutputLayer) continue;
-            var projected = error.Multiply(_feedback![layer.Index]!); // [B, C] · [C, M_i] = [B, M_i]
+            var projected = ProjectThrough(error, feedback[layer.Index]!); // [B, C] · [C, M_i] = [B, M_i]
             layer.TeachingSignal = ToTeachingSignal(projected, layer.OutputShape);
         }
     }
 
-    public void OnParametersUpdated(ICreditAssignmentContext<T> context)
+    protected override void UpdateFeedback(ICreditAssignmentContext<T> context)
     {
-        if (_feedback is null) return;
+        var feedback = Feedback;
+        if (feedback.Count == 0) return;
         var error = ErrorMatrix(context); // [B, C]
         var ops = context.NumOps;
 
@@ -77,18 +63,7 @@ internal sealed class DirectKolenPollackCreditRule<T> : CreditRuleBase<T>, IFeed
             if (layer.IsOutputLayer) continue;
             Matrix<T> activation = FlatMatrix(layer.Output); // [B, M_i]
             Matrix<T> grad = MeanOuter(error, activation, ops); // [C, M_i]
-            KpUpdate(_feedback[layer.Index]!, grad, _feedbackLearningRate, _weightDecay, ops);
+            KpUpdate(feedback[layer.Index]!, grad, _feedbackLearningRate, _weightDecay, ops);
         }
-    }
-
-    private bool IsInitializedFor(ICreditAssignmentContext<T> context)
-    {
-        if (_feedback is null || _shapeSignature is null) return false;
-        var layers = context.Layers;
-        if (_feedback.Length != layers.Count) return false;
-        if (_shapeSignature[layers.Count] != layers[layers.Count - 1].FlatFeatureSize) return false;
-        for (int i = 0; i < layers.Count; i++)
-            if (_shapeSignature[i] != layers[i].FlatFeatureSize) return false;
-        return true;
     }
 }

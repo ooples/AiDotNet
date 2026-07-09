@@ -15,22 +15,21 @@ namespace AiDotNet.NeuralNetworks.CreditAssignment;
 /// <typeparam name="T">The numeric data type.</typeparam>
 /// <remarks>
 /// <para>
-/// <b>Topology.</b> <c>B_j</c> (shape <c>[outFeatures_j, inFeatures_j]</c>) plays the exact role of the forward
-/// weight <c>W_j</c>: the teaching signal at layer <c>j</c>'s input is <c>δ_j · B_j</c>, which — when
-/// <c>B_j → W_j</c> — equals the true back-propagated error <c>δ_j · W_j</c>. That input-side teaching signal
-/// becomes the trainable layer below's output teaching signal (the layers must chain, i.e. each layer's input
-/// feature count equals the previous trainable layer's output feature count — as in a dense stack). For the
-/// attention/normalization case use <see cref="DirectKolenPollackCreditRule{T}"/>.
+/// <b>For Beginners:</b> KP is Feedback Alignment that <i>learns</i>: every step it nudges each layer's random
+/// feedback matrix to look a little more like the real forward weight, so after a while the shortcut messages it
+/// sends each layer are almost as good as exact back-propagation — which is why it keeps working on deep networks.
+/// </para>
+/// <para>
+/// <b>Topology.</b> <c>B_j</c> (shape <c>[outFeatures_j, inFeatures_j]</c>) plays the role of the forward weight
+/// <c>W_j</c>: the teaching signal at layer <c>j</c>'s input is <c>δ_j · B_j</c>, which — when <c>B_j → W_j</c> —
+/// equals the true back-propagated error <c>δ_j · W_j</c>. That input-side teaching signal becomes the trainable
+/// layer below's output teaching signal (the layers must chain, i.e. each layer's input feature count equals the
+/// previous trainable layer's output feature count — as in a dense stack). For attention/normalization use
+/// <see cref="DirectKolenPollackCreditRule{T}"/>.
 /// </para>
 /// </remarks>
-internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>, IFeedbackLearningRule<T>
+internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
 {
-    // _feedback[j] : [outFeatures_j, inFeatures_j], learned toward W_j. _feedback[0] is unused (the first
-    // trainable layer needs no downward feedback matrix — nothing below it consumes its input teaching).
-    private Matrix<T>?[]? _feedback;
-    private int[]? _outSignature;
-    private int[]? _inSignature;
-
     private readonly double _feedbackLearningRate;
     private readonly double _weightDecay;
 
@@ -43,32 +42,13 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>, IFeedbackLe
 
     public override string Name => "KolenPollack";
 
-    public override void Initialize(ICreditAssignmentContext<T> context)
-    {
-        if (IsInitializedFor(context)) return;
-
-        var layers = context.Layers;
-        var random = ResolveRandom(context);
-
-        _feedback = new Matrix<T>?[layers.Count];
-        _outSignature = new int[layers.Count];
-        _inSignature = new int[layers.Count];
-        for (int j = 0; j < layers.Count; j++)
-        {
-            int outFeatures = layers[j].FlatFeatureSize;
-            int inFeatures = InFeatures(layers[j]);
-            _outSignature[j] = outFeatures;
-            _inSignature[j] = inFeatures;
-            // j == 0 has no downstream trainable layer that consumes its input teaching, so no feedback matrix.
-            _feedback[j] = j == 0
-                ? null
-                : RandomGaussian(outFeatures, inFeatures, outFeatures, random, context.NumOps);
-        }
-    }
+    // B_j (j >= 1) maps layer j's output-teaching to its input-teaching; layer 0 needs none (nothing below consumes it).
+    private Matrix<T>?[] EnsureFeedback(ICreditAssignmentContext<T> context) =>
+        EnsureFeedback(context, (layers, j) => j == 0 ? null : (layers[j].FlatFeatureSize, InFeatures(layers[j])));
 
     public override void ComputeTeachingSignals(ICreditAssignmentContext<T> context)
     {
-        if (!IsInitializedFor(context)) Initialize(context);
+        var feedback = EnsureFeedback(context);
         var layers = context.Layers;
         int last = layers.Count - 1;
 
@@ -77,8 +57,8 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>, IFeedbackLe
         Matrix<T> delta = ErrorMatrix(context); // [B, outFeatures_last]
         for (int j = last; j >= 1; j--)
         {
-            var b = _feedback![j]!;               // [outFeatures_j, inFeatures_j]
-            Matrix<T> teachingBelow = delta.Multiply(b); // [B, inFeatures_j] == below layer's output space
+            var b = feedback[j]!;                          // [outFeatures_j, inFeatures_j]
+            Matrix<T> teachingBelow = delta.Multiply(b);   // [B, inFeatures_j] == below layer's output space
 
             var below = layers[j - 1];
             if (teachingBelow.Columns != below.FlatFeatureSize)
@@ -94,9 +74,10 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>, IFeedbackLe
         }
     }
 
-    public void OnParametersUpdated(ICreditAssignmentContext<T> context)
+    protected override void UpdateFeedback(ICreditAssignmentContext<T> context)
     {
-        if (_feedback is null) return;
+        var feedback = Feedback;
+        if (feedback.Count == 0) return;
         var layers = context.Layers;
         int last = layers.Count - 1;
         var ops = context.NumOps;
@@ -108,26 +89,7 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>, IFeedbackLe
             Matrix<T> deltaOut = j == last ? ErrorMatrix(context) : FlatMatrix(layers[j].TeachingSignal!);
             Matrix<T> input = FlatMatrix(layers[j].Input); // [B, inFeatures_j]
             Matrix<T> grad = MeanOuter(deltaOut, input, ops); // [outFeatures_j, inFeatures_j]
-            KpUpdate(_feedback[j]!, grad, _feedbackLearningRate, _weightDecay, ops);
+            KpUpdate(feedback[j]!, grad, _feedbackLearningRate, _weightDecay, ops);
         }
-    }
-
-    private static int InFeatures(ICreditLayer<T> layer)
-    {
-        var shape = layer.Input.Shape;
-        int flat = 1;
-        for (int i = 1; i < shape.Length; i++) flat *= shape[i];
-        return flat;
-    }
-
-    private bool IsInitializedFor(ICreditAssignmentContext<T> context)
-    {
-        if (_feedback is null || _outSignature is null || _inSignature is null) return false;
-        var layers = context.Layers;
-        if (_feedback.Length != layers.Count) return false;
-        for (int j = 0; j < layers.Count; j++)
-            if (_outSignature[j] != layers[j].FlatFeatureSize || _inSignature[j] != InFeatures(layers[j]))
-                return false;
-        return true;
     }
 }

@@ -509,4 +509,64 @@ public class CreditRuleFacadeTrainingTests
         if (na == 0 || nb == 0) return 0;
         return dot / (Math.Sqrt(na) * Math.Sqrt(nb));
     }
+
+    // ===========================================================================================
+    // Public extensible base class — a user-authored rule outside the library trains through the facade
+    // ===========================================================================================
+
+    /// <summary>
+    /// A minimal custom credit rule authored "outside" the library by subclassing the public
+    /// <see cref="CreditRuleBase{T}"/> and using only its protected helpers — proving the base is genuinely
+    /// extensible and that <c>ConfigureCreditRule(ICreditRule&lt;T&gt;)</c> accepts it.
+    /// </summary>
+    private sealed class CustomDirectRule<T> : CreditRuleBase<T>
+    {
+        public CustomDirectRule(int? seed = null) : base(seed) { }
+        public override string Name => "CustomDirectRule";
+
+        public override void ComputeTeachingSignals(ICreditAssignmentContext<T> context)
+        {
+            int outputFeatures = context.OutputError.Shape[1];
+            var feedback = EnsureFeedback(context, (layers, i) =>
+                layers[i].IsOutputLayer ? null : (outputFeatures, layers[i].FlatFeatureSize));
+            var error = ErrorMatrix(context);
+            foreach (var layer in context.Layers)
+            {
+                if (layer.IsOutputLayer) continue;
+                var projected = ProjectThrough(error, feedback[layer.Index]!);
+                layer.TeachingSignal = ToTeachingSignal(projected, layer.OutputShape);
+            }
+        }
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task CustomCreditRuleBaseSubclass_TrainsMlp_ThroughFacade()
+    {
+        var (trainX, trainY, _) = MakeBlobs(300, seed: 1);
+        var (testX, _, testLabels) = MakeBlobs(120, seed: 999);
+
+        var mlp = BuildMlp();
+        double before = Accuracy<double>(mlp.Predict, testX, testLabels, MlpClasses);
+
+        var adam = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = 0.03,
+                MaxIterations = 80,
+                BatchSize = 32,
+            });
+
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureModel(mlp)
+            .ConfigureOptimizer(adam)
+            .ConfigureCreditRule(new CustomDirectRule<double>(seed: 42)) // ICreditRule<T> overload
+            .ConfigureLossFunction(new CategoricalCrossEntropyLoss<double>())
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Tensor<double>, Tensor<double>>(trainX, trainY))
+            .BuildAsync();
+
+        double after = Accuracy<double>(result.Predict, testX, testLabels, MlpClasses);
+        Assert.True(after >= 0.60,
+            $"Custom CreditRuleBase subclass should learn (held-out {after:F3} >= 0.60, chance {1.0 / MlpClasses:F3}, before {before:F3}).");
+    }
 }
