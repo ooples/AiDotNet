@@ -61,7 +61,7 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
         var network = CreateNetwork();
 
         // Only models that expose the mask-conditioned Inpaint path are in scope.
-        if (network is not VideoInpaintingBase<T> inpainter) return;
+        if (network is not VideoInpaintingBase<double> inpainter) return;
 
         var frames = CreateRandomTensor(InputShape, rng);
         int n = frames.Shape[0];
@@ -91,9 +91,9 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
     }
 
     /// <summary>Builds a single-channel <c>[n, 1, h, w]</c> mask with a rectangular hole (1 = hole).</summary>
-    private Tensor<T> BuildBoxMask(int n, int h, int w, int top, int left, int boxH, int boxW)
+    private Tensor<double> BuildBoxMask(int n, int h, int w, int top, int left, int boxH, int boxW)
     {
-        var mask = new Tensor<T>([n, 1, h, w]);
+        var mask = new Tensor<double>([n, 1, h, w]);
         var one = NumOps.FromDouble(1.0);
         var span = mask.Data.Span;
         int plane = h * w;
