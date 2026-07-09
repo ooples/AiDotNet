@@ -3115,6 +3115,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // runs at sensible cost.
             sb.AppendLine("    protected override int[] InputShape => new[] { 16 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+
+            if (model.ClassName == "LayoutLMv2")
+            {
+                // EXCEED the reference: the default invariants above feed a TOKEN-ONLY input (the model
+                // degrades gracefully to its text stream). This extra test exercises the FULL two-stream
+                // fusion — a token-ID sequence AND a document image together — through EncodeMultimodal,
+                // which reference LayoutLMv2 requires and our modality-robust forward also supports.
+                sb.AppendLine();
+                sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                sb.AppendLine("    public async System.Threading.Tasks.Task MultiModal_FullFusion_ShouldProduceFiniteOutput()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+                sb.AppendLine("        var rng = ModelTestHelpers.CreateSeededRandom();");
+                sb.AppendLine("        var model = (AiDotNet.Document.LayoutAware.LayoutLMv2<double>)CreateNetwork();");
+                sb.AppendLine("        var tokens = CreateRandomTensor(new[] { 16 }, rng);");
+                sb.AppendLine("        var image = CreateRandomTensor(new[] { 3, 32, 32 }, rng);");
+                sb.AppendLine("        var output = model.EncodeMultimodal(tokens, image);");
+                sb.AppendLine("        Xunit.Assert.True(output.Length > 0, \"Full-fusion output must be non-empty.\");");
+                sb.AppendLine("        for (int i = 0; i < output.Length; i++)");
+                sb.AppendLine("            Xunit.Assert.False(double.IsNaN(output[i]) || double.IsInfinity(output[i]),");
+                sb.AppendLine("                $\"Full-fusion output[{i}] = {output[i]} is not finite.\");");
+                sb.AppendLine("    }");
+            }
         }
         else if (isVisionModel &&
                  (model.ClassName.StartsWith("UNITER", System.StringComparison.Ordinal)
