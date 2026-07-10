@@ -23,6 +23,8 @@ class Program
         ["lstmvae-profile"]     = LSTMVAEProfile.Run,
         ["deepant-profile"]     = DeepANTProfile.Run,
         ["nbeats-profile"]      = NBEATSProfile.Run,
+        ["informer-verify"]     = InformerProfile.RunVerify,
+        ["informer-gpu"]        = InformerProfile.RunGpu,
         ["autoformer-profile"]  = AutoformerProfile.Run,
         ["resnet50-profile"]    = ResNet50Profile.Run,
         ["whispertimestamped-profile"] = WhisperTimestampedProfile.Run,
