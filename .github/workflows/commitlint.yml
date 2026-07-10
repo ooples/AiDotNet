@@ -16,6 +16,8 @@ jobs:
 
       - name: Lint commits
         uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6
-        # Uses .commitlintrc.json from repository root via auto-discovery
+        # Loads commitlint.config.mjs — the action's default configFile is
+        # ./commitlint.config.mjs, so the file MUST be named .mjs (a .js was
+        # silently ignored, falling back to config-conventional defaults).
 
 
