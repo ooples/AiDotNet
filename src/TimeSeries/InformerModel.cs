@@ -468,7 +468,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate();
         AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount();
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         int maxEpochs = _options.Epochs;
         bool fusedEngaged = false;
         bool diverged = false;

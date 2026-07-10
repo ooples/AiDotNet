@@ -684,7 +684,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     /// <see cref="TrainCore"/> call (the objective being minimized by Adam). Exposed so callers
     /// can confirm the tape-driven optimizer is actually reducing the loss.
     /// </summary>
-    public IReadOnlyList<double> TrainingLossHistory => _epochLosses;
+    internal IReadOnlyList<double> TrainingLossHistory => _epochLosses.AsReadOnly();
     private readonly List<double> _epochLosses = new();
 }
 

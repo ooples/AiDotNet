@@ -25,15 +25,16 @@ namespace AiDotNet.TimeSeries;
 /// <see cref="Tensors.Engines.Autodiff.GradientTape{T}"/> produces the whole backward pass
 /// automatically (no hand-derived gradients) and every op is GPU-dispatchable. Windows of
 /// the z-normalized series are stacked into a <c>[B, L]</c> batch and the full H-step horizon
-/// is supervised per sample (MSE). Best-epoch parameters are snapshotted and restored.
+/// is supervised per sample with the pinball / quantile loss summed over every configured
+/// <see cref="TemporalFusionTransformerOptions{T}.QuantileLevels"/> level, so the model learns a
+/// genuine predictive spread (see <see cref="PredictQuantiles"/>); the point forecast is the
+/// median-level head.
 /// </para>
 /// <para>
 /// <b>Simplifications vs the full paper</b> (documented per the tape-conversion campaign):
-/// (1) The quantile / pinball output head is replaced by a single point (mean) forecast head
-/// trained with MSE — the interpretable quantile spread is not modelled. (2) The sequential
-/// LSTM encoder-decoder is replaced by additive sinusoidal positional encodings feeding the
+/// (1) The sequential LSTM encoder-decoder is replaced by additive sinusoidal positional encodings feeding the
 /// self-attention block (a recurrent scan differentiates poorly on the tape and does not
-/// batch; positional encodings + attention recover temporal order). (3) For univariate series
+/// batch; positional encodings + attention recover temporal order). (2) For univariate series
 /// (the only exogenous inputs available here) variable selection reduces to a learned
 /// per-channel softmax gate over the embedded features rather than selection across multiple
 /// exogenous variables. The GRN, variable-selection gating, and interpretable multi-head
@@ -73,9 +74,9 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     // Post-attention gated skip connection.
     private GatedResidualNetwork<T> _postAttentionGrn;
 
-    // Point-forecast head (MSE): pooled hidden -> H-step forecast.
-    private Tensor<T> _forecastWeight; // [hiddenSize, forecastHorizon]
-    private Tensor<T> _forecastBias;   // [forecastHorizon]
+    // Quantile forecast head: pooled hidden -> H-step forecast for each quantile level (quantile-major).
+    private Tensor<T> _forecastWeight; // [hiddenSize, forecastHorizon * numQuantiles]
+    private Tensor<T> _forecastBias;   // [forecastHorizon * numQuantiles]
 
     // Training state.
     private Vector<T> _trainingSeries = Vector<T>.Empty();
@@ -116,6 +117,10 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
                 $"HiddenSize ({_options.HiddenSize}) must be divisible by NumAttentionHeads ({_options.NumAttentionHeads}).");
         if (_options.QuantileLevels == null || _options.QuantileLevels.Length == 0)
             throw new ArgumentException("QuantileLevels must contain at least one value.");
+        foreach (var q in _options.QuantileLevels)
+            if (q <= 0.0 || q >= 1.0)
+                throw new ArgumentException(
+                    $"Each quantile level must be strictly between 0 and 1; got {q}.", nameof(_options.QuantileLevels));
     }
 
     private void InitializeComponents()
@@ -146,10 +151,14 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         // Post-attention gated skip.
         _postAttentionGrn = new GatedResidualNetwork<T>(d, d, d, seed: _random.Next());
 
-        // Forecast head (point forecast).
+        // Quantile forecast head: projects the pooled features to H forecasts for EACH quantile level,
+        // laid out quantile-major as [q0_h0..q0_h(H-1), q1_h0.., ...] (index = qi*H + h). Trained with the
+        // pinball/quantile loss so each level learns a genuine predictive interval (TFT's defining feature).
         int horizon = _options.ForecastHorizon;
-        _forecastWeight = CreateRandomTensor([d, horizon], Math.Sqrt(2.0 / (d + horizon)));
-        _forecastBias = new Tensor<T>([horizon]);
+        int numQuantiles = _options.QuantileLevels.Length;
+        int outDim = horizon * numQuantiles;
+        _forecastWeight = CreateRandomTensor([d, outDim], Math.Sqrt(2.0 / (d + outDim)));
+        _forecastBias = new Tensor<T>([outDim]);
     }
 
     // ── Training (tape + Adam) ──────────────────────────────────────────────────────
@@ -180,7 +189,25 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
         var optimizer = _optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
-        var mseLoss = new MeanSquaredErrorLoss<T>();
+        // Pinball / quantile loss, one per configured level. Summing them over the quantile-major forecast
+        // trains a genuine spread (lower levels below, upper above) instead of a single point head.
+        int numQuantiles = _options.QuantileLevels.Length;
+        var quantileLosses = new QuantileLoss<T>[numQuantiles];
+        for (int qi = 0; qi < numQuantiles; qi++)
+            quantileLosses[qi] = new QuantileLoss<T>(_options.QuantileLevels[qi]);
+
+        // Sum the mean pinball loss of every quantile's [B, H] slice of the [B, H*Q] forecast (all on the tape).
+        Tensor<T> QuantilePinballLoss(Tensor<T> pred, Tensor<T> tgt)
+        {
+            Tensor<T> total = null!;
+            for (int qi = 0; qi < numQuantiles; qi++)
+            {
+                var sliceQi = Engine.TensorNarrow(pred, 1, qi * horizon, horizon); // [B, H]
+                var ql = quantileLosses[qi].ComputeTapeLoss(sliceQi, tgt);
+                total = qi == 0 ? ql : Engine.TensorAdd(total, ql);
+            }
+            return total;
+        }
         var allParams = CollectAllTrainableParameters();
 
         int batchSize = Math.Max(1, _options.BatchSize);
@@ -216,8 +243,8 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
                 var batchTarget = new Tensor<T>([b, horizon], new Vector<T>(targetData));
 
                 using var tape = new GradientTape<T>();
-                var forecast = ForwardBatch(batchInput, b, lookback); // [b, horizon]
-                var lossTensor = mseLoss.ComputeTapeLoss(forecast, batchTarget);
+                var forecast = ForwardBatch(batchInput, b, lookback); // [b, horizon*Q]
+                var lossTensor = QuantilePinballLoss(forecast, batchTarget);
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
 
                 var grads = new Dictionary<Tensor<T>, Tensor<T>>(
@@ -227,7 +254,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
                 T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
                 Tensor<T> ComputeForward(Tensor<T> a, Tensor<T> t) => forecast;
-                Tensor<T> ComputeLoss(Tensor<T> p, Tensor<T> t) => mseLoss.ComputeTapeLoss(p, t);
+                Tensor<T> ComputeLoss(Tensor<T> p, Tensor<T> t) => QuantilePinballLoss(p, t);
                 var context = new TapeStepContext<T>(
                     allParams, grads, lossValue, batchInput, batchTarget, ComputeForward, ComputeLoss, null);
                 optimizer.Step(context);
@@ -344,25 +371,54 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         // 6. Pool over the sequence and project to the H-step forecast.
         var gated3 = Engine.Reshape(gated, [batch, seq, d]);
         var pooled = Engine.ReduceMean(gated3, [1], keepDims: false); // [batch, d]
-        return MatMulBias(pooled, _forecastWeight, _forecastBias);    // [batch, horizon]
+        return MatMulBias(pooled, _forecastWeight, _forecastBias);    // [batch, horizon*Q]
     }
 
     // Inference forward for a single lookback window using the SAME Engine ops as training.
-    private Tensor<T> ForwardEngine(Vector<T> input)
+    // Full quantile forecast for a single lookback window: [H*Q] denormalized (index = qi*H + h).
+    private Tensor<T> ForwardEngineQuantiles(Vector<T> input)
     {
+        int horizon = _options.ForecastHorizon;
+        int numQuantiles = _options.QuantileLevels.Length;
+        int outDim = horizon * numQuantiles;
         int seqLen = Math.Min(input.Length, _options.LookbackWindow);
-        if (seqLen <= 0) return new Tensor<T>([_options.ForecastHorizon]);
+        if (seqLen <= 0) return new Tensor<T>([outDim]);
         var inData = new T[seqLen];
         for (int t = 0; t < seqLen; t++)
             inData[t] = NumOps.Divide(NumOps.Subtract(input[input.Length - seqLen + t], _normMean), _normStd);
         var batchInput = new Tensor<T>([1, seqLen], new Vector<T>(inData));
-        var outBH = ForwardBatch(batchInput, 1, seqLen); // [1, horizon]
+        var outBHQ = ForwardBatch(batchInput, 1, seqLen); // [1, H*Q]
 
+        var result = new Tensor<T>([outDim]);
+        for (int i = 0; i < outDim; i++)
+            result[i] = NumOps.Add(NumOps.Multiply(outBHQ[i], _normStd), _normMean);
+        return result;
+    }
+
+    // Point forecast = the median (closest-to-0.5) quantile's H-step forecast.
+    private Tensor<T> ForwardEngine(Vector<T> input)
+    {
         int horizon = _options.ForecastHorizon;
+        var all = ForwardEngineQuantiles(input); // [H*Q]
+        int medQi = MedianQuantileIndex();
         var result = new Tensor<T>([horizon]);
         for (int h = 0; h < horizon; h++)
-            result[h] = NumOps.Add(NumOps.Multiply(outBH[h], _normStd), _normMean);
+            result[h] = all[medQi * horizon + h];
         return result;
+    }
+
+    // Index of the quantile level nearest 0.5 — used as the point forecast.
+    private int MedianQuantileIndex()
+    {
+        var levels = _options.QuantileLevels;
+        int best = 0;
+        double bestDist = double.MaxValue;
+        for (int qi = 0; qi < levels.Length; qi++)
+        {
+            double dist = Math.Abs(levels[qi] - 0.5);
+            if (dist < bestDist) { bestDist = dist; best = qi; }
+        }
+        return best;
     }
 
     // ── Prediction ──────────────────────────────────────────────────────────────────
@@ -415,19 +471,17 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Returns per-quantile forecasts. NOTE: the quantile head was simplified to a single
-    /// point (mean) MSE forecast during the tape conversion, so every requested quantile level
-    /// returns the same H-step point forecast (no learned quantile spread).
+    /// Returns per-quantile forecasts as a flat vector laid out quantile-major:
+    /// <c>[q0_h0..q0_h(H-1), q1_h0..q1_h(H-1), ...]</c> (index = <c>qi*ForecastHorizon + h</c>), in the same
+    /// order as <see cref="TemporalFusionTransformerOptions{T}.QuantileLevels"/>. Each level is produced by a
+    /// dedicated head column trained with the pinball loss, so the levels give a genuine predictive spread.
     /// </summary>
     public Vector<T> PredictQuantiles(Vector<T> input)
     {
-        var point = ForwardEngine(input);
-        int numQuantiles = _options.QuantileLevels.Length;
-        int horizon = _options.ForecastHorizon;
-        var result = new Vector<T>(numQuantiles * horizon);
-        for (int qi = 0; qi < numQuantiles; qi++)
-            for (int h = 0; h < horizon; h++)
-                result[qi * horizon + h] = h < point.Length ? point[h] : NumOps.Zero;
+        var all = ForwardEngineQuantiles(input); // [H*Q] denormalized, index = qi*H + h
+        var result = new Vector<T>(all.Length);
+        for (int i = 0; i < all.Length; i++)
+            result[i] = all[i];
         return result;
     }
 

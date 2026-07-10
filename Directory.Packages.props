@@ -219,10 +219,10 @@
          memory-bounded transformer forward uses: it carries the layer boundary out of the recyclable
          scratch region, then resets the pool so the next layer reuses it (peak ~= O(one layer)).
          0.111.1 is PUBLISHED to NuGet and is a superset of 0.111.0. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.111.1" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.111.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.111.1" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.111.1" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.112.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.112.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.112.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.112.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />

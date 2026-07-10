@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
@@ -44,7 +45,7 @@ internal static class AutoformerVerify
         const int n = 600;
         var x = new Matrix<double>(n, 1);
         var y = new Vector<double>(n);
-        var rng = new Random(1234);
+        var rng = RandomHelper.CreateSeededRandom(1234);
         for (int i = 0; i < n; i++)
         {
             double t = i;
@@ -94,6 +95,10 @@ internal static class AutoformerVerify
         Console.WriteLine(beatsBaseline ? "PASS: beats naive repeat-last baseline"
                                         : "FAIL: does NOT beat naive repeat-last baseline");
         Console.WriteLine(decreased && beatsBaseline ? "OVERALL: PASS" : "OVERALL: FAIL");
+
+        // Verification must FAIL THE PROCESS so CI / callers can detect a regression (not just print it).
+        if (!(decreased && beatsBaseline))
+            Environment.Exit(1);
     }
 
     // Average MSE of the model's full-horizon forecast over valid lookback windows (strided).

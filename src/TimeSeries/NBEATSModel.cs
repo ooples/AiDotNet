@@ -326,7 +326,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         var allBlocks = _blocks.Cast<Interfaces.ILayer<T>>().ToList();
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allBlocks, -1);
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         _lastRunEpochLosses = new List<double>();
 
         // Mini-batch training per Oreshkin et al. 2019 §3.3: for each mini-
@@ -575,15 +575,15 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// engages, or when there isn't a single full batch of data.
     /// </para>
     /// <para>
-    /// <b>Status on the currently-linked Tensors build:</b> for N-BEATS's specific op
-    /// graph (per-layer <c>TensorPermute</c> + <c>TensorBroadcastAdd</c> in the
-    /// doubly-residual stack) the compiled fused plan does not yet reliably reproduce the
-    /// eager gradients, so this attempt typically validation-rejects and hands off to the
-    /// eager path. It is retained as the reusable residency seam for time-series models
-    /// whose op graphs the compiler handles faithfully; N-BEATS is additionally
-    /// host-bound (small per-op tensors), which caps GPU occupancy regardless. The
-    /// eager path itself already dispatches every tape op to the GPU when a
-    /// <c>DirectGpuTensorEngine</c> is current.
+    /// <b>Status (AiDotNet.Tensors ≥ 0.112.0):</b> the compiled fused plan now trains N-BEATS's
+    /// doubly-residual op graph (per-layer <c>TensorPermute</c> + <c>TensorBroadcastAdd</c>) faithfully —
+    /// AiDotNet.Tensors #759 fixed the multi-consumer grad-buffer zeroing that made those ops' backward
+    /// explode, and #764 fixed the GPU-resident-parameter mistrain. Verified on GPU: the resident run
+    /// reduces the eager-forward training MSE and improves the held-out MSE over the untrained baseline, so
+    /// the correctness gate below accepts it. The gate is retained as a safety net: a resident run that fails
+    /// to generalize (e.g. on pathological / out-of-distribution splits) is still discarded in favour of the
+    /// eager path. N-BEATS is host-bound (small per-op tensors), so the residency win is modest; the eager
+    /// path also dispatches every tape op to the GPU when a <c>DirectGpuTensorEngine</c> is current.
     /// </para>
     /// </remarks>
     private bool TryTrainGpuResident(Vector<T> yNorm, int numSamples)
@@ -641,7 +641,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
         _lastRunEpochLosses = new List<double>();
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         bool fusedEngaged = false;
         bool diverged = false;
         double firstStepLoss = double.NaN;
@@ -702,15 +702,12 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                 epochLossSum += stepLossD;
                 epochStepCount++;
 
-                // Divergence guard. The compiled fused-optimizer plan does not
-                // correctly train N-BEATS's doubly-residual op graph (the
-                // TensorPermute + TensorBroadcastAdd backward in the captured
-                // plan produces exploding Adam updates on the linked Tensors
-                // build) — the weights blow up to ~1e13 while the reported loss
-                // barely moves. Detect a non-finite or exploding step loss and
-                // bail so TrainCore re-initializes and falls back to the eager
-                // tape path (which trains N-BEATS correctly). This keeps the
-                // GPU-resident attempt from ever shipping garbage weights.
+                // Divergence guard (defensive). AiDotNet.Tensors #759 fixed the TensorPermute +
+                // TensorBroadcastAdd backward that used to make the captured plan produce exploding Adam
+                // updates for N-BEATS's doubly-residual graph, so on Tensors >= 0.112.0 the fused step trains
+                // correctly. This guard remains as a cheap belt-and-braces check against any future
+                // non-finite / exploding step loss (e.g. a different linked Tensors build): on a NaN or a
+                // blow-up it bails so TrainCore re-initializes and falls back to the eager tape path.
                 if (double.IsNaN(stepLossD) || double.IsInfinity(stepLossD))
                 {
                     diverged = true;
@@ -729,17 +726,15 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                 _lastRunEpochLosses.Add(epochLossSum / epochStepCount);
         }
 
-        // Correctness gate. The compiled fused-optimizer plan is NOT reliably
-        // faithful to the eager tape semantics for N-BEATS's doubly-residual op
-        // graph on the linked Tensors build: for some shapes it reduces its own
-        // compiled loss while driving the model to worse-than-random forecasts
-        // (finite but degenerate weights). A pure magnitude/NaN check misses
-        // that, so we validate on the actual forecasting objective: keep the
-        // resident result only if it meaningfully improved the validation MSE
-        // over the untrained baseline. Otherwise discard it, re-initialize the
-        // blocks to their deterministic seeded init, and let TrainCore fall back
-        // to the eager path (which trains N-BEATS correctly). This guarantees
-        // the GPU-resident attempt can never ship worse weights than eager.
+        // Correctness gate. On Tensors >= 0.112.0 the fused plan trains N-BEATS faithfully (verified:
+        // the resident run lowers the eager-forward training MSE and improves the held-out MSE). This gate
+        // is retained as a generalization safety net rather than a correctness workaround: it validates on
+        // the actual forecasting objective (held-out MSE vs the untrained baseline) and keeps the resident
+        // result only when it meaningfully improved. A resident run that fails to generalize — e.g. an
+        // out-of-distribution split, or a hypothetical future Tensors build that regresses gradient fidelity
+        // finitely (below the NaN/blow-up guard) — is discarded: the blocks are re-initialized to their
+        // deterministic seeded init and TrainCore falls back to the eager path. So the GPU-resident attempt
+        // can never ship weights that forecast worse than the untrained baseline.
         if (fusedEngaged)
         {
             double postMse = ValidationStackMse(holdoutWindows, yNorm, L, H);
