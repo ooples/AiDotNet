@@ -137,7 +137,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// and forth for every little operation — much higher GPU utilization and throughput.
     /// </para>
     /// </remarks>
-    protected bool CanTrainOnGpu =>
+    private protected bool CanTrainOnGpu =>
         typeof(T) == typeof(float)
         && AiDotNetEngine.Current is DirectGpuTensorEngine gpu && gpu.SupportsGpu
         && AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
@@ -163,7 +163,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// resident) callers must pass a <b>constant batch shape</b> on every step.
     /// </para>
     /// </remarks>
-    protected static bool TryFusedResidentStep(
+    private protected static bool TryFusedResidentStep(
         IReadOnlyList<ITrainableLayer<T>> layers,
         Tensor<T> input,
         Tensor<T> target,

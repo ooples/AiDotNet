@@ -93,7 +93,12 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
     /// improve the validation baseline, or the config's pool sizes don't divide the
     /// lookback cleanly (see <see cref="TryTrainGpuResident"/>).
     /// </summary>
-    public bool LastRunUsedGpuResidentPath { get; private set; }
+    /// <remarks>
+    /// Internal diagnostic: the public surface stays limited to the facade
+    /// (<c>AiModelBuilder</c>/<c>AiModelResult</c>). Visible to the test and
+    /// serving assemblies via <c>InternalsVisibleTo</c>.
+    /// </remarks>
+    internal bool LastRunUsedGpuResidentPath { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the NHiTSModel class.
@@ -121,6 +126,14 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
         if (_options.PoolingKernelSizes is null || _options.PoolingKernelSizes.Length != _options.NumStacks)
             throw new ArgumentException($"Pooling kernel sizes length must match number of stacks ({_options.NumStacks}).");
+
+        for (int i = 0; i < _options.PoolingKernelSizes.Length; i++)
+        {
+            if (_options.PoolingKernelSizes[i] <= 0)
+                throw new ArgumentException(
+                    $"Pooling kernel size at index {i} must be positive (was {_options.PoolingKernelSizes[i]}); " +
+                    "a zero kernel divides by zero and a negative kernel produces an invalid downsampled length.");
+        }
 
         if (_options.LookbackWindow <= 0)
             throw new ArgumentException("Lookback window must be positive.");
@@ -175,6 +188,21 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Reject series that cannot produce a single training window BEFORE the
+        // mean/variance pass (which divides by y.Length) and the window builder.
+        // An empty series would divide by zero; any series shorter than
+        // LookbackWindow + ForecastHorizon yields no valid windows and would train
+        // silently on nothing (zero parameter updates).
+        int requiredLength = checked(_options.LookbackWindow + _options.ForecastHorizon);
+        if (y.Length < requiredLength)
+        {
+            throw new ArgumentException(
+                $"Training series must contain at least {requiredLength} values " +
+                $"(LookbackWindow {_options.LookbackWindow} + ForecastHorizon {_options.ForecastHorizon}); " +
+                $"got {y.Length}.",
+                nameof(y));
+        }
+
         // Store training series BEFORE training loop for cancellation safety
         _trainingSeries = new Vector<T>(y.Length);
         for (int i = 0; i < y.Length; i++)
@@ -255,6 +283,14 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         double bestLoss = double.PositiveInfinity;
         List<Vector<T>>? bestSnapshot = null;
 
+        // Valid window positions (idx with a full lookback AND target horizon), used
+        // to score each epoch's FROZEN end-of-epoch weights for best-checkpoint
+        // selection. Built once — the series doesn't change across epochs.
+        var checkpointWindows = new List<int>();
+        for (int idx = 0; idx < numSamples; idx++)
+            if (idx >= lookback && idx + horizon <= yNorm.Length)
+                checkpointWindows.Add(idx);
+
         for (int epoch = 0; epoch < maxEpochs; epoch++)
         {
             if (timeBounded && TrainingCancellationToken.IsCancellationRequested)
@@ -263,7 +299,6 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
             var indices = Enumerable.Range(0, numSamples).OrderBy(_ => _random.Next()).ToList();
 
-            double epochLossSum = 0.0;
             int epochSampleCount = 0;
 
             for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
@@ -341,15 +376,11 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
                         grads[param] = grad;
                 }
 
-                // Accumulate this batch's mean loss (weighted by sample count) so the
-                // epoch mean can be compared for best-checkpoint selection. Read the
-                // loss BEFORE the optimizer step — it reflects the current weights.
-                if (batchLoss.Length > 0)
-                {
-                    double bl = Convert.ToDouble(batchLoss[0]);
-                    epochLossSum += bl * effectiveBatch;
-                    epochSampleCount += effectiveBatch;
-                }
+                // Count trained samples this epoch so best-checkpoint selection only
+                // fires when training actually ran. The epoch is SCORED separately on
+                // the frozen end-of-epoch weights (see ValidationMse below), so the
+                // per-batch pre-update loss is no longer accumulated here.
+                epochSampleCount += effectiveBatch;
 
                 var context = new TapeStepContext<T>(
                     trainableParams, grads,
@@ -358,11 +389,16 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
                 optimizer.Step(context);
             }
 
-            // Snapshot the parameters if this epoch's mean training loss is the best
-            // so far and finite. The snapshot captures end-of-epoch weights.
+            // Snapshot the parameters if this epoch's FROZEN end-of-epoch weights are
+            // the best so far. Score with ValidationMse (a no-update forward over the
+            // window set) so bestLoss measures exactly the weights bestSnapshot
+            // captures. Scoring by the epoch's mean PRE-update batch loss instead
+            // would measure a mix of intra-epoch weight states, not the snapshot, so
+            // a late-diverging epoch (good early batches, bad end weights) could be
+            // wrongly selected as best. The extra pass is forward-only (no backprop).
             if (epochSampleCount > 0)
             {
-                double epochLoss = epochLossSum / epochSampleCount;
+                double epochLoss = ValidationMse(checkpointWindows, yNorm, lookback, horizon);
                 if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
                 {
                     bestLoss = epochLoss;
@@ -729,6 +765,12 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         {
             stack.Serialize(writer);
         }
+
+        // Normalization statistics learned in TrainCore. Without these a reloaded
+        // model denormalizes with the defaults (_normMean=0, _normStd=1), so its
+        // forecasts differ from the original trained model. Written as doubles.
+        writer.Write(NumOps.ToDouble(_normMean));
+        writer.Write(NumOps.ToDouble(_normStd));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -744,6 +786,11 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         {
             _stacks[s].Deserialize(reader);
         }
+
+        // Restore the normalization statistics written by SerializeCore so the
+        // reloaded model reproduces the original's forecasts.
+        _normMean = NumOps.FromDouble(reader.ReadDouble());
+        _normStd = NumOps.FromDouble(reader.ReadDouble());
     }
 
     public override ModelMetadata<T> GetModelMetadata()

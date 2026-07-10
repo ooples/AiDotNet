@@ -93,7 +93,12 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     /// fused compiled plan (weights / activations / Adam moments resident on the
     /// device across the whole loop). Mirrors <c>NBEATSModel.LastRunUsedGpuResidentPath</c>.
     /// </summary>
-    public bool LastRunUsedGpuResidentPath { get; private set; }
+    /// <remarks>
+    /// Internal diagnostic: the public surface stays limited to the facade
+    /// (<c>AiModelBuilder</c>/<c>AiModelResult</c>). Visible to the test and
+    /// serving assemblies via <c>InternalsVisibleTo</c>.
+    /// </remarks>
+    internal bool LastRunUsedGpuResidentPath { get; private set; }
 
     // Sparsity factor for ProbSparse attention (c in the paper, typically 5)
     private const int SparsityFactor = 5;
@@ -142,6 +147,15 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     {
         double stddev = Math.Sqrt(2.0 / _options.EmbeddingDim);
         var random = RandomHelper.CreateSeededRandom(42);
+
+        // Idempotent: TryTrainGpuResident re-invokes this on a rejected resident run
+        // to reset to a clean init, so clear any existing layers before rebuilding —
+        // otherwise the rebuild APPENDS a second full set (doubling encoder/decoder/
+        // distilling layers, corrupting ParameterCount, ForwardBatch and the forecast).
+        // Safe on the constructor path too, where the lists are already empty.
+        _encoderLayers.Clear();
+        _distillingLayers.Clear();
+        _decoderLayers.Clear();
 
         // Input projection: maps single time step values to embedding dimension
         _inputProjection = InitTensor(new[] { _options.EmbeddingDim, 1 }, stddev, random);

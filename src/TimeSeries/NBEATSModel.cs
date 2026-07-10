@@ -85,14 +85,21 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <c>Train</c> call, in order. Useful for verifying convergence and for
     /// comparing the GPU-resident path against the eager path.
     /// </summary>
-    public IReadOnlyList<double> LastRunEpochLosses => _lastRunEpochLosses;
+    /// <remarks>
+    /// Internal diagnostic: the public surface stays limited to the facade
+    /// (<c>AiModelBuilder</c>/<c>AiModelResult</c>). Exposed as an immutable
+    /// snapshot so callers cannot mutate the backing list. Visible to the test
+    /// and serving assemblies via <c>InternalsVisibleTo</c>.
+    /// </remarks>
+    internal IReadOnlyList<double> LastRunEpochLosses => _lastRunEpochLosses.AsReadOnly();
 
     /// <summary>
     /// True when the most recent <c>Train</c> call executed through the
     /// GPU-resident fused-compiled training path (see <see cref="TryTrainGpuResident"/>).
-    /// False when it used the eager tape loop.
+    /// False when it used the eager tape loop. Internal diagnostic (see
+    /// <see cref="LastRunEpochLosses"/>).
     /// </summary>
-    public bool LastRunUsedGpuResidentPath { get; private set; }
+    internal bool LastRunUsedGpuResidentPath { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the NBEATSModel class.
