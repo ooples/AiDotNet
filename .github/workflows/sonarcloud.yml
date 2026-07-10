@@ -127,7 +127,7 @@ jobs:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event.pull_request.draft != true
+    if: ${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') }}
     permissions:
       contents: read
       security-events: write
@@ -211,7 +211,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: github.event.pull_request.draft != true
+    if: ${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') }}
 
     steps:
       - name: Checkout code
@@ -291,7 +291,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 45
-    if: github.event.pull_request.draft != true
+    if: ${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') }}
     strategy:
       fail-fast: false
       matrix:
@@ -1113,7 +1113,7 @@ jobs:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: github.event.pull_request.draft != true
+    if: ${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') }}
     needs:
       - build
       - test-net10-sharded
@@ -1237,6 +1237,7 @@ jobs:
 
   # Artifact size analysis
   size-check:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     name: Artifact Size Check
     runs-on: ubuntu-latest
     needs: build

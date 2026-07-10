@@ -50,54 +50,48 @@ internal static class CreditAssignmentGradientComputer<T>
                 "CategoricalCrossEntropyLoss or MeanSquaredErrorLoss).");
         }
 
-        IEngine engine = AiDotNetEngine.Current;
         var layers = network.Layers;
         bool prevTrainingMode = network.IsTrainingMode;
         network.SetTrainingMode(true);
 
         try
         {
-            using var tape = new GradientTape<T>();
-
-            // Forward pass under the tape, capturing each layer's INPUT and output node.
-            // layerInputs[i] is the tensor fed INTO layer i (needed to re-run a single hidden
-            // layer in isolation for its local teaching-signal VJP — see the hidden loop below).
-            var outputs = new Tensor<T>[layers.Count];
-            var layerInputs = new Tensor<T>[layers.Count];
-            var current = input;
-            for (int i = 0; i < layers.Count; i++)
-            {
-                layerInputs[i] = current;
-                current = layers[i].Forward(current);
-                outputs[i] = current;
-            }
-            var predictionNode = current; // final (post-softmax) network output, tracked
-
-            // Constant output error e = (prediction - target) / batch (detached from the tape).
-            // The 1/batch scaling matches the MEAN-over-batch reduction the tape loss uses for the
-            // exact output-layer gradient: without it the hidden-layer teaching VJP (which SUMS the
-            // local Jacobian over the batch) would be ~batchSize larger than the output-layer step,
-            // so DFA would take enormous, destabilizing hidden-layer steps and diverge.
-            var predConst = Detach(predictionNode);
-            var targetTensor = BuildTargetTensor(target, predConst.Shape.ToArray());
-            var outputError = SubtractConst(predConst, targetTensor);
-            int batchSize = predConst.Shape.Length > 0 ? predConst.Shape[0] : 1;
-            if (batchSize > 1)
-                outputError = ScaleConst(outputError, Ops.FromDouble(1.0 / batchSize));
-
-            // Collect the trainable layers (those with at least one trainable parameter tensor), in order.
+            // ---- Capture pass: run the full forward once to identify the trainable layers, each layer's input
+            // activation, and the network's output error. Values are detached to constants; graph is discarded.
             var trainableLayers = new List<ILayer<T>>();
             var trainableParams = new List<IReadOnlyList<Tensor<T>>>();
-            var trainableOutputs = new List<Tensor<T>>();
-            var trainableInputs = new List<Tensor<T>>(); // detached input fed into each trainable layer
-            for (int i = 0; i < layers.Count; i++)
+            var trainableInputs = new List<Tensor<T>>();   // detached (constant) input to each trainable layer
+            var trainableOutputs = new List<Tensor<T>>();  // detached (constant) output of each trainable layer
+            var trainableLayerIndex = new List<int>();      // index into `layers` of each trainable layer
+            Tensor<T> targetTensor;
+            Tensor<T> outputError;
+
+            using (var captureTape = new GradientTape<T>())
             {
-                var ps = CollectParameters(layers[i]);
-                if (ps.Count == 0) continue;
-                trainableLayers.Add(layers[i]);
-                trainableParams.Add(ps);
-                trainableOutputs.Add(outputs[i]);
-                trainableInputs.Add(Detach(layerInputs[i]));
+                var inputs = new Tensor<T>[layers.Count];
+                var outputs = new Tensor<T>[layers.Count];
+                var current = input;
+                for (int i = 0; i < layers.Count; i++)
+                {
+                    inputs[i] = current;
+                    current = layers[i].Forward(current);
+                    outputs[i] = current;
+                }
+
+                var predConst = Detach(current);
+                targetTensor = BuildTargetTensor(target, predConst.Shape.ToArray());
+                outputError = SubtractConst(predConst, targetTensor);
+
+                for (int i = 0; i < layers.Count; i++)
+                {
+                    var ps = CollectParameters(layers[i]);
+                    if (ps.Count == 0) continue;
+                    trainableLayers.Add(layers[i]);
+                    trainableParams.Add(ps);
+                    trainableInputs.Add(Detach(inputs[i]));
+                    trainableOutputs.Add(Detach(outputs[i]));
+                    trainableLayerIndex.Add(i);
+                }
             }
 
             if (trainableLayers.Count == 0)
@@ -114,55 +108,71 @@ internal static class CreditAssignmentGradientComputer<T>
                 creditLayers.Add(new CreditLayer<T>(
                     index: k,
                     isOutputLayer: isOutput,
+                    input: trainableInputs[k],
                     output: trainableOutputs[k],
                     weights: TryGetWeightMatrix(trainableLayers[k])));
             }
 
-            var context = new CreditAssignmentContext<T>(creditLayers, outputError, Ops, random);
+            var context = new CreditAssignmentContext<T>(creditLayers, outputError, targetTensor, Ops, random);
             rule.Initialize(context);
             rule.ComputeTeachingSignals(context);
 
-            var grads = new Dictionary<Tensor<T>, Tensor<T>>();
+            int last = trainableLayers.Count - 1;
+
+            // ---- Gradient pass: a SINGLE combined objective backpropagated once. The teaching-driven design needs
+            // each trainable layer's gradient to be a LOCAL VJP (its output treated as a function of only its own
+            // parameters). We achieve that by re-running the forward and DETACHING the input immediately before each
+            // trainable layer, so that layer's output depends on nothing below it. The objective is
+            //     loss(prediction)  +  Σ_hidden  sum(output_k ⊙ teachingSignal_k)
+            // whose gradient w.r.t. each layer's parameters is exactly that layer's intended update: the exact loss
+            // gradient for the output layer, the teaching-driven VJP for every hidden layer, with no cross-layer
+            // leakage. A single backward pass is required because GradientTape is single-use — one backward frees
+            // the graph, so calling it once per layer silently zeroed every layer after the first.
+            var isTrainable = new bool[layers.Count];
+            var trainOrderOf = new int[layers.Count];
+            for (int t = 0; t < trainableLayerIndex.Count; t++)
+            {
+                isTrainable[trainableLayerIndex[t]] = true;
+                trainOrderOf[trainableLayerIndex[t]] = t;
+            }
+
+            using var tape = new GradientTape<T>();
+            IEngine engine = AiDotNetEngine.Current; // the tape's recording engine (installed for this scope)
+
+            var trainOutputNode = new Tensor<T>[trainableLayers.Count];
+            var current2 = input;
+            for (int i = 0; i < layers.Count; i++)
+            {
+                if (isTrainable[i])
+                    current2 = Detach(current2); // isolate this trainable layer's params from everything below
+                current2 = layers[i].Forward(current2);
+                if (isTrainable[i])
+                    trainOutputNode[trainOrderOf[i]] = current2;
+            }
+            var predictionNode = current2;
 
             // Output layer: exact loss gradient (handles the softmax head + matched loss correctly).
-            // This is the sole ComputeGradients call on the main tape, so no graph-retention flag
-            // is needed — the tape is consumed once and never re-walked.
-            var lossTensor = tapeLoss.ComputeTapeLoss(predictionNode, targetTensor);
-            Merge(grads, tape.ComputeGradients(lossTensor, sources: trainableParams[trainableLayers.Count - 1]));
+            Tensor<T> combined = ReduceToScalar(engine, tapeLoss.ComputeTapeLoss(predictionNode, targetTensor));
+            var allSources = new List<Tensor<T>>(trainableParams[last]);
 
-            // Hidden layers: local teaching-signal VJP, each on its OWN fresh single-shot tape.
-            //
-            // DFA credit assignment is LOCAL by construction — layer i's parameter gradient depends
-            // only on layer i's own Jacobian (input_i -> output_i) contracted with the teaching signal
-            // B_i·e, NOT on any cross-layer backward chain. Re-running just that one layer under a
-            // fresh tape (with its input detached to a constant) computes exactly that local Jacobian
-            // and sidesteps the fragility of repeatedly walking one shared tape: the persistent/compiled
-            // backward fast path prunes the graph to the FIRST call's sources and severs every later
-            // layer's nodes (all hidden grads came back zero), and forcing createGraph to retain the
-            // graph still silently dropped the EmbeddingLayer's scatter-add backward. A per-layer
-            // single-shot tape is the same well-tested path normal training uses, so every layer type
-            // — embeddings included — produces a correct gradient.
-            //
-            // The isolated re-forwards run in EVAL mode: the main forward above already advanced any
-            // stateful layer's running buffers once this step (e.g. BatchNormalizationLayer's
-            // _runningMean/_runningVariance), and re-running in training mode would replay that update a
-            // second time, corrupting the statistics. Eval mode captures the same local Jacobian w.r.t.
-            // the layer's parameters without the state mutation (and deterministically, without dropout
-            // masks diverging from the main pass). Restored by the finally below.
-            network.SetTrainingMode(false);
-            for (int k = 0; k < trainableLayers.Count - 1; k++)
+            // Hidden layers: teaching-driven local VJP, seeded by the rule's teaching signal.
+            for (int k = 0; k < last; k++)
             {
                 var teaching = creditLayers[k].TeachingSignal
                     ?? throw new InvalidOperationException(
                         $"Credit rule '{rule.Name}' did not set a teaching signal for hidden layer {k}.");
-
-                using var localTape = new GradientTape<T>();
-                var localOutput = trainableLayers[k].Forward(trainableInputs[k]);
-                var prod = engine.TensorMultiply(localOutput, teaching);
-                var allAxes = Enumerable.Range(0, prod.Shape.Length).ToArray();
-                var scalar = engine.ReduceSum(prod, allAxes, keepDims: false);
-                Merge(grads, localTape.ComputeGradients(scalar, sources: trainableParams[k]));
+                var prod = engine.TensorMultiply(trainOutputNode[k], teaching);
+                combined = engine.TensorAdd(combined, ReduceToScalar(engine, prod));
+                allSources.AddRange(trainableParams[k]);
             }
+
+            var grads = new Dictionary<Tensor<T>, Tensor<T>>();
+            Merge(grads, tape.ComputeGradients(combined, sources: allSources));
+
+            // Feedback-learning rules (Kolen-Pollack / Direct Kolen-Pollack) update their learned feedback state
+            // once per step, using the same activations, output error and teaching signals just consumed above.
+            if (rule is IFeedbackLearningRule<T> feedbackLearner)
+                feedbackLearner.OnParametersUpdated(context);
 
             return Flatten(network, grads);
         }
@@ -178,6 +188,14 @@ internal static class CreditAssignmentGradientComputer<T>
     {
         foreach (var kv in from)
             into[kv.Key] = kv.Value;
+    }
+
+    /// <summary>Reduces a tensor to a single scalar (sum over every axis) so heterogeneous terms can be added into one objective.</summary>
+    private static Tensor<T> ReduceToScalar(IEngine engine, Tensor<T> t)
+    {
+        if (t.Shape.Length == 0) return t;
+        var axes = Enumerable.Range(0, t.Shape.Length).ToArray();
+        return engine.ReduceSum(t, axes, keepDims: false);
     }
 
     /// <summary>Recursively collects a layer's trainable parameter tensors (including composite sub-layers), deduped by reference.</summary>
@@ -224,15 +242,6 @@ internal static class CreditAssignmentGradientComputer<T>
         var r = new Vector<T>(va.Length);
         for (int i = 0; i < va.Length; i++)
             r[i] = Ops.Subtract(va[i], vb[i]);
-        return new Tensor<T>(a.Shape.ToArray(), r);
-    }
-
-    private static Tensor<T> ScaleConst(Tensor<T> a, T scale)
-    {
-        var va = a.ToVector();
-        var r = new Vector<T>(va.Length);
-        for (int i = 0; i < va.Length; i++)
-            r[i] = Ops.Multiply(va[i], scale);
         return new Tensor<T>(a.Shape.ToArray(), r);
     }
 

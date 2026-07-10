@@ -9,6 +9,7 @@ concurrency:
 
 jobs:
   commitlint:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out the PR

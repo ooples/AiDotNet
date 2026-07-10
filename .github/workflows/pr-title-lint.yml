@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   auto-fix-pr-title:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     name: Auto-Fix PR Title
     runs-on: ubuntu-latest
     steps:

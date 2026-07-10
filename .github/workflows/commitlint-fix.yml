@@ -17,6 +17,11 @@ jobs:
   check-and-fix-commits:
     name: Check and Fix Non-Compliant Commits
     runs-on: ubuntu-latest
+    # Skip dependabot PRs (restricted token can't force-push) and release-please
+    # release PRs (their bot commits must not be rewritten). Merged from master's
+    # guard; the old handle-dependabot job was not restored — the rewritten fixer
+    # replaces that broken, lowercase-only path.
+    if: ${{ (github.actor != 'dependabot[bot]') && !startsWith(github.head_ref, 'release-please--') }}
 
     steps:
       # Check out the PR's HEAD BRANCH by name (not the detached pull/N/merge ref),
