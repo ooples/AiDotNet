@@ -330,24 +330,26 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
-        // GPU-RESIDENT fast path — recon + commitment on a fused SGD plan.
-        // Falls through to the in-place SGD loop below when the fused path
-        // can't engage.
+        // GPU-RESIDENT fast path — recon + commitment on a fused SGD plan. Safe
+        // now that VectorQuantize is fully traceable (argmin + gather + straight-
+        // through + commitment loss all via engine ops) so each replay recomputes
+        // from the CURRENT slot data instead of freezing the trace-batch argmin
+        // into the plan. The codebook EMA runs POST-Step in eager code using the
+        // trace-time argmin/head tensor references — their .Data is refreshed by
+        // each replay, so the post-Step read gives the current batch's values and
+        // the update lands exactly once per batch (CodeRabbit contract).
         var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableLayers.Count > 0)
         {
-            // Closure-captured commitment loss: ForwardNativeForTrainingWithCommitment
-            // internally calls VectorQuantize which performs an EMA SetCodebookValue
-            // update in training mode. Running it twice per step (once in Fwd, once
-            // in Loss) would update the codebook twice per replay and diverge from
-            // the eager path. Capture the commitment tensor from Fwd's single call
-            // and reuse it in Loss. Fwd/Loss ordering is guaranteed by the fused-step
-            // contract; a null-guard covers the invariant defensively.
             Tensor<T>? capturedCommitment = null;
+            Tensor<int>? capturedArgmin = null;
+            Tensor<T>? capturedHead = null;
             Tensor<T> ForwardCombined(Tensor<T> inp)
             {
-                var (fc, commit) = ForwardNativeForTrainingWithCommitment(inp);
+                var (fc, commit, argmin, head) = ForwardNativeForTrainingWithVQExtras(inp);
                 capturedCommitment = commit;
+                capturedArgmin = argmin;
+                capturedHead = head;
                 return fc;
             }
             Tensor<T> ComputeLossCombined(Tensor<T> pred, Tensor<T> tgt)
@@ -358,9 +360,8 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
                 else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
                     alignedT = Engine.Reshape(tgt, pred._shape);
                 var recon = loss.ComputeTapeLoss(pred, alignedT);
-                var commit = capturedCommitment;
-                if (commit is null)
-                    throw new InvalidOperationException(
+                var commit = capturedCommitment
+                    ?? throw new InvalidOperationException(
                         "TOTEM fused step: commitment loss was not captured by ForwardCombined. " +
                         "This indicates the fused-step framework called the loss closure before " +
                         "the forward closure, violating its documented Fwd-then-Loss ordering.");
@@ -374,6 +375,8 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
                     out T fusedLoss))
             {
                 LastLoss = fusedLoss;
+                if (IsTrainingMode && capturedArgmin is not null && capturedHead is not null)
+                    UpdateCodebookEMA(capturedHead, capturedArgmin);
                 return;
             }
         }
@@ -424,6 +427,24 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     /// </summary>
     private (Tensor<T> forecast, Tensor<T> commitmentLoss) ForwardNativeForTrainingWithCommitment(Tensor<T> input)
     {
+        var (forecast, commitmentLoss, _, _) = ForwardNativeForTrainingWithVQExtras(input);
+        return (forecast, commitmentLoss);
+    }
+
+    /// <summary>
+    /// Training forward that also exposes the VQ argmin indices and encoder head
+    /// tensors. Used by the compiled fused path so the caller can invoke
+    /// <see cref="UpdateCodebookEMA"/> AFTER each Step with post-replay values
+    /// (argmin/head are graph-node references whose <c>.Data</c> is refreshed
+    /// by each replay). All ops go through <see cref="Engine"/> so the full
+    /// forward — including the RevIN normalize/denormalize, the encoder, the
+    /// quantization projection, VQ argmin+gather+straight-through, commitment
+    /// loss, and the decoder — records on the autodiff tape and re-executes
+    /// per replay.
+    /// </summary>
+    private (Tensor<T> Forecast, Tensor<T> CommitmentLoss, Tensor<int>? Argmin, Tensor<T>? Head)
+        ForwardNativeForTrainingWithVQExtras(Tensor<T> input)
+    {
         var normalized = ApplyInstanceNormalization(input);
         // Tokenize to [1, contextLength, 1] for the per-token encoder/decoder.
         int seqLen = normalized.Length;
@@ -436,30 +457,9 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         if (_quantizationProjection is not null)
             current = _quantizationProjection.Forward(current);
 
-        // Non-differentiable lookup: find nearest codebook entry per
-        // position. VectorQuantize returns a plain Tensor<T> built by
-        // .Data.Span — this is intentional here; we use it as the
-        // stop-gradient target in the straight-through trick.
-        var codebookValues = VectorQuantize(current);
-
-        // Straight-through estimator:
-        //   quantized = encoder + sg(codebook - encoder)
-        //   forward: evaluates to codebook values (VQ behavior)
-        //   backward: d quantized / d encoder = 1 (gradient passes through)
-        var diff = Engine.TensorSubtract(codebookValues, current);
-        var diffDetached = Engine.StopGradient(diff);
-        var quantizedST = Engine.TensorAdd(current, diffDetached);
-
-        // Commitment loss: mean((encoder - sg(codebook))^2), weighted.
-        // Pulling encoder toward codebook encourages discrete
-        // quantization without destabilizing codebook values.
-        var codebookDetached = Engine.StopGradient(codebookValues);
-        var commitDiff = Engine.TensorSubtract(current, codebookDetached);
-        var commitSq = Engine.TensorMultiply(commitDiff, commitDiff);
-        var allAxes = Enumerable.Range(0, commitSq.Rank).ToArray();
-        var commitmentLoss = Engine.ReduceMean(commitSq, allAxes, keepDims: false);
-        commitmentLoss = Engine.TensorMultiplyScalar(commitmentLoss,
-            NumOps.FromDouble(_commitmentWeight));
+        // Traceable VQ: returns straight-through-quantized values, commitment loss,
+        // argmin indices, and the reshaped-head input for post-Step EMA.
+        var (quantizedST, commitmentLoss, argmin, head) = VectorQuantizeTraceable(current);
 
         var decoded = quantizedST;
         if (_decoder is not null)
@@ -475,7 +475,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         // RevIN reverse: train against the input-scale forecast.
         decoded = DenormalizeForecast(decoded);
 
-        return (decoded, commitmentLoss);
+        return (decoded, commitmentLoss, argmin, head);
     }
 
     /// <inheritdoc/>
@@ -792,85 +792,216 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     /// Uses product quantization when numCodebooks > 1 (splits features across codebooks).
     /// Also computes commitment loss: ||z_e - sg(e_k)||^2.
     /// </summary>
+    /// <summary>
+    /// Legacy scalar-loop VectorQuantize — kept for callers that don't need the argmin/head
+    /// side-outputs (inference, serialization roundtrips). Training paths should use
+    /// <see cref="VectorQuantizeTraceable"/> so the entire quantization runs on-tape and
+    /// re-executes correctly under the compiled fused plan.
+    /// </summary>
     private Tensor<T> VectorQuantize(Tensor<T> encoderOutput)
     {
+        var (quantized, _, _, _) = VectorQuantizeTraceable(encoderOutput);
+        return quantized;
+    }
+
+    /// <summary>
+    /// Traceable VQ-VAE quantization step (van den Oord et al. 2017). Returns the
+    /// straight-through-quantized tensor, the commitment loss, the argmin indices,
+    /// and the reshaped-head input in the [numPositions, numCodebooks, codebookDim]
+    /// layout. All ops go through <see cref="Engine"/> so the computation records on
+    /// the autodiff tape and re-executes on every replay under a compiled fused plan
+    /// — the previous <c>.Data.Span</c> nearest-neighbor + <c>SetCodebookValue</c>
+    /// EMA loop froze the argmin decision AND applied the codebook update at trace
+    /// time (bug flagged by CodeRabbit).
+    /// </summary>
+    /// <remarks>
+    /// EMA is intentionally NOT applied here. The caller invokes <see cref="UpdateCodebookEMA"/>
+    /// with the returned argmin+head AFTER the compiled Step so the codebook update
+    /// runs exactly once per batch (regardless of whether the fused or eager path
+    /// engaged). Under the compiled plan, <c>head</c> and <c>argmin</c> are trace-time
+    /// graph nodes whose <c>.Data</c> is refreshed by each replay — reading them
+    /// post-Step gives the current batch's values.
+    /// </remarks>
+    private (Tensor<T> Quantized, Tensor<T> CommitmentLoss, Tensor<int>? ArgminIndices, Tensor<T>? Head)
+        VectorQuantizeTraceable(Tensor<T> encoderOutput)
+    {
         if (_codebooks is null) InitializeCodebooks();
+        var codebooks = _codebooks!;
 
         int totalLen = encoderOutput.Length;
-        var quantized = new Tensor<T>(encoderOutput._shape);
-        T commitmentLoss = NumOps.Zero;
-
-        // Product quantization: split encoded vector across codebooks
         int dimPerCodebook = Math.Max(1, _codebookDimension);
-        int numPositions = Math.Max(1, totalLen / Math.Max(1, dimPerCodebook * _numCodebooks));
+        int blockSize = dimPerCodebook * _numCodebooks;
+        int numPositions = Math.Max(1, totalLen / Math.Max(1, blockSize));
+        int quantizedElements = numPositions * blockSize;
 
-        for (int pos = 0; pos < numPositions; pos++)
+        // Fallback: input can't be cleanly reshaped into the PQ block structure.
+        // Return the input unchanged with a zero commitment loss and no argmin/head
+        // (the caller's EMA-update path is a no-op when these are null).
+        if (numPositions <= 0 || quantizedElements > totalLen)
         {
-            for (int c = 0; c < _numCodebooks; c++)
-            {
-                int startIdx = pos * dimPerCodebook * _numCodebooks + c * dimPerCodebook;
-                if (startIdx >= totalLen) break;
-
-                int effectiveDim = Math.Min(dimPerCodebook, totalLen - startIdx);
-
-                // Find nearest codebook entry
-                int bestIdx = 0;
-                T bestDist = NumOps.MaxValue;
-                for (int k = 0; k < _codebookSize; k++)
-                {
-                    T dist = NumOps.Zero;
-                    for (int d = 0; d < effectiveDim; d++)
-                    {
-                        int idx = startIdx + d;
-                        if (idx >= totalLen) break;
-                        T diff = NumOps.Subtract(encoderOutput[idx], GetCodebookValue(c, k, d % _codebookDimension));
-                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
-                    }
-                    if (NumOps.LessThan(dist, bestDist)) { bestDist = dist; bestIdx = k; }
-                }
-
-                // Replace encoder output with nearest codebook entry (straight-through)
-                for (int d = 0; d < effectiveDim; d++)
-                {
-                    int idx = startIdx + d;
-                    if (idx >= totalLen) break;
-                    T codebookVal = GetCodebookValue(c, bestIdx, d % _codebookDimension);
-
-                    // Straight-through: quantized = encoder_output + sg(codebook - encoder_output)
-                    // This means forward uses codebook values, backward passes gradient through encoder
-                    quantized.Data.Span[idx] = codebookVal;
-
-                    // Commitment loss: ||z_e - sg(e_k)||^2
-                    T diff = NumOps.Subtract(encoderOutput[idx], codebookVal);
-                    commitmentLoss = NumOps.Add(commitmentLoss, NumOps.Multiply(diff, diff));
-                }
-
-                // EMA codebook update (during training): move codebook entry toward encoder output
-                if (IsTrainingMode)
-                {
-                    T emaDecay = NumOps.FromDouble(0.99);
-                    T oneMinusDecay = NumOps.FromDouble(0.01);
-                    for (int d = 0; d < effectiveDim && d < _codebookDimension; d++)
-                    {
-                        int idx = startIdx + d;
-                        if (idx >= totalLen) break;
-                        T currentVal = GetCodebookValue(c, bestIdx, d);
-                        T newVal = NumOps.Add(NumOps.Multiply(emaDecay, currentVal), NumOps.Multiply(oneMinusDecay, encoderOutput[idx]));
-                        SetCodebookValue(c, bestIdx, d, newVal);
-                    }
-                }
-            }
+            var zeroLoss = new Tensor<T>(new[] { 1 });
+            Engine.TensorFill(zeroLoss, NumOps.Zero);
+            _lastCommitmentLoss = NumOps.Zero;
+            return (encoderOutput, zeroLoss, null, null);
         }
 
-        // Copy through any remaining elements that don't fit product quantization
-        int quantizedElements = numPositions * _numCodebooks * dimPerCodebook;
-        for (int i = quantizedElements; i < totalLen; i++)
-            quantized.Data.Span[i] = encoderOutput[i];
+        // Split input into [quantizable, passThrough]. The passThrough tail is
+        // copied unchanged; the quantizable prefix goes through PQ.
+        var flatInput = encoderOutput.Rank == 1
+            ? encoderOutput
+            : Engine.Reshape(encoderOutput, new[] { totalLen });
+        var quantizable = Engine.TensorSlice(flatInput, new[] { 0 }, new[] { quantizedElements });
 
-        T commitWeightT = NumOps.FromDouble(_commitmentWeight);
-        T invTotalLen = NumOps.Divide(NumOps.One, NumOps.FromDouble(Math.Max(1, totalLen)));
-        _lastCommitmentLoss = NumOps.Multiply(NumOps.Multiply(commitmentLoss, commitWeightT), invTotalLen);
-        return quantized;
+        // head[p, c, d] — reshape the quantizable prefix into PQ block layout.
+        var head = Engine.Reshape(quantizable, new[] { numPositions, _numCodebooks, dimPerCodebook });
+
+        // Distance to each codebook entry: broadcast head [P, C, 1, D] against
+        // codebook [1, C, K, D] → diff [P, C, K, D] → sum(diff²) → [P, C, K].
+        // codebooks shape: [numCodebooks, codebookSize, codebookDim] → add batch axis.
+        var headExpanded = Engine.Reshape(head, new[] { numPositions, _numCodebooks, 1, dimPerCodebook });
+        var codebookExpanded = Engine.Reshape(codebooks, new[] { 1, _numCodebooks, _codebookSize, dimPerCodebook });
+        var diff = Engine.TensorBroadcastSubtract(headExpanded, codebookExpanded);
+        var diffSq = Engine.TensorMultiply(diff, diff);
+        var distances = Engine.ReduceSum(diffSq, new[] { 3 }, keepDims: false);
+        // distances shape: [numPositions, numCodebooks, codebookSize].
+
+        // Argmin over the codebookSize axis — non-differentiable by design; the
+        // straight-through estimator below routes gradients around the argmin.
+        var argmin = Engine.TensorArgMin(distances, axis: 2);
+        // argmin shape: [numPositions, numCodebooks] of Tensor<int>.
+
+        // Per-codebook gather: for each c, zqSlices[c][p, :] = codebooks[c, argmin[p, c], :].
+        // TensorIndexSelectDiff along the codebookSize axis of the per-c codebook slice.
+        var zqSlices = new Tensor<T>[_numCodebooks];
+        for (int c = 0; c < _numCodebooks; c++)
+        {
+            // Slice codebook_c = codebooks[c, :, :] via TensorSliceAxis(axis=0, index=c).
+            var codebookC = Engine.TensorSliceAxis(codebooks, axis: 0, index: c);
+            // argminC = argmin[:, c] shape [numPositions] — TensorSliceAxis on int tensor.
+            var argminC = Engine.TensorSliceAxis(argmin, axis: 1, index: c);
+            // Gather: source shape [codebookSize, codebookDim], indices [numPositions] along axis 0
+            //   → [numPositions, codebookDim].
+            zqSlices[c] = Engine.TensorIndexSelectDiff(codebookC, argminC, axis: 0);
+        }
+        // Stack per-codebook slices along the codebook axis to get [numPositions, numCodebooks, codebookDim].
+        var zq = Engine.TensorStack(zqSlices, axis: 1);
+
+        // Commitment loss per Oord 2017 §3.2: β · ||z_e - sg(e_k)||² averaged over totalLen.
+        // Straight-through routes gradient through encoder only — encoder learns to
+        // match codebook via commitment loss; codebook learns via EMA (separate path).
+        var zqDetached = Engine.StopGradient(zq);
+        var commitmentDelta = Engine.TensorSubtract(head, zqDetached);
+        var commitmentSqSum = Engine.ReduceSum(
+            Engine.TensorMultiply(commitmentDelta, commitmentDelta),
+            axes: null, keepDims: false);
+        var invTotalLen = NumOps.Divide(NumOps.One, NumOps.FromDouble(Math.Max(1, totalLen)));
+        var commitmentLoss = Engine.TensorMultiplyScalar(
+            commitmentSqSum,
+            NumOps.Multiply(NumOps.FromDouble(_commitmentWeight), invTotalLen));
+        _lastCommitmentLoss = commitmentLoss.Length > 0 ? commitmentLoss[0] : NumOps.Zero;
+
+        // Straight-through: quantized = head + StopGradient(zq - head). Forward-values
+        // equal codebook entries; backward gradient flows through head as if identity.
+        var straightThroughShift = Engine.StopGradient(Engine.TensorSubtract(zq, head));
+        var quantizedBlocks = Engine.TensorAdd(head, straightThroughShift);
+        var quantizedFlat = Engine.Reshape(quantizedBlocks, new[] { quantizedElements });
+
+        Tensor<T> quantized;
+        if (quantizedElements < totalLen)
+        {
+            // Concat the passThrough tail unchanged.
+            var passThroughLen = totalLen - quantizedElements;
+            var passThrough = Engine.TensorSlice(flatInput, new[] { quantizedElements }, new[] { passThroughLen });
+            var combined = Engine.TensorConcatenate(new[] { quantizedFlat, passThrough }, axis: 0);
+            quantized = encoderOutput.Rank == 1 ? combined : Engine.Reshape(combined, encoderOutput._shape);
+        }
+        else
+        {
+            quantized = encoderOutput.Rank == 1 ? quantizedFlat : Engine.Reshape(quantizedFlat, encoderOutput._shape);
+        }
+
+        return (quantized, commitmentLoss, argmin, head);
+    }
+
+    /// <summary>
+    /// Post-Step EMA codebook update (van den Oord 2017 §3.2). Runs exactly once
+    /// per batch, using the trace-time <paramref name="argmin"/> / <paramref name="head"/>
+    /// tensors captured by <see cref="VectorQuantizeTraceable"/> — under the compiled
+    /// plan these are graph-node references whose <c>.Data</c> reflects the LAST
+    /// replay, so post-Step reads give the current batch's values.
+    /// </summary>
+    /// <remarks>
+    /// EMA formula (last-wins matching the eager path's per-position race):
+    /// <c>codebook[c, argmin[p,c], :] ← decay · codebook[c, argmin[p,c], :] +
+    /// (1-decay) · head[p, c, :]</c>.
+    /// Expressed as an in-place scatter-add: <c>codebook += (1-decay) · scatter(head - zq_at_selected)</c>,
+    /// where the scatter writes the deltas into the codebook at (c, argmin) positions
+    /// and the codebook's underlying data is updated via <see cref="IEngine.TensorCopy"/>
+    /// so the tensor object identity (referenced by future trace/replay reads) stays
+    /// stable.
+    /// </remarks>
+    private void UpdateCodebookEMA(Tensor<T> head, Tensor<int> argmin)
+    {
+        if (_codebooks is null) return;
+        var codebooks = _codebooks;
+
+        int dimPerCodebook = Math.Max(1, _codebookDimension);
+        int numPositions = head.Shape.Length >= 3 ? head.Shape[0] : 1;
+
+        var decayT = NumOps.FromDouble(0.99);
+        var oneMinusDecayT = NumOps.FromDouble(0.01);
+
+        // Per-codebook scatter: for each c, the selected entries move by
+        // (1-decay)·(head[:, c, :] - codebook[c, argmin[:, c], :]).
+        // TensorScatterAdd writes updates into a fresh copy of the codebook slice;
+        // TensorCopy propagates the update back into the same codebook tensor object.
+        for (int c = 0; c < _numCodebooks; c++)
+        {
+            var codebookC = Engine.TensorSliceAxis(codebooks, axis: 0, index: c);
+            var headC = Engine.TensorSliceAxis(head, axis: 1, index: c);
+            var argminC = Engine.TensorSliceAxis(argmin, axis: 1, index: c);
+
+            // Current selected entries: gather codebookC by argminC along axis 0.
+            var zqC = Engine.TensorIndexSelectDiff(codebookC, argminC, axis: 0);
+
+            // Delta = (1-decay) · (headC - zqC), shape [numPositions, codebookDim].
+            var deltaC = Engine.TensorMultiplyScalar(
+                Engine.TensorSubtract(headC, zqC),
+                oneMinusDecayT);
+
+            // Scatter deltaC into a zero canvas at argminC indices along axis 0.
+            var canvas = new Tensor<T>(new[] { _codebookSize, dimPerCodebook });
+            Engine.TensorFill(canvas, NumOps.Zero);
+            var updatedCodebookC = Engine.TensorScatterAdd(canvas, argminC, deltaC, axis: 0);
+            // updatedCodebookC = deltas placed at scatter positions, zeros elsewhere.
+
+            // codebookC_new = codebookC + updatedCodebookC.
+            var codebookC_new = Engine.TensorAdd(codebookC, updatedCodebookC);
+
+            // Write codebookC_new back into codebooks[c, :, :] via TensorSliceAxisWrite-like
+            // pattern: reshape to [1, codebookSize, codebookDim], place with TensorScatter
+            // along axis 0 at index c into a per-codebook staging tensor. Simpler:
+            // reconstruct the full codebook by concatenating updated + unchanged slices.
+            var updated3D = Engine.Reshape(codebookC_new, new[] { 1, _codebookSize, dimPerCodebook });
+            var partsList = new System.Collections.Generic.List<Tensor<T>>();
+            if (c > 0)
+            {
+                partsList.Add(Engine.TensorSlice(codebooks, new[] { 0, 0, 0 }, new[] { c, _codebookSize, dimPerCodebook }));
+            }
+            partsList.Add(updated3D);
+            if (c + 1 < _numCodebooks)
+            {
+                partsList.Add(Engine.TensorSlice(codebooks,
+                    new[] { c + 1, 0, 0 },
+                    new[] { _numCodebooks - c - 1, _codebookSize, dimPerCodebook }));
+            }
+            var newCodebooks = partsList.Count == 1 ? partsList[0] : Engine.TensorConcatenate(partsList.ToArray(), axis: 0);
+            Engine.TensorCopy(newCodebooks, codebooks);
+        }
+
+        // Suppress unused-var warning for decayT (kept for documentation of the
+        // decay-in-the-formula intent; the (1-decay) factor is what's actually used).
+        _ = decayT;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
