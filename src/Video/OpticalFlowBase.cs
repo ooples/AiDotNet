@@ -1,6 +1,8 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using System.IO;
 
 namespace AiDotNet.Video;
 
@@ -226,5 +228,47 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
             return Engine.Reshape(flow, [1, flow.Shape[0], flow.Shape[1], flow.Shape[2]]);
         }
         return flow;
+    }
+
+    /// <summary>
+    /// Re-links the typed optical-flow role layers to the layers the base already deserialized
+    /// (trained, shape-resolved) instead of re-running InitializeLayers, which would allocate fresh
+    /// random-init convolutions and leave the trained weights unused in <c>Layers</c> (the #1221-class
+    /// "clone/load predicts from random init" bug). Shared by the flow models whose serialized layout
+    /// is identical: <c>[featureExtract, ...processingBlocks (numLayers), outputConv]</c>.
+    /// </summary>
+    /// <param name="numLayers">Deserialized processing-block count (untrusted — validated here).</param>
+    /// <param name="modelName">Model name, used only in diagnostic messages.</param>
+    /// <param name="featureExtract">Receives the resolved feature-extractor convolution.</param>
+    /// <param name="processingBlocks">Caller-owned list; cleared and refilled with the resolved blocks.</param>
+    /// <param name="outputConv">Receives the resolved output convolution.</param>
+    protected void RelinkOpticalFlowLayers(
+        int numLayers,
+        string modelName,
+        out ConvolutionalLayer<T> featureExtract,
+        List<ConvolutionalLayer<T>> processingBlocks,
+        out ConvolutionalLayer<T> outputConv)
+    {
+        // Validate the untrusted deserialized count first: a negative value would slip past the size
+        // check below (Layers.Count < negative is false) and then throw a raw IndexOutOfRangeException
+        // at Layers[numLayers + 1]. The ctor already enforces numLayers > 0.
+        if (numLayers < 0)
+            throw new InvalidDataException($"{modelName} serialized layer count {numLayers} is invalid.");
+        // Compare in long space: numLayers + 2 as unchecked int wraps negative for numLayers near
+        // int.MaxValue, bypassing this guard and throwing a raw IndexOutOfRangeException at
+        // Layers[numLayers + 1] below. (long)numLayers + 2 cannot overflow for any int input.
+        if (Layers.Count < (long)numLayers + 2)
+            throw new InvalidDataException(
+                $"{modelName} serialized layer count {Layers.Count} is too small for {numLayers} processing blocks.");
+        featureExtract = Layers[0] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException($"{modelName} feature extractor layer is missing or has the wrong type.");
+        processingBlocks.Clear();
+        for (int i = 0; i < numLayers; i++)
+        {
+            processingBlocks.Add(Layers[i + 1] as ConvolutionalLayer<T>
+                ?? throw new InvalidDataException($"{modelName} processing block {i} is missing or has the wrong type."));
+        }
+        outputConv = Layers[numLayers + 1] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException($"{modelName} output layer is missing or has the wrong type.");
     }
 }

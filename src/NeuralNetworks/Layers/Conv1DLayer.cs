@@ -190,12 +190,27 @@ public partial class Conv1DLayer<T> : LayerBase<T>
         int tOut = (tIn + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
 
         _inputChannels = cIn;
-        _kernels = AllocateLazyWeight([_outputChannels, cIn, 1, _kernelSize]);
-        _biases = AllocateLazyWeight([_outputChannels]);
-        InitializeLayerWeights(_kernels, cIn * _kernelSize, _outputChannels);
-        InitializeLayerBiases(_biases);
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        // Idempotent weight allocation. If this layer ALREADY holds correctly-shaped weights — because
+        // they were installed by SetParameters / SetTrainableParameters (deserialize) or shared by a
+        // copy-on-write clone before the first forward — do NOT re-allocate and re-initialize them.
+        // Re-initializing here would overwrite restored/shared TRAINED weights with fresh random ones
+        // the first time a cloned or deserialized model runs a forward, silently dropping the training
+        // (the #1221 Clone_AfterTraining failure class for lazy conv/attention stacks). Only allocate
+        // when the weights are missing or their input-channel count no longer matches the input.
+        bool weightsAlreadyValid = _kernels is { Rank: 4 } k
+            && k.Shape[0] == _outputChannels && k.Shape[1] == cIn && k.Shape[3] == _kernelSize
+            && _biases is { } b && b.Length == _outputChannels;
+
+        if (!weightsAlreadyValid)
+        {
+            _kernels = AllocateLazyWeight([_outputChannels, cIn, 1, _kernelSize]);
+            _biases = AllocateLazyWeight([_outputChannels]);
+            InitializeLayerWeights(_kernels, cIn * _kernelSize, _outputChannels);
+            InitializeLayerBiases(_biases);
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, tOut });
     }

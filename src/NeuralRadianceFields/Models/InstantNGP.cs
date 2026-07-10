@@ -152,7 +152,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Instant Neural Graphics Primitives with a Multiresolution Hash Encoding", "https://doi.org/10.1145/3528223.3530127", Year = 2022, Authors = "Thomas Müller, Alex Evans, Christoph Schied, Alexander Keller")]
-public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
+public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
     private readonly InstantNGPOptions<T> _options;
 
@@ -631,6 +631,11 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
     protected override void InitializeLayers()
     {
+        // Rebuilding the layer collection invalidates any prior shape resolution — the fresh
+        // lazy DenseLayers must be re-resolved through the model's real topology (see
+        // ResolveLazyLayerShapes) before the next ParameterCount / GetParameters query.
+        _ngpShapesResolved = false;
+
         ClearLayers();
         _densityLayers.Clear();
         _colorLayers.Clear();
@@ -667,6 +672,77 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         // Color output
         _colorOutputLayer = (DenseLayer<T>)Layers[idx++];
+    }
+
+    private bool _ngpShapesResolved;
+
+    /// <summary>
+    /// Resolves InstantNGP's lazy <see cref="DenseLayer{T}"/> input shapes through the model's
+    /// REAL (non-sequential) topology instead of the base class's left-to-right walk.
+    /// </summary>
+    /// <remarks>
+    /// InstantNGP is not a plain sequential stack: a multiresolution hash encoding feeds the
+    /// density MLP, and the colour MLP consumes the feature vector CONCATENATED with the view
+    /// direction (see <see cref="QueryField"/>). The base
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.ResolveLazyLayerShapes"/> assumes each
+    /// layer's input equals the previous layer's output, so it mis-sizes the first density layer
+    /// (real input = hash-encoding width, not the raw architecture input) and the first colour
+    /// layer (real input = feature width + 3 direction dims), leaving an unstable
+    /// <c>ParameterCount</c> that blocks the facade optimizer's post-train writeback into a
+    /// freshly-constructed model. Resolution here is shape-only via
+    /// <see cref="LayerBase{T}.ResolveShapesOnly"/> — no weight allocation, no RNG, no forward
+    /// compute; weights still allocate lazily on the first real forward.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_ngpShapesResolved)
+        {
+            return;
+        }
+
+        // Custom-architecture path (Architecture.Layers supplied) doesn't follow the fixed head
+        // layout, so defer to the base sequential walk in that case.
+        if (_densityOutputLayer is null || _featureLayer is null || _colorOutputLayer is null)
+        {
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        int hashFeatureDim = _numLevels * _featuresPerLevel;
+
+        // Density MLP: layer 0 reads the multiresolution hash encoding; later layers read the
+        // previous hidden output.
+        for (int i = 0; i < _densityLayers.Count; i++)
+        {
+            ResolveDenseLayerShape(_densityLayers[i], i == 0 ? hashFeatureDim : _mlpHiddenDim);
+        }
+
+        // Density + feature heads read the density MLP's hidden output (or the hash encoding
+        // directly when there are no density hidden layers).
+        int densityHeadInput = _densityLayers.Count > 0 ? _mlpHiddenDim : hashFeatureDim;
+        ResolveDenseLayerShape(_densityOutputLayer, densityHeadInput);
+        ResolveDenseLayerShape(_featureLayer, densityHeadInput);
+
+        // Colour MLP: layer 0 reads [feature ⊕ direction (3 dims)]; later layers read the colour
+        // hidden width.
+        int colorInputDim = _featureDim + 3;
+        for (int i = 0; i < _colorLayers.Count; i++)
+        {
+            ResolveDenseLayerShape(_colorLayers[i], i == 0 ? colorInputDim : _colorHiddenDim);
+        }
+
+        // Colour output reads the last colour hidden width (or the concatenated colour input when
+        // there are no colour hidden layers).
+        ResolveDenseLayerShape(
+            _colorOutputLayer, _colorLayers.Count > 0 ? _colorHiddenDim : colorInputDim);
+
+        _ngpShapesResolved = true;
+    }
+
+    private static void ResolveDenseLayerShape(DenseLayer<T> layer, int inputDim)
+    {
+        // [batch=1, inputDim] — the batch axis is irrelevant to weight-shape resolution.
+        layer.ResolveShapesOnly(new[] { 1, inputDim });
     }
 
     public (Tensor<T> rgb, Tensor<T> density) QueryField(Tensor<T> positions, Tensor<T> viewingDirections)
@@ -1626,6 +1702,68 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         return new Tensor<T>(output, [numPoints, 4]);
     }
+
+    /// <summary>
+    /// Image-space photometric training (#1834). Renders one batch of rays, computes MSE
+    /// against ground-truth pixel colors, and drives a full gradient step through the
+    /// hash-grid encoder + volume-render integral via
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.BackwardAndStepOnPrecomputedLoss"/>.
+    /// Sample count ramps per <see cref="ProgressiveSamplingSchedule"/> for coarse→fine training.
+    /// </summary>
+    public T TrainOnImageBatch(
+        AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
+        int raysPerBatch,
+        AiDotNet.Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
+        NeuralRadianceFields.Data.ImageTrainingOptions? imageTrainingOptions = null)
+    {
+        var batch = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
+        if (batch is null)
+        {
+            return NumOps.Zero;
+        }
+        var (view, pixels) = batch.Value;
+
+        var schedule = imageTrainingOptions?.Schedule ?? NeuralRadianceFields.Data.ProgressiveSamplingSchedule.Paper();
+        int numSamples = schedule.SamplesForIteration(_imageTrainingIteration);
+        _imageTrainingIteration++;
+
+        NeuralRadianceFields.Data.SceneBounds? bounds = imageTrainingOptions?.SceneBounds ?? _autoBounds;
+        if (bounds is null && loader is NeuralRadianceFields.Data.IViewSetProvider<T> vsp)
+        {
+            bounds = NeuralRadianceFields.Data.SceneBoundsEstimator.EstimateFromViews(vsp.Views);
+            _autoBounds = bounds;
+        }
+        T near = bounds is not null ? NumOps.FromDouble(bounds.Near) : _renderNearBound;
+        T far  = bounds is not null ? NumOps.FromDouble(bounds.Far)  : _renderFarBound;
+
+        // LearnedPrior blending (excellence goal #4) — same helper as NeRF.
+        var targetColors = NeuralRadianceFields.Helpers.ImageTrainingHelpers.ApplyPriorToRayTargets(
+            Engine, pixels.TargetColors, view, imageTrainingOptions?.PriorConfidenceOverride);
+
+        SetTrainingMode(true);
+        try
+        {
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
+            var rendered = RenderRays(
+                pixels.RayOrigins,
+                pixels.RayDirections,
+                numSamples: numSamples,
+                near,
+                far);
+            var diff = Engine.TensorSubtract(rendered, targetColors);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
+            var meanLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+            return BackwardAndStepOnPrecomputedLoss(tape, meanLoss);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    private int _imageTrainingIteration;
+    private NeuralRadianceFields.Data.SceneBounds? _autoBounds;
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

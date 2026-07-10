@@ -90,30 +90,71 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         // Phase 2: Solve ILP via branch-and-bound with lazy acyclicity constraints
         var bestAssignment = SolveILP(parentSets, d);
 
-        // Phase 3: Convert selected parent sets to adjacency matrix with OLS weights
+        // Phase 3: Convert selected parent sets to adjacency matrix with OLS weights.
         var cov = ComputeCovarianceMatrix(data);
         T eps = NumOps.FromDouble(1e-10);
-        var result = new Matrix<T>(d, d);
 
+        // Collect the selected parent->child edges with their OLS weights.
+        var candidates = new List<(int p, int j, T weight, double strength)>();
         for (int j = 0; j < d; j++)
         {
             int[] parents = bestAssignment[j];
             foreach (int p in parents)
             {
                 T varP = cov[p, p];
-                if (NumOps.GreaterThan(varP, eps))
-                    result[p, j] = NumOps.Divide(cov[p, j], varP);
-                else
-                    result[p, j] = NumOps.One;
+                T weight = NumOps.GreaterThan(varP, eps)
+                    ? NumOps.Divide(cov[p, j], varP)
+                    : NumOps.One;
+                candidates.Add((p, j, weight, Math.Abs(NumOps.ToDouble(weight))));
             }
         }
 
-        // An empty DAG can be the true ILP optimum when all nodes are independent
-        // (empty parent set scores best for every variable). Do NOT override this
-        // with a heuristic fallback — it would break the "globally optimal DAG
-        // under BIC" contract that GOBNILP guarantees.
+        // The branch-and-bound ILP solver breaks cycles greedily but is capped at
+        // _maxBranchIterations, so on hard instances it can return an assignment that still
+        // contains a directed cycle (or asymmetric i->j AND j->i strong edges). CausalGraph
+        // requires a DAG (GetTopologicalOrder throws on cycles), so materialize the adjacency by
+        // inserting edges strongest-first and skipping any that would close a cycle — dropping the
+        // weakest edge of each cycle keeps the higher-scoring parent choices. An already-acyclic
+        // assignment (incl. the empty DAG, which is a valid ILP optimum) is preserved unchanged.
+        candidates.Sort((a, b) => b.strength.CompareTo(a.strength));
+
+        var result = new Matrix<T>(d, d);
+        var adjacency = new List<int>[d];
+        for (int k = 0; k < d; k++) adjacency[k] = new List<int>();
+
+        foreach (var (p, j, weight, _) in candidates)
+        {
+            // Adding p->j closes a cycle iff j can already reach p.
+            if (CanReach(adjacency, j, p, d)) continue;
+            result[p, j] = weight;
+            adjacency[p].Add(j);
+        }
 
         return result;
+    }
+
+    /// <summary>Depth-first reachability: can <paramref name="from"/> reach <paramref name="to"/> along current directed edges?</summary>
+    private static bool CanReach(List<int>[] adjacency, int from, int to, int d)
+    {
+        if (from == to) return true;
+        var visited = new bool[d];
+        var stack = new Stack<int>();
+        stack.Push(from);
+        visited[from] = true;
+        while (stack.Count > 0)
+        {
+            int node = stack.Pop();
+            foreach (int next in adjacency[node])
+            {
+                if (next == to) return true;
+                if (!visited[next])
+                {
+                    visited[next] = true;
+                    stack.Push(next);
+                }
+            }
+        }
+        return false;
     }
 
     private List<(int[] parents, double score)> ComputeParentSetScores(Matrix<T> data, int target, int d, int n)

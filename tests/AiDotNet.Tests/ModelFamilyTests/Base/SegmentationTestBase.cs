@@ -14,6 +14,32 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class SegmentationTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    /// <summary>
+    /// Segmentation targets are per-pixel ONE-HOT class distributions consumed by a
+    /// cross-entropy loss. The base <see cref="NeuralNetworkModelTestBase{T}.CreateRandomTargetTensor"/>
+    /// emits continuous-uniform values, which are NOT a valid probability distribution: fed to
+    /// CrossEntropy over a <c>[C, H, W]</c> logit map they define an objective with no finite-logit
+    /// optimum, so the training invariants drive the per-pixel logits to overflow and the loss
+    /// diverges to NaN (SwinUNETR MoreData/Training). Emit a valid one-hot map with a DIVERSE class
+    /// per spatial position (finite, balanced optimum) — the documented override pattern for
+    /// classifier-style families (mirrors NER's integer-label target override).
+    /// </summary>
+    protected override Tensor<T> CreateRandomTargetTensor(int[] shape, Random rng)
+    {
+        // Rank-3+ [C, H, W(, ...)] class-map target: one-hot along the class (first) axis.
+        if (shape.Length >= 3 && shape[0] > 1)
+        {
+            int classes = shape[0];
+            int spatial = 1;
+            for (int d = 1; d < shape.Length; d++) spatial *= shape[d];
+            var t = new Tensor<T>(shape);
+            for (int p = 0; p < spatial; p++)
+                t[rng.Next(0, classes) * spatial + p] = NumOps.One;
+            return t;
+        }
+        return base.CreateRandomTargetTensor(shape, rng);
+    }
+
     // =====================================================
     // SEGMENTATION INVARIANT: Output Spatial Dimensions Match Input
     // The segmentation mask must have the same spatial dimensions as

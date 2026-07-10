@@ -979,6 +979,102 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <summary>
     /// Internal method that performs supervised training with the provided input features and output values.
     /// This contains all the core supervised learning logic.
+    /// <summary>
+    /// Image-only training path (#1834). Drives the image-space training loop when the caller
+    /// configured an <c>IDataLoader&lt;ImageView&lt;T&gt;, PixelBatch&lt;T&gt;&gt;</c> and an
+    /// <c>IImageTrainable</c> model with no standard X/y data. Skips the row-oriented
+    /// preprocessing pipeline entirely — image-space training has fundamentally different
+    /// tensor shapes than row-scalar supervised training and doesn't fit the split /
+    /// standardize / feature-select pipeline downstream.
+    /// </summary>
+    private Task<AiModelResult<T, TInput, TOutput>> BuildImageOnlyInternalAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (_model is null)
+        {
+            throw new InvalidOperationException("Image-only build requires ConfigureModel(...) before BuildAsync.");
+        }
+        if (_imageDataLoader is null)
+        {
+            throw new InvalidOperationException("Image-only build requires ConfigureDataLoader(imageLoader) before BuildAsync.");
+        }
+        if (_model is not NeuralRadianceFields.Interfaces.IImageTrainable<T> imageTrainable)
+        {
+            throw new InvalidOperationException(
+                $"Image-space training requires an IImageTrainable model (NeRF, InstantNGP, " +
+                $"GaussianSplatting). Got '{_model.GetType().FullName}'.");
+        }
+        if (_imageDataLoader is not IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> typedLoader)
+        {
+            throw new InvalidOperationException(
+                "Configured image data loader is not compatible with this builder's numeric type.");
+        }
+
+        // Optimizer options (for #1833 hyperparameter routing + rays-per-batch selection).
+        var optimizerOptions = _optimizer?.GetOptions();
+
+        // Apply hyperparameter routing so per-attribute LR schedules (GS position/scale/opacity)
+        // fire before the first training iteration.
+        if (optimizerOptions is not null && _model is IHyperparameterAware<T, TInput, TOutput> hpAware)
+        {
+            hpAware.ApplyOptimizerHyperparameters(optimizerOptions);
+        }
+
+        int imageEpochs = optimizerOptions?.MaxIterations > 0 ? optimizerOptions.MaxIterations : 100;
+        const int PaperRaysPerBatch = 1024;
+        const int AdamDefaultBatchSize = 32;
+        int raysPerBatch =
+            optimizerOptions is AdamOptimizerOptions<T, TInput, TOutput> adamOpts
+                && adamOpts.BatchSize > 0
+                && adamOpts.BatchSize != AdamDefaultBatchSize
+                ? adamOpts.BatchSize
+                : PaperRaysPerBatch;
+
+        RunImageSpaceTrainingLoop(imageTrainable, typedLoader, raysPerBatch, imageEpochs, optimizerOptions, cancellationToken);
+
+        var result = new AiModelResult<T, TInput, TOutput> { Model = _model };
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Shared image-space training loop used by both <see cref="BuildImageOnlyInternalAsync"/>
+    /// and the <c>imageSpaceHandled</c> branch inside <see cref="BuildSupervisedInternalAsync"/>.
+    /// Runs <paramref name="epochs"/> iterations of <c>TrainOnImageBatch</c> and, when the
+    /// model is a <see cref="NeuralRadianceFields.Models.GaussianSplatting{T}"/> with
+    /// <see cref="AiDotNet.Models.Options.GaussianSplattingOptions.CompressOnBuildComplete"/>
+    /// set, runs the post-training compression pass exactly once at the end.
+    /// </summary>
+    private void RunImageSpaceTrainingLoop(
+        NeuralRadianceFields.Interfaces.IImageTrainable<T> imageTrainable,
+        IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> typedLoader,
+        int raysPerBatch,
+        int epochs,
+        AiDotNet.Models.Options.OptimizationAlgorithmOptions<T, TInput, TOutput>? optimizerOptions,
+        CancellationToken cancellationToken)
+    {
+        var imgOpts = optimizerOptions as AiDotNet.Models.Options.OptimizationAlgorithmOptions<
+            T,
+            AiDotNet.Tensors.LinearAlgebra.Tensor<T>,
+            AiDotNet.Tensors.LinearAlgebra.Tensor<T>>;
+
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            imageTrainable.TrainOnImageBatch(typedLoader, raysPerBatch, imgOpts);
+        }
+
+        if (_model is NeuralRadianceFields.Models.GaussianSplatting<T> gs
+            && gs.GetOptions() is AiDotNet.Models.Options.GaussianSplattingOptions gsOpts
+            && gsOpts.CompressOnBuildComplete)
+        {
+            gs.RunCompressionPass();
+        }
+    }
+
+    /// <summary>
+    /// Standard supervised training entry point. Runs the full data-preparation +
+    /// optimizer.Optimize pipeline against the given training tensors.
     /// </summary>
     /// <param name="x">Matrix of input features.</param>
     /// <param name="y">Vector of output values.</param>
@@ -2144,7 +2240,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ? _model.DeepCopy()
             : null;
 
-        OptimizationResult<T, TInput, TOutput> optimizationResult;
+        OptimizationResult<T, TInput, TOutput> optimizationResult = null!;
         FederatedLearningMetadata? federatedLearningMetadata = null;
 #pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
         var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
@@ -2422,7 +2518,71 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // This is required for InitializeRandomSolution to access model.ParameterCount
             finalOptimizer.SetModel(model);
 
-            if (_trainingGroups is not null
+            // #1833: propagate the configured optimizer's hyperparameters into models with
+            // SPECIALIZED internal update paths (e.g. GaussianSplatting's per-attribute LR
+            // schedule for position/scale/opacity/spherical-harmonics; DDPM's noise-prediction
+            // schedule). Without this hook, those models silently ignore every
+            // AdamOptimizerOptions knob except MaxIterations — the facade's Adam step runs
+            // but finds no chunks to update because it walks the standard Layers path that
+            // specialized models bypass, and the model's own internal update uses whatever
+            // defaults its constructor was built with. See #1833 for the full diagnostic.
+            //
+            // Runs immediately after SetModel and before any Optimize call so per-attribute
+            // LR schedules etc. are in place for the FIRST gradient step. Hook is a no-op
+            // for models that don't implement IHyperparameterAware — every neural-network
+            // model that fits the standard Layers walk (NeRF, InstantNGP, Transformer) picks
+            // up hyperparameters via the normal Adam.Step path and doesn't need this route.
+            var configuredOptimizerOptions = finalOptimizer.GetOptions();
+            if (configuredOptimizerOptions is not null
+                && model is IHyperparameterAware<T, TInput, TOutput> hyperparameterAwareModel)
+            {
+                hyperparameterAwareModel.ApplyOptimizerHyperparameters(configuredOptimizerOptions);
+            }
+
+            // #1834 IMAGE-SPACE branch: if the caller registered an image loader AND the model
+            // implements IImageTrainable, drive training via TrainOnImageBatch per iteration.
+            // Image-space training has photometric-MSE semantics (rendered pixels vs ground-
+            // truth photo pixels) that don't fit the standard (input, target) row shape, so we
+            // route around the supervised optimizer.Optimize flow. Paper-standard AdamOptimizer
+            // BatchSize is the rays-per-batch count for radiance fields.
+            bool imageSpaceHandled = false;
+            if (_imageDataLoader is not null
+                && model is NeuralRadianceFields.Interfaces.IImageTrainable<T> imageTrainable
+                && _imageDataLoader is IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> typedImageLoader)
+            {
+                int imageEpochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                // Paper-standard rays-per-iteration is 1024–4096; AdamOptimizerOptions.BatchSize
+                // defaults to 32 (row-sample count for supervised training) which would starve
+                // an image-space step. Only honor an EXPLICITLY-set non-default BatchSize as
+                // rays-per-batch; otherwise use the radiance-field paper default of 1024.
+                const int PaperRaysPerBatch = 1024;
+                const int AdamDefaultBatchSize = 32;
+                int raysPerBatch =
+                    configuredOptimizerOptions is AdamOptimizerOptions<T, TInput, TOutput> adamOpts
+                        && adamOpts.BatchSize > 0
+                        && adamOpts.BatchSize != AdamDefaultBatchSize
+                        ? adamOpts.BatchSize
+                        : PaperRaysPerBatch;
+
+                // Shared image-space training loop (extracted so both this branch and
+                // BuildImageOnlyInternalAsync route through the same helper).
+                RunImageSpaceTrainingLoop(
+                    imageTrainable, typedImageLoader,
+                    raysPerBatch, imageEpochs, configuredOptimizerOptions,
+                    cancellationToken: cancellationToken);
+
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                };
+                imageSpaceHandled = true;
+            }
+
+            if (imageSpaceHandled)
+            {
+                // handled above — skip the standard-supervised branches
+            }
+            else if (_trainingGroups is not null
                 && model is NeuralNetworks.NeuralNetworkBase<T> groupedNet
                 && XTrain is Tensor<T> groupedX && yTrain is Tensor<T> groupedY)
             {

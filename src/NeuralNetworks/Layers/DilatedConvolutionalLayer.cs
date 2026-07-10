@@ -499,11 +499,15 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         int outH = (h + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
         int outW = (w + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
 
-        _kernels = AllocateLazyWeight([_outputDepth, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = AllocateLazyWeight([_outputDepth]);
-        InitializeWeights();
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_kernels, _outputDepth, _inputDepth, _kernelSize, _kernelSize))
+        {
+            _kernels = AllocateLazyWeight([_outputDepth, _inputDepth, _kernelSize, _kernelSize]);
+            _biases = AllocateLazyWeight([_outputDepth]);
+            InitializeWeights();
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { c, h, w }, new[] { _outputDepth, outH, outW });
     }

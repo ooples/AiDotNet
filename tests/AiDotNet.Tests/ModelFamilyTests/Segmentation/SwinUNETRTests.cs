@@ -170,9 +170,14 @@ public class SwinUNETRTests : SegmentationTestBase
 
     private static Tensor<double> CreateClassIndexMask()
     {
+        // DIVERSE per-pixel class indices, NOT all-zeros. "Predict class 0 for every pixel"
+        // is a degenerate objective with no finite-logit optimum: the model drives the class-0
+        // logit toward +infinity for all pixels, overflowing to NaN within ~30 AdamW steps
+        // (the Training_ShouldReduceLoss / MoreData NaN). A multi-class map has a finite,
+        // balanced optimum so training stays numerically stable and the loss actually decreases.
         var mask = new Tensor<double>(new[] { Height, Width });
         for (int i = 0; i < mask.Length; i++)
-            mask[i] = 0.0;
+            mask[i] = i % NumClasses;
 
         return mask;
     }

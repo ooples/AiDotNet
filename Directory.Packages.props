@@ -209,16 +209,33 @@
          deps above are retained. NOTE: 0.106.0 (and the lockstep native packages below) is already
          PUBLISHED to NuGet, so this bump does not gate CI on an unreleased dependency.
 
-         Bumped 0.110.0 -> 0.111.0: brings AiDotNet.Tensors #739 —
-         DirectGpuTensorEngine.InvalidateResidentWeightBuffer, which this PR calls after every in-place
-         optimizer update to force a weight re-upload on the resident-GPU path (fixes stale-weight GPU
-         transformer training). 0.111.0 is PUBLISHED to NuGet and is a superset of 0.110.x.
+         Bumped 0.110.0 -> 0.111.0 (managed + native packages in lockstep): 0.111.0 is a published
+         superset that brings BOTH AiDotNet.Tensors #739 — DirectGpuTensorEngine.InvalidateResident-
+         WeightBuffer, which this PR calls after every in-place optimizer update to force a weight
+         re-upload on the resident-GPU path (fixes stale-weight GPU transformer training) — AND #747,
+         2D AffineGrid made differentiable w.r.t. theta, which unblocks this PR's SpatialTransformer-
+         Layer tape-gradient fix.
 
          Bumped 0.111.0 -> 0.111.1: brings AiDotNet.Tensors #753 (AiDotNet#1824) —
-         TensorArena.DetachBoundaryAndReset, the per-layer scratch-recycling primitive this PR's
-         memory-bounded transformer forward uses: it carries the layer boundary out of the recyclable
-         scratch region, then resets the pool so the next layer reuses it (peak ~= O(one layer)).
-         0.111.1 is PUBLISHED to NuGet and is a superset of 0.111.0. -->
+         TensorArena.DetachBoundaryAndReset, the per-layer scratch-recycling primitive that landed on
+         master via #1824. 0.111.1 is PUBLISHED to NuGet and is a superset of 0.111.0, so the #739 /
+         #747 rationale above is retained.
+
+         Bumped 0.111.1 -> 0.111.2: brings AiDotNet.Tensors #755 — zero the unwritten tail in
+         CpuEngine.TensorConcatenate's axis-0 fast path. That path sized the output by SUMMING each
+         input's shape[0] but filled it by COPYING each input's Length; for ragged inputs the summed
+         output is larger than the copied total, leaving a tail the copy never wrote. Since the buffer
+         is rented UNINITIALIZED from AutoTensorCache, a tail left dirty by an earlier op (e.g. NaN/Inf
+         activations from a prior training step on the same thread) leaked straight into the concat
+         result — an intermittent, pool-state-dependent NaN, exactly the failure mode behind the
+         model-family shard flakes this PR targets. 0.111.2 is PUBLISHED to NuGet and is a superset of
+         0.111.1, so all rationale above is retained.
+
+         Bumped 0.111.2 -> 0.112.0: brings AiDotNet.Tensors #759 (N-BEATS resident blow-up — zero only
+         accumulating multi-consumer grad buffers) and #764 (GPU-resident-parameter fused-Adam mistrain
+         fix), which together make this PR's TimeSeries GPU-resident training path train faithfully (the
+         resident run now lowers the eager-forward training MSE and improves held-out MSE, so the N-BEATS
+         correctness gate accepts it). 0.112.0 is PUBLISHED to NuGet and is a superset of 0.111.2. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.112.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.112.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.112.0" />

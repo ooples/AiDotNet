@@ -707,6 +707,28 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         return [_outputChannels, outH, outW];
     }
 
+    /// <summary>
+    /// Serializes the layer's construction-time configuration so Clone / Deserialize can
+    /// rebuild it exactly. Input channels / spatial dims are resolved lazily on the first
+    /// forward (and the trained weights are restored via SetParameters), so only the
+    /// constructor-shape hyperparameters need to round-trip. Without these keys the
+    /// deserialization fallback rebuilt the layer with default ctor args
+    /// (outputChannels/padding wrong), producing a mis-shaped output tensor and breaking
+    /// Clone for every DCN-using model (InternImage, BasicVSR++).
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["OutputChannels"] = _outputChannels.ToString();
+        metadata["KernelSize"] = _kernelSize.ToString();
+        metadata["Stride"] = _stride.ToString();
+        metadata["Padding"] = _padding.ToString();
+        metadata["Groups"] = _groups.ToString();
+        metadata["DeformGroups"] = _deformGroups.ToString();
+        metadata["UseModulation"] = _useModulation.ToString();
+        return metadata;
+    }
+
     #endregion
 
     #region Parameter Management

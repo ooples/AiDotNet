@@ -339,7 +339,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>
     /// <param name="outputSize">The number of output neurons.</param>
-    /// <param name="activationFunction">The activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <param name="activationFunction">The activation function to apply. Defaults to a LINEAR
+    /// (identity) projection when not specified, matching PyTorch's <c>nn.Linear</c> and Keras'
+    /// <c>Dense</c> — a bare dense layer emits raw pre-activations. Pass an explicit activation
+    /// (e.g. <see cref="ReLUActivation{T}"/>) for a nonlinear hidden layer. (Previously defaulted
+    /// to ReLU, which silently clamped output/logit heads to zero on negative pre-activations.)</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a dense layer with the specified number of input and output neurons.
@@ -362,7 +366,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public DenseLayer(int outputSize, IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
-        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
         {

@@ -127,10 +127,30 @@ public class STTN<T> : VideoInpaintingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeInpaintFrames(rawFrames);
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeInpaintFrames(modelOutput);
+
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Training must apply the SAME transform inference does (Inpaint): normalize the frames,
+        // concatenate a 1-channel mask (InputDepth -> InputDepth+1 so the encoder conv matches),
+        // run the layer stack, then denormalize. Feeding the raw InputDepth frames straight through
+        // the base would resolve/expect a different first-conv depth than inference AND train in a
+        // different value space, so the two paths would diverge. Delegate the actual layer walk
+        // (autodiff tape, gradient checkpointing, seed-wiring) to the base by handing it the
+        // mask-concatenated tensor; normalize/denormalize are Engine ops so gradients still flow.
+        // Use a fresh RANDOM per-step hole mask (PyTorch video-inpainting recipe). A mask that varies
+        // every step exercises the encoder's mask-channel weights without becoming a constant the model
+        // can exploit as a shortcut — so training keeps using the frame content and stays input-sensitive.
+        // Inference's PredictCore uses the deterministic CreateDefaultInpaintingMask.
+        var mask = CreateTrainingMask(input.Shape[0], input.Shape[2], input.Shape[3]);
+        var combined = ConcatFramesAndMasks(PreprocessFrames(input), mask);
+        return PostprocessOutput(base.ForwardForTraining(combined));
+    }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expected)

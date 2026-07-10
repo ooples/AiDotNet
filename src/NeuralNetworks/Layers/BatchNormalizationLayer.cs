@@ -496,15 +496,21 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // streaming-aware layers and to keep the contract simple. Then
         // fill gamma with the deferred init value (zero-init for
         // post-residual BN, one-init otherwise) and runningVariance with 1.
-        _gamma = AllocateLazyWeight([numFeatures]);
-        _gamma.Fill(gammaInit);
-        _beta = AllocateLazyWeight([numFeatures]);
-        _runningMean = AllocateLazyWeight([numFeatures]);
-        _runningVariance = AllocateLazyWeight([numFeatures]);
-        _runningVariance.Fill(NumOps.One);
+        // Idempotent: don't re-allocate/re-init gamma/beta/running-stats a clone/deserialize already
+        // installed — re-filling gamma and running-variance would drop trained normalization params
+        // (#1221 Clone_AfterTraining). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_gamma, numFeatures))
+        {
+            _gamma = AllocateLazyWeight([numFeatures]);
+            _gamma.Fill(gammaInit);
+            _beta = AllocateLazyWeight([numFeatures]);
+            _runningMean = AllocateLazyWeight([numFeatures]);
+            _runningVariance = AllocateLazyWeight([numFeatures]);
+            _runningVariance.Fill(NumOps.One);
 
-        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
-        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+            RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+            RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+        }
 
         // BatchNorm is SHAPE-PRESERVING (output shape == input shape). For image
         // inputs (rank ≥ 3) resolve the layer's declared I/O shapes to the

@@ -208,23 +208,39 @@ public class Int8InferenceModelIntegrationTests
             int8.Predict(input);
         }
 
-        var swFp32 = Stopwatch.StartNew();
-        for (int i = 0; i < measureIters; i++)
-            fp32.Predict(input);
-        swFp32.Stop();
+        // The fp32 baseline here is sub-millisecond per call, so a SINGLE timing round is
+        // noise-dominated on a shared CI runner — a lone scheduling hiccup or an unusually fast
+        // fp32 round spikes the ratio far above the true value (observed 25x on CI vs ~8-15x
+        // steady-state), producing false regression failures. Take the MEDIAN ratio over several
+        // measurement rounds (per the repo's median-of-N timing guidance) so one noisy round
+        // can't trip the ceiling while a genuine dequant regression — which shifts every round —
+        // still does.
+        const int rounds = 5;
+        var ratios = new double[rounds];
+        double fp32Ms = 0, int8Ms = 0;
+        for (int r = 0; r < rounds; r++)
+        {
+            var swFp32 = Stopwatch.StartNew();
+            for (int i = 0; i < measureIters; i++)
+                fp32.Predict(input);
+            swFp32.Stop();
 
-        var swInt8 = Stopwatch.StartNew();
-        for (int i = 0; i < measureIters; i++)
-            int8.Predict(input);
-        swInt8.Stop();
+            var swInt8 = Stopwatch.StartNew();
+            for (int i = 0; i < measureIters; i++)
+                int8.Predict(input);
+            swInt8.Stop();
 
-        double fp32Ms = swFp32.Elapsed.TotalMilliseconds / measureIters;
-        double int8Ms = swInt8.Elapsed.TotalMilliseconds / measureIters;
-        double ratio = int8Ms / Math.Max(fp32Ms, 0.0001);
+            fp32Ms = swFp32.Elapsed.TotalMilliseconds / measureIters;
+            int8Ms = swInt8.Elapsed.TotalMilliseconds / measureIters;
+            ratios[r] = int8Ms / Math.Max(fp32Ms, 0.0001);
+        }
+        System.Array.Sort(ratios);
+        double ratio = ratios[rounds / 2]; // median of the per-round ratios
 
         _output.WriteLine(
-            $"INT8 wall-clock ratio: {ratio:F2}x (int8={int8Ms:F3}ms vs fp32={fp32Ms:F3}ms) " +
-            $"on {seqLen}x{embDim} transformer canary, {numHeads} heads, {measureIters} iters.");
+            $"INT8 wall-clock ratio: {ratio:F2}x median over {rounds} rounds " +
+            $"(last round int8={int8Ms:F3}ms vs fp32={fp32Ms:F3}ms) " +
+            $"on {seqLen}x{embDim} transformer canary, {numHeads} heads, {measureIters} iters/round.");
 
         // 20x post-SIMD ceiling (down from the pre-SIMD 50x). The measured
         // canary ratio is ~15x — small-matrix per-call overhead dominates here.

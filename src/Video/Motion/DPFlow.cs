@@ -68,7 +68,11 @@ public class DPFlow<T> : OpticalFlowBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            // 2 frames stacked channel-wise (2×3=6): the lazy _featureExtract conv is sized from
+            // InputDepth by ResolveLazyLayerShapes, and EstimateFlow feeds it the concatenated pair,
+            // so it must be 6 not 3. Single-encoder flow models only (RAFT/GMFlow have a separate
+            // 3-channel context encoder and are excluded). PredictCore splits per-frame via Shape[1]/2.
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
             outputSize: 2))
     {
     }
@@ -120,8 +124,13 @@ public class DPFlow<T> : OpticalFlowBase<T>
     {
         int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
         int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
-        int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
-        var dummy = new Tensor<T>([1, 2 * channels, height, width]);
+        // InputDepth is ALREADY the two-frames-stacked channel count (2×3=6 — see the ctor comment),
+        // which is exactly what _featureExtract consumes: PredictCore splits the stacked input into two
+        // half-depth frames and EstimateFlow re-concatenates them back to InputDepth before the conv.
+        // Warming up with 2×InputDepth resolved the conv to 12 while the real path feeds it 6
+        // ("Expected input depth 12, but got 6"). Use InputDepth directly.
+        int channels = arch.InputDepth > 0 ? arch.InputDepth : 6;
+        var dummy = new Tensor<T>([1, channels, height, width]);
 
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);

@@ -913,6 +913,12 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null);
 
+    // NOTE: The advanced ConfigureAutoML(IAutoMLModel<T,TInput,TOutput>) overload is intentionally
+    // NOT part of this interface. Adding it would be a breaking change for every external
+    // IAiModelBuilder<T,TInput,TOutput> implementer. It remains a public method on the concrete
+    // AiModelBuilder<T,TInput,TOutput>, which is also what the generated YAML applier targets
+    // (it dispatches against the concrete builder type, not this interface).
+
     /// <summary>
     /// Configures reinforcement learning options for training an RL agent.
     /// </summary>

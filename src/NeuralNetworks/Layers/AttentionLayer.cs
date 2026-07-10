@@ -352,18 +352,22 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 $"AttentionLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
         _inputSize = input.Shape[rank - 1];
-        _Wq = AllocateLazyWeight([_attentionSize, _inputSize]);
-        _Wk = AllocateLazyWeight([_attentionSize, _inputSize]);
-        _Wv = AllocateLazyWeight([_attentionSize, _inputSize]);
-        _Wo = AllocateLazyWeight([_inputSize, _attentionSize]);
-        InitializeLayerWeights(_Wq, _inputSize, _attentionSize);
-        InitializeLayerWeights(_Wk, _inputSize, _attentionSize);
-        InitializeLayerWeights(_Wv, _inputSize, _attentionSize);
-        InitializeLayerWeights(_Wo, _attentionSize, _inputSize);
-        RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wo, PersistentTensorRole.Weights);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_Wq, _attentionSize, _inputSize))
+        {
+            _Wq = AllocateLazyWeight([_attentionSize, _inputSize]);
+            _Wk = AllocateLazyWeight([_attentionSize, _inputSize]);
+            _Wv = AllocateLazyWeight([_attentionSize, _inputSize]);
+            _Wo = AllocateLazyWeight([_inputSize, _attentionSize]);
+            InitializeLayerWeights(_Wq, _inputSize, _attentionSize);
+            InitializeLayerWeights(_Wk, _inputSize, _attentionSize);
+            InitializeLayerWeights(_Wv, _inputSize, _attentionSize);
+            InitializeLayerWeights(_Wo, _attentionSize, _inputSize);
+            RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_Wo, PersistentTensorRole.Weights);
+        }
 
         // Output last dim = input last dim (passthrough via Wo projection)
         var inputShape = input.Shape.ToArray();

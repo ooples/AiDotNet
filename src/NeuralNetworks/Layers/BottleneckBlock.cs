@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 1")]
-public class BottleneckBlock<T> : LayerBase<T>
+public class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// The expansion factor for BottleneckBlock. Output channels = base channels * 4.
@@ -286,6 +286,18 @@ public class BottleneckBlock<T> : LayerBase<T>
             _pendingParameters = null;
             ApplyParameters(pending);
         }
+
+        // Replay BN running-stats extras that arrived via Deserialize →
+        // SetExtraParameters before the sub-layers existed. Without this the
+        // cloned/deserialized block's BN running mean/var stay at their reset
+        // defaults, so eval-mode inference diverges from the trained model even
+        // though every trainable weight is byte-identical (Clone_AfterTraining).
+        if (_pendingExtraParameters is not null)
+        {
+            var pendingExtras = _pendingExtraParameters;
+            _pendingExtraParameters = null;
+            ApplyExtraParametersUnsafe(pendingExtras);
+        }
     }
 
     // Constructor args round-trip for serialization. DeserializationHelper
@@ -511,6 +523,68 @@ public class BottleneckBlock<T> : LayerBase<T>
         {
             Set(_downsampleConv); Set(_downsampleBn);
         }
+    }
+
+    // --- ILayerSerializationExtras: round-trip the internal BN layers' running
+    // mean/variance. These are NON-trainable state (excluded from GetParameters),
+    // so without forwarding them the block loses its BN statistics on
+    // serialize/clone and eval-mode inference diverges (Clone_AfterTraining). The
+    // BN order MUST match GetParameters: bn1, bn2, bn3, then the optional
+    // downsample BN. ---
+
+    int ILayerSerializationExtras<T>.ExtraParameterCount
+    {
+        get
+        {
+            int count = 0;
+            if (_bn1 is ILayerSerializationExtras<T> b1) count += b1.ExtraParameterCount;
+            if (_bn2 is ILayerSerializationExtras<T> b2) count += b2.ExtraParameterCount;
+            if (_bn3 is ILayerSerializationExtras<T> b3) count += b3.ExtraParameterCount;
+            if (_downsampleBn is ILayerSerializationExtras<T> db) count += db.ExtraParameterCount;
+            return count;
+        }
+    }
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        var parts = new List<T>();
+        if (_bn1 is ILayerSerializationExtras<T> b1) parts.AddRange(b1.GetExtraParameters().ToArray());
+        if (_bn2 is ILayerSerializationExtras<T> b2) parts.AddRange(b2.GetExtraParameters().ToArray());
+        if (_bn3 is ILayerSerializationExtras<T> b3) parts.AddRange(b3.GetExtraParameters().ToArray());
+        if (_downsampleBn is ILayerSerializationExtras<T> db) parts.AddRange(db.GetExtraParameters().ToArray());
+        return new Vector<T>(parts.ToArray());
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        // Buffer until OnFirstForward allocates the BN sub-layers (lazy ctor):
+        // at deserialize time the block is unresolved and the type-checks below
+        // would all skip, silently dropping the running stats.
+        if (!IsShapeResolved)
+        {
+            _pendingExtraParameters = extraParameters;
+            return;
+        }
+        ApplyExtraParametersUnsafe(extraParameters);
+    }
+
+    private Vector<T>? _pendingExtraParameters;
+
+    private void ApplyExtraParametersUnsafe(Vector<T> extraParameters)
+    {
+        int offset = 0;
+        void Apply(BatchNormalizationLayer<T>? bn)
+        {
+            if (bn is not ILayerSerializationExtras<T> ex) return;
+            int count = ex.ExtraParameterCount;
+            if (count == 0) return;
+            if (offset + count > extraParameters.Length)
+                throw new ArgumentException(
+                    $"Truncated BottleneckBlock extra-parameters: need {offset + count} but got {extraParameters.Length}.");
+            ex.SetExtraParameters(extraParameters.SubVector(offset, count));
+            offset += count;
+        }
+        Apply(_bn1); Apply(_bn2); Apply(_bn3); Apply(_downsampleBn);
     }
 
     /// <summary>

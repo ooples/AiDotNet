@@ -321,15 +321,19 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 $"MemoryWriteLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
         int inputDimension = input.Shape[rank - 1];
-        _queryWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
-        _keyWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
-        _valueWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
-        InitializeParameters();
-        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_queryWeights, inputDimension, _memoryDimension))
+        {
+            _queryWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
+            _keyWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
+            _valueWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
+            InitializeParameters();
+            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { inputDimension }, new[] { _memoryDimension });
     }

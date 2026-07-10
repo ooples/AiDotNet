@@ -252,6 +252,29 @@ public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return features[features.Count - 1];
     }
 
+    /// <summary>
+    /// Exposes the per-stage hierarchical feature maps as named activations.
+    /// </summary>
+    /// <remarks>
+    /// Swin composes its patch-embed / stage blocks internally rather than through the
+    /// base <see cref="NeuralNetworkBase{T}.Layers"/> list (<see cref="InitializeLayers"/>
+    /// is intentionally empty for a detection backbone), so the base implementation — which
+    /// walks <c>Layers</c> — would return an empty map. Override it to surface the stage
+    /// feature pyramid (one entry per stage, coarsest-to-finest strides), which is exactly
+    /// what a backbone contributes to a detector's FPN and what interpretability/inference
+    /// tooling expects from <see cref="GetNamedLayerActivations"/>.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        var features = ExtractFeatures(input);
+        for (int i = 0; i < features.Count; i++)
+        {
+            activations[$"Stage_{i}"] = features[i];
+        }
+        return activations;
+    }
+
     protected override void InitializeLayers() { }
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);

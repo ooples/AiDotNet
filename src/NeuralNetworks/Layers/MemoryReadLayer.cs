@@ -298,12 +298,16 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int inputDimension = input.Shape[rank - 1];
         int outputDimension = OutputShape[0];
 
-        _keyWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
-        InitializeParameters();
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_keyWeights, inputDimension, _memoryDimension))
+        {
+            _keyWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
+            InitializeParameters();
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { inputDimension }, new[] { outputDimension });
     }

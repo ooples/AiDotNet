@@ -380,11 +380,15 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
 
         InputChannels = c;
         int weightSize = c * NumTimeScales;
-        _weights = AllocateLazyWeight([OutputChannels, weightSize]);
-        _biases = AllocateLazyWeight([OutputChannels]);
-        InitializeWeights();
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_weights, OutputChannels, weightSize))
+        {
+            _weights = AllocateLazyWeight([OutputChannels, weightSize]);
+            _biases = AllocateLazyWeight([OutputChannels]);
+            InitializeWeights();
+            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { v, c }, new[] { v, OutputChannels });
     }
