@@ -103,31 +103,39 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             int bestVar = -1;
             double bestScore = double.MaxValue;
 
-            // Cache pairwise MI scores within each round to avoid recomputation
-            var miCache = new Dictionary<(int, int), double>();
+            // Find the MOST EXOGENOUS variable among remaining using the DirectLiNGAM / RCD
+            // criterion (Shimizu et al. 2011 DirectLiNGAM; Maeda & Shimizu 2020 RCD): the
+            // exogenous variable is the one whose regression RESIDUALS of the other variables are
+            // most INDEPENDENT of it. For each candidate, regress every other remaining variable
+            // on the candidate and measure the mutual information between the candidate and each
+            // residual r_j = x_j - reg(x_j ~ x_candidate). A true root leaves those residuals
+            // independent of it (score ~0); a descendant does not.
+            //
+            // NOTE: scoring RAW pairwise MI between the candidate and the other variables (the
+            // previous implementation) is wrong — a root cause has HIGH raw MI with its
+            // descendants because it drives them, so raw-MI minimisation systematically selects a
+            // LEAF and inverts the causal order, leaving the true directed edges undetected.
+            // Score each candidate by the DirectLiNGAM entropy criterion: for every other
+            // variable j, DiffMutualInfo(candidate, j) > 0 iff candidate → j (candidate is the
+            // cause). Accumulate min(0, DiffMI)² — the squared EVIDENCE that the candidate is an
+            // EFFECT of some j. The exogenous variable has no such evidence (score ≈ 0), so we
+            // pick the argmin. This uses Hyvärinen's max-entropy differential-entropy
+            // approximation, which detects the non-Gaussian dependence that identifies causal
+            // direction even for near-collinear variables (a histogram MI cannot).
             foreach (int candidate in remaining)
             {
-                // Compute total mutual information of this variable's residuals with all others
-                double totalMI = 0;
+                double effectEvidence = 0;
                 foreach (int other in remaining)
                 {
                     if (other == candidate) continue;
-                    var key = (Math.Min(candidate, other), Math.Max(candidate, other));
-                    if (!miCache.TryGetValue(key, out double mi))
-                    {
-                        mi = ComputeEntropyBasedMI(residualData, n, candidate, other);
-                        miCache[key] = mi;
-                    }
-                    totalMI += mi;
+                    double diffMI = DiffMutualInfo(residualData, n, candidate, other);
+                    double neg = Math.Min(0.0, diffMI);
+                    effectEvidence += neg * neg;
                 }
 
-                // Normalize by number of comparisons
-                int comparisons = remaining.Count - 1;
-                double avgMI = comparisons > 0 ? totalMI / comparisons : 0;
-
-                if (avgMI < bestScore)
+                if (effectEvidence < bestScore)
                 {
-                    bestScore = avgMI;
+                    bestScore = effectEvidence;
                     bestVar = candidate;
                 }
             }
@@ -177,58 +185,78 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     }
 
     /// <summary>
-    /// Computes mutual information between two columns using entropy-based estimation.
-    /// Uses differential entropy via histogram binning: MI = H(X) + H(Y) - H(X,Y).
+    /// Hyvärinen's (1998) maximum-entropy approximation of the differential entropy of a
+    /// STANDARDIZED (zero-mean, unit-variance) variable. Lower entropy ⇒ more non-Gaussian.
+    /// This is the entropy term DirectLiNGAM (Shimizu et al. 2011) — which RCD (Maeda &amp;
+    /// Shimizu 2020) builds on — uses to score causal direction, because the non-Gaussianity of
+    /// a residual is what identifies direction; a histogram MI cannot resolve this on
+    /// near-collinear data.
     /// </summary>
-    private static double ComputeEntropyBasedMI(double[,] data, int n, int col1, int col2)
+    private static double DifferentialEntropy(double[] u, int n)
     {
-        if (n < 4) return 0;
+        // Constants from Hyvärinen (1998) "New approximations of differential entropy…":
+        // the two non-quadratic contrast functions G1(u)=log cosh(u), G2(u)=u·exp(-u²/2),
+        // with gamma = E[G1(standard normal)].
+        const double k1 = 79.047;
+        const double k2 = 7.4129;
+        const double gamma = 0.37457;
+        double gaussEntropy = (1.0 + Math.Log(2.0 * Math.PI)) / 2.0;
 
-        // Number of bins via Sturges' rule
-        int numBins = Math.Max(3, (int)Math.Ceiling(Math.Log(n, 2) + 1));
-
-        // Find ranges for each variable
-        double min1 = double.MaxValue, max1 = double.MinValue;
-        double min2 = double.MaxValue, max2 = double.MinValue;
+        double m1 = 0, m2 = 0;
         for (int i = 0; i < n; i++)
         {
-            double v1 = data[i, col1], v2 = data[i, col2];
-            if (v1 < min1) min1 = v1; if (v1 > max1) max1 = v1;
-            if (v2 < min2) min2 = v2; if (v2 > max2) max2 = v2;
+            double x = u[i];
+            m1 += Math.Log(Math.Cosh(x));
+            m2 += x * Math.Exp(-0.5 * x * x);
         }
+        m1 /= n;
+        m2 /= n;
 
-        double range1 = max1 - min1, range2 = max2 - min2;
-        if (range1 < 1e-15 || range2 < 1e-15) return 0;
+        return gaussEntropy - k1 * (m1 - gamma) * (m1 - gamma) - k2 * m2 * m2;
+    }
 
-        // Build joint and marginal histograms
-        var joint = new int[numBins, numBins];
-        var marginal1 = new int[numBins];
-        var marginal2 = new int[numBins];
+    /// <summary>
+    /// DirectLiNGAM's entropy-based mutual-information difference for the ordered pair (i, j):
+    /// a positive value means <c>i → j</c> (variable i is the cause), a negative value means
+    /// <c>j → i</c>. Both variables are standardized; the regression residuals in each direction
+    /// are r_{i|j} = x_i − ρ·x_j and r_{j|i} = x_j − ρ·x_i (ρ = correlation), and the measure is
+    /// [H(x_j) + H(r_{i|j})] − [H(x_i) + H(r_{j|i})] using
+    /// <see cref="DifferentialEntropy(double[], int)"/>.
+    /// </summary>
+    private static double DiffMutualInfo(double[,] data, int n, int i, int j)
+    {
+        double meanI = 0, meanJ = 0;
+        for (int k = 0; k < n; k++) { meanI += data[k, i]; meanJ += data[k, j]; }
+        meanI /= n; meanJ /= n;
 
-        for (int i = 0; i < n; i++)
+        double varI = 0, varJ = 0, cov = 0;
+        for (int k = 0; k < n; k++)
         {
-            int b1 = Math.Min((int)((data[i, col1] - min1) / range1 * numBins), numBins - 1);
-            int b2 = Math.Min((int)((data[i, col2] - min2) / range2 * numBins), numBins - 1);
-            joint[b1, b2]++;
-            marginal1[b1]++;
-            marginal2[b2]++;
+            double di = data[k, i] - meanI, dj = data[k, j] - meanJ;
+            varI += di * di; varJ += dj * dj; cov += di * dj;
         }
+        double stdI = Math.Sqrt(varI / n), stdJ = Math.Sqrt(varJ / n);
+        if (stdI < 1e-12 || stdJ < 1e-12) return 0;
+        double rho = (cov / n) / (stdI * stdJ);
+        if (rho > 1) rho = 1; else if (rho < -1) rho = -1;
+        double residStd = Math.Sqrt(Math.Max(1e-12, 1.0 - rho * rho));
 
-        // MI = sum p(x,y) * log(p(x,y) / (p(x)*p(y)))
-        double mi = 0;
-        double logN = Math.Log(n);
-        for (int b1 = 0; b1 < numBins; b1++)
+        var xi = new double[n];
+        var xj = new double[n];
+        var rIgivenJ = new double[n];
+        var rJgivenI = new double[n];
+        for (int k = 0; k < n; k++)
         {
-            if (marginal1[b1] == 0) continue;
-            for (int b2 = 0; b2 < numBins; b2++)
-            {
-                if (joint[b1, b2] == 0 || marginal2[b2] == 0) continue;
-                mi += (double)joint[b1, b2] / n *
-                      (Math.Log(joint[b1, b2]) - Math.Log(marginal1[b1]) - Math.Log(marginal2[b2]) + logN);
-            }
+            double xis = (data[k, i] - meanI) / stdI;
+            double xjs = (data[k, j] - meanJ) / stdJ;
+            xi[k] = xis;
+            xj[k] = xjs;
+            rIgivenJ[k] = (xis - rho * xjs) / residStd;
+            rJgivenI[k] = (xjs - rho * xis) / residStd;
         }
 
-        return Math.Max(mi, 0);
+        return (DifferentialEntropy(xj, n) + DifferentialEntropy(rIgivenJ, n))
+             - (DifferentialEntropy(xi, n) + DifferentialEntropy(rJgivenI, n));
     }
 
     /// <summary>
