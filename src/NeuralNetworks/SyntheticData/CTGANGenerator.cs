@@ -614,7 +614,46 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
 
         var (realPacked, fakePacked) = BuildPackedRealAndFakeBatches(transformedData, numPacks);
 
-        // GPU-RESIDENT WGAN-GP disc via Tensors PR #763.
+        // Preferred fused path: WganGpFusedStep runs the full WGAN-GP objective
+        // (Wasserstein + λ·GP with createGraph=true GP) in one compiled plan,
+        // with persistent (real, fake, ε) slots refreshed each Step. Falls
+        // through to the GpuResidentFusedStep path (which uses this critic's
+        // per-batch epsilon sampled inline) when the optimizer has no fused-
+        // kernel mapping (adaptive LR, non-fuse-able type) or the primitive
+        // itself declines. See ooples/AiDotNet#1845.
+        var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers);
+        if (discParams.Count > 0
+            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                _discriminatorOptimizer,
+                out var wganOptType, out var wganLr, out var wganB1,
+                out var wganB2, out var wganEps, out var wganWd,
+                out _, out _))
+        {
+            using var wganStep = new AiDotNet.Training.WganGpFusedStep<T>();
+            Tensor<T> DiscFwd(Tensor<T> inp) => DiscriminatorForwardBatched(inp, isTraining: true);
+            Tensor<T> EpsilonSampler(int bs) =>
+                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
+            if (wganStep.TryStep(
+                    discParameters: discParams,
+                    realBatch: realPacked,
+                    fakeBatch: fakePacked,
+                    discForward: DiscFwd,
+                    epsilonSampler: EpsilonSampler,
+                    gradientPenaltyWeight: _options.GradientPenaltyWeight,
+                    optimizerType: wganOptType,
+                    learningRate: wganLr,
+                    beta1: wganB1,
+                    beta2: wganB2,
+                    epsilon: wganEps,
+                    weightDecay: wganWd,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        // Secondary fused path: GpuResidentFusedStep with the loss composed via
+        // this class's ComputeGradientPenalty (createGraph=true GP fix, #1844).
         var trainableDiscLayers = _discLayers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableDiscLayers.Count > 0)
         {
@@ -650,7 +689,8 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
         }
 
         using var tape = new GradientTape<T>();
-        var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers);
+        // discParams already collected above for the WganGpFusedStep attempt;
+        // reuse it here to avoid a redundant Layers → parameter scan.
 
         var realScores = DiscriminatorForwardBatched(realPacked, isTraining: true);
         var fakeScores = DiscriminatorForwardBatched(fakePacked, isTraining: true);

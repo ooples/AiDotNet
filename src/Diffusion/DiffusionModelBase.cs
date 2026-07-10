@@ -127,6 +127,29 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     public virtual ModelOptions GetOptions() => _options;
 
     /// <summary>
+    /// Opt-in flag: does this subclass's <see cref="PredictNoise"/> /
+    /// <see cref="PredictNoiseBatched"/> path use ONLY traceable engine ops (no
+    /// host-side <c>.Data.Span</c> loops, no per-step class-field mutation)?
+    /// When <c>true</c>, <see cref="Train"/> attempts a
+    /// <see cref="AiDotNet.Training.MultiSlotFusedStep{T}"/> fused-plan step
+    /// with (noisySample, noise) as persistent slots — the compiled plan replays
+    /// the forward per training call so <c>PredictNoise</c> must be free of
+    /// per-call side effects that would freeze at trace time.
+    /// <para>
+    /// Base default is <c>false</c> so existing subclasses (which may still use
+    /// <c>.Data.Span</c> internally) run through the eager tape as before. Override
+    /// after auditing your forward path. See ooples/AiDotNet#1846.
+    /// </para>
+    /// </summary>
+    protected virtual bool SupportsFusedDenoising => false;
+
+    private static void RestoreShadow(Tensor<T> param, Vector<T> shadow)
+    {
+        var span = param.Data.Span;
+        for (int k = 0; k < span.Length && k < shadow.Length; k++) span[k] = shadow[k];
+    }
+
+    /// <summary>
     /// The optional neural network architecture blueprint for custom layer configuration.
     /// </summary>
     private readonly NeuralNetworkArchitecture<T>? _architecture;
@@ -1130,6 +1153,70 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             noiseVector = SampleNoise(inputVector.Length, RandomGenerator);
             var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
             noisySampleTensor = new Tensor<T>(input._shape, noisySample);
+        }
+
+        // Preferred fused path: MultiSlotFusedStep with (noisySample, noise,
+        // timestepsPerElement) as persistent slots. Only engages when the
+        // concrete subclass has certified its PredictNoise/PredictNoiseBatched
+        // path as fully traceable by opting in via SupportsFusedDenoising —
+        // eager PredictNoise implementations that use host-side .Data.Span
+        // loops would freeze at trace time. See ooples/AiDotNet#1846.
+        // Only try the fused path when an optimizer has already been resolved
+        // (avoids double-construction with a slightly-different config).
+        var trainingOptimizerForFused = _trainingOptimizer;
+        if (SupportsFusedDenoising
+            && trainingOptimizerForFused is not null
+            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                trainingOptimizerForFused,
+                out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
+                out var mfsEps, out var mfsWd, out _, out _))
+        {
+            var trainableForFused = CollectTrainableParameters();
+            var noiseSlotT = new Tensor<T>(noisySampleTensor._shape, noiseVector);
+            var slots = new Tensor<T>[]
+            {
+                noisySampleTensor,
+                noiseSlotT,
+            };
+            using var multiSlotStep = new AiDotNet.Training.MultiSlotFusedStep<T>();
+            var timestepsSnapshot = timesteps;
+            var timestepSnapshotSingle = timestep;
+            var isBatchedSnapshot = isBatched;
+            Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
+            {
+                return isBatchedSnapshot
+                    ? PredictNoiseBatched(s[0], timestepsSnapshot)
+                    : PredictNoise(s[0], timestepSnapshotSingle);
+            }
+            Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
+            {
+                var diff = Engine.TensorSubtract(pred, s[1]);
+                var sq = Engine.TensorMultiply(diff, diff);
+                var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+                return Engine.ReduceMean(sq, axes, keepDims: false);
+            }
+            if (trainableForFused.Length > 0
+                && multiSlotStep.TryStep(
+                    parameters: trainableForFused,
+                    zeroGradAction: null,
+                    freshSlotData: slots,
+                    forward: ForwardFromSlots,
+                    computeLoss: ComputeLossFromSlots,
+                    optimizerType: mfsOptType,
+                    learningRate: mfsLr,
+                    beta1: mfsB1,
+                    beta2: mfsB2,
+                    epsilon: mfsEps,
+                    weightDecay: mfsWd,
+                    out T _))
+            {
+                if (qatShadows is not null && qatParams is not null)
+                {
+                    for (int i = 0; i < qatParams.Length; i++)
+                        RestoreShadow(qatParams[i], qatShadows[i]);
+                }
+                return;
+            }
         }
 
         using var tape = new GradientTape<T>();

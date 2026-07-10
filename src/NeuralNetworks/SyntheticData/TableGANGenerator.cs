@@ -434,7 +434,40 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         var fakeBatch = GeneratorForwardBatched(noiseBatch);
         fakeBatch = ApplyOutputActivationsBatched(fakeBatch);
 
-        // GPU-RESIDENT WGAN-GP disc via Tensors PR #763.
+        // Preferred fused path: WganGpFusedStep (see ooples/AiDotNet#1845).
+        var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers.Cast<ILayer<T>>());
+        if (discParams.Count > 0
+            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                _discriminatorOptimizer,
+                out var wganOptType, out var wganLr, out var wganB1,
+                out var wganB2, out var wganEps, out var wganWd,
+                out _, out _))
+        {
+            using var wganStep = new AiDotNet.Training.WganGpFusedStep<T>();
+            Tensor<T> DiscFwd(Tensor<T> inp) => DiscriminatorForwardBatched(inp, isTraining: true);
+            Tensor<T> EpsilonSampler(int bs) =>
+                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
+            if (wganStep.TryStep(
+                    discParameters: discParams,
+                    realBatch: realBatch,
+                    fakeBatch: fakeBatch,
+                    discForward: DiscFwd,
+                    epsilonSampler: EpsilonSampler,
+                    gradientPenaltyWeight: _options.GradientPenaltyWeight,
+                    optimizerType: wganOptType,
+                    learningRate: wganLr,
+                    beta1: wganB1,
+                    beta2: wganB2,
+                    epsilon: wganEps,
+                    weightDecay: wganWd,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        // Secondary fused path: GpuResidentFusedStep with the loss composed via
+        // this class's ComputeGradientPenalty (createGraph=true GP fix, #1844).
         var trainableDiscLayers = _discLayers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableDiscLayers.Count > 0)
         {
@@ -470,7 +503,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         }
 
         using var tape = new GradientTape<T>();
-        var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers.Cast<ILayer<T>>());
+        // discParams already collected above for the WganGpFusedStep attempt.
 
         var realScores = DiscriminatorForwardBatched(realBatch, isTraining: true);
         var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: true);
