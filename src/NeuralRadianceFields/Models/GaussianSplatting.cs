@@ -2402,6 +2402,27 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
     /// Clone_ShouldProduceIdenticalOutput) can read and diff the model's
     /// trained state.
     /// </remarks>
+    /// <summary>
+    /// The number of learnable parameters. Gaussian Splatting is an explicit-representation
+    /// model: its trainable state lives in <c>_gaussians</c>, not in <c>Layers</c>, so the base
+    /// class's layer-walking <c>ParameterCount</c> reports 0 and every ParameterCount-gated
+    /// consumer (streaming/memory auto-detect, and the model-family
+    /// <c>Parameters_ShouldBeNonEmpty</c> invariant) mis-reads the model as parameter-free.
+    /// Report the flattened Gaussian parameter count, matching <see cref="GetParameters"/>'s
+    /// layout exactly (position 3 + rotation 4 + scale 3 + opacity 1 + colour) so the two stay
+    /// consistent.
+    /// </summary>
+    public override long ParameterCount
+    {
+        get
+        {
+            if (_gaussians.Count == 0) return 0;
+            int colorDim = _useSphericalHarmonics ? 3 * GetShBasisCount() : 3;
+            int perGaussian = 3 + 4 + 3 + 1 + colorDim;
+            return (long)perGaussian * _gaussians.Count;
+        }
+    }
+
     public override Vector<T> GetParameters()
     {
         if (_gaussians.Count == 0) return new Vector<T>(0);
