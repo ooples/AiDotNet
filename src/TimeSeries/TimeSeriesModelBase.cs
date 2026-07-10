@@ -1,7 +1,11 @@
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.TimeSeries;
 
@@ -104,6 +108,88 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </para>
     /// </remarks>
     protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Gets whether this model can train through the GPU-resident <b>fused compiled</b>
+    /// training path — forward + backward + optimizer step captured as a single
+    /// on-device graph with no per-op host&lt;-&gt;device round-trips.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mirrors <c>NeuralNetworkBase&lt;T&gt;.CanTrainOnGpu</c> for the time-series family.
+    /// Three conditions must hold:
+    /// </para>
+    /// <list type="number">
+    /// <item><c>T == float</c> — the Tensors fused-optimizer kernels and the GPU-resident
+    /// activation/weight buffers are float32-only (consumer NVIDIA FP64 is crippled and
+    /// the DirectGpu resident path is float-oriented).</item>
+    /// <item>The current engine is a <see cref="DirectGpuTensorEngine"/> with GPU available.</item>
+    /// <item>Graph compilation is enabled (<c>TensorCodecOptions.Current.EnableCompilation</c>).</item>
+    /// </list>
+    /// <para>
+    /// When false, a model should fall back to its eager tape training loop (which still
+    /// dispatches individual ops to the GPU when one is current, but round-trips activations
+    /// through host memory every op).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> When this is true, an entire training step runs on the GPU as one
+    /// compiled program, which keeps the data on the graphics card instead of copying it back
+    /// and forth for every little operation — much higher GPU utilization and throughput.
+    /// </para>
+    /// </remarks>
+    protected bool CanTrainOnGpu =>
+        typeof(T) == typeof(float)
+        && AiDotNetEngine.Current is DirectGpuTensorEngine gpu && gpu.SupportsGpu
+        && AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
+
+    /// <summary>
+    /// Runs a single GPU-resident fused training step (forward + backward + Adam update)
+    /// through the compiled-plan capture path shared with <c>NeuralNetworkBase</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the reusable seam that lets any tensorized time-series forecaster (N-BEATS today,
+    /// N-HiTS / DeepAR / Autoformer next) become GPU-resident: supply the trainable layers,
+    /// a batch <paramref name="input"/>/<paramref name="target"/> pair, a <paramref name="forward"/>
+    /// closure that runs the model's tape graph, and a <paramref name="computeLoss"/> closure. The
+    /// first call traces + compiles the graph; subsequent calls with the <b>same tensor shapes</b>
+    /// replay the compiled plan, keeping weights, activations and the Adam moment buffers on the
+    /// device across the whole training loop.
+    /// </para>
+    /// <para>
+    /// Returns <c>false</c> when the fused/compiled path cannot engage (e.g. an op in the graph
+    /// isn't compilable in the linked Tensors build, or compilation is disabled); the caller must
+    /// then fall back to its eager loop. To keep the compiled plan cache hitting (and thus stay
+    /// resident) callers must pass a <b>constant batch shape</b> on every step.
+    /// </para>
+    /// </remarks>
+    protected static bool TryFusedResidentStep(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        float learningRate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float weightDecay,
+        out T lossValue,
+        double maxGradNorm = 1.0)
+        => AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+            layers,
+            input,
+            target,
+            forward,
+            computeLoss,
+            AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam,
+            learningRate,
+            beta1,
+            beta2,
+            epsilon,
+            weightDecay,
+            out lossValue,
+            maxGradNorm: maxGradNorm);
 
     /// <summary>
     /// Gets or sets the trained model parameters.
