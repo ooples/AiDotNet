@@ -219,6 +219,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             Scale = new Vector<T>(3);
             Color = new Vector<T>(colorDim);
             Opacity = numOps.FromDouble(0.0);
+            PositionLrScale = 1.0;
+            ScaleLrScale = 1.0;
+            OpacityLrScale = 1.0;
+            RotationLrScale = 1.0;
+            ColorLrScale = 1.0;
         }
 
         public Vector<T> Position { get; }
@@ -230,6 +235,15 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         // Derived: Covariance matrix Σ = R * S * S^T * R^T
         public Matrix<T>? Covariance { get; set; }
         public Matrix<T>? CovarianceInverse { get; set; }
+
+        // Per-Gaussian LR multipliers (excellence goal #4 — persistent split-child LR state).
+        // Default 1.0 (no effect). Set to the SplitChildLearningRateScales values when this
+        // Gaussian is born from a split; consumed by every per-attribute optimizer update.
+        public double PositionLrScale { get; set; }
+        public double ScaleLrScale { get; set; }
+        public double OpacityLrScale { get; set; }
+        public double RotationLrScale { get; set; }
+        public double ColorLrScale { get; set; }
     }
 
     private sealed class CameraGaussian
@@ -1273,14 +1287,21 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
     {
         var transformed = new List<CameraGaussian>(_gaussians.Count);
 
+        // Convention (matches NeRF.RenderImage + NerfLab.LookAt): cameraRotation is a
+        // CAMERA-to-WORLD matrix — its columns are the world-space directions of the camera
+        // right/up/forward axes. To map a world point into camera coordinates we need the
+        // TRANSPOSE (world-to-camera). Previously this method used R (not R^T), which is why
+        // GS.RenderImage produced all-zero output for LookAt-derived rotations — every
+        // Gaussian was being mapped to the wrong side of the camera and projected outside
+        // the image plane. Same fix applies to the covariance transform below.
         double r00 = NumOps.ToDouble(cameraRotation[0, 0]);
-        double r01 = NumOps.ToDouble(cameraRotation[0, 1]);
-        double r02 = NumOps.ToDouble(cameraRotation[0, 2]);
-        double r10 = NumOps.ToDouble(cameraRotation[1, 0]);
+        double r10 = NumOps.ToDouble(cameraRotation[0, 1]);
+        double r20 = NumOps.ToDouble(cameraRotation[0, 2]);
+        double r01 = NumOps.ToDouble(cameraRotation[1, 0]);
         double r11 = NumOps.ToDouble(cameraRotation[1, 1]);
-        double r12 = NumOps.ToDouble(cameraRotation[1, 2]);
-        double r20 = NumOps.ToDouble(cameraRotation[2, 0]);
-        double r21 = NumOps.ToDouble(cameraRotation[2, 1]);
+        double r21 = NumOps.ToDouble(cameraRotation[1, 2]);
+        double r02 = NumOps.ToDouble(cameraRotation[2, 0]);
+        double r12 = NumOps.ToDouble(cameraRotation[2, 1]);
         double r22 = NumOps.ToDouble(cameraRotation[2, 2]);
 
         double camX = NumOps.ToDouble(cameraPosition[0]);
@@ -2316,20 +2337,17 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         // constant — 3DGS uses different LRs per parameter family
         // (Kerbl et al. 2023 §B), and the ray-mode path should honour
         // the same configuration as the image-supervised path.
-        var stepSize = NumOps.FromDouble(ColorLearningRate);
-
         for (int g = 0; g < _gaussians.Count; g++)
         {
             var gauss = _gaussians[g];
             int colorLen = gauss.Color.Length;
-            // Update at most the leading 3 colour channels (RGB / leading
-            // SH band) — bounded also by what the gradient tensor actually
-            // carries, so a [N, 1] gradient won't read off the end.
             int copyLen = Math.Min(Math.Min(colorLen, 3), gradC);
 
-            // Sum the per-ray RGB gradient and apply scaled to the
-            // Gaussian's colour channels (first 3 entries — leading SH
-            // band when spherical harmonics are enabled).
+            // #1835 excellence goal #4 (persistent per-Gaussian LR state): scale the color
+            // step by this Gaussian's ColorLrScale. Split children set this to
+            // SplitChildLearningRateScales.Color at split time (default 1.0 = no effect).
+            var stepSize = NumOps.FromDouble(ColorLearningRate * gauss.ColorLrScale);
+
             for (int r = 0; r < numRays; r++)
             {
                 for (int c = 0; c < copyLen; c++)
@@ -2894,6 +2912,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                 }
             }
 
+            // Per-Gaussian persistent LR multipliers (#1835 excellence goal #4).
+            double lrColor    = ColorLearningRate    * source.ColorLrScale;
+            double lrOpacity  = OpacityLearningRate  * source.OpacityLrScale;
+            double lrPosition = PositionLearningRate * source.PositionLrScale;
+
             if (_useSphericalHarmonics && gradCoeffR != null && gradCoeffG != null && gradCoeffB != null)
             {
                 for (int b = 0; b < basisCount; b++)
@@ -2903,24 +2926,24 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                     int bIdx = b + 2 * basisCount;
 
                     source.Color[rIdx] = NumOps.FromDouble(
-                        NumOps.ToDouble(source.Color[rIdx]) - ColorLearningRate * gradCoeffR[b]);
+                        NumOps.ToDouble(source.Color[rIdx]) - lrColor * gradCoeffR[b]);
                     source.Color[gIdx] = NumOps.FromDouble(
-                        NumOps.ToDouble(source.Color[gIdx]) - ColorLearningRate * gradCoeffG[b]);
+                        NumOps.ToDouble(source.Color[gIdx]) - lrColor * gradCoeffG[b]);
                     source.Color[bIdx] = NumOps.FromDouble(
-                        NumOps.ToDouble(source.Color[bIdx]) - ColorLearningRate * gradCoeffB[b]);
+                        NumOps.ToDouble(source.Color[bIdx]) - lrColor * gradCoeffB[b]);
                 }
             }
             else
             {
-                source.Color[0] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[0]) - ColorLearningRate * gradColorR));
-                source.Color[1] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[1]) - ColorLearningRate * gradColorG));
-                source.Color[2] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[2]) - ColorLearningRate * gradColorB));
+                source.Color[0] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[0]) - lrColor * gradColorR));
+                source.Color[1] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[1]) - lrColor * gradColorG));
+                source.Color[2] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(source.Color[2]) - lrColor * gradColorB));
             }
 
-            source.Opacity = NumOps.FromDouble(NumOps.ToDouble(source.Opacity) - OpacityLearningRate * gradOpacity);
-            source.Position[0] = NumOps.FromDouble(NumOps.ToDouble(source.Position[0]) - PositionLearningRate * gradPosX);
-            source.Position[1] = NumOps.FromDouble(NumOps.ToDouble(source.Position[1]) - PositionLearningRate * gradPosY);
-            source.Position[2] = NumOps.FromDouble(NumOps.ToDouble(source.Position[2]) - PositionLearningRate * gradPosZ);
+            source.Opacity = NumOps.FromDouble(NumOps.ToDouble(source.Opacity) - lrOpacity * gradOpacity);
+            source.Position[0] = NumOps.FromDouble(NumOps.ToDouble(source.Position[0]) - lrPosition * gradPosX);
+            source.Position[1] = NumOps.FromDouble(NumOps.ToDouble(source.Position[1]) - lrPosition * gradPosY);
+            source.Position[2] = NumOps.FromDouble(NumOps.ToDouble(source.Position[2]) - lrPosition * gradPosZ);
 
             if (Math.Abs(gradInvA) > 0.0 || Math.Abs(gradInvB) > 0.0 || Math.Abs(gradInvC) > 0.0)
             {
@@ -3009,9 +3032,10 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                 double gradScaleY = 2.0 * sy * rt11;
                 double gradScaleZ = 2.0 * sz * rt22;
 
-                sx = Math.Max(MinScale, sx - ScaleLearningRate * gradScaleX);
-                sy = Math.Max(MinScale, sy - ScaleLearningRate * gradScaleY);
-                sz = Math.Max(MinScale, sz - ScaleLearningRate * gradScaleZ);
+                double lrScale = ScaleLearningRate * source.ScaleLrScale;
+                sx = Math.Max(MinScale, sx - lrScale * gradScaleX);
+                sy = Math.Max(MinScale, sy - lrScale * gradScaleY);
+                sz = Math.Max(MinScale, sz - lrScale * gradScaleZ);
 
                 source.Scale[0] = NumOps.FromDouble(sx);
                 source.Scale[1] = NumOps.FromDouble(sy);
@@ -3053,10 +3077,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                                + gR10 * (2.0 * qw) + gR11 * (-4.0 * qz) + gR12 * (2.0 * qy)
                                + gR20 * (2.0 * qx) + gR21 * (2.0 * qy);
 
-                qw -= RotationLearningRate * gradW;
-                qx -= RotationLearningRate * gradX;
-                qy -= RotationLearningRate * gradY;
-                qz -= RotationLearningRate * gradZ;
+                double lrRotation = RotationLearningRate * source.RotationLrScale;
+                qw -= lrRotation * gradW;
+                qx -= lrRotation * gradX;
+                qy -= lrRotation * gradY;
+                qz -= lrRotation * gradZ;
 
                 double newNorm = Math.Sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
                 if (newNorm < 1e-12)
@@ -3230,6 +3255,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                 var (r, g, b) = EvaluateGaussianColor(gaussian, dx, dy, dz);
                 double dAlpha = dSumAlpha + dSumColorR * r + dSumColorG * g + dSumColorB * b;
 
+                // #1835 excellence goal #4 — per-Gaussian persistent LR multipliers.
+                double lrColor2    = ColorLearningRate    * gaussian.ColorLrScale;
+                double lrOpacity2  = OpacityLearningRate  * gaussian.OpacityLrScale;
+                double lrPosition2 = PositionLearningRate * gaussian.PositionLrScale;
+
                 if (_useSphericalHarmonics)
                 {
                     var basis = EvaluateSphericalHarmonicsBasis(dx, dy, dz);
@@ -3241,30 +3271,30 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
                         int bIdx2 = bIdx + 2 * basisCount;
                         double coeff = basis[bIdx];
                         gaussian.Color[rIdx] = NumOps.FromDouble(
-                            NumOps.ToDouble(gaussian.Color[rIdx]) - ColorLearningRate * alpha * dSumColorR * coeff);
+                            NumOps.ToDouble(gaussian.Color[rIdx]) - lrColor2 * alpha * dSumColorR * coeff);
                         gaussian.Color[gIdx] = NumOps.FromDouble(
-                            NumOps.ToDouble(gaussian.Color[gIdx]) - ColorLearningRate * alpha * dSumColorG * coeff);
+                            NumOps.ToDouble(gaussian.Color[gIdx]) - lrColor2 * alpha * dSumColorG * coeff);
                         gaussian.Color[bIdx2] = NumOps.FromDouble(
-                            NumOps.ToDouble(gaussian.Color[bIdx2]) - ColorLearningRate * alpha * dSumColorB * coeff);
+                            NumOps.ToDouble(gaussian.Color[bIdx2]) - lrColor2 * alpha * dSumColorB * coeff);
                     }
                 }
                 else
                 {
-                    gaussian.Color[0] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(gaussian.Color[0]) - ColorLearningRate * alpha * dSumColorR));
-                    gaussian.Color[1] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(gaussian.Color[1]) - ColorLearningRate * alpha * dSumColorG));
-                    gaussian.Color[2] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(gaussian.Color[2]) - ColorLearningRate * alpha * dSumColorB));
+                    gaussian.Color[0] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(gaussian.Color[0]) - lrColor2 * alpha * dSumColorR));
+                    gaussian.Color[1] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(gaussian.Color[1]) - lrColor2 * alpha * dSumColorG));
+                    gaussian.Color[2] = NumOps.FromDouble(Clamp01(NumOps.ToDouble(gaussian.Color[2]) - lrColor2 * alpha * dSumColorB));
                 }
 
                 double gradOpacity = dAlpha * weight * alphaBase * (1.0 - alphaBase);
-                gaussian.Opacity = NumOps.FromDouble(opacityParam - OpacityLearningRate * gradOpacity);
+                gaussian.Opacity = NumOps.FromDouble(opacityParam - lrOpacity2 * gradOpacity);
 
                 double gradPosX = dAlpha * alpha * (inv00 * ox + inv01 * oy + inv02 * oz);
                 double gradPosY = dAlpha * alpha * (inv01 * ox + inv11 * oy + inv12 * oz);
                 double gradPosZ = dAlpha * alpha * (inv02 * ox + inv12 * oy + inv22 * oz);
 
-                gaussian.Position[0] = NumOps.FromDouble(NumOps.ToDouble(gaussian.Position[0]) - PositionLearningRate * gradPosX);
-                gaussian.Position[1] = NumOps.FromDouble(NumOps.ToDouble(gaussian.Position[1]) - PositionLearningRate * gradPosY);
-                gaussian.Position[2] = NumOps.FromDouble(NumOps.ToDouble(gaussian.Position[2]) - PositionLearningRate * gradPosZ);
+                gaussian.Position[0] = NumOps.FromDouble(NumOps.ToDouble(gaussian.Position[0]) - lrPosition2 * gradPosX);
+                gaussian.Position[1] = NumOps.FromDouble(NumOps.ToDouble(gaussian.Position[1]) - lrPosition2 * gradPosY);
+                gaussian.Position[2] = NumOps.FromDouble(NumOps.ToDouble(gaussian.Position[2]) - lrPosition2 * gradPosZ);
             }
         }
 
@@ -3382,6 +3412,21 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             source.Opacity = NumOps.FromDouble(Logit(newAlpha));
             clone.Opacity = NumOps.FromDouble(Logit(newAlpha));
 
+            // #1835 excellence goal #4 (persistent per-Gaussian LR state): both children
+            // inherit the paper-standard multipliers. Compounds if a child later splits
+            // again — reference impls do the same (each generation of children gets a
+            // fresh LR multiplier layered on top of its parent's).
+            source.PositionLrScale *= childScales.Position;
+            source.ScaleLrScale    *= childScales.Scale;
+            source.OpacityLrScale  *= childScales.Opacity;
+            source.RotationLrScale *= childScales.Rotation;
+            source.ColorLrScale    *= childScales.Color;
+            clone.PositionLrScale   = source.PositionLrScale;
+            clone.ScaleLrScale      = source.ScaleLrScale;
+            clone.OpacityLrScale    = source.OpacityLrScale;
+            clone.RotationLrScale   = source.RotationLrScale;
+            clone.ColorLrScale      = source.ColorLrScale;
+
             ComputeCovariance(source);
             ComputeCovariance(clone);
             _gaussians.Add(clone);
@@ -3409,6 +3454,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         clone.Scale[1] = source.Scale[1];
         clone.Scale[2] = source.Scale[2];
         clone.Opacity = source.Opacity;
+        clone.PositionLrScale = source.PositionLrScale;
+        clone.ScaleLrScale    = source.ScaleLrScale;
+        clone.OpacityLrScale  = source.OpacityLrScale;
+        clone.RotationLrScale = source.RotationLrScale;
+        clone.ColorLrScale    = source.ColorLrScale;
         clone.Covariance = source.Covariance?.Clone();
         clone.CovarianceInverse = source.CovarianceInverse?.Clone();
 
@@ -3534,4 +3584,31 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
     /// Gets the number of Gaussians currently in the scene.
     /// </summary>
     public int GaussianCount => _gaussians.Count;
+
+    /// <summary>
+    /// Diagnostic snapshot of the Gaussian cloud state — returns per-index summary
+    /// (position, opacity-after-sigmoid, max-scale, mean-color). Intended for tests /
+    /// validation probes that need to inspect the cloud without exposing the internal
+    /// <c>Gaussian</c> type.
+    /// </summary>
+    public IReadOnlyList<(double PosX, double PosY, double PosZ, double Opacity, double MaxScale, double MeanColor)> GetGaussianDiagnostics()
+    {
+        var results = new List<(double, double, double, double, double, double)>(_gaussians.Count);
+        for (int i = 0; i < _gaussians.Count; i++)
+        {
+            var g = _gaussians[i];
+            double px = NumOps.ToDouble(g.Position[0]);
+            double py = NumOps.ToDouble(g.Position[1]);
+            double pz = NumOps.ToDouble(g.Position[2]);
+            double op = Sigmoid(NumOps.ToDouble(g.Opacity));
+            double s0 = Math.Abs(NumOps.ToDouble(g.Scale[0]));
+            double s1 = Math.Abs(NumOps.ToDouble(g.Scale[1]));
+            double s2 = Math.Abs(NumOps.ToDouble(g.Scale[2]));
+            double maxS = Math.Max(s0, Math.Max(s1, s2));
+            double sumC = 0;
+            for (int c = 0; c < Math.Min(3, g.Color.Length); c++) sumC += NumOps.ToDouble(g.Color[c]);
+            results.Add((px, py, pz, op, maxS, sumC / 3.0));
+        }
+        return results;
+    }
 }

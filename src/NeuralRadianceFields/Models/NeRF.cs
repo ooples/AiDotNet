@@ -1127,38 +1127,34 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
         AiDotNet.Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
         NeuralRadianceFields.Data.ImageTrainingOptions? imageTrainingOptions = null)
     {
-        var pixels = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
-        if (pixels is null)
+        var batch = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
+        if (batch is null)
         {
             return NumOps.Zero;
         }
+        var (view, pixels) = batch.Value;
 
-        // Excellence goal #4: progressive coarse-to-fine sample count. Ramps sample count from
-        // 64 coarse (early iters) to 128 fine (post-5k iters) by default.
+        // Excellence goal #4: progressive coarse-to-fine sample count.
         var schedule = imageTrainingOptions?.Schedule ?? NeuralRadianceFields.Data.ProgressiveSamplingSchedule.Paper();
         int numSamples = schedule.SamplesForIteration(_imageTrainingIteration);
         _imageTrainingIteration++;
 
-        // Excellence goal #3: auto scene bounds. If caller supplied SceneBounds, use its
-        // near/far; otherwise derive them once on first call from the loader's view set
-        // (nerfstudio-standard pose-frustum intersection) and cache. Skip if the loader
-        // isn't a rich in-memory image loader (streaming loaders don't expose all views).
+        // Excellence goal #3: auto scene bounds.
         NeuralRadianceFields.Data.SceneBounds? bounds = imageTrainingOptions?.SceneBounds ?? _autoBounds;
         if (bounds is null)
         {
             bounds = TryEstimateBoundsFromLoader(loader);
-            _autoBounds = bounds; // cache for the remaining iterations
+            _autoBounds = bounds;
         }
         T near = bounds is not null ? NumOps.FromDouble(bounds.Near) : _renderNearBound;
         T far  = bounds is not null ? NumOps.FromDouble(bounds.Far)  : _renderFarBound;
 
-        // Excellence goal #4 (LearnedPrior single-image mode): blend hallucinated per-ray
-        // colors from the current-view prior into the target when the caller opts in.
-        var targetColors = pixels.TargetColors;
-        // (Per-ray prior blending needs the model's current view — the loader emits ImageView
-        // + PixelBatch but PullOneBatch discards the view. Wire prior blending only when the
-        // helper can carry the view; skipped here for the per-ray training path. GS uses the
-        // camera-mode route where the view is available and applies prior blending there.)
+        // Excellence goal #4 (LearnedPrior single-image mode): blend the current view's
+        // prior hallucination into the ray targets so single-photo reconstruction gets
+        // training signal from directions the caller didn't photograph. No-op when the
+        // view has no prior or the caller set PriorConfidenceOverride to 0.
+        var targetColors = NeuralRadianceFields.Helpers.ImageTrainingHelpers.ApplyPriorToRayTargets(
+            Engine, pixels.TargetColors, view, imageTrainingOptions?.PriorConfidenceOverride);
 
         // Tape-recorded forward + photometric MSE → BackwardAndStepOnPrecomputedLoss drives a
         // real gradient step through RenderRays into the MLP weights.

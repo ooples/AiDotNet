@@ -1640,17 +1640,17 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
         AiDotNet.Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
         NeuralRadianceFields.Data.ImageTrainingOptions? imageTrainingOptions = null)
     {
-        var pixels = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
-        if (pixels is null)
+        var batch = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
+        if (batch is null)
         {
             return NumOps.Zero;
         }
+        var (view, pixels) = batch.Value;
 
         var schedule = imageTrainingOptions?.Schedule ?? NeuralRadianceFields.Data.ProgressiveSamplingSchedule.Paper();
         int numSamples = schedule.SamplesForIteration(_imageTrainingIteration);
         _imageTrainingIteration++;
 
-        // Auto-derive scene bounds from loader poses if the caller didn't set them (excellence goal #3).
         NeuralRadianceFields.Data.SceneBounds? bounds = imageTrainingOptions?.SceneBounds ?? _autoBounds;
         if (bounds is null && loader is NeuralRadianceFields.Data.IViewSetProvider<T> vsp)
         {
@@ -1659,6 +1659,10 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
         }
         T near = bounds is not null ? NumOps.FromDouble(bounds.Near) : _renderNearBound;
         T far  = bounds is not null ? NumOps.FromDouble(bounds.Far)  : _renderFarBound;
+
+        // LearnedPrior blending (excellence goal #4) — same helper as NeRF.
+        var targetColors = NeuralRadianceFields.Helpers.ImageTrainingHelpers.ApplyPriorToRayTargets(
+            Engine, pixels.TargetColors, view, imageTrainingOptions?.PriorConfidenceOverride);
 
         SetTrainingMode(true);
         try
@@ -1670,7 +1674,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
                 numSamples: numSamples,
                 near,
                 far);
-            var diff = Engine.TensorSubtract(rendered, pixels.TargetColors);
+            var diff = Engine.TensorSubtract(rendered, targetColors);
             var squared = Engine.TensorMultiply(diff, diff);
             var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
             var meanLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
