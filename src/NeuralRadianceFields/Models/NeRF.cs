@@ -440,6 +440,11 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
     /// </summary>
     protected override void InitializeLayers()
     {
+        // Rebuilding the layer collection invalidates any prior shape resolution — the fresh
+        // lazy DenseLayers must be re-resolved through NeRF's real topology (see
+        // ResolveLazyLayerShapes) before the next ParameterCount / GetParameters query.
+        _nerfShapesResolved = false;
+
         ClearLayers();
         _positionLayers.Clear();
         _colorLayers.Clear();
@@ -476,6 +481,90 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
 
         // Color output
         _colorOutputLayer = (DenseLayer<T>)Layers[idx++];
+    }
+
+    private bool _nerfShapesResolved;
+
+    /// <summary>
+    /// Resolves NeRF's lazy <see cref="DenseLayer{T}"/> input shapes through the model's REAL
+    /// (non-sequential) topology instead of the base class's left-to-right walk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NeRF is not a plain sequential stack: a positional-encoding front end feeds the position
+    /// MLP, and the colour MLP consumes the feature vector CONCATENATED with the direction
+    /// encoding (see <see cref="QueryField"/>). The base
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.ResolveLazyLayerShapes"/> assumes each
+    /// layer's input equals the previous layer's output, so it mis-sizes the first position layer
+    /// (real input = positional-encoding width, not the raw architecture input) and the first
+    /// colour layer (real input = feature width + direction-encoding width). That left NeRF
+    /// reporting an unstable, partly-wrong <c>ParameterCount</c> before the first forward and a
+    /// different value after it — which blocked the facade optimizer from writing trained
+    /// parameters back into a freshly-constructed model (that writeback only fires when the
+    /// caller's parameter count is zero or already equals the trained count).
+    /// </para>
+    /// <para>
+    /// The base method is <c>virtual</c> precisely so non-sequential topologies (its own docs
+    /// cite U-Net concatenation) can resolve through their real graph. Resolution here is
+    /// shape-only via <see cref="LayerBase{T}.ResolveShapesOnly"/>: it fixes each layer's declared
+    /// input/output shape WITHOUT allocating weights or consuming RNG, so weight allocation still
+    /// happens lazily on the first real forward — no eager-materialization cost.
+    /// </para>
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_nerfShapesResolved)
+        {
+            return;
+        }
+
+        // Custom-architecture path (Architecture.Layers supplied) doesn't follow NeRF's fixed
+        // head layout, so defer to the base sequential walk in that case.
+        if (_densityLayer is null || _featureLayer is null || _colorOutputLayer is null)
+        {
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        int positionDim = 3 * 2 * _positionEncodingLevels;
+        int directionDim = 3 * 2 * _directionEncodingLevels;
+
+        // Position MLP: layer 0 reads the positional encoding; later layers read the previous
+        // hidden output; a skip-connection layer additionally concatenates the positional encoding.
+        for (int i = 0; i < _positionLayers.Count; i++)
+        {
+            int inputDim = i == 0 ? positionDim : _hiddenDim;
+            if (_skipConnectionLayer >= 0 && i == _skipConnectionLayer)
+            {
+                inputDim = _hiddenDim + positionDim;
+            }
+            ResolveDenseLayerShape(_positionLayers[i], inputDim);
+        }
+
+        // Density + feature heads both read the position MLP's hidden output.
+        ResolveDenseLayerShape(_densityLayer, _hiddenDim);
+        ResolveDenseLayerShape(_featureLayer, _hiddenDim);
+
+        // Colour MLP: layer 0 reads [feature ⊕ direction-encoding]; later layers read the colour
+        // hidden width.
+        int colorInputDim = _hiddenDim + directionDim;
+        for (int i = 0; i < _colorLayers.Count; i++)
+        {
+            ResolveDenseLayerShape(_colorLayers[i], i == 0 ? colorInputDim : _colorHiddenDim);
+        }
+
+        // Colour output reads the last colour hidden width (or the concatenated colour input when
+        // there are no colour hidden layers).
+        ResolveDenseLayerShape(
+            _colorOutputLayer, _colorLayers.Count > 0 ? _colorHiddenDim : colorInputDim);
+
+        _nerfShapesResolved = true;
+    }
+
+    private static void ResolveDenseLayerShape(DenseLayer<T> layer, int inputDim)
+    {
+        // [batch=1, inputDim] — the batch axis is irrelevant to weight-shape resolution.
+        layer.ResolveShapesOnly(new[] { 1, inputDim });
     }
 
     #endregion
