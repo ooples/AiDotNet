@@ -644,6 +644,18 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
             if (copy is SurvivalModelBase<T> copyBase)
             {
                 copyBase.DeserializeInternalUnchecked(serialized);
+
+                // SerializeInternalUnchecked captures only NumFeatures/IsFitted — NOT the model's
+                // fitted parameters — so without this transfer every parametric survival model
+                // (LogNormalAFT/WeibullAFT/CoxPH/etc.) would clone into an unfitted shell whose
+                // Predict throws "Coefficients is null". Round-trip the fitted state through the
+                // GetParameters/SetParameters contract each subclass already implements.
+                // Non-parametric models (Kaplan-Meier, survival forests) return an empty/degenerate
+                // parameter vector, so this is a no-op for them.
+                if (IsFitted)
+                {
+                    copyBase.SetParameters(GetParameters());
+                }
             }
             else
             {
