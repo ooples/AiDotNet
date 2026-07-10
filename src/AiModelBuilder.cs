@@ -211,6 +211,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private int? _creditRuleSeed;
 
     private IDataLoader<T>? _dataLoader;
+
+    /// <summary>
+    /// Image-space data loader (#1834). Set by the image-shaped overload of ConfigureDataLoader.
+    /// Stored as <see cref="object"/> because it's <c>IDataLoader&lt;ImageView&lt;T&gt;, PixelBatch&lt;T&gt;&gt;</c>
+    /// whose type parameters don't match this builder's TInput / TOutput. Downcast at the
+    /// facade branch when we know the model implements <c>IImageTrainable</c>.
+    /// </summary>
+    private object? _imageDataLoader;
     private DataPreparationPipeline<T>? _dataPreparationPipeline;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;

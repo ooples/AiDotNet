@@ -148,6 +148,53 @@ public class BuildAsyncFacadeRadianceFieldTests
     }
 
     /// <summary>
+    /// #1826 — same contract for <see cref="InstantNGP{T}"/>, the third shipping
+    /// radiance-field model. Like NeRF it is non-sequential (a multiresolution
+    /// hash encoding feeds the density MLP; the colour MLP consumes the feature
+    /// vector concatenated with the view direction), so it needs the same
+    /// through-topology lazy-shape resolution for the facade's post-train
+    /// parameter writeback to reach a freshly-constructed instance.
+    /// </summary>
+    [Fact(Timeout = 300_000)]
+    public async Task BuildAsync_InstantNGP_ConfigureModel_DoesNotThrowFromFeatureSelection()
+    {
+        var ngp = new InstantNGP<float>(
+            hashTableSize: 4096,
+            numLevels: 4,
+            featuresPerLevel: 2,
+            finestResolution: 256,
+            coarsestResolution: 16,
+            mlpHiddenDim: 16,
+            mlpNumLayers: 2,
+            occupancyGridResolution: 16,
+            learningRate: 1e-2);
+
+        var (xTrain, yTrain) = SmallCubeBatch(seed: 18262);
+
+        var before = ngp.GetParameters();
+        var beforeCopy = new float[before.Length];
+        for (int i = 0; i < before.Length; i++) beforeCopy[i] = before[i];
+
+        var loader = DataLoaders.FromTensors(xTrain, yTrain);
+        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureDataLoader(loader)
+            .ConfigureModel(ngp)
+            .BuildAsync();
+
+        Assert.NotNull(result);
+
+        var after = ngp.GetParameters();
+        Assert.Equal(before.Length, after.Length);
+        int movedCount = 0;
+        for (int i = 0; i < after.Length; i++)
+            if (System.MathF.Abs(after[i] - beforeCopy[i]) > 1e-8f) movedCount++;
+        _output.WriteLine($"InstantNGP params: {after.Length}, moved: {movedCount}");
+        Assert.True(movedCount > 0,
+            "AiModelBuilder.BuildAsync returned without throwing but no InstantNGP " +
+            "parameters moved from init.");
+    }
+
+    /// <summary>
     /// #1826 — same contract for <see cref="GaussianSplatting{T}"/>, which
     /// implements <c>IRadianceField&lt;T&gt;</c> and hit the identical
     /// feature-selection failure. The <c>IRadianceField&lt;T&gt;</c> guard
