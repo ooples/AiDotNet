@@ -648,13 +648,42 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     /// </summary>
     private void TrainGeneratorStepBatched(int batchSize)
     {
-        using var tape = new GradientTape<T>();
         var generatorLayers = new List<ILayer<T>>();
         generatorLayers.AddRange(Layers);
         foreach (var bn in _genBNLayers) generatorLayers.Add(bn);
         var genParams = TapeTrainingStep<T>.CollectParameters(generatorLayers);
 
         var noiseBatch = GenerateNoiseBatchTensor(batchSize);
+
+        // GPU-RESIDENT fast path — noise → gen → (optional causal) → activation → disc-frozen → -avgFake.
+        // Disc layers not in the trainable set, so no gradients accumulate to them.
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0)
+        {
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> nb)
+            {
+                var f = GeneratorForwardBatched(nb);
+                var c = _adjacency is not null ? ApplyCausalStructureBatched(f) : f;
+                var a = ApplyOutputActivationsBatched(c);
+                return DiscriminatorForwardBatched(a, false);
+            }
+            Tensor<T> Loss(Tensor<T> scores, Tensor<T> _)
+            {
+                var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+                return Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, noiseBatch, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _generatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
         var fakeRaw = GeneratorForwardBatched(noiseBatch);
         var fakeCausal = _adjacency is not null ? ApplyCausalStructureBatched(fakeRaw) : fakeRaw;
         var fakeBatch = ApplyOutputActivationsBatched(fakeCausal);

@@ -695,7 +695,6 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         if (_sampler is null) return;
 
-        using var tape = new GradientTape<T>();
         var generatorLayers = new List<ILayer<T>>();
         generatorLayers.AddRange(Layers);
         foreach (var bn in _genBNLayers) generatorLayers.Add(bn);
@@ -706,6 +705,42 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var noiseBatch = GenerateNoiseBatchTensor(total);
         var condBatch = SampleConditionalBatchTensor(total);
         var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
+
+        // GPU-RESIDENT fast path — genInput carries both noise + cond, so the
+        // forward closure can slice condBatch back out of the persistent input
+        // tensor (correctly refreshed per step). Disc layers not in trainable set.
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0)
+        {
+            int embedDim = _options.EmbeddingDimension;
+            int condDim = _condWidth;
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> ginp)
+            {
+                var faked = GeneratorForwardWithResidualBatched(ginp);
+                var act = ApplyOutputActivationsBatched(faked);
+                // condBatch is the tail of ginp (columns [embedDim, embedDim+condDim)).
+                var condFromInput = Engine.TensorSlice(ginp, [0, embedDim], [total, condDim]);
+                var withCond = Engine.TensorConcatenate([act, condFromInput], axis: 1);
+                var packed = withCond.Reshape([numPacks, _packedInputDim]);
+                return DiscriminatorForwardBatched(packed, false);
+            }
+            Tensor<T> Loss(Tensor<T> scores, Tensor<T> _)
+            {
+                var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+                return Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, genInput, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _generatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
 
         var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
         var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);

@@ -727,8 +727,6 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     {
         if (_sampler is null) return;
 
-        using var tape = new GradientTape<T>();
-
         // Generator's trainable surface = Layers + per-layer BN.
         var generatorLayers = new List<ILayer<T>>();
         generatorLayers.AddRange(Layers);
@@ -741,9 +739,63 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
 
         // Build the conditional generator input batch [numPacks * pacSize, genInputDim],
         // capturing the mask so the conditional cross-entropy term can be computed.
-        var noiseBatch = GenerateNoiseBatchTensor(numPacks * pacSize);
-        var (condBatch, maskBatch) = SampleCondMaskBatch(numPacks * pacSize);
+        int totalSamples = numPacks * pacSize;
+        var noiseBatch = GenerateNoiseBatchTensor(totalSamples);
+        var (condBatch, maskBatch) = SampleCondMaskBatch(totalSamples);
         var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
+
+        // GPU-RESIDENT fast path — pack (genInput, maskBatch) into one persistent
+        // input tensor so replay uses fresh noise + cond + mask each step. The
+        // closure slices them back out. Conditional CE and -avgFake both captured
+        // on the fused plan.
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0)
+        {
+            int embedDim = _options.EmbeddingDimension;
+            int condDim = _condWidth;
+            // Fused-step input encodes [noise | cond | mask] side-by-side (columns).
+            var fusedInput = Engine.TensorConcatenate([genInput, maskBatch], axis: 1);
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> packed)
+            {
+                var gi = Engine.TensorSlice(packed, [0, 0], [totalSamples, embedDim + condDim]);
+                var faked = GeneratorForwardWithResidualBatched(gi);
+                var act = ApplyOutputActivationsBatched(faked);
+                var condFromInput = Engine.TensorSlice(packed, [0, embedDim], [totalSamples, condDim]);
+                var withCond = Engine.TensorConcatenate([act, condFromInput], axis: 1);
+                var pk = withCond.Reshape([numPacks, _packedInputDim]);
+                return DiscriminatorForwardBatched(pk, false);
+            }
+            Tensor<T> Loss(Tensor<T> scores, Tensor<T> _)
+            {
+                var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+                var lossT = Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
+                if (_condWidth > 0 && _catOutputBlocks.Count > 0)
+                {
+                    // Re-run gen forward on fused input to get fakeActivated, then
+                    // compute the CE term. Redundant with Fwd but captured on the
+                    // same fused plan and stays on-device.
+                    var gi = Engine.TensorSlice(fusedInput, [0, 0], [totalSamples, embedDim + condDim]);
+                    var faked = GeneratorForwardWithResidualBatched(gi);
+                    var act = ApplyOutputActivationsBatched(faked);
+                    var condFromInput = Engine.TensorSlice(fusedInput, [0, embedDim], [totalSamples, condDim]);
+                    var maskFromInput = Engine.TensorSlice(fusedInput, [0, embedDim + condDim], [totalSamples, condDim]);
+                    var ce = ConditionalCrossEntropy(act, condFromInput, maskFromInput);
+                    lossT = Engine.TensorAdd(lossT, ce);
+                }
+                return lossT;
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, fusedInput, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _generatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
 
         // Forward through generator → produces [numPacks * pacSize, dataWidth].
         var fakeFlat = GeneratorForwardWithResidualBatched(genInput);

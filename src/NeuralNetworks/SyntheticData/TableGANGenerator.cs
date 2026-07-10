@@ -546,13 +546,31 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// </summary>
     private void TrainGeneratorStepBatched(Tensor<T> noiseBatch, Tensor<T> realBatch)
     {
-        using var tape = new GradientTape<T>();
-
         // Generator's trainable surface = generator FC layers + their BN layers.
         var generatorLayers = new List<ILayer<T>>();
         generatorLayers.AddRange(Layers);
         foreach (var bn in _genBNLayers) generatorLayers.Add(bn);
         var genParams = TapeTrainingStep<T>.CollectParameters(generatorLayers);
+
+        // GPU-RESIDENT fast path — noise → gen → activation → composite loss
+        // (fake-scores + info-loss + optional classification). Fused SGD/Adam
+        // step; disc/classifier layers not in trainable set so their weights stay frozen.
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0)
+        {
+            Tensor<T> Fwd(Tensor<T> nb) => ApplyOutputActivationsBatched(GeneratorForwardBatched(nb));
+            Tensor<T> Loss(Tensor<T> fakeActivated, Tensor<T> real) => ComputeGeneratorLoss(fakeActivated, real);
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, noiseBatch, realBatch,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _generatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
 
         var fakeBatch = GeneratorForwardBatched(noiseBatch);
         var fakeActivated = ApplyOutputActivationsBatched(fakeBatch);

@@ -732,8 +732,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// </summary>
     private void TrainGeneratorStepBatched(int batchSize)
     {
-        using var tape = new GradientTape<T>();
-
         // Generator's trainable surface = decoder FCs + per-layer BN +
         // output projection — NOT the full Layers list (Layers also holds
         // the encoder, VAE heads, and discriminator sub-graph; capturing
@@ -746,6 +744,32 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         var genParams = TapeTrainingStep<T>.CollectParameters(generatorLayers);
 
         var noiseBatch = GenerateNoiseBatchTensor(batchSize);
+
+        // GPU-RESIDENT fast path — the fused plan captures the whole
+        // (noise → decoder → discriminator-frozen → non-saturating loss) chain.
+        // Discriminator layers aren't in `genParams`, so no gradients accumulate
+        // to them on this step. Falls through on failure.
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0)
+        {
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> nb) => DiscriminatorForwardBatched(DecoderForwardBatched(nb, true), false);
+            Tensor<T> Loss(Tensor<T> scores, Tensor<T> _)
+            {
+                var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+                return Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(scores), axes, keepDims: false));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, noiseBatch, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _generatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
         var fakeBatch = DecoderForwardBatched(noiseBatch, isTraining: true);
         var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: false);
 

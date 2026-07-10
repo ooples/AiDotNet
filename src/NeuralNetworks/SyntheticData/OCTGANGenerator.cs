@@ -546,6 +546,31 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private void TrainGeneratorStep(int batchSize, T scaledLr)
     {
         // Generator pulls its embeddings toward the SVDD center (look real).
+        // GPU-RESIDENT fast path — every iteration uses the same forward graph
+        // (noise → gen → disc-frozen embedding → SVDD dist²), so the fused plan
+        // compiles once and replays across the batch with refreshed noise per step.
+        var generatorLayers = BuildGeneratorLayerList();
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        {
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> noiseT) => DiscriminatorForward(GeneratorForward(noiseT), isTraining: false);
+            Tensor<T> Loss(Tensor<T> emb, Tensor<T> _) => SvddDistSq(emb);
+            bool fusedEngaged = false;
+            for (int i = 0; i < batchSize; i++)
+            {
+                var noiseTensor = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, noiseTensor, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _generatorOptimizer,
+                    out T _);
+                if (!ran) { if (!fusedEngaged) break; continue; }
+                fusedEngaged = true;
+            }
+            if (fusedEngaged) return;
+        }
+
         for (int i = 0; i < batchSize; i++)
         {
             var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
