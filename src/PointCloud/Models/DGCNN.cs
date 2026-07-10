@@ -661,7 +661,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 /// - Later layers: Neighbors are semantically similar points
 /// - Graph structure adapts as features evolve
 /// </remarks>
-internal class EdgeConvLayer<T> : LayerBase<T>
+public class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly int _inputChannels;
     private readonly int _outputChannels;
@@ -825,16 +825,42 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         return all;
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
+    public override void UpdateParameters(Vector<T> parameters) => SetParameters(parameters);
+
+    public override void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length != ParameterCount)
         {
             throw new ArgumentException("Parameter vector length does not match layer parameter count.", nameof(parameters));
         }
 
+        // Distribute to the sub-layers in [mlp | bn] order (matching GetParameters). This MUST
+        // override SetParameters: the Clone / DeepCopy / serialize round-trip sets weights through
+        // SetParameters, and the LayerBase default only stores the vector in the Parameters field
+        // without recursing into RegisterSubLayer'd children, so a clone would keep the sub-layers'
+        // fresh random init and diverge from the original (issue #1221 class).
         int mlpCount = (int)_mlp.ParameterCount;
-        _mlp.UpdateParameters(parameters.SubVector(0, mlpCount));
-        _bn.UpdateParameters(parameters.SubVector(mlpCount, (int)_bn.ParameterCount));
+        _mlp.SetParameters(parameters.SubVector(0, mlpCount));
+        _bn.SetParameters(parameters.SubVector(mlpCount, (int)_bn.ParameterCount));
+    }
+
+    // ILayerSerializationExtras: the BatchNorm sub-layer's running mean / variance are
+    // non-trainable state that GetParameters() deliberately excludes, so without round-tripping
+    // them here the clone loses its BN statistics and eval-mode inference diverges from the trained
+    // original (Clone_AfterTraining_ShouldPreserveLearnedWeights). Delegate to the BN sub-layer,
+    // mirroring the ResNet BasicBlock composite.
+    int ILayerSerializationExtras<T>.ExtraParameterCount =>
+        _bn is ILayerSerializationExtras<T> ex ? ex.ExtraParameterCount : 0;
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters() =>
+        _bn is ILayerSerializationExtras<T> ex ? ex.GetExtraParameters() : new Vector<T>(0);
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        if (_bn is ILayerSerializationExtras<T> ex)
+        {
+            ex.SetExtraParameters(extraParameters);
+        }
     }
 
     public override void ResetState()
