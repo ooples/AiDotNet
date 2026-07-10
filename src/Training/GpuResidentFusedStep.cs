@@ -30,7 +30,7 @@ namespace AiDotNet.Training;
 /// </code>
 /// </summary>
 /// <typeparam name="T">Numeric type (float supported end-to-end; other types fall back to eager).</typeparam>
-public static class GpuResidentFusedStep<T>
+internal static class GpuResidentFusedStep<T>
 {
     /// <summary>
     /// Maps the runtime optimizer instance to the fused-plan optimizer enum + hyperparameters.

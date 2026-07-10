@@ -687,9 +687,14 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             // failure. Uses SGD to match this method's baseline behavior.
             if (CanTrainOnGpu)
             {
+                // _fourierLayers are already registered into Layers (see the
+                // InitializeArchitecture Layers.Add(fourierLayer) call at construction),
+                // so iterating Layers alone collects them exactly once — a second
+                // pass over _fourierLayers would double-register each Fourier
+                // parameter and let the fused optimizer's moment buffers apply
+                // the update twice per step.
                 var allTrainable = new List<ITrainableLayer<T>>();
                 foreach (var l in Layers) if (l is ITrainableLayer<T> t) allTrainable.Add(t);
-                foreach (var fl in _fourierLayers) if (fl is ITrainableLayer<T> t) allTrainable.Add(t);
                 if (allTrainable.Count > 0)
                 {
                     Tensor<T> Forward(Tensor<T> inp)
@@ -724,28 +729,14 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 }
             }
 
-            // Collect every trainable parameter tensor across Layers (lift +
-            // project DenseLayers) and _fourierLayers. Cached between calls —
-            // layer structure is stable after construction and parameter
-            // tensors are updated in place by SetParameters.
+            // Collect every trainable parameter tensor. _fourierLayers are already
+            // registered into Layers (Layers.Add(fourierLayer) at construction), so
+            // iterating Layers alone covers them — a second pass over _fourierLayers
+            // would apply the SGD update twice per step to each Fourier parameter.
             var paramList = new List<Tensor<T>>();
             foreach (var layer in Layers)
             {
                 if (layer is ITrainableLayer<T> trainable)
-                {
-                    var layerParams = trainable.GetTrainableParameters();
-                    if (layerParams is not null)
-                    {
-                        foreach (var p in layerParams)
-                        {
-                            if (p is not null && p.Length > 0) paramList.Add(p);
-                        }
-                    }
-                }
-            }
-            foreach (var fl in _fourierLayers)
-            {
-                if (fl is ITrainableLayer<T> trainable)
                 {
                     var layerParams = trainable.GetTrainableParameters();
                     if (layerParams is not null)

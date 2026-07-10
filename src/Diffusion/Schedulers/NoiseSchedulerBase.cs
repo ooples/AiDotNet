@@ -297,11 +297,26 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
         if (noiseBatch == null) throw new ArgumentNullException(nameof(noiseBatch));
         if (timesteps == null) throw new ArgumentNullException(nameof(timesteps));
 
-        int batchSize = cleanBatch.Shape[0];
-        if (noiseBatch.Shape[0] != batchSize)
+        if (cleanBatch.Rank == 0 || cleanBatch.Shape[0] <= 0)
             throw new ArgumentException(
-                $"noiseBatch batch size {noiseBatch.Shape[0]} does not match cleanBatch batch size {batchSize}.",
+                "cleanBatch must have a non-empty batch dimension.",
+                nameof(cleanBatch));
+        int batchSize = cleanBatch.Shape[0];
+
+        // Validate full shape parity, not only the batch dim. Without this a
+        // noiseBatch of shape [B, smaller...] would pass the leading-dim check
+        // and then index beyond its span in the per-element copy loop below.
+        if (noiseBatch.Rank != cleanBatch.Rank)
+            throw new ArgumentException(
+                $"noiseBatch rank {noiseBatch.Rank} does not match cleanBatch rank {cleanBatch.Rank}.",
                 nameof(noiseBatch));
+        for (int dim = 0; dim < cleanBatch.Rank; dim++)
+        {
+            if (noiseBatch.Shape[dim] != cleanBatch.Shape[dim])
+                throw new ArgumentException(
+                    $"noiseBatch shape[{dim}] = {noiseBatch.Shape[dim]} does not match cleanBatch shape[{dim}] = {cleanBatch.Shape[dim]}.",
+                    nameof(noiseBatch));
+        }
         if (timesteps.Length != batchSize)
             throw new ArgumentException(
                 $"timesteps length {timesteps.Length} does not match batch size {batchSize}.",

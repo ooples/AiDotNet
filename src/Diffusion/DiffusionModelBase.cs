@@ -1245,7 +1245,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // clip; nothing is materialized or copied here. The forward/loss closures are only consulted by
         // optimizers that re-evaluate the objective (e.g. line search); Adam ignores them.
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        Tensor<T> RecomputeForward(Tensor<T> inp, Tensor<T> _) => PredictNoise(inp, timestep);
+        Tensor<T> RecomputeForward(Tensor<T> inp, Tensor<T> _) =>
+            isBatched
+                ? PredictNoiseBatched(inp, timesteps)
+                : PredictNoise(inp, timestep);
         Tensor<T> RecomputeLoss(Tensor<T> inp, Tensor<T> target)
         {
             using var noGrad = new NoGradScope<T>();

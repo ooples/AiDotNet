@@ -282,9 +282,17 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableLayers.Count > 0)
         {
+            // Closure-captured local: ComputeContrastiveLossTape runs INSIDE the
+            // forward closure so it consumes the CURRENT-step persistent input
+            // (`inp` — refreshed by CompiledTapeTrainingStep before every replay),
+            // not the outer `input` which would freeze at compile time. The loss
+            // closure reads the captured value with a null-guard for the initial
+            // trace pass. Fwd/Loss ordering is guaranteed by the fused-step
+            // contract (Fwd always runs before Loss on each step).
+            Tensor<T>? capturedContrastive = null;
             Tensor<T> ForwardCombined(Tensor<T> inp)
             {
-                // supervised forecast head (same alignment as eager path below).
+                capturedContrastive = ComputeContrastiveLossTape(inp);
                 var f = ForwardForTraining(inp);
                 return f;
             }
@@ -296,7 +304,12 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
                 else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
                     alignedT = Engine.Reshape(tgt, pred._shape);
                 var supervised = loss.ComputeTapeLoss(pred, alignedT);
-                var contrastive = ComputeContrastiveLossTape(input);
+                var contrastive = capturedContrastive;
+                if (contrastive is null)
+                    throw new InvalidOperationException(
+                        "TFC fused step: contrastive loss was not captured by ForwardCombined. " +
+                        "This indicates the fused-step framework called the loss closure before " +
+                        "the forward closure, which violates its documented Fwd-then-Loss ordering.");
                 if (!supervised._shape.SequenceEqual(contrastive._shape)
                     && supervised.Length == contrastive.Length)
                     contrastive = Engine.Reshape(contrastive, supervised._shape);

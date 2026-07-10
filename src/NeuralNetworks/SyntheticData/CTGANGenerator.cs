@@ -791,12 +791,22 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
             // Fused-step input encodes [noise | cond | mask] side-by-side (columns).
             var fusedInput = Engine.TensorConcatenate([genInput, maskBatch], axis: 1);
             var target = new Tensor<T>(new[] { 1 });
+            // Closure-captured intermediates from Fwd's single generator pass —
+            // reused by Loss so we don't re-run GeneratorForwardWithResidualBatched
+            // and ApplyOutputActivationsBatched for the conditional-CE term.
+            // Fwd/Loss ordering is guaranteed by the fused-step contract.
+            Tensor<T>? capturedAct = null;
+            Tensor<T>? capturedCond = null;
+            Tensor<T>? capturedMask = null;
             Tensor<T> Fwd(Tensor<T> packed)
             {
                 var gi = Engine.TensorSlice(packed, [0, 0], [totalSamples, embedDim + condDim]);
                 var faked = GeneratorForwardWithResidualBatched(gi);
                 var act = ApplyOutputActivationsBatched(faked);
                 var condFromInput = Engine.TensorSlice(packed, [0, embedDim], [totalSamples, condDim]);
+                capturedAct = act;
+                capturedCond = condFromInput;
+                capturedMask = Engine.TensorSlice(packed, [0, embedDim + condDim], [totalSamples, condDim]);
                 var withCond = Engine.TensorConcatenate([act, condFromInput], axis: 1);
                 var pk = withCond.Reshape([numPacks, _packedInputDim]);
                 return DiscriminatorForwardBatched(pk, false);
@@ -807,14 +817,14 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
                 var lossT = Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
                 if (_condWidth > 0 && _catOutputBlocks.Count > 0)
                 {
-                    // Re-run gen forward on fused input to get fakeActivated, then
-                    // compute the CE term. Redundant with Fwd but captured on the
-                    // same fused plan and stays on-device.
-                    var gi = Engine.TensorSlice(fusedInput, [0, 0], [totalSamples, embedDim + condDim]);
-                    var faked = GeneratorForwardWithResidualBatched(gi);
-                    var act = ApplyOutputActivationsBatched(faked);
-                    var condFromInput = Engine.TensorSlice(fusedInput, [0, embedDim], [totalSamples, condDim]);
-                    var maskFromInput = Engine.TensorSlice(fusedInput, [0, embedDim + condDim], [totalSamples, condDim]);
+                    var act = capturedAct;
+                    var condFromInput = capturedCond;
+                    var maskFromInput = capturedMask;
+                    if (act is null || condFromInput is null || maskFromInput is null)
+                        throw new InvalidOperationException(
+                            "CTGAN fused step: generator intermediates were not captured by Fwd. " +
+                            "This indicates the fused-step framework called the loss closure before " +
+                            "the forward closure, violating its documented Fwd-then-Loss ordering.");
                     var ce = ConditionalCrossEntropy(act, condFromInput, maskFromInput);
                     lossT = Engine.TensorAdd(lossT, ce);
                 }

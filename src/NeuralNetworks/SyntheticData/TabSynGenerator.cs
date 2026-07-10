@@ -767,20 +767,38 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         var trainableVaeLayers = vaeLayers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableVaeLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
         {
+            // Closure-captured (mean, logVar) from Fwd's single encoder pass —
+            // reused by Loss so the encoder doesn't run twice per row. Since input
+            // and target are the same tensor for VAE ELBO training, the encoder
+            // output is genuinely the same value in both closures. Fwd/Loss ordering
+            // is guaranteed by the fused-step contract.
+            Tensor<T>? capturedMean = null;
+            Tensor<T>? capturedLogVar = null;
             Tensor<T> Fwd(Tensor<T> inp)
             {
                 var enc = EncoderForwardOnTape(inp);
                 var (m, lv) = SplitEncoderOutput(enc);
+                capturedMean = m;
+                capturedLogVar = lv;
                 var zz = Reparameterize(m, lv);
                 return DecoderForward(zz);
             }
             Tensor<T> Loss(Tensor<T> rawOutput, Tensor<T> target)
             {
-                var enc = EncoderForwardOnTape(target);
-                var (m, lv) = SplitEncoderOutput(enc);
+                var m = capturedMean;
+                var lv = capturedLogVar;
+                if (m is null || lv is null)
+                    throw new InvalidOperationException(
+                        "TabSyn VAE fused step: encoder outputs were not captured by Fwd. " +
+                        "This indicates the fused-step framework called the loss closure before " +
+                        "the forward closure, violating its documented Fwd-then-Loss ordering.");
                 return ComputeElboLossTape(rawOutput, target, m, lv);
             }
+            // On a mid-batch fused failure after fusedEngaged, drop out of the
+            // fused loop and let the eager path below reprocess the remaining
+            // rows — no row is silently skipped.
             bool fusedEngaged = false;
+            int nextEagerRow = startRow;
             for (int row = startRow; row < endRow; row++)
             {
                 var inputTensor = VectorToTensor(GetRow(transformedData, row));
@@ -789,10 +807,20 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _optimizer,
                     out T _);
-                if (!ran) { if (!fusedEngaged) break; continue; }
+                if (!ran)
+                {
+                    if (!fusedEngaged) break;
+                    // Fused engaged then failed mid-batch. Resume this row and the
+                    // remainder on the eager path so no gradient is lost.
+                    nextEagerRow = row;
+                    break;
+                }
                 fusedEngaged = true;
+                nextEagerRow = row + 1;
             }
-            if (fusedEngaged) return;
+            if (fusedEngaged && nextEagerRow >= endRow) return;
+            // Adjust the eager loop's start so it picks up where fused stopped.
+            startRow = nextEagerRow;
         }
 
         for (int row = startRow; row < endRow; row++)

@@ -336,9 +336,18 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableLayers.Count > 0)
         {
+            // Closure-captured commitment loss: ForwardNativeForTrainingWithCommitment
+            // internally calls VectorQuantize which performs an EMA SetCodebookValue
+            // update in training mode. Running it twice per step (once in Fwd, once
+            // in Loss) would update the codebook twice per replay and diverge from
+            // the eager path. Capture the commitment tensor from Fwd's single call
+            // and reuse it in Loss. Fwd/Loss ordering is guaranteed by the fused-step
+            // contract; a null-guard covers the invariant defensively.
+            Tensor<T>? capturedCommitment = null;
             Tensor<T> ForwardCombined(Tensor<T> inp)
             {
-                var (fc, _) = ForwardNativeForTrainingWithCommitment(inp);
+                var (fc, commit) = ForwardNativeForTrainingWithCommitment(inp);
+                capturedCommitment = commit;
                 return fc;
             }
             Tensor<T> ComputeLossCombined(Tensor<T> pred, Tensor<T> tgt)
@@ -349,7 +358,12 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
                 else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
                     alignedT = Engine.Reshape(tgt, pred._shape);
                 var recon = loss.ComputeTapeLoss(pred, alignedT);
-                var (_, commit) = ForwardNativeForTrainingWithCommitment(input);
+                var commit = capturedCommitment;
+                if (commit is null)
+                    throw new InvalidOperationException(
+                        "TOTEM fused step: commitment loss was not captured by ForwardCombined. " +
+                        "This indicates the fused-step framework called the loss closure before " +
+                        "the forward closure, violating its documented Fwd-then-Loss ordering.");
                 return Engine.TensorAdd(recon, commit);
             }
             if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
