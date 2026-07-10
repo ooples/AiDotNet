@@ -725,6 +725,25 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
                 $"LinkPredictionModel tape-based training requires a LossFunctionBase<T> (one that "
                 + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
                 + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as BinaryCrossEntropyLoss.");
+
+        // GPU-RESIDENT fast path — same seam as GraphClassificationModel and
+        // TimeSeries deep forecasters. Compiled forward + backward + fused Adam
+        // step on a device-resident plan; falls back to eager tape+optimizer.
+        var trainableLayers = Layers
+            .Where(l => l is ITrainableLayer<T>).Cast<ITrainableLayer<T>>()
+            .ToList();
+        if (CanTrainOnGpu
+            && AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                trainableLayers, input, expectedOutput,
+                forward: Forward,
+                computeLoss: tapeLoss.ComputeTapeLoss,
+                optimizer: _optimizer,
+                out T fusedLoss))
+        {
+            LastLoss = fusedLoss;
+            return;
+        }
+
         using (var tape = new GradientTape<T>())
         {
             var predictions = Forward(input);
