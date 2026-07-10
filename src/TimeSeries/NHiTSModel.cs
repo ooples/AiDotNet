@@ -86,6 +86,16 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
     private T _normStd = MathHelper.GetNumericOperations<T>().One;
 
     /// <summary>
+    /// True when the most recent <c>TrainCore</c> completed via the GPU-resident
+    /// fused compiled plan (weights / activations / Adam moments resident on the
+    /// device across the whole loop). False when the eager tape path ran instead —
+    /// either because <c>CanTrainOnGpu</c> was false, the resident attempt didn't
+    /// improve the validation baseline, or the config's pool sizes don't divide the
+    /// lookback cleanly (see <see cref="TryTrainGpuResident"/>).
+    /// </summary>
+    public bool LastRunUsedGpuResidentPath { get; private set; }
+
+    /// <summary>
     /// Initializes a new instance of the NHiTSModel class.
     /// </summary>
     /// <param name="options">Configuration options for N-HiTS.</param>
@@ -195,6 +205,22 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         var yNorm = new Vector<T>(y.Length);
         for (int i = 0; i < y.Length; i++)
             yNorm[i] = NumOps.Divide(NumOps.Subtract(y[i], yMean), yStd);
+
+        // GPU-RESIDENT fast path (float + DirectGpuTensorEngine + compilation).
+        // Same seam NBEATSModel uses via TimeSeriesModelBase.TryFusedResidentStep —
+        // forward + backward + Adam captured as a single on-device plan, weights /
+        // activations / Adam moments resident across every step. Only in epoch-bounded
+        // mode: the resident attempt is validated against the untrained baseline and
+        // rejected (with a fresh block reinit) if it didn't help, so in a wall-clock-
+        // bounded run a rejected attempt would burn the whole budget and leave nothing
+        // for the eager fallback. Epoch budgets don't have that hazard.
+        LastRunUsedGpuResidentPath = false;
+        if (CanTrainOnGpu && _options.MaxTrainingTimeSeconds <= 0
+            && TryTrainGpuResident(yNorm))
+        {
+            LastRunUsedGpuResidentPath = true;
+            return;
+        }
 
         // Adam optimizer (Challu et al. 2023).
         var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
@@ -354,6 +380,185 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
             for (int s = 0; s < _stacks.Count; s++)
                 _stacks[s].SetParameters(bestSnapshot[s]);
         }
+    }
+
+    /// <summary>
+    /// Batched, tape-recordable average pooling for the fused-resident forward.
+    /// <c>[B, L] → [B, L/kernelSize]</c> via <c>Reshape → ReduceMean(axis=2)</c>.
+    /// Requires <c>L % kernelSize == 0</c>; returns null otherwise so the caller
+    /// can fall back to the eager path. Kernel=1 is identity (returned as-is).
+    /// </summary>
+    private Tensor<T>? PoolBatchedTape(Tensor<T> input, int kernelSize)
+    {
+        if (kernelSize <= 1) return input;
+        int B = input.Shape[0];
+        int L = input.Shape[1];
+        if (L % kernelSize != 0) return null;
+        int poolCount = L / kernelSize;
+        var reshaped = Engine.Reshape(input, new[] { B, poolCount, kernelSize });
+        return Engine.ReduceMean(reshaped, new[] { 2 }, keepDims: false);
+    }
+
+    /// <summary>
+    /// Runs the full multi-rate stack over a <c>[B, L]</c> batch using on-tape
+    /// pooling + per-stack forecast + sum. Returns null when any stack's pooling
+    /// size doesn't divide the lookback cleanly (fused path unsupported for that
+    /// config; caller falls back to eager).
+    /// </summary>
+    private Tensor<T>? RunForwardBatched(Tensor<T> input)
+    {
+        Tensor<T>? aggregated = null;
+        foreach (var stack in _stacks)
+        {
+            var pooled = PoolBatchedTape(input, stack.PoolingSize);
+            if (pooled is null) return null;
+            var forecast = stack.ForwardTape(pooled);
+            aggregated = aggregated is null
+                ? forecast
+                : Engine.TensorAdd(aggregated, forecast);
+        }
+        return aggregated;
+    }
+
+    /// <summary>
+    /// Validation MSE across up to 256 windows for the accept/reject gate. Uses
+    /// the current stack weights so it correctly reflects the pre- or post-resident
+    /// state depending on when it's called.
+    /// </summary>
+    private double ValidationMse(List<int> valid, Vector<T> yNorm, int L, int H)
+    {
+        int m = Math.Min(valid.Count, 256);
+        if (m == 0) return double.NaN;
+        var inputData = new T[m * L];
+        var targetData = new T[m * H];
+        for (int bi = 0; bi < m; bi++)
+        {
+            int idx = valid[bi];
+            for (int j = 0; j < L; j++) inputData[bi * L + j] = yNorm[idx - L + j];
+            for (int h = 0; h < H; h++) targetData[bi * H + h] = yNorm[idx + h];
+        }
+        var input = new Tensor<T>(new[] { m, L }, new Vector<T>(inputData));
+        var pred = RunForwardBatched(input);
+        if (pred is null) return double.NaN;
+        double sum = 0.0;
+        int n = pred.Length;
+        for (int i = 0; i < n; i++)
+        {
+            double d = NumOps.ToDouble(pred[i]) - NumOps.ToDouble(targetData[i]);
+            sum += d * d;
+        }
+        return sum / n;
+    }
+
+    /// <summary>
+    /// GPU-resident training via the fused compiled-plan capture path — mirrors
+    /// NBEATSModel.TryTrainGpuResident. Returns false when the fused path can't
+    /// engage, when the pool sizes don't divide the lookback cleanly, or when the
+    /// resident run failed to improve on the untrained baseline (blocks are
+    /// re-initialized before returning so the eager fallback starts clean).
+    /// </summary>
+    private bool TryTrainGpuResident(Vector<T> yNorm)
+    {
+        int L = _options.LookbackWindow;
+        int H = _options.ForecastHorizon;
+        int batchSize = _options.BatchSize;
+
+        // Precondition: every stack's pooling divides L cleanly so PoolBatchedTape
+        // works. Fall back to eager for non-power-of-two configs.
+        foreach (var stack in _stacks)
+        {
+            if (stack.PoolingSize > 1 && L % stack.PoolingSize != 0)
+                return false;
+        }
+
+        var valid = new List<int>();
+        for (int idx = 0; idx < yNorm.Length; idx++)
+            if (idx >= L && idx + H <= yNorm.Length)
+                valid.Add(idx);
+        if (valid.Count < batchSize) return false;
+
+        var layers = _stacks.Cast<ITrainableLayer<T>>().ToList();
+        var trainingLoss = new MeanSquaredErrorLoss<T>();
+
+        Tensor<T> ForwardStack(Tensor<T> input) => RunForwardBatched(input)!;
+        Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>
+            trainingLoss.ComputeTapeLoss(pred, target);
+
+        double preMse = ValidationMse(valid, yNorm, L, H);
+
+        float lr = (float)_options.LearningRate;
+        const float beta1 = 0.9f;
+        const float beta2 = 0.999f;
+        const float epsilon = 1e-8f;
+        const float weightDecay = 0f;
+
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate();
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount();
+
+        var random = new Random(42);
+        int maxEpochs = _options.Epochs;
+        bool fusedEngaged = false;
+        bool diverged = false;
+        double firstStepLoss = double.NaN;
+
+        for (int epoch = 0; epoch < maxEpochs && !diverged; epoch++)
+        {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+            var order = valid.OrderBy(_ => random.Next()).ToList();
+            int fullBatches = order.Count / batchSize;
+
+            for (int b = 0; b < fullBatches; b++)
+            {
+                TrainingCancellationToken.ThrowIfCancellationRequested();
+                int baseIdx = b * batchSize;
+                var inputData = new T[batchSize * L];
+                var targetData = new T[batchSize * H];
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    int idx = order[baseIdx + bi];
+                    for (int j = 0; j < L; j++) inputData[bi * L + j] = yNorm[idx - L + j];
+                    for (int h = 0; h < H; h++) targetData[bi * H + h] = yNorm[idx + h];
+                }
+                var batchInput = new Tensor<T>(new[] { batchSize, L }, new Vector<T>(inputData));
+                var batchTarget = new Tensor<T>(new[] { batchSize, H }, new Vector<T>(targetData));
+
+                bool ran = TryFusedResidentStep(
+                    layers, batchInput, batchTarget, ForwardStack, ComputeLoss,
+                    lr, beta1, beta2, epsilon, weightDecay, out T stepLoss);
+                if (!ran)
+                {
+                    if (!fusedEngaged) return false;
+                    continue;
+                }
+                fusedEngaged = true;
+                double stepLossD = NumOps.ToDouble(stepLoss);
+                if (double.IsNaN(stepLossD) || double.IsInfinity(stepLossD))
+                {
+                    diverged = true;
+                    break;
+                }
+                if (double.IsNaN(firstStepLoss)) firstStepLoss = stepLossD;
+                else if (stepLossD > 1e3 && stepLossD > firstStepLoss * 1e3)
+                {
+                    diverged = true;
+                    break;
+                }
+            }
+        }
+
+        if (fusedEngaged)
+        {
+            double postMse = ValidationMse(valid, yNorm, L, H);
+            bool improved = !double.IsNaN(postMse) && !double.IsInfinity(postMse)
+                            && postMse < preMse * 0.98;
+            if (diverged || !improved)
+            {
+                _stacks.Clear();
+                InitializeStacks();
+                return false;
+            }
+        }
+        return fusedEngaged;
     }
 
     public override Vector<T> Predict(Matrix<T> input)
