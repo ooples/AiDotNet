@@ -735,6 +735,37 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         SetTrainingMode(true);
         try
         {
+            // GPU-RESIDENT fast path — GOGGLE's ELBO + structure-regularisation
+            // objective compiles cleanly, and the soft adjacency A is threaded
+            // through via extraTensors so the fused optimizer treats it identically
+            // to layer-carried params. Reparameterize re-samples in the closure.
+            var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
+            var extras = GetExtraTrainableTensors().ToList();
+            if (trainableLayers.Count > 0 || extras.Count > 0)
+            {
+                Tensor<T> Fwd(Tensor<T> inp)
+                {
+                    var (m, lv) = EncoderForwardTape(inp);
+                    var zz = ReparameterizeTape(m, lv);
+                    return DecoderForwardTape(zz);
+                }
+                Tensor<T> Loss(Tensor<T> raw, Tensor<T> tgt)
+                {
+                    var (m, lv) = EncoderForwardTape(tgt);
+                    return ComputeGoggleLossTape(raw, tgt, m, lv);
+                }
+                if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                        trainableLayers, input, expectedOutput,
+                        forward: Fwd, computeLoss: Loss,
+                        optimizer: _optimizer,
+                        out T _,
+                        extraTensors: extras))
+                {
+                    ProjectAdjacencyConstraints();
+                    return;
+                }
+            }
+
             using var tape = new GradientTape<T>();
             var (mean, logVar) = EncoderForwardTape(input);
             var z = ReparameterizeTape(mean, logVar);
