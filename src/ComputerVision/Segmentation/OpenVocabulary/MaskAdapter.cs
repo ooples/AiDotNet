@@ -117,7 +117,17 @@ public class MaskAdapter<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Wire a training-stable AdamW as the model's actual training optimizer. Two bugs were
+        // fixed here: (1) the previously-constructed AdamW was never handed to the base training
+        // loop (SetBaseTrainOptimizer was never called), so training silently fell back to the
+        // base default Adam; (2) that default's 1e-3 learning rate diverges on this deep,
+        // unnormalized conv encoder/decoder (the loss explodes geometrically). Mask-Adapter
+        // fine-tunes at a low learning rate; use 1e-4 with gradient clipping (the AdamW default)
+        // for a stable step.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
+        SetBaseTrainOptimizer(_optimizer);
         _channelDims = [64, 128, 320, 512];
         _depths = [2, 2, 4, 2];
         _decoderDim = 256;
