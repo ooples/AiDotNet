@@ -42,7 +42,7 @@ public static class AiModelResultTransformerExtensions
         int maxNewTokens,
         int? eosTokenId = null)
     {
-        RequireTransformerCapability(result, nameof(GenerateGreedy));
+        GateAndValidate(result, nameof(GenerateGreedy), startTokens, maxNewTokens);
         return AiDotNet.Extensions.Telemetry.AiModelResultInferenceTelemetry.TimeAndLog(
             result,
             nameof(GenerateGreedy),
@@ -65,7 +65,7 @@ public static class AiModelResultTransformerExtensions
         int? eosTokenId = null,
         int? seed = null)
     {
-        RequireTransformerCapability(result, nameof(GenerateSampled));
+        GateAndValidate(result, nameof(GenerateSampled), startTokens, maxNewTokens);
         return GenerateInternal(result, startTokens, maxNewTokens, argmax: false, temperature, eosTokenId, seed, onToken: null, cancellationToken: default);
     }
 
@@ -207,7 +207,7 @@ public static class AiModelResultTransformerExtensions
         IProgress<int>? onToken = null,
         CancellationToken cancellationToken = default)
     {
-        RequireTransformerCapability(result, nameof(GenerateGreedyAsync));
+        GateAndValidate(result, nameof(GenerateGreedyAsync), startTokens, maxNewTokens);
         return Task.Run(
             () => GenerateInternal(result, startTokens, maxNewTokens, argmax: true, default!, eosTokenId,
                 seed: null, onToken: onToken, cancellationToken: cancellationToken),
@@ -228,15 +228,59 @@ public static class AiModelResultTransformerExtensions
         int maxNewTokens,
         int? eosTokenId = null)
     {
-        RequireTransformerCapability(result, nameof(GenerateGreedyBatch));
+        // Type-signature gate → argument validation → capability gate (same ordering as the
+        // single-prompt entry points, but the "startTokens" here is an array of prompts).
+        RequireTensorSignature<T, TInput, TOutput>(nameof(GenerateGreedyBatch));
         if (startTokensPerPrompt is null) throw new ArgumentNullException(nameof(startTokensPerPrompt));
-        if (maxNewTokens <= 0) throw new ArgumentOutOfRangeException(nameof(maxNewTokens));
+        if (maxNewTokens <= 0) throw new ArgumentOutOfRangeException(nameof(maxNewTokens), "Must be positive.");
+        RequireTransformerCapability(result, nameof(GenerateGreedyBatch));
         var outputs = new Tensor<T>[startTokensPerPrompt.Length];
         System.Threading.Tasks.Parallel.For(0, startTokensPerPrompt.Length, i =>
         {
             outputs[i] = GenerateInternal(result, startTokensPerPrompt[i], maxNewTokens, argmax: true, default!, eosTokenId, seed: null, onToken: null, cancellationToken: default);
         });
         return outputs;
+    }
+
+    /// <summary>
+    /// Runs the three inference guards in the order callers expect: (1) the type-signature gate
+    /// (the result must be token-tensor in / token-tensor out), (2) argument validation on the
+    /// caller-supplied prompt + length, and only THEN (3) the model-capability gate. Ordering
+    /// matters: a null / non-positive argument or a wrong TInput/TOutput signature is a caller
+    /// mistake that should surface as an <see cref="ArgumentException"/> family / signature error,
+    /// not get masked by the capability gate's <see cref="InvalidOperationException"/>.
+    /// </summary>
+    private static void GateAndValidate<T, TInput, TOutput>(
+        AiModelResult<T, TInput, TOutput> result,
+        string extensionName,
+        Tensor<T> startTokens,
+        int maxNewTokens)
+    {
+        RequireTensorSignature<T, TInput, TOutput>(extensionName);
+        if (startTokens is null) throw new ArgumentNullException(nameof(startTokens));
+        if (maxNewTokens <= 0) throw new ArgumentOutOfRangeException(nameof(maxNewTokens), "Must be positive.");
+        RequireTransformerCapability(result, extensionName);
+    }
+
+    /// <summary>
+    /// Guards that the result was built through a token-tensor pipeline — autoregressive
+    /// generation appends token IDs to a <c>[batch, seqLen]</c> <see cref="Tensor{T}"/>, so both
+    /// <typeparamref name="TInput"/> and <typeparamref name="TOutput"/> must be
+    /// <see cref="Tensor{T}"/>. A result typed with any other TInput/TOutput (e.g. Matrix / Vector
+    /// from a tabular regressor) can never drive token generation, so we fail fast with a message
+    /// that names the required tensor signature rather than deferring to the capability gate.
+    /// </summary>
+    private static void RequireTensorSignature<T, TInput, TOutput>(string extensionName)
+    {
+        if (typeof(TInput) != typeof(Tensor<T>) || typeof(TOutput) != typeof(Tensor<T>))
+        {
+            throw new InvalidOperationException(
+                $"AiModelResult.{extensionName} requires a token-tensor result: the model must have " +
+                $"been built with both TInput and TOutput as Tensor<{typeof(T).Name}> (generation " +
+                $"appends token IDs to a [batch, seqLen] Tensor). This result was built with " +
+                $"TInput={typeof(TInput).Name}, TOutput={typeof(TOutput).Name}. Rebuild the model " +
+                $"through a Tensor-in / Tensor-out pipeline (e.g. Transformer<{typeof(T).Name}>).");
+        }
     }
 
     private static void RequireTransformerCapability<T, TInput, TOutput>(

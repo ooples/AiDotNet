@@ -1847,10 +1847,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
     /// <c>GaussianSplattingOptions</c> directly (bypasses this scaling).
     /// </para>
     /// <para>
-    /// If <c>options.InitialLearningRate</c> is at the base class default (0.01) the caller
-    /// almost certainly didn't set it explicitly — in that case we leave GS's existing
-    /// per-attribute defaults untouched. Any value the caller set explicitly (including 0.01
-    /// if that's genuinely what they want) triggers full re-derivation.
+    /// When <c>options.InitialLearningRate</c> still equals the configured optimizer type's own
+    /// default (0.01 for the base <c>OptimizationAlgorithmOptions</c>, 1e-3 for
+    /// <c>AdamOptimizerOptions</c>, etc.), the per-attribute defaults from
+    /// <see cref="GaussianSplattingOptions"/> are retained unchanged so the model keeps the
+    /// schedule from Kerbl et al. 2023. Any other value triggers full re-derivation.
     /// </para>
     /// </remarks>
     public void ApplyOptimizerHyperparameters(OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>> options)
@@ -1878,23 +1879,40 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             _options.DensificationEndIteration = Math.Max(2, (int)(totalIters * 0.85));
         }
 
-        // Paper anchor: base LR = 1.6e-4 → per-attribute ratios below. Ratios are the
-        // published Kerbl et al. 2023 defaults expressed relative to the position LR.
+        // Per-attribute learning rates from Kerbl et al. 2023, "3D Gaussian Splatting for
+        // Real-Time Radiance Field Rendering" (SIGGRAPH 2023), Section 5 / Appendix B: position
+        // 1.6e-4, feature/color 2.5e-3, opacity 5.0e-2, scale 5.0e-3, rotation 1.0e-3. Encoded
+        // as ratios relative to the position LR so a caller-supplied base LR scales all five
+        // consistently while preserving the paper's cross-attribute proportions.
         const double PaperBasePositionLR = 1.6e-4;
         const double ColorRatio = 15.625;     // 2.5e-3 / 1.6e-4
         const double OpacityRatio = 312.5;    // 5.0e-2 / 1.6e-4
         const double ScaleRatio = 31.25;      // 5.0e-3 / 1.6e-4
         const double RotationRatio = 6.25;    // 1.0e-3 / 1.6e-4
 
-        // OptimizationAlgorithmOptions.InitialLearningRate defaults to 0.01 (a value tuned
-        // for MLPs, NOT for GS — 62× the paper's position LR of 1.6e-4). Treat that exact
-        // default as "caller didn't touch it" and leave GS's constructor-set schedule
-        // (from GaussianSplattingOptions) intact — the caller's Build() call should use
-        // paper-quality defaults, not destabilize with an MLP-shaped LR. Any other value
-        // (including 0.01 if the caller genuinely wants it) triggers full re-derivation.
-        const double OptimizerBaseClassDefaultLR = 0.01;
+        // A learning rate left at the configured optimizer's default is a no-op: GS retains the
+        // paper's per-attribute schedule from GaussianSplattingOptions rather than collapsing it
+        // to a single MLP-tuned rate. The sentinel is the CONCRETE optimizer options type's own
+        // default, not a hardcoded base-class 0.01 — OptimizationAlgorithmOptions defaults to
+        // 0.01 but AdamOptimizerOptions overrides to 1e-3 (and other optimizers differ). A fresh
+        // instance of the runtime type yields its true default so detection tracks whichever
+        // optimizer is configured; a value differing from that default triggers re-derivation.
+        double defaultLR;
+        try
+        {
+            var freshDefaults = System.Activator.CreateInstance(options.GetType())
+                as OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>;
+            defaultLR = freshDefaults?.InitialLearningRate ?? 0.01;
+        }
+        catch (System.MissingMethodException)
+        {
+            // No public parameterless ctor on this options type — fall back to the base-class
+            // default so an untouched base-typed options instance still no-ops.
+            defaultLR = 0.01;
+        }
+
         double callerLR = options.InitialLearningRate;
-        if (callerLR == OptimizerBaseClassDefaultLR)
+        if (callerLR == defaultLR)
         {
             return;
         }

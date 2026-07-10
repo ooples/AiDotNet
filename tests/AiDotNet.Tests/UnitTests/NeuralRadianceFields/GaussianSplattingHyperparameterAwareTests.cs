@@ -126,11 +126,13 @@ public class GaussianSplattingHyperparameterAwareTests
         double origScale = gs.ScaleLearningRate;
         double origRotation = gs.RotationLearningRate;
 
-        // Caller didn't touch InitialLearningRate → OptimizationAlgorithmOptions default = 0.01.
-        // For GS, 0.01 is 62× the paper's position LR — treating that as "user asked for it"
-        // would blow training. GS explicitly no-ops on the base-class default.
+        // A fresh AdamOptimizerOptions leaves InitialLearningRate at Adam's canonical default of
+        // 1e-3 (Kingma & Ba 2015). For GS that is ~6× the position learning rate from the 3D
+        // Gaussian Splatting paper (Kerbl et al. 2023), so applying it directly would diverge
+        // from the paper's schedule. GS no-ops when the LR still equals the configured optimizer
+        // type's default (derived from a fresh instance), regardless of which optimizer was used.
         var options = new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>();
-        Assert.Equal(0.01, options.InitialLearningRate);
+        Assert.Equal(0.001, options.InitialLearningRate);
 
         ((IHyperparameterAware<double, Tensor<double>, Tensor<double>>)gs)
             .ApplyOptimizerHyperparameters(options);
