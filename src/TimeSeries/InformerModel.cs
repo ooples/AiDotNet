@@ -82,8 +82,23 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private Tensor<T> _outputProjection;     // [forecastHorizon, embeddingDim]
     private Tensor<T> _outputBias;           // [forecastHorizon]
 
-    // Gradient accumulators for batch training
-    private Dictionary<string, Tensor<T>> _gradientAccumulators;
+    // Normalization statistics computed during training (zero-mean / unit-variance of the
+    // training series). Inputs are normalized before the network and the forecast is
+    // denormalized at inference so gradient flow stays well-scaled (mirrors NBEATS / NHiTS).
+    private T _normMean = MathHelper.GetNumericOperations<T>().Zero;
+    private T _normStd = MathHelper.GetNumericOperations<T>().One;
+
+    /// <summary>
+    /// True when the most recent <c>TrainCore</c> completed via the GPU-resident
+    /// fused compiled plan (weights / activations / Adam moments resident on the
+    /// device across the whole loop). Mirrors <c>NBEATSModel.LastRunUsedGpuResidentPath</c>.
+    /// </summary>
+    /// <remarks>
+    /// Internal diagnostic: the public surface stays limited to the facade
+    /// (<c>AiModelBuilder</c>/<c>AiModelResult</c>). Visible to the test and
+    /// serving assemblies via <c>InternalsVisibleTo</c>.
+    /// </remarks>
+    internal bool LastRunUsedGpuResidentPath { get; private set; }
 
     // Sparsity factor for ProbSparse attention (c in the paper, typically 5)
     private const int SparsityFactor = 5;
@@ -116,7 +131,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         _encoderLayers = new List<InformerEncoderLayerTensor<T>>();
         _distillingLayers = new List<DistillingConvTensor<T>>();
         _decoderLayers = new List<InformerDecoderLayerTensor<T>>();
-        _gradientAccumulators = new Dictionary<string, Tensor<T>>();
 
         // Initialize with default tensors
         _inputProjection = new Tensor<T>(new[] { 1, 1 });
@@ -133,6 +147,15 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     {
         double stddev = Math.Sqrt(2.0 / _options.EmbeddingDim);
         var random = RandomHelper.CreateSeededRandom(42);
+
+        // Idempotent: TryTrainGpuResident re-invokes this on a rejected resident run
+        // to reset to a clean init, so clear any existing layers before rebuilding —
+        // otherwise the rebuild APPENDS a second full set (doubling encoder/decoder/
+        // distilling layers, corrupting ParameterCount, ForwardBatch and the forecast).
+        // Safe on the constructor path too, where the lists are already empty.
+        _encoderLayers.Clear();
+        _distillingLayers.Clear();
+        _decoderLayers.Clear();
 
         // Input projection: maps single time step values to embedding dimension
         _inputProjection = InitTensor(new[] { _options.EmbeddingDim, 1 }, stddev, random);
@@ -185,38 +208,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         // Output projection
         _outputProjection = InitTensor(new[] { _options.ForecastHorizon, _options.EmbeddingDim }, stddev, random);
         _outputBias = new Tensor<T>(new[] { _options.ForecastHorizon });
-
-        // Initialize gradient accumulators
-        InitializeGradientAccumulators();
-    }
-
-    private void InitializeGradientAccumulators()
-    {
-        _gradientAccumulators = new Dictionary<string, Tensor<T>>
-        {
-            ["inputProjection"] = new Tensor<T>(new[] { _options.EmbeddingDim, 1 }),
-            ["decoderStartToken"] = new Tensor<T>(new[] { _options.EmbeddingDim }),
-            ["outputProjection"] = new Tensor<T>(new[] { _options.ForecastHorizon, _options.EmbeddingDim }),
-            ["outputBias"] = new Tensor<T>(new[] { _options.ForecastHorizon })
-        };
-
-        // Initialize encoder layer gradient accumulators
-        for (int i = 0; i < _encoderLayers.Count; i++)
-        {
-            _encoderLayers[i].InitializeGradientAccumulators(_gradientAccumulators, i);
-        }
-
-        // Initialize distilling layer gradient accumulators
-        for (int i = 0; i < _distillingLayers.Count; i++)
-        {
-            _distillingLayers[i].InitializeGradientAccumulators(_gradientAccumulators, i);
-        }
-
-        // Initialize decoder layer gradient accumulators
-        for (int i = 0; i < _decoderLayers.Count; i++)
-        {
-            _decoderLayers[i].InitializeGradientAccumulators(_gradientAccumulators, i);
-        }
     }
 
     private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
@@ -245,73 +236,116 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the model using proper backpropagation through the Informer architecture.
+    /// Trains the Informer with tape-based automatic differentiation and the Adam optimizer.
     /// </summary>
+    /// <remarks>
+    /// The forward pass (<see cref="ForwardBatch"/>) is expressed entirely with batched
+    /// <c>Engine.Tensor*</c> ops, so a <see cref="Tensors.Engines.Autodiff.GradientTape{T}"/>
+    /// produces the whole backward pass (no hand-derived gradients) and every op is
+    /// GPU-dispatchable — the point of the transformer GPU campaign. Windows of the
+    /// z-normalized series are stacked into a <c>[B, L]</c> batch and the full H-step
+    /// horizon is supervised per sample (MSE), matching the generative-decoder contract
+    /// (Zhou et al. 2021 §3.3). Best-epoch parameters are snapshotted and restored so a
+    /// noisy late-epoch Adam step cannot degrade the returned model.
+    /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // Store training series BEFORE training loop — if training is cancelled
-        // early by MaxTrainingTimeSeconds, we still have the data for in-sample predictions.
         _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _trainingSeries[i] = y[i];
+        for (int i = 0; i < y.Length; i++) _trainingSeries[i] = y[i];
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = _numOps.FromDouble(y.Length);
 
         int lookback = _options.LookbackWindow;
+        int horizon = _options.ForecastHorizon;
 
-        // Build training samples from y: input = y[i-lookback : i], target = y[i]
-        var validIndices = new List<int>();
-        for (int i = lookback; i < y.Length; i++)
+        // z-normalize the series for stable gradient flow (mirrors NBEATS / NHiTS).
+        T yMean = _numOps.Zero;
+        for (int i = 0; i < y.Length; i++) yMean = _numOps.Add(yMean, y[i]);
+        yMean = _numOps.Divide(yMean, _numOps.FromDouble(y.Length));
+        T yVar = _numOps.Zero;
+        for (int i = 0; i < y.Length; i++)
         {
-            validIndices.Add(i);
+            T diff = _numOps.Subtract(y[i], yMean);
+            yVar = _numOps.Add(yVar, _numOps.Multiply(diff, diff));
+        }
+        yVar = _numOps.Divide(yVar, _numOps.FromDouble(y.Length));
+        T yStd = _numOps.Sqrt(yVar);
+        if (_numOps.LessThanOrEquals(yStd, _numOps.FromDouble(1e-10))) yStd = _numOps.One;
+        _normMean = yMean;
+        _normStd = yStd;
+
+        var yNorm = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            yNorm[i] = _numOps.Divide(_numOps.Subtract(y[i], yMean), yStd);
+
+        // GPU-RESIDENT fast path (float + DirectGpuTensorEngine + compilation).
+        // Informer's forward is SDPA + LayerNorm + FFN + distilling — a very different op
+        // graph from NBEATS's Permute+BroadcastAdd chain — so the compiled fused plan should
+        // engage cleanly here even if NBEATS's fused path still trips the divergence guard.
+        // Only in epoch-bounded mode (see NBEATSModel for the wall-clock hazard rationale).
+        LastRunUsedGpuResidentPath = false;
+        if (CanTrainOnGpu && _options.MaxTrainingTimeSeconds <= 0
+            && TryTrainGpuResident(yNorm))
+        {
+            LastRunUsedGpuResidentPath = true;
+            return;
         }
 
+        // Valid sample = index with a complete lookback AND horizon window (idx in [L, N-H]).
+        var validIndices = new List<int>();
+        for (int i = lookback; i + horizon <= y.Length; i++) validIndices.Add(i);
         if (validIndices.Count == 0)
         {
             throw new ArgumentException(
-                $"Not enough data to build a single training sample. " +
-                $"Require at least {lookback + 1} points, got {y.Length}.",
-                nameof(y));
+                $"Not enough data to build a single training sample. Require at least " +
+                $"{lookback + horizon} points, got {y.Length}.", nameof(y));
         }
 
-        // Level initialization: seed the output bias with the mean of the training
-        // targets so the forecast starts at the series' level. Informer's generative
-        // decoder predicts the whole horizon at once; without a level seed, plain
-        // SGD over a few epochs only nudges the bias a fraction of the way across a
-        // large raw level (the +32 instead of +500 translation shift). Seeding lets
-        // training refine the residual pattern. (1-D reduction, not a tensor loop.)
-        T levelSum = _numOps.Zero;
-        for (int i = 0; i < y.Length; i++) levelSum = _numOps.Add(levelSum, y[i]);
-        T levelMean = _numOps.Divide(levelSum, _numOps.FromDouble(y.Length));
-        for (int h = 0; h < _outputBias.Length; h++) _outputBias[h] = levelMean;
-
-        // IEngine automatic-gradient-tape training (no hand-rolled backprop):
-        // forward via Engine ops under a GradientTape, then AdamOptimizer.Step
-        // applies the tape's gradients to every trainable tensor (model + encoder/
-        // decoder layer params). The model forecasts y[i] from its lookback window,
-        // so the loss compares the decoder's first output position to y[i].
         var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
         var mseLoss = new MeanSquaredErrorLoss<T>();
         var allParams = CollectTrainableParameters();
 
-        for (int epoch = 0; epoch < _options.Epochs; epoch++)
+        int batchSize = Math.Max(1, _options.BatchSize);
+        bool timeBounded = _options.MaxTrainingTimeSeconds > 0;
+        int maxEpochs = timeBounded ? int.MaxValue : _options.Epochs;
+
+        double bestLoss = double.PositiveInfinity;
+        List<Tensor<T>>? bestSnapshot = null;
+
+        for (int epoch = 0; epoch < maxEpochs; epoch++)
         {
+            if (timeBounded && TrainingCancellationToken.IsCancellationRequested) break;
             TrainingCancellationToken.ThrowIfCancellationRequested();
+
             var shuffled = validIndices.OrderBy(_ => _random.Next()).ToList();
+            double epochLossSum = 0.0;
+            int epochCount = 0;
 
-            foreach (int i in shuffled)
+            for (int start = 0; start < shuffled.Count; start += batchSize)
             {
-                if (i % 8 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
+                if (timeBounded && TrainingCancellationToken.IsCancellationRequested) break;
+                TrainingCancellationToken.ThrowIfCancellationRequested();
 
-                var input = new Vector<T>(lookback);
-                for (int j = 0; j < lookback; j++) input[j] = y[i - lookback + j];
-                var targetTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { y[i] }));
+                int end = Math.Min(start + batchSize, shuffled.Count);
+                int b = end - start;
+
+                var inputData = new T[b * lookback];
+                var targetData = new T[b * horizon];
+                for (int bi = 0; bi < b; bi++)
+                {
+                    int idx = shuffled[start + bi];
+                    for (int j = 0; j < lookback; j++)
+                        inputData[bi * lookback + j] = yNorm[idx - lookback + j];
+                    for (int h = 0; h < horizon; h++)
+                        targetData[bi * horizon + h] = yNorm[idx + h];
+                }
+                var batchInput = new Tensor<T>(new[] { b, lookback }, new Vector<T>(inputData));
+                var batchTarget = new Tensor<T>(new[] { b, horizon }, new Vector<T>(targetData));
 
                 using var tape = new Tensors.Engines.Autodiff.GradientTape<T>();
-                var forecast = ForwardEngine(input);
-                var pred0 = Engine.Reshape(Engine.TensorNarrow(forecast, 0, 0, 1), new[] { 1 });
-                var lossTensor = mseLoss.ComputeTapeLoss(pred0, targetTensor);
+                var forecast = ForwardBatch(batchInput, b, lookback); // [b, horizon]
+                var lossTensor = mseLoss.ComputeTapeLoss(forecast, batchTarget);
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
 
                 var grads = new Dictionary<Tensor<T>, Tensor<T>>(
@@ -320,14 +354,183 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                     if (allGrads.TryGetValue(param, out var g)) grads[param] = g;
 
                 T lossValue = lossTensor.Length > 0 ? lossTensor[0] : _numOps.Zero;
-                var inTensor = new Tensor<T>(new[] { lookback, 1 }, input);
-                Tensor<T> ComputeForward(Tensor<T> a, Tensor<T> b) => pred0;
+                Tensor<T> ComputeForward(Tensor<T> a, Tensor<T> t) => forecast;
                 Tensor<T> ComputeLoss(Tensor<T> p, Tensor<T> t) => mseLoss.ComputeTapeLoss(p, t);
                 var context = new Tensors.Engines.Autodiff.TapeStepContext<T>(
-                    allParams, grads, lossValue, inTensor, targetTensor, ComputeForward, ComputeLoss, null);
+                    allParams, grads, lossValue, batchInput, batchTarget, ComputeForward, ComputeLoss, null);
                 optimizer.Step(context);
+
+                epochLossSum += Convert.ToDouble(lossValue) * b;
+                epochCount += b;
+            }
+
+            if (epochCount > 0)
+            {
+                double epochLoss = epochLossSum / epochCount;
+                if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
+                {
+                    bestLoss = epochLoss;
+                    bestSnapshot = allParams.Select(p => p.Clone()).ToList();
+                }
             }
         }
+
+        // Restore best-epoch parameters (copy values into the live tensors the model uses).
+        if (bestSnapshot is not null)
+        {
+            for (int i = 0; i < allParams.Count; i++)
+            {
+                var src = bestSnapshot[i];
+                var dst = allParams[i];
+                for (int k = 0; k < Math.Min(src.Length, dst.Length); k++) dst[k] = src[k];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Collects every layer that carries trainable parameters in a single flat list —
+    /// encoder + distilling + decoder + the output projection wrapped as a trivial
+    /// layer. Used by the GPU-resident fused-step path which needs <c>ITrainableLayer</c>
+    /// handles (not raw tensors) so it can call <c>ZeroGrad</c> per step.
+    /// </summary>
+    private List<ITrainableLayer<T>> CollectTrainableLayers()
+    {
+        var layers = new List<ITrainableLayer<T>>();
+        foreach (var l in _encoderLayers) layers.Add(l);
+        foreach (var l in _distillingLayers) layers.Add(l);
+        foreach (var l in _decoderLayers) layers.Add(l);
+        return layers;
+    }
+
+    /// <summary>
+    /// Validation MSE across up to 256 windows for the GPU-resident accept/reject gate.
+    /// Uses the current model weights, so callers can compare pre- and post-resident MSE.
+    /// </summary>
+    private double ValidationMseGpu(List<int> valid, Vector<T> yNorm, int L, int H)
+    {
+        int m = Math.Min(valid.Count, 256);
+        if (m == 0) return double.NaN;
+        var inputData = new T[m * L];
+        var targetData = new T[m * H];
+        for (int bi = 0; bi < m; bi++)
+        {
+            int idx = valid[bi];
+            for (int j = 0; j < L; j++) inputData[bi * L + j] = yNorm[idx - L + j];
+            for (int h = 0; h < H; h++) targetData[bi * H + h] = yNorm[idx + h];
+        }
+        var input = new Tensor<T>(new[] { m, L }, new Vector<T>(inputData));
+        var pred = ForwardBatch(input, m, L);
+        double sum = 0.0;
+        int n = pred.Length;
+        for (int i = 0; i < n; i++)
+        {
+            double d = Convert.ToDouble(pred[i]) - Convert.ToDouble(targetData[i]);
+            sum += d * d;
+        }
+        return sum / n;
+    }
+
+    /// <summary>
+    /// GPU-resident training via the fused compiled-plan capture path — mirrors
+    /// NBEATSModel.TryTrainGpuResident. Informer's forward is SDPA + LayerNorm + FFN
+    /// (very different from NBEATS's Permute+BroadcastAdd chain), so the compiled plan
+    /// should engage cleanly. Falls back to eager when the plan can't compile or the
+    /// resident run doesn't improve the validation baseline.
+    /// </summary>
+    private bool TryTrainGpuResident(Vector<T> yNorm)
+    {
+        int L = _options.LookbackWindow;
+        int H = _options.ForecastHorizon;
+        int batchSize = Math.Max(1, _options.BatchSize);
+
+        var valid = new List<int>();
+        for (int idx = L; idx + H <= yNorm.Length; idx++) valid.Add(idx);
+        if (valid.Count < batchSize) return false;
+
+        var layers = CollectTrainableLayers();
+        var mseLoss = new MeanSquaredErrorLoss<T>();
+
+        Tensor<T> ForwardEnc(Tensor<T> input)
+        {
+            // input.Shape = [batchSize, L] — constant across every fused step
+            int b = input.Shape[0];
+            int encLen0 = input.Shape[1];
+            return ForwardBatch(input, b, encLen0);
+        }
+        Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>
+            mseLoss.ComputeTapeLoss(pred, target);
+
+        double preMse = ValidationMseGpu(valid, yNorm, L, H);
+
+        float lr = (float)_options.LearningRate;
+        const float beta1 = 0.9f, beta2 = 0.999f, epsilon = 1e-8f, weightDecay = 0f;
+
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate();
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount();
+
+        var random = RandomHelper.CreateSeededRandom(42);
+        int maxEpochs = _options.Epochs;
+        bool fusedEngaged = false;
+        bool diverged = false;
+        double firstStepLoss = double.NaN;
+
+        for (int epoch = 0; epoch < maxEpochs && !diverged; epoch++)
+        {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+            var order = valid.OrderBy(_ => random.Next()).ToList();
+            int fullBatches = order.Count / batchSize;
+            for (int b = 0; b < fullBatches; b++)
+            {
+                TrainingCancellationToken.ThrowIfCancellationRequested();
+                int baseIdx = b * batchSize;
+                var inputData = new T[batchSize * L];
+                var targetData = new T[batchSize * H];
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    int idx = order[baseIdx + bi];
+                    for (int j = 0; j < L; j++) inputData[bi * L + j] = yNorm[idx - L + j];
+                    for (int h = 0; h < H; h++) targetData[bi * H + h] = yNorm[idx + h];
+                }
+                var batchInput = new Tensor<T>(new[] { batchSize, L }, new Vector<T>(inputData));
+                var batchTarget = new Tensor<T>(new[] { batchSize, H }, new Vector<T>(targetData));
+
+                bool ran = TryFusedResidentStep(
+                    layers, batchInput, batchTarget, ForwardEnc, ComputeLoss,
+                    lr, beta1, beta2, epsilon, weightDecay, out T stepLoss);
+                if (!ran)
+                {
+                    if (!fusedEngaged) return false;
+                    continue;
+                }
+                fusedEngaged = true;
+                double stepLossD = Convert.ToDouble(stepLoss);
+                if (double.IsNaN(stepLossD) || double.IsInfinity(stepLossD))
+                {
+                    diverged = true;
+                    break;
+                }
+                if (double.IsNaN(firstStepLoss)) firstStepLoss = stepLossD;
+                else if (stepLossD > 1e3 && stepLossD > firstStepLoss * 1e3)
+                {
+                    diverged = true;
+                    break;
+                }
+            }
+        }
+
+        if (fusedEngaged)
+        {
+            double postMse = ValidationMseGpu(valid, yNorm, L, H);
+            bool improved = !double.IsNaN(postMse) && !double.IsInfinity(postMse)
+                            && postMse < preMse * 0.98;
+            if (diverged || !improved)
+            {
+                // Reinit encoder/decoder/distilling so eager fallback starts clean.
+                InitializeModel();
+                return false;
+            }
+        }
+        return fusedEngaged;
     }
 
     public override Vector<T> Predict(Matrix<T> input)
@@ -367,258 +570,216 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         }
         return predictions;
     }
+    // ── Batched IEngine forward (automatic GradientTape) ────────────────────────────
+    // Standard multi-head scaled-dot-product transformer expressed entirely with batched
+    // Engine.* tensor ops, so a GradientTape differentiates it automatically (no hand-rolled
+    // backward) and every op is GPU-dispatchable. Token-wise ops run on a flattened
+    // [B*S, d] matrix (large GEMMs); attention reshapes to the engine's [B, H, S, headDim]
+    // 4-D layout for fused SDPA.
+    //
+    // SIMPLIFICATION vs the paper: the encoder / decoder self-attention uses FULL
+    // scaled-dot-product attention, not ProbSparse. ProbSparse's top-u query selection is a
+    // data-dependent host gather that neither batches nor differentiates cleanly, and for the
+    // sequence lengths used here it already reduces to full attention (u = round(c·ln L) >= L).
+    // Self-attention distilling between encoder layers is retained (batched conv + max-pool).
+    private int EffectiveHeads()
+        => _options.EmbeddingDim % _options.NumAttentionHeads == 0 ? _options.NumAttentionHeads : 1;
 
-    /// <summary>
-    /// Uses the Informer's built-in autodiff gradient computation instead of SPSA.
-    /// </summary>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    // [B*S, d] -> [B, H, S, hd]
+    private Tensor<T> ToHeads(Tensor<T> x, int batch, int seq)
     {
-        int lookback = _options.LookbackWindow;
-
-        var inputVec = input.Rows >= lookback
-            ? new Vector<T>(lookback)
-            : new Vector<T>(input.Rows);
-        int vecLen = inputVec.Length;
-        for (int i = 0; i < vecLen; i++)
-            inputVec[i] = input[Math.Max(0, input.Rows - vecLen + i), 0];
-
-        T targetVal = target.Length > 0 ? target[0] : _numOps.Zero;
-
-        ResetGradientAccumulators();
-        var (gradients, _) = ComputeGradients(inputVec, targetVal);
-        AccumulateGradients(gradients);
-
-        // Extract gradients matching GetParameters order
-        var g = new List<T>();
-        foreach (var kvp in _gradientAccumulators)
-        {
-            for (int i = 0; i < kvp.Value.Length; i++) g.Add(kvp.Value[i]);
-        }
-        return new Vector<T>(g.ToArray());
+        int d = _options.EmbeddingDim, nh = EffectiveHeads(), hd = d / nh;
+        var split = Engine.Reshape(x, new[] { batch, seq, nh, hd });
+        return Engine.TensorPermute(split, new[] { 0, 2, 1, 3 });
     }
 
-    private void ResetGradientAccumulators()
+    // [B, H, S, hd] -> [B*S, d]
+    private Tensor<T> FromHeads(Tensor<T> x, int batch, int seq)
     {
-        foreach (var tensor in _gradientAccumulators.Values)
-        {
-            for (int i = 0; i < tensor.Length; i++)
-            {
-                tensor[i] = _numOps.Zero;
-            }
-        }
+        int d = _options.EmbeddingDim;
+        var bshd = Engine.TensorPermute(x, new[] { 0, 2, 1, 3 });
+        return Engine.Reshape(bshd, new[] { batch * seq, d });
     }
 
-    // ── Unified IEngine-op forward (automatic GradientTape) ─────────────────
-    // One forward for BOTH training (under a GradientTape) and inference, built
-    // entirely from IEngine ops so the tape differentiates it automatically — no
-    // hand-rolled backward, no manual ApplyGradients. Returns [forecastHorizon, 1].
-    // (The paper's self-attention distilling between encoder layers is a sequence-
-    // length efficiency step; it is omitted here so the full encoder context feeds
-    // the decoder cross-attention — it does not change what is learned.)
-    private Tensor<T> ForwardEngine(Vector<T> input)
+    // Multi-head scaled-dot-product attention: qFlat [B*sq, d], k/vFlat [B*sk, d] -> [B*sq, d].
+    private Tensor<T> MultiHeadAttention(Tensor<T> qFlat, Tensor<T> kFlat, Tensor<T> vFlat,
+        int batch, int sq, int sk)
     {
-        int seqLen = Math.Min(input.Length, _options.LookbackWindow);
-        int embDim = _options.EmbeddingDim;
-        int horizon = _options.ForecastHorizon;
-
-        var inData = new Vector<T>(seqLen);
-        for (int t = 0; t < seqLen; t++) inData[t] = input[t];
-        var inputTensor = new Tensor<T>(new[] { seqLen, 1 }, inData);
-        var posData = new Vector<T>(seqLen * embDim);
-        for (int i = 0; i < seqLen * embDim; i++) posData[i] = _positionalEncoding[i];
-        var posTensor = new Tensor<T>(new[] { seqLen, embDim }, posData);
-        var embedded = Engine.TensorAdd(
-            Engine.TensorMatMul(inputTensor, Engine.Reshape(_inputProjection, new[] { 1, embDim })), posTensor);
-
-        var enc = embedded;
-        for (int i = 0; i < _encoderLayers.Count; i++)
-        {
-            enc = EncoderLayerEngine(enc, i);
-            // Self-attention distilling between encoder layers (not after the last): halve the
-            // sequence so the stack privileges dominant features. The decoder cross-attention
-            // handles the shortened encoder memory (it already supports differing q/kv lengths).
-            if (i < _encoderLayers.Count - 1 && i < _distillingLayers.Count)
-                enc = DistillEngine(enc, i);
-        }
-
-        // Decoder input (Informer generative decoder, Zhou et al. 2021 §3.3): the
-        // start token is the input sequence's tail, which carries the series level.
-        // We seed it with the embedded input mean (broadcast over the horizon) plus
-        // the learned start token + decoder positional encoding. Without the input
-        // mean the decoder is a constant and the encoder's LayerNorm strips the
-        // magnitude, so the forecast cannot track each window's level (flat, R² ≈ 0).
-        var decPosData = new Vector<T>(horizon * embDim);
-        for (int t = 0; t < horizon; t++)
-            for (int j = 0; j < embDim; j++)
-                decPosData[t * embDim + j] = _positionalEncoding[(_options.LookbackWindow + t) * embDim + j];
-        var decPos = new Tensor<T>(new[] { horizon, embDim }, decPosData);
-        var embMean = Engine.TensorMultiplyScalar(
-            Engine.ReduceSum(embedded, new[] { 0 }, keepDims: true),
-            _numOps.FromDouble(1.0 / seqLen));
-        var dec = Engine.TensorBroadcastAdd(
-            Engine.TensorBroadcastAdd(decPos, Engine.Reshape(_decoderStartToken, new[] { 1, embDim })),
-            embMean);
-
-        for (int i = 0; i < _decoderLayers.Count; i++) dec = DecoderLayerEngine(dec, enc, i);
-
-        // Per-position output projection: output[t] = Σ_j dec[t,j]·outputProjection[t,j] + bias[t].
-        var summed = Engine.ReduceSum(Engine.TensorMultiply(dec, _outputProjection), new[] { 1 }, keepDims: true);
-        return Engine.TensorAdd(summed, Engine.Reshape(_outputBias, new[] { horizon, 1 }));
+        int hd = _options.EmbeddingDim / EffectiveHeads();
+        double scale = 1.0 / Math.Sqrt(hd);
+        var q4 = ToHeads(qFlat, batch, sq);
+        var k4 = ToHeads(kFlat, batch, sk);
+        var v4 = ToHeads(vFlat, batch, sk);
+        var attn4 = Engine.ScaledDotProductAttention<T>(q4, k4, v4, mask: null, scale: scale, out _);
+        return FromHeads(attn4, batch, sq);
     }
 
-    private Tensor<T> Attend(Tensor<T> q, Tensor<T> k, Tensor<T> v)
-    {
-        int sq = q.Shape[0], e = q.Shape[1], sk = k.Shape[0];
-        var o4 = Engine.ScaledDotProductAttention(
-            Engine.Reshape(q, new[] { 1, 1, sq, e }), Engine.Reshape(k, new[] { 1, 1, sk, e }),
-            Engine.Reshape(v, new[] { 1, 1, sk, e }), null, null, out _);
-        return Engine.Reshape(o4, new[] { sq, e });
-    }
-
-    // ProbSparse self-attention (Zhou et al. 2021, "Informer", §3.2), Engine/tape version. Each query's
-    // sparsity measure M(q_i,K) = max_j(s_ij) - mean_j(s_ij) (s = q·kᵀ/√d) ranks queries; only the
-    // top-u = round(c·ln(Lq)) "active" queries take full attention, the rest ("lazy" queries) take the
-    // mean of V — exactly the paper's output semantics. The top-u SELECTION is data-dependent
-    // (non-differentiable, as in the official impl); gradients flow through the full-attention output,
-    // the mean-V, and the constant active/lazy mask. When u >= Lq (small sequences) every query is
-    // active and this reduces EXACTLY to full attention.
-    private Tensor<T> ProbSparseAttend(Tensor<T> q, Tensor<T> k, Tensor<T> v)
-    {
-        int lq = q.Shape[0], d = q.Shape[1], lk = k.Shape[0];
-        var attn = Attend(q, k, v); // full attention output [lq, d] (used by active queries)
-
-        int u = Math.Max(1, (int)Math.Round(SparsityFactor * Math.Log(Math.Max(2.0, lq))));
-        if (u >= lq) return attn; // all queries active → ProbSparse == full attention
-
-        // Sparsity measure per query (host read for the non-diff top-u selection).
-        var scores = Engine.TensorMultiplyScalar(
-            Engine.TensorMatMul(q, Engine.TensorTranspose(k)), _numOps.FromDouble(1.0 / Math.Sqrt(d))); // [lq, lk]
-        var measure = new double[lq];
-        for (int i = 0; i < lq; i++)
-        {
-            double mx = double.NegativeInfinity, sum = 0.0;
-            for (int j = 0; j < lk; j++)
-            {
-                double s = _numOps.ToDouble(scores[i * lk + j]);
-                if (s > mx) mx = s;
-                sum += s;
-            }
-            measure[i] = mx - sum / lk;
-        }
-        var active = new bool[lq];
-        foreach (var i in Enumerable.Range(0, lq).OrderByDescending(i => measure[i]).Take(u)) active[i] = true;
-
-        // Lazy queries get mean(V) over keys (broadcast across query positions).
-        var meanV = Engine.TensorMultiplyScalar(
-            Engine.ReduceSum(v, new[] { 0 }, keepDims: true), _numOps.FromDouble(1.0 / lk)); // [1, d]
-        var meanVBroadcast = Engine.TensorBroadcastAdd(new Tensor<T>(new[] { lq, d }), meanV); // [lq, d]
-
-        // out = mask⊙attn + (1-mask)⊙meanV. mask/inv are constant data-dependent gates.
-        var maskData = new Vector<T>(lq);
-        var invData = new Vector<T>(lq);
-        for (int i = 0; i < lq; i++)
-        {
-            maskData[i] = active[i] ? _numOps.One : _numOps.Zero;
-            invData[i] = active[i] ? _numOps.Zero : _numOps.One;
-        }
-        var mask = new Tensor<T>(new[] { lq, 1 }, maskData);
-        var inv = new Tensor<T>(new[] { lq, 1 }, invData);
-        return Engine.TensorAdd(
-            Engine.TensorBroadcastMultiply(attn, mask),
-            Engine.TensorBroadcastMultiply(meanVBroadcast, inv));
-    }
-
-    private Tensor<T> AddBias(Tensor<T> x, Tensor<T> bias)
+    private Tensor<T> AddRowBias(Tensor<T> x, Tensor<T> bias)
         => Engine.TensorBroadcastAdd(x, Engine.Reshape(bias, new[] { 1, bias.Shape[0] }));
 
-    // Self-attention distilling (Zhou et al. 2021, "Informer", §3.2), Engine/tape version: a depthwise
-    // 1-D conv (kernel 3) + ELU + stride-`factor` max-pool that HALVES the sequence between encoder
-    // layers, privileging dominant attention features and shrinking the memory footprint of the stack.
-    // Uses the DistillingConvTensor's weights as tape sources so they actually train on the tape path
-    // (they were previously dead — counted/serialized but never in the IEngine forward).
-    private Tensor<T> DistillEngine(Tensor<T> x, int distillIdx)
+    // Position-wise feed-forward on [rows, d]: ReLU(x·W1^T + b1)·W2^T + b2.
+    private Tensor<T> FeedForwardFlat(Tensor<T> xFlat, Tensor<T> w1, Tensor<T> b1, Tensor<T> w2, Tensor<T> b2)
+    {
+        var hidden = Engine.ReLU(AddRowBias(Engine.TensorMatMul(xFlat, Engine.TensorTranspose(w1)), b1));
+        return AddRowBias(Engine.TensorMatMul(hidden, Engine.TensorTranspose(w2)), b2);
+    }
+
+    private Tensor<T> EncoderLayerBatch(Tensor<T> xFlat, int batch, int seq, int layerIdx)
+    {
+        var l = _encoderLayers[layerIdx];
+        var q = Engine.TensorMatMul(xFlat, l.GetQueryProjection());
+        var k = Engine.TensorMatMul(xFlat, l.GetKeyProjection());
+        var v = Engine.TensorMatMul(xFlat, l.GetValueProjection());
+        var attn = Engine.TensorMatMul(MultiHeadAttention(q, k, v, batch, seq, seq), l.GetOutputProjection());
+        var norm1 = Engine.LayerNorm(Engine.TensorAdd(xFlat, attn),
+            l.GetLayerNorm1Gamma(), l.GetLayerNorm1Beta(), 1e-6, out _, out _);
+        var ff = FeedForwardFlat(norm1, l.GetFF1Weight(), l.GetFF1Bias(), l.GetFF2Weight(), l.GetFF2Bias());
+        return Engine.LayerNorm(Engine.TensorAdd(norm1, ff),
+            l.GetLayerNorm2Gamma(), l.GetLayerNorm2Beta(), 1e-6, out _, out _);
+    }
+
+    private Tensor<T> DecoderLayerBatch(Tensor<T> decFlat, Tensor<T> encFlat,
+        int batch, int decLen, int encLen, int layerIdx)
+    {
+        var l = _decoderLayers[layerIdx];
+        var sq = Engine.TensorMatMul(decFlat, l.GetSelfQueryProjection());
+        var sk = Engine.TensorMatMul(decFlat, l.GetSelfKeyProjection());
+        var sv = Engine.TensorMatMul(decFlat, l.GetSelfValueProjection());
+        var selfAttn = Engine.TensorMatMul(
+            MultiHeadAttention(sq, sk, sv, batch, decLen, decLen), l.GetSelfOutputProjection());
+        var norm1 = Engine.LayerNorm(Engine.TensorAdd(decFlat, selfAttn),
+            l.GetLayerNorm1Gamma(), l.GetLayerNorm1Beta(), 1e-6, out _, out _);
+        var cq = Engine.TensorMatMul(norm1, l.GetCrossQueryProjection());
+        var ck = Engine.TensorMatMul(encFlat, l.GetCrossKeyProjection());
+        var cv = Engine.TensorMatMul(encFlat, l.GetCrossValueProjection());
+        var crossAttn = Engine.TensorMatMul(
+            MultiHeadAttention(cq, ck, cv, batch, decLen, encLen), l.GetCrossOutputProjection());
+        var norm2 = Engine.LayerNorm(Engine.TensorAdd(norm1, crossAttn),
+            l.GetLayerNorm2Gamma(), l.GetLayerNorm2Beta(), 1e-6, out _, out _);
+        var ff = FeedForwardFlat(norm2, l.GetFF1Weight(), l.GetFF1Bias(), l.GetFF2Weight(), l.GetFF2Bias());
+        return Engine.LayerNorm(Engine.TensorAdd(norm2, ff),
+            l.GetLayerNorm3Gamma(), l.GetLayerNorm3Beta(), 1e-6, out _, out _);
+    }
+
+    // Batched self-attention distilling: depthwise kernel-3 conv + ELU + stride-factor
+    // max-pool that halves the sequence between encoder layers. In/out flattened [B*S, d].
+    private (Tensor<T> outFlat, int outLen) DistillBatch(Tensor<T> xFlat, int batch, int seq, int distillIdx)
     {
         var distill = _distillingLayers[distillIdx];
-        int seqLen = x.Shape[0];
-        int embDim = x.Shape[1];
-        if (seqLen < 2) return x; // nothing to compress
-
-        var w = distill.GetConvWeights();   // [embDim, 3]
-        var bias = distill.GetConvBias();   // [embDim]
+        int embDim = _options.EmbeddingDim;
         int factor = distill.DistillingFactor;
+        if (seq < 2) return (xFlat, seq);
 
-        // Depthwise conv (per channel, kernel 3): conv[t,d] = bias[d] + Σ_k w[d,k]·x[t+k-1, d].
-        // Shift x by ±1 with zero padding at the boundaries (Narrow + zero-row Concat).
-        var zeroRow = new Tensor<T>(new[] { 1, embDim });
-        var xLeft = Engine.Concat(new[] { zeroRow, Engine.TensorNarrow(x, 0, 0, seqLen - 1) }, 0);  // x[t-1]
-        var xRight = Engine.Concat(new[] { Engine.TensorNarrow(x, 0, 1, seqLen - 1), zeroRow }, 0); // x[t+1]
-        var w0 = Engine.Reshape(Engine.TensorNarrow(w, 1, 0, 1), new[] { 1, embDim }); // w[:,0]
-        var w1 = Engine.Reshape(Engine.TensorNarrow(w, 1, 1, 1), new[] { 1, embDim }); // w[:,1]
-        var w2 = Engine.Reshape(Engine.TensorNarrow(w, 1, 2, 1), new[] { 1, embDim }); // w[:,2]
+        var x = Engine.Reshape(xFlat, new[] { batch, seq, embDim });
+        var w = distill.GetConvWeights();  // [embDim, 3]
+        var bias = distill.GetConvBias();  // [embDim]
+
+        var zeroRow = new Tensor<T>(new[] { batch, 1, embDim });
+        var xLeft = Engine.Concat(new[] { zeroRow, Engine.TensorNarrow(x, 1, 0, seq - 1) }, 1);  // x[t-1]
+        var xRight = Engine.Concat(new[] { Engine.TensorNarrow(x, 1, 1, seq - 1), zeroRow }, 1); // x[t+1]
+        var w0 = Engine.Reshape(Engine.TensorNarrow(w, 1, 0, 1), new[] { 1, 1, embDim });
+        var w1 = Engine.Reshape(Engine.TensorNarrow(w, 1, 1, 1), new[] { 1, 1, embDim });
+        var w2 = Engine.Reshape(Engine.TensorNarrow(w, 1, 2, 1), new[] { 1, 1, embDim });
         var conv = Engine.TensorAdd(
             Engine.TensorAdd(
                 Engine.TensorBroadcastMultiply(xLeft, w0),
                 Engine.TensorBroadcastMultiply(x, w1)),
             Engine.TensorBroadcastMultiply(xRight, w2));
-        conv = Engine.ELU(Engine.TensorBroadcastAdd(conv, Engine.Reshape(bias, new[] { 1, embDim })));
+        conv = Engine.ELU(Engine.TensorBroadcastAdd(conv, Engine.Reshape(bias, new[] { 1, 1, embDim })));
 
-        // Stride-`factor` max-pool: pad (replicate last row) to a multiple of factor, reshape to
-        // [outLen, factor, embDim], max over the window axis.
-        int outLen = (seqLen + factor - 1) / factor;
+        int outLen = (seq + factor - 1) / factor;
         int padded = outLen * factor;
         Tensor<T> poolInput = conv;
-        if (padded != seqLen)
+        if (padded != seq)
         {
-            var last = Engine.TensorNarrow(conv, 0, seqLen - 1, 1);
-            var parts = new Tensor<T>[1 + (padded - seqLen)];
+            var last = Engine.TensorNarrow(conv, 1, seq - 1, 1);
+            var parts = new Tensor<T>[1 + (padded - seq)];
             parts[0] = conv;
             for (int r = 1; r < parts.Length; r++) parts[r] = last;
-            poolInput = Engine.Concat(parts, 0);
+            poolInput = Engine.Concat(parts, 1);
         }
-        var grouped = Engine.Reshape(poolInput, new[] { outLen, factor, embDim });
-        return Engine.ReduceMax(grouped, new[] { 1 }, keepDims: false, out _); // [outLen, embDim]
+        var grouped = Engine.Reshape(poolInput, new[] { batch, outLen, factor, embDim });
+        var pooled = Engine.ReduceMax(grouped, new[] { 2 }, keepDims: false, out _); // [batch, outLen, embDim]
+        return (Engine.Reshape(pooled, new[] { batch * outLen, embDim }), outLen);
     }
 
-    private Tensor<T> EncoderLayerEngine(Tensor<T> x, int layerIdx)
+    // Batched forward: batchInput [batch, encLen0] (normalized) -> forecast [batch, horizon].
+    private Tensor<T> ForwardBatch(Tensor<T> batchInput, int batch, int encLen0)
     {
-        var l = _encoderLayers[layerIdx];
-        var attn = ProbSparseAttend(Engine.TensorMatMul(x, l.GetQueryProjection()),
-            Engine.TensorMatMul(x, l.GetKeyProjection()), Engine.TensorMatMul(x, l.GetValueProjection()));
-        var projected = Engine.TensorMatMul(attn, l.GetOutputProjection());
-        var norm1 = Engine.LayerNorm(Engine.TensorAdd(x, projected),
-            l.GetLayerNorm1Gamma(), l.GetLayerNorm1Beta(), 1e-6, out _, out _);
-        var ffHidden = Engine.ReLU(AddBias(
-            Engine.TensorMatMul(norm1, Engine.TensorTranspose(l.GetFF1Weight())), l.GetFF1Bias()));
-        var ffOutput = AddBias(
-            Engine.TensorMatMul(ffHidden, Engine.TensorTranspose(l.GetFF2Weight())), l.GetFF2Bias());
-        return Engine.LayerNorm(Engine.TensorAdd(norm1, ffOutput),
-            l.GetLayerNorm2Gamma(), l.GetLayerNorm2Beta(), 1e-6, out _, out _);
+        int d = _options.EmbeddingDim;
+        int horizon = _options.ForecastHorizon;
+
+        // Input embedding + sinusoidal positional encoding.
+        var flatIn = Engine.Reshape(batchInput, new[] { batch * encLen0, 1 });
+        var proj = Engine.TensorMatMul(flatIn, Engine.Reshape(_inputProjection, new[] { 1, d })); // [B*L, d]
+        var posEnc = new Vector<T>(batch * encLen0 * d);
+        for (int bi = 0; bi < batch; bi++)
+            for (int t = 0; t < encLen0; t++)
+                for (int j = 0; j < d; j++)
+                    posEnc[(bi * encLen0 + t) * d + j] = _positionalEncoding[t * d + j];
+        var embFlat = Engine.TensorAdd(proj, new Tensor<T>(new[] { batch * encLen0, d }, posEnc));
+
+        // Encoder stack with distilling.
+        var encFlat = embFlat;
+        int encLen = encLen0;
+        for (int i = 0; i < _encoderLayers.Count; i++)
+        {
+            encFlat = EncoderLayerBatch(encFlat, batch, encLen, i);
+            if (i < _encoderLayers.Count - 1 && i < _distillingLayers.Count && encLen >= 2)
+                (encFlat, encLen) = DistillBatch(encFlat, batch, encLen, i);
+        }
+
+        // Generative decoder seed (Zhou et al. 2021 §3.3): learned start token + decoder
+        // positional encoding + the per-window embedded mean, which carries the series level
+        // so the forecast can track each window's magnitude.
+        var emb3 = Engine.Reshape(embFlat, new[] { batch, encLen0, d });
+        var embMean = Engine.ReduceMean(emb3, new[] { 1 }, keepDims: true); // [batch, 1, d]
+        var decPosData = new Vector<T>(horizon * d);
+        for (int t = 0; t < horizon; t++)
+            for (int j = 0; j < d; j++)
+                decPosData[t * d + j] = _positionalEncoding[(_options.LookbackWindow + t) * d + j];
+        var decPos = new Tensor<T>(new[] { 1, horizon, d }, decPosData);
+        var start3 = Engine.Reshape(_decoderStartToken, new[] { 1, 1, d });
+        var dec3 = Engine.TensorBroadcastAdd(
+            Engine.TensorBroadcastAdd(decPos, start3), embMean); // [batch, horizon, d]
+        var decFlat = Engine.Reshape(dec3, new[] { batch * horizon, d });
+
+        for (int i = 0; i < _decoderLayers.Count; i++)
+            decFlat = DecoderLayerBatch(decFlat, encFlat, batch, horizon, encLen, i);
+
+        // Per-position output projection: out[b,t] = Σ_j dec[b,t,j]·outputProj[t,j] + bias[t].
+        var decOut3 = Engine.Reshape(decFlat, new[] { batch, horizon, d });
+        var op3 = Engine.Reshape(_outputProjection, new[] { 1, horizon, d });
+        var summed = Engine.ReduceSum(
+            Engine.TensorBroadcastMultiply(decOut3, op3), new[] { 2 }, keepDims: false); // [batch, horizon]
+        return Engine.TensorBroadcastAdd(summed, Engine.Reshape(_outputBias, new[] { 1, horizon }));
     }
 
-    private Tensor<T> DecoderLayerEngine(Tensor<T> dec, Tensor<T> enc, int layerIdx)
+    // Inference forward for a single lookback window. Uses the SAME batched Engine ops as
+    // training (no scalar / tape divergence); normalizes the input with the training
+    // statistics and denormalizes the forecast. Returns [horizon].
+    private Tensor<T> ForwardEngine(Vector<T> input)
     {
-        var l = _decoderLayers[layerIdx];
-        var selfProj = Engine.TensorMatMul(ProbSparseAttend(
-            Engine.TensorMatMul(dec, l.GetSelfQueryProjection()), Engine.TensorMatMul(dec, l.GetSelfKeyProjection()),
-            Engine.TensorMatMul(dec, l.GetSelfValueProjection())), l.GetSelfOutputProjection());
-        var norm1 = Engine.LayerNorm(Engine.TensorAdd(dec, selfProj),
-            l.GetLayerNorm1Gamma(), l.GetLayerNorm1Beta(), 1e-6, out _, out _);
-        var crossProj = Engine.TensorMatMul(Attend(
-            Engine.TensorMatMul(norm1, l.GetCrossQueryProjection()), Engine.TensorMatMul(enc, l.GetCrossKeyProjection()),
-            Engine.TensorMatMul(enc, l.GetCrossValueProjection())), l.GetCrossOutputProjection());
-        var norm2 = Engine.LayerNorm(Engine.TensorAdd(norm1, crossProj),
-            l.GetLayerNorm2Gamma(), l.GetLayerNorm2Beta(), 1e-6, out _, out _);
-        var ffHidden = Engine.ReLU(AddBias(
-            Engine.TensorMatMul(norm2, Engine.TensorTranspose(l.GetFF1Weight())), l.GetFF1Bias()));
-        var ffOutput = AddBias(
-            Engine.TensorMatMul(ffHidden, Engine.TensorTranspose(l.GetFF2Weight())), l.GetFF2Bias());
-        return Engine.LayerNorm(Engine.TensorAdd(norm2, ffOutput),
-            l.GetLayerNorm3Gamma(), l.GetLayerNorm3Beta(), 1e-6, out _, out _);
+        int seqLen = Math.Min(input.Length, _options.LookbackWindow);
+        var inData = new T[seqLen];
+        for (int t = 0; t < seqLen; t++)
+            inData[t] = _numOps.Divide(_numOps.Subtract(input[t], _normMean), _normStd);
+        var batchInput = new Tensor<T>(new[] { 1, seqLen }, new Vector<T>(inData));
+        var outBH = ForwardBatch(batchInput, 1, seqLen); // [1, horizon]
+        int horizon = _options.ForecastHorizon;
+        var result = new Tensor<T>(new[] { horizon });
+        for (int h = 0; h < horizon; h++)
+            result[h] = _numOps.Add(_numOps.Multiply(outBH[h], _normStd), _normMean);
+        return result;
     }
 
     private List<Tensor<T>> CollectTrainableParameters()
     {
         var p = new List<Tensor<T>> { _inputProjection, _decoderStartToken, _outputProjection, _outputBias };
+        foreach (var l in _distillingLayers)
+        {
+            p.Add(l.GetConvWeights()); p.Add(l.GetConvBias());
+        }
         foreach (var l in _encoderLayers)
         {
             p.Add(l.GetQueryProjection()); p.Add(l.GetKeyProjection()); p.Add(l.GetValueProjection());
@@ -637,265 +798,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         }
         return p;
     }
-
-    private (Dictionary<string, Tensor<T>> gradients, T prediction) ComputeGradients(Vector<T> input, T target)
-    {
-        var gradients = new Dictionary<string, Tensor<T>>();
-
-        // Forward pass with caching
-        var (prediction, cache) = ForwardWithCache(input);
-        T error = _numOps.Subtract(target, prediction);
-
-        // Backward pass through output projection
-        var dOutputProj = new Tensor<T>(new[] { _options.ForecastHorizon, _options.EmbeddingDim });
-        var dOutputBias = new Tensor<T>(new[] { _options.ForecastHorizon });
-
-        // dL/dOutput = -2 * error (MSE gradient for first forecast position)
-        T dLoss = _numOps.Multiply(_numOps.FromDouble(-2.0), error);
-
-        // Gradient for output bias and projection (first position only for single prediction)
-        dOutputBias[0] = dLoss;
-        for (int j = 0; j < _options.EmbeddingDim; j++)
-        {
-            if (cache.DecoderOutput.Count > 0 && cache.DecoderOutput[0].Length > j)
-            {
-                dOutputProj[j] = _numOps.Multiply(dLoss, cache.DecoderOutput[0][j]);
-            }
-        }
-
-        gradients["outputProjection"] = dOutputProj;
-        gradients["outputBias"] = dOutputBias;
-
-        // Backward through decoder layers
-        var dDecoderInput = new List<Tensor<T>>();
-        for (int t = 0; t < _options.ForecastHorizon; t++)
-        {
-            var dVec = new Tensor<T>(new[] { _options.EmbeddingDim });
-            if (t == 0)
-            {
-                for (int j = 0; j < _options.EmbeddingDim; j++)
-                {
-                    dVec[j] = _numOps.Multiply(dLoss, _outputProjection[j]);
-                }
-            }
-            dDecoderInput.Add(dVec);
-        }
-
-        // Backward through decoder layers
-        var dEncoderOutput = new List<Tensor<T>>();
-        for (int i = _decoderLayers.Count - 1; i >= 0; i--)
-        {
-            var (dInput, dEnc) = _decoderLayers[i].Backward(dDecoderInput, cache.EncoderOutput);
-            dDecoderInput = dInput;
-            if (dEncoderOutput.Count == 0)
-            {
-                dEncoderOutput = dEnc;
-            }
-            else
-            {
-                for (int t = 0; t < Math.Min(dEncoderOutput.Count, dEnc.Count); t++)
-                {
-                    for (int j = 0; j < Math.Min(dEncoderOutput[t].Length, dEnc[t].Length); j++)
-                    {
-                        dEncoderOutput[t][j] = _numOps.Add(dEncoderOutput[t][j], dEnc[t][j]);
-                    }
-                }
-            }
-
-            _decoderLayers[i].AccumulateGradients(gradients, i);
-        }
-
-        // Gradient for decoder start token
-        var dStartToken = new Tensor<T>(new[] { _options.EmbeddingDim });
-        if (dDecoderInput.Count > 0)
-        {
-            for (int j = 0; j < Math.Min(_options.EmbeddingDim, dDecoderInput[0].Length); j++)
-            {
-                dStartToken[j] = dDecoderInput[0][j];
-            }
-        }
-        gradients["decoderStartToken"] = dStartToken;
-
-        // Backward through distilling layers and encoder layers
-        var dEncoderIn = dEncoderOutput;
-        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
-        {
-            dEncoderIn = _encoderLayers[i].Backward(dEncoderIn);
-            _encoderLayers[i].AccumulateGradients(gradients, i);
-
-            if (i > 0 && i - 1 < _distillingLayers.Count)
-            {
-                dEncoderIn = _distillingLayers[i - 1].Backward(dEncoderIn);
-                _distillingLayers[i - 1].AccumulateGradients(gradients, i - 1);
-            }
-        }
-
-        // Gradient for input projection
-        var dInputProj = new Tensor<T>(new[] { _options.EmbeddingDim, 1 });
-        if (dEncoderIn.Count > 0)
-        {
-            for (int t = 0; t < dEncoderIn.Count && t < input.Length; t++)
-            {
-                for (int j = 0; j < Math.Min(_options.EmbeddingDim, dEncoderIn[t].Length); j++)
-                {
-                    dInputProj[j] = _numOps.Add(dInputProj[j],
-                        _numOps.Multiply(dEncoderIn[t][j], input[t]));
-                }
-            }
-        }
-        gradients["inputProjection"] = dInputProj;
-
-        return (gradients, prediction);
-    }
-
-    private void AccumulateGradients(Dictionary<string, Tensor<T>> gradients)
-    {
-        foreach (var kvp in gradients)
-        {
-            string key = kvp.Key;
-            Tensor<T> gradient = kvp.Value;
-            if (_gradientAccumulators.TryGetValue(key, out var accumulator))
-            {
-                for (int i = 0; i < Math.Min(accumulator.Length, gradient.Length); i++)
-                {
-                    accumulator[i] = _numOps.Add(accumulator[i], gradient[i]);
-                }
-            }
-        }
-    }
-
-    private void ApplyGradients(T learningRate, int batchSize)
-    {
-        T batchSizeT = _numOps.FromDouble(batchSize);
-
-        // Apply to input projection
-        ApplyGradientToTensor(_inputProjection, "inputProjection", learningRate, batchSizeT);
-
-        // Apply to decoder start token
-        ApplyGradientToTensor(_decoderStartToken, "decoderStartToken", learningRate, batchSizeT);
-
-        // Apply to output projection and bias
-        ApplyGradientToTensor(_outputProjection, "outputProjection", learningRate, batchSizeT);
-        ApplyGradientToTensor(_outputBias, "outputBias", learningRate, batchSizeT);
-
-        // Apply to encoder layers
-        for (int i = 0; i < _encoderLayers.Count; i++)
-        {
-            _encoderLayers[i].ApplyGradients(_gradientAccumulators, learningRate, batchSizeT, i);
-        }
-
-        // Apply to distilling layers
-        for (int i = 0; i < _distillingLayers.Count; i++)
-        {
-            _distillingLayers[i].ApplyGradients(_gradientAccumulators, learningRate, batchSizeT, i);
-        }
-
-        // Apply to decoder layers
-        for (int i = 0; i < _decoderLayers.Count; i++)
-        {
-            _decoderLayers[i].ApplyGradients(_gradientAccumulators, learningRate, batchSizeT, i);
-        }
-    }
-
-    private void ApplyGradientToTensor(Tensor<T> tensor, string key, T learningRate, T batchSize)
-    {
-        if (_gradientAccumulators.TryGetValue(key, out var gradient))
-        {
-            for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
-            {
-                T avgGrad = _numOps.Divide(gradient[i], batchSize);
-                T update = _numOps.Multiply(learningRate, avgGrad);
-                tensor[i] = _numOps.Subtract(tensor[i], update);
-            }
-        }
-    }
-
-    private (T prediction, ForwardCache cache) ForwardWithCache(Vector<T> input)
-    {
-        var cache = new ForwardCache();
-
-        // Embed input sequence
-        cache.EmbeddedInput = EmbedInput(input);
-
-        // Encoder forward with distilling
-        var encoderOutput = cache.EmbeddedInput;
-        for (int i = 0; i < _encoderLayers.Count; i++)
-        {
-            encoderOutput = _encoderLayers[i].Forward(encoderOutput);
-
-            // Apply distilling (except after last layer)
-            if (i < _distillingLayers.Count)
-            {
-                encoderOutput = _distillingLayers[i].Forward(encoderOutput);
-            }
-        }
-        cache.EncoderOutput = encoderOutput;
-
-        // Decoder forward
-        var decoderInput = CreateDecoderInput();
-        for (int i = 0; i < _decoderLayers.Count; i++)
-        {
-            decoderInput = _decoderLayers[i].Forward(decoderInput, encoderOutput);
-        }
-        cache.DecoderOutput = decoderInput;
-
-        // Output projection (first position for single prediction)
-        T prediction = ComputeOutput(decoderInput);
-
-        return (prediction, cache);
-    }
-
-    private List<Tensor<T>> EmbedInput(Vector<T> input)
-    {
-        var embedded = new List<Tensor<T>>();
-        int seqLen = Math.Min(input.Length, _options.LookbackWindow);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var vec = new Tensor<T>(new[] { _options.EmbeddingDim });
-            for (int j = 0; j < _options.EmbeddingDim; j++)
-            {
-                // Input projection: multiply input value by projection weight
-                T projected = _numOps.Multiply(input[t], _inputProjection[j]);
-                // Add positional encoding
-                T posEnc = _positionalEncoding[t * _options.EmbeddingDim + j];
-                vec[j] = _numOps.Add(projected, posEnc);
-            }
-            embedded.Add(vec);
-        }
-
-        return embedded;
-    }
-
-    private List<Tensor<T>> CreateDecoderInput()
-    {
-        var decoderInput = new List<Tensor<T>>();
-        for (int t = 0; t < _options.ForecastHorizon; t++)
-        {
-            var vec = new Tensor<T>(new[] { _options.EmbeddingDim });
-            for (int j = 0; j < _options.EmbeddingDim; j++)
-            {
-                // Start token + positional encoding
-                T posEnc = _positionalEncoding[(_options.LookbackWindow + t) * _options.EmbeddingDim + j];
-                vec[j] = _numOps.Add(_decoderStartToken[j], posEnc);
-            }
-            decoderInput.Add(vec);
-        }
-        return decoderInput;
-    }
-
-    private T ComputeOutput(List<Tensor<T>> decoderOutput)
-    {
-        if (decoderOutput.Count == 0) return _numOps.Zero;
-
-        T result = _outputBias[0];
-        for (int j = 0; j < Math.Min(_options.EmbeddingDim, decoderOutput[0].Length); j++)
-        {
-            result = _numOps.Add(result, _numOps.Multiply(_outputProjection[j], decoderOutput[0][j]));
-        }
-        return result;
-    }
-
     /// <summary>
     /// Predicts the next single value in the time series.
     /// </summary>
@@ -969,14 +871,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
             return count;
         }
     }
-
-    private class ForwardCache
-    {
-        public List<Tensor<T>> EmbeddedInput { get; set; } = new List<Tensor<T>>();
-        public List<Tensor<T>> EncoderOutput { get; set; } = new List<Tensor<T>>();
-        public List<Tensor<T>> DecoderOutput { get; set; } = new List<Tensor<T>>();
-    }
-
     /// <summary>
     /// Creates a new instance of the Informer model.
     /// </summary>
@@ -1037,6 +931,10 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         writer.Write(_trainingSeries.Length);
         for (int i = 0; i < _trainingSeries.Length; i++)
             writer.Write(Convert.ToDouble(_trainingSeries[i]));
+
+        // Normalization statistics (appended; older files without them fall back to 0/1).
+        writer.Write(Convert.ToDouble(_normMean));
+        writer.Write(Convert.ToDouble(_normStd));
     }
 
     /// <summary>
@@ -1133,8 +1031,12 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 _trainingSeries[i] = numOps.FromDouble(reader.ReadDouble());
         }
 
-        // Initialize gradient accumulators
-        InitializeGradientAccumulators();
+        // Normalization statistics (present in models serialized after the tape rewrite).
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _normMean = _numOps.FromDouble(reader.ReadDouble());
+            _normStd = _numOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
@@ -1202,9 +1104,6 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private readonly Tensor<T> _layerNorm2Gamma;
     private readonly Tensor<T> _layerNorm2Beta;
 
-    // Cache for backward pass
-    private List<Tensor<T>>? _cachedInput;
-
     public override long ParameterCount =>
         _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
@@ -1221,7 +1120,8 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             for (int i = 0; i < t.Length; i++) p.Add(t[i]);
         return new Vector<T>(p.ToArray());
     }
-    public override Tensor<T> Forward(Tensor<T> input) { var seq = new List<Tensor<T>> { input }; var result = Forward(seq); return result.Count > 0 ? result[result.Count - 1] : input; }
+    public override Tensor<T> Forward(Tensor<T> input) => throw new NotSupportedException(
+        "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
     public InformerEncoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
@@ -1273,167 +1173,6 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             tensor[i] = NumOps.One;
         }
         return tensor;
-    }
-
-    public void InitializeGradientAccumulators(Dictionary<string, Tensor<T>> accumulators, int layerIndex)
-    {
-        string prefix = $"encoder_{layerIndex}_";
-        accumulators[prefix + "queryProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "keyProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "valueProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "outputProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        int ffnDim = _embeddingDim * 4;
-        accumulators[prefix + "ffn1"] = new Tensor<T>(new[] { ffnDim, _embeddingDim });
-        accumulators[prefix + "ffn1Bias"] = new Tensor<T>(new[] { ffnDim });
-        accumulators[prefix + "ffn2"] = new Tensor<T>(new[] { _embeddingDim, ffnDim });
-        accumulators[prefix + "ffn2Bias"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln1Gamma"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln1Beta"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln2Gamma"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln2Beta"] = new Tensor<T>(new[] { _embeddingDim });
-    }
-
-    public List<Tensor<T>> Forward(List<Tensor<T>> input)
-    {
-        _cachedInput = input;
-        var output = new List<Tensor<T>>();
-
-        // ProbSparse self-attention with residual
-        var attnOutput = ProbSparseSelfAttention(input);
-
-        // Add residual and apply layer norm
-        var norm1Output = new List<Tensor<T>>();
-        for (int t = 0; t < input.Count; t++)
-        {
-            var residual = new Tensor<T>(new[] { _embeddingDim });
-            for (int j = 0; j < _embeddingDim && j < input[t].Length && j < attnOutput[t].Length; j++)
-            {
-                residual[j] = NumOps.Add(input[t][j], attnOutput[t][j]);
-            }
-            norm1Output.Add(LayerNorm(residual, _layerNorm1Gamma, _layerNorm1Beta));
-        }
-
-        // FFN with residual
-        for (int t = 0; t < norm1Output.Count; t++)
-        {
-            var ffnOut = FeedForward(norm1Output[t]);
-
-            var residual = new Tensor<T>(new[] { _embeddingDim });
-            for (int j = 0; j < _embeddingDim && j < norm1Output[t].Length && j < ffnOut.Length; j++)
-            {
-                residual[j] = NumOps.Add(norm1Output[t][j], ffnOut[j]);
-            }
-            output.Add(LayerNorm(residual, _layerNorm2Gamma, _layerNorm2Beta));
-        }
-
-        return output;
-    }
-
-    private List<Tensor<T>> ProbSparseSelfAttention(List<Tensor<T>> input)
-    {
-        int seqLen = input.Count;
-        var output = new List<Tensor<T>>();
-
-        // Compute Q, K, V projections
-        var queries = input.Select(x => MatVecMul(_queryProj, x)).ToList();
-        var keys = input.Select(x => MatVecMul(_keyProj, x)).ToList();
-        var values = input.Select(x => MatVecMul(_valueProj, x)).ToList();
-
-        for (int q = 0; q < seqLen; q++)
-        {
-            // Compute attention scores
-            var attnWeights = new double[seqLen];
-            double maxScore = double.MinValue;
-            for (int k = 0; k < seqLen; k++)
-            {
-                double score = 0;
-                for (int d = 0; d < _embeddingDim && d < queries[q].Length && d < keys[k].Length; d++)
-                {
-                    score += NumOps.ToDouble(NumOps.Multiply(queries[q][d], keys[k][d]));
-                }
-                score /= Math.Sqrt(_headDim);
-                attnWeights[k] = score;
-                maxScore = Math.Max(maxScore, score);
-            }
-
-            // Softmax
-            double sum = 0;
-            for (int k = 0; k < seqLen; k++)
-            {
-                attnWeights[k] = Math.Exp(attnWeights[k] - maxScore);
-                sum += attnWeights[k];
-            }
-            for (int k = 0; k < seqLen; k++)
-                attnWeights[k] /= sum;
-
-            // Weighted sum of values
-            var result = new Tensor<T>(new[] { _embeddingDim });
-            for (int k = 0; k < seqLen; k++)
-            {
-                for (int d = 0; d < _embeddingDim && d < values[k].Length; d++)
-                {
-                    result[d] = NumOps.Add(result[d],
-                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
-                }
-            }
-
-            output.Add(MatVecMul(_outputProj, result));
-        }
-
-        return output;
-    }
-
-    private Tensor<T> FeedForward(Tensor<T> input)
-    {
-        int ffnDim = _embeddingDim * 4;
-
-        // First linear: hidden = W1 @ input + b1, then GELU — vectorized matmul
-        var w1Mat = _ffn1.Reshape(ffnDim, _embeddingDim);
-        var hidden = Engine.TensorAdd(
-            MatVecMul(w1Mat, input),
-            _ffn1Bias.Reshape(ffnDim));
-        hidden = Engine.GELU(hidden);
-
-        // Second linear: output = W2 @ hidden + b2 — vectorized matmul
-        var w2Mat = _ffn2.Reshape(_embeddingDim, ffnDim);
-        return Engine.TensorAdd(
-            MatVecMul(w2Mat, hidden),
-            _ffn2Bias.Reshape(_embeddingDim));
-    }
-
-    private T GELU(T x)
-    {
-        double xd = NumOps.ToDouble(x);
-        double result = 0.5 * xd * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (xd + 0.044715 * Math.Pow(xd, 3))));
-        return NumOps.FromDouble(result);
-    }
-
-    private Tensor<T> LayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
-    {
-        return AiDotNetEngine.Current.LayerNorm(input, gamma, beta, 1e-6, out _, out _);
-    }
-
-    private Tensor<T> MatVecMul(Tensor<T> matrix, Tensor<T> vec)
-    {
-        // matrix @ vec — vectorized Engine.TensorMatMul
-        int rows = matrix.Shape[0];
-        int cols = matrix.Shape[1];
-        var vecCol = vec.Reshape(Math.Min(cols, vec.Length), 1);
-        return Engine.TensorMatMul(matrix, vecCol).Reshape(rows);
-    }
-
-    public List<Tensor<T>> Backward(List<Tensor<T>> dOutput)
-    {
-        var dInput = new List<Tensor<T>>();
-        for (int t = 0; t < dOutput.Count; t++)
-        {
-            dInput.Add(new Tensor<T>(new[] { _embeddingDim }));
-            for (int j = 0; j < Math.Min(_embeddingDim, dOutput[t].Length); j++)
-            {
-                dInput[t][j] = dOutput[t][j];
-            }
-        }
-        return dInput;
     }
 
     /// <summary>
@@ -1504,40 +1243,6 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         }
     }
 
-    public void AccumulateGradients(Dictionary<string, Tensor<T>> gradients, int layerIndex)
-    {
-        // Gradients are accumulated during backward pass
-    }
-
-    public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, T learningRate, T batchSize, int layerIndex)
-    {
-        string prefix = $"encoder_{layerIndex}_";
-        ApplyGradient(_queryProj, accumulators, prefix + "queryProj", learningRate, batchSize);
-        ApplyGradient(_keyProj, accumulators, prefix + "keyProj", learningRate, batchSize);
-        ApplyGradient(_valueProj, accumulators, prefix + "valueProj", learningRate, batchSize);
-        ApplyGradient(_outputProj, accumulators, prefix + "outputProj", learningRate, batchSize);
-        ApplyGradient(_ffn1, accumulators, prefix + "ffn1", learningRate, batchSize);
-        ApplyGradient(_ffn1Bias, accumulators, prefix + "ffn1Bias", learningRate, batchSize);
-        ApplyGradient(_ffn2, accumulators, prefix + "ffn2", learningRate, batchSize);
-        ApplyGradient(_ffn2Bias, accumulators, prefix + "ffn2Bias", learningRate, batchSize);
-        ApplyGradient(_layerNorm1Gamma, accumulators, prefix + "ln1Gamma", learningRate, batchSize);
-        ApplyGradient(_layerNorm1Beta, accumulators, prefix + "ln1Beta", learningRate, batchSize);
-        ApplyGradient(_layerNorm2Gamma, accumulators, prefix + "ln2Gamma", learningRate, batchSize);
-        ApplyGradient(_layerNorm2Beta, accumulators, prefix + "ln2Beta", learningRate, batchSize);
-    }
-
-    private void ApplyGradient(Tensor<T> tensor, Dictionary<string, Tensor<T>> accumulators, string key, T learningRate, T batchSize)
-    {
-        if (accumulators.TryGetValue(key, out var gradient))
-        {
-            for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
-            {
-                T avgGrad = NumOps.Divide(gradient[i], batchSize);
-                T update = NumOps.Multiply(learningRate, avgGrad);
-                tensor[i] = NumOps.Subtract(tensor[i], update);
-            }
-        }
-    }
 }
 
 /// <summary>
@@ -1551,8 +1256,6 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private readonly Tensor<T> _convWeights;  // [embeddingDim, 3] for kernel size 3
     private readonly Tensor<T> _convBias;
-
-    private List<Tensor<T>>? _cachedInput;
 
     public override long ParameterCount => _convWeights.Length + _convBias.Length;
 
@@ -1572,7 +1275,8 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         for (int i = 0; i < _convBias.Length; i++) p.Add(_convBias[i]);
         return new Vector<T>(p.ToArray());
     }
-    public override Tensor<T> Forward(Tensor<T> input) { var seq = new List<Tensor<T>> { input }; var result = Forward(seq); return result.Count > 0 ? result[result.Count - 1] : input; }
+    public override Tensor<T> Forward(Tensor<T> input) => throw new NotSupportedException(
+        "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
     public DistillingConvTensor(int embeddingDim, int inputSeqLen, int distillingFactor, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
@@ -1589,97 +1293,6 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             _convWeights[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         _convBias = new Tensor<T>(new[] { embeddingDim });
-    }
-
-    public void InitializeGradientAccumulators(Dictionary<string, Tensor<T>> accumulators, int layerIndex)
-    {
-        string prefix = $"distill_{layerIndex}_";
-        accumulators[prefix + "convWeights"] = new Tensor<T>(new[] { _embeddingDim, 3 });
-        accumulators[prefix + "convBias"] = new Tensor<T>(new[] { _embeddingDim });
-    }
-
-    public List<Tensor<T>> Forward(List<Tensor<T>> input)
-    {
-        _cachedInput = input;
-        var output = new List<Tensor<T>>();
-        int outputLen = (input.Count + _distillingFactor - 1) / _distillingFactor;
-
-        for (int i = 0; i < outputLen; i++)
-        {
-            int startIdx = i * _distillingFactor;
-
-            // 1D convolution with kernel size 3 + ELU + max pooling
-            var pooled = new Tensor<T>(new[] { _embeddingDim });
-
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                T maxVal = NumOps.FromDouble(double.MinValue);
-
-                // Pool over distilling factor positions
-                for (int p = 0; p < _distillingFactor && startIdx + p < input.Count; p++)
-                {
-                    // Convolve at this position
-                    T conv = _convBias[d];
-                    for (int k = -1; k <= 1; k++)
-                    {
-                        int idx = startIdx + p + k;
-                        if (idx >= 0 && idx < input.Count && d < input[idx].Length)
-                        {
-                            conv = NumOps.Add(conv, NumOps.Multiply(_convWeights[d * 3 + (k + 1)], input[idx][d]));
-                        }
-                    }
-
-                    // ELU activation
-                    conv = ELU(conv);
-
-                    // Max pooling
-                    if (NumOps.ToDouble(conv) > NumOps.ToDouble(maxVal))
-                    {
-                        maxVal = conv;
-                    }
-                }
-
-                pooled[d] = maxVal;
-            }
-
-            output.Add(pooled);
-        }
-
-        return output;
-    }
-
-    private T ELU(T x)
-    {
-        double xd = NumOps.ToDouble(x);
-        if (xd >= 0) return x;
-        return NumOps.FromDouble(Math.Exp(xd) - 1);
-    }
-
-    public List<Tensor<T>> Backward(List<Tensor<T>> dOutput)
-    {
-        var dInput = new List<Tensor<T>>();
-        if (_cachedInput == null) return dInput;
-
-        for (int t = 0; t < _cachedInput.Count; t++)
-        {
-            dInput.Add(new Tensor<T>(new[] { _embeddingDim }));
-        }
-
-        // Simplified gradient propagation
-        for (int i = 0; i < dOutput.Count; i++)
-        {
-            int startIdx = i * _distillingFactor;
-            for (int p = 0; p < _distillingFactor && startIdx + p < dInput.Count; p++)
-            {
-                for (int d = 0; d < Math.Min(_embeddingDim, dOutput[i].Length); d++)
-                {
-                    T grad = NumOps.Divide(dOutput[i][d], NumOps.FromDouble(_distillingFactor));
-                    dInput[startIdx + p][d] = NumOps.Add(dInput[startIdx + p][d], grad);
-                }
-            }
-        }
-
-        return dInput;
     }
 
     /// <summary>
@@ -1728,46 +1341,6 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             dest[i] = source[i];
         }
     }
-
-    /// <summary>
-    /// Accumulates gradients during the backward pass for the distilling layer.
-    /// </summary>
-    /// <param name="gradients">Dictionary to accumulate gradients into.</param>
-    /// <param name="layerIndex">The index of this layer in the model.</param>
-    public void AccumulateGradients(Dictionary<string, Tensor<T>> gradients, int layerIndex)
-    {
-        // Gradients accumulated during backward
-    }
-
-    /// <summary>
-    /// Applies accumulated gradients to update the layer weights.
-    /// </summary>
-    /// <param name="accumulators">Dictionary containing accumulated gradients.</param>
-    /// <param name="learningRate">The learning rate for weight updates.</param>
-    /// <param name="batchSize">The batch size for averaging gradients.</param>
-    /// <param name="layerIndex">The index of this layer in the model.</param>
-    public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, T learningRate, T batchSize, int layerIndex)
-    {
-        string prefix = $"distill_{layerIndex}_";
-        ApplyGradient(_convWeights, accumulators, prefix + "convWeights", learningRate, batchSize);
-        ApplyGradient(_convBias, accumulators, prefix + "convBias", learningRate, batchSize);
-    }
-
-    private void ApplyGradient(Tensor<T> tensor, Dictionary<string, Tensor<T>> accumulators, string key, T learningRate, T batchSize)
-    {
-        if (accumulators.TryGetValue(key, out var gradient))
-        {
-            for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
-            {
-                T avgGrad = NumOps.Divide(gradient[i], batchSize);
-                T update = NumOps.Multiply(learningRate, avgGrad);
-                tensor[i] = NumOps.Subtract(tensor[i], update);
-            }
-        }
-    }
-
-    private static ComputationNode<T> LayerNormNode(ComputationNode<T> input, Tensor<T> gamma, Tensor<T> beta, string prefix)
-        => TransformerGraphHelper<T>.LayerNormGraph(input, gamma, beta, prefix);
 }
 
 /// <summary>
@@ -1830,10 +1403,8 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2 + _layerNorm3Gamma.Length * 2;
 
-    private List<Tensor<T>>? _lastEncoderOutput;
-
     public override bool SupportsTraining => true;
-    public override void ResetState() { _lastEncoderOutput = null; }
+    public override void ResetState() { }
     public override void UpdateParameters(T learningRate) { }
     public override Vector<T> GetParameters()
     {
@@ -1845,22 +1416,8 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             for (int i = 0; i < t.Length; i++) p.Add(t[i]);
         return new Vector<T>(p.ToArray());
     }
-    public override Tensor<T> Forward(Tensor<T> input)
-    {
-        var seq = new List<Tensor<T>> { input };
-        var enc = _lastEncoderOutput ?? seq;
-        var result = Forward(seq, enc);
-        return result.Count > 0 ? result[result.Count - 1] : input;
-    }
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length >= 2)
-        {
-            _lastEncoderOutput = new List<Tensor<T>> { inputs[1] };
-            return Forward(inputs[0]);
-        }
-        return Forward(inputs[0]);
-    }
+    public override Tensor<T> Forward(Tensor<T> input) => throw new NotSupportedException(
+        "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
     public InformerDecoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
         : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim })
@@ -1919,229 +1476,6 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             tensor[i] = NumOps.One;
         }
         return tensor;
-    }
-
-    public void InitializeGradientAccumulators(Dictionary<string, Tensor<T>> accumulators, int layerIndex)
-    {
-        string prefix = $"decoder_{layerIndex}_";
-        accumulators[prefix + "selfQueryProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "selfKeyProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "selfValueProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "selfOutputProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "crossQueryProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "crossKeyProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "crossValueProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        accumulators[prefix + "crossOutputProj"] = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        int ffnDim = _embeddingDim * 4;
-        accumulators[prefix + "ffn1"] = new Tensor<T>(new[] { ffnDim, _embeddingDim });
-        accumulators[prefix + "ffn1Bias"] = new Tensor<T>(new[] { ffnDim });
-        accumulators[prefix + "ffn2"] = new Tensor<T>(new[] { _embeddingDim, ffnDim });
-        accumulators[prefix + "ffn2Bias"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln1Gamma"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln1Beta"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln2Gamma"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln2Beta"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln3Gamma"] = new Tensor<T>(new[] { _embeddingDim });
-        accumulators[prefix + "ln3Beta"] = new Tensor<T>(new[] { _embeddingDim });
-    }
-
-    public List<Tensor<T>> Forward(List<Tensor<T>> input, List<Tensor<T>> encoderOutput)
-    {
-        var output = new List<Tensor<T>>();
-
-        // Masked self-attention
-        var selfAttnOutput = MaskedSelfAttention(input);
-
-        // Add residual + layer norm
-        var norm1Output = new List<Tensor<T>>();
-        for (int t = 0; t < input.Count; t++)
-        {
-            var residual = AddTensors(input[t], selfAttnOutput[t]);
-            norm1Output.Add(LayerNorm(residual, _layerNorm1Gamma, _layerNorm1Beta));
-        }
-
-        // Cross-attention
-        var crossAttnOutput = CrossAttention(norm1Output, encoderOutput);
-
-        // Add residual + layer norm
-        var norm2Output = new List<Tensor<T>>();
-        for (int t = 0; t < norm1Output.Count; t++)
-        {
-            var residual = AddTensors(norm1Output[t], crossAttnOutput[t]);
-            norm2Output.Add(LayerNorm(residual, _layerNorm2Gamma, _layerNorm2Beta));
-        }
-
-        // FFN
-        for (int t = 0; t < norm2Output.Count; t++)
-        {
-            var ffnOut = FeedForward(norm2Output[t]);
-            var residual = AddTensors(norm2Output[t], ffnOut);
-            output.Add(LayerNorm(residual, _layerNorm3Gamma, _layerNorm3Beta));
-        }
-
-        return output;
-    }
-
-    private List<Tensor<T>> MaskedSelfAttention(List<Tensor<T>> input)
-    {
-        int seqLen = input.Count;
-        var output = new List<Tensor<T>>();
-
-        var queries = input.Select(x => MatVecMul(_selfQueryProj, x)).ToList();
-        var keys = input.Select(x => MatVecMul(_selfKeyProj, x)).ToList();
-        var values = input.Select(x => MatVecMul(_selfValueProj, x)).ToList();
-
-        for (int q = 0; q < seqLen; q++)
-        {
-            var attnWeights = new double[q + 1];  // Masked: only attend to positions <= q
-            double maxScore = double.MinValue;
-
-            for (int k = 0; k <= q; k++)
-            {
-                double score = 0;
-                for (int d = 0; d < _embeddingDim && d < queries[q].Length && d < keys[k].Length; d++)
-                {
-                    score += NumOps.ToDouble(NumOps.Multiply(queries[q][d], keys[k][d]));
-                }
-                score /= Math.Sqrt(_headDim);
-                attnWeights[k] = score;
-                maxScore = Math.Max(maxScore, score);
-            }
-
-            double sum = 0;
-            for (int k = 0; k <= q; k++)
-            {
-                attnWeights[k] = Math.Exp(attnWeights[k] - maxScore);
-                sum += attnWeights[k];
-            }
-            for (int k = 0; k <= q; k++)
-                attnWeights[k] /= sum;
-
-            var result = new Tensor<T>(new[] { _embeddingDim });
-            for (int k = 0; k <= q; k++)
-            {
-                for (int d = 0; d < _embeddingDim && d < values[k].Length; d++)
-                {
-                    result[d] = NumOps.Add(result[d],
-                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
-                }
-            }
-
-            output.Add(MatVecMul(_selfOutputProj, result));
-        }
-
-        return output;
-    }
-
-    private List<Tensor<T>> CrossAttention(List<Tensor<T>> input, List<Tensor<T>> encoderOutput)
-    {
-        var output = new List<Tensor<T>>();
-
-        var queries = input.Select(x => MatVecMul(_crossQueryProj, x)).ToList();
-        var keys = encoderOutput.Select(x => MatVecMul(_crossKeyProj, x)).ToList();
-        var values = encoderOutput.Select(x => MatVecMul(_crossValueProj, x)).ToList();
-
-        int encLen = encoderOutput.Count;
-
-        foreach (var query in queries)
-        {
-            var attnWeights = new double[encLen];
-            double maxScore = double.MinValue;
-
-            for (int k = 0; k < encLen; k++)
-            {
-                double score = 0;
-                for (int d = 0; d < _embeddingDim && d < query.Length && d < keys[k].Length; d++)
-                {
-                    score += NumOps.ToDouble(NumOps.Multiply(query[d], keys[k][d]));
-                }
-                score /= Math.Sqrt(_headDim);
-                attnWeights[k] = score;
-                maxScore = Math.Max(maxScore, score);
-            }
-
-            double sum = 0;
-            for (int k = 0; k < encLen; k++)
-            {
-                attnWeights[k] = Math.Exp(attnWeights[k] - maxScore);
-                sum += attnWeights[k];
-            }
-            for (int k = 0; k < encLen; k++)
-                attnWeights[k] /= sum;
-
-            var result = new Tensor<T>(new[] { _embeddingDim });
-            for (int k = 0; k < encLen; k++)
-            {
-                for (int d = 0; d < _embeddingDim && d < values[k].Length; d++)
-                {
-                    result[d] = NumOps.Add(result[d],
-                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
-                }
-            }
-
-            output.Add(MatVecMul(_crossOutputProj, result));
-        }
-
-        return output;
-    }
-
-    private Tensor<T> FeedForward(Tensor<T> input)
-    {
-        int ffnDim = _embeddingDim * 4;
-
-        // First linear + GELU — vectorized matmul
-        var w1Mat = _ffn1.Reshape(ffnDim, _embeddingDim);
-        var hidden = Engine.TensorAdd(
-            MatVecMul(w1Mat, input),
-            _ffn1Bias.Reshape(ffnDim));
-        hidden = Engine.GELU(hidden);
-
-        // Second linear — vectorized matmul
-        var w2Mat = _ffn2.Reshape(_embeddingDim, ffnDim);
-        return Engine.TensorAdd(
-            MatVecMul(w2Mat, hidden),
-            _ffn2Bias.Reshape(_embeddingDim));
-    }
-
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
-    {
-        return AiDotNetEngine.Current.TensorAdd(a, b);
-    }
-
-    private Tensor<T> LayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
-    {
-        return AiDotNetEngine.Current.LayerNorm(input, gamma, beta, 1e-6, out _, out _);
-    }
-
-    private Tensor<T> MatVecMul(Tensor<T> matrix, Tensor<T> vec)
-    {
-        // matrix @ vec — vectorized Engine.TensorMatMul
-        int rows = matrix.Shape[0];
-        int cols = matrix.Shape[1];
-        var vecCol = vec.Reshape(Math.Min(cols, vec.Length), 1);
-        return Engine.TensorMatMul(matrix, vecCol).Reshape(rows);
-    }
-
-    public (List<Tensor<T>> dInput, List<Tensor<T>> dEncoderOutput) Backward(List<Tensor<T>> dOutput, List<Tensor<T>> encoderOutput)
-    {
-        var dInput = new List<Tensor<T>>();
-        var dEncoderOutput = new List<Tensor<T>>();
-
-        for (int t = 0; t < dOutput.Count; t++)
-        {
-            dInput.Add(new Tensor<T>(new[] { _embeddingDim }));
-            for (int j = 0; j < Math.Min(_embeddingDim, dOutput[t].Length); j++)
-            {
-                dInput[t][j] = dOutput[t][j];
-            }
-        }
-
-        for (int t = 0; t < encoderOutput.Count; t++)
-        {
-            dEncoderOutput.Add(new Tensor<T>(new[] { _embeddingDim }));
-        }
-
-        return (dInput, dEncoderOutput);
     }
 
     /// <summary>
@@ -2241,62 +1575,6 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         }
     }
 
-    /// <summary>
-    /// Accumulates gradients during the backward pass for the decoder layer.
-    /// </summary>
-    /// <param name="gradients">Dictionary to accumulate gradients into.</param>
-    /// <param name="layerIndex">The index of this layer in the model.</param>
-    public void AccumulateGradients(Dictionary<string, Tensor<T>> gradients, int layerIndex)
-    {
-        // Gradients accumulated during backward
-    }
-
-    /// <summary>
-    /// Applies accumulated gradients to update the layer weights.
-    /// </summary>
-    /// <param name="accumulators">Dictionary containing accumulated gradients.</param>
-    /// <param name="learningRate">The learning rate for weight updates.</param>
-    /// <param name="batchSize">The batch size for averaging gradients.</param>
-    /// <param name="layerIndex">The index of this layer in the model.</param>
-    /// <remarks>
-    /// Updates all trainable parameters including self-attention, cross-attention,
-    /// feed-forward network, and layer normalization weights using gradient descent.
-    /// </remarks>
-    public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, T learningRate, T batchSize, int layerIndex)
-    {
-        string prefix = $"decoder_{layerIndex}_";
-        ApplyGradient(_selfQueryProj, accumulators, prefix + "selfQueryProj", learningRate, batchSize);
-        ApplyGradient(_selfKeyProj, accumulators, prefix + "selfKeyProj", learningRate, batchSize);
-        ApplyGradient(_selfValueProj, accumulators, prefix + "selfValueProj", learningRate, batchSize);
-        ApplyGradient(_selfOutputProj, accumulators, prefix + "selfOutputProj", learningRate, batchSize);
-        ApplyGradient(_crossQueryProj, accumulators, prefix + "crossQueryProj", learningRate, batchSize);
-        ApplyGradient(_crossKeyProj, accumulators, prefix + "crossKeyProj", learningRate, batchSize);
-        ApplyGradient(_crossValueProj, accumulators, prefix + "crossValueProj", learningRate, batchSize);
-        ApplyGradient(_crossOutputProj, accumulators, prefix + "crossOutputProj", learningRate, batchSize);
-        ApplyGradient(_ffn1, accumulators, prefix + "ffn1", learningRate, batchSize);
-        ApplyGradient(_ffn1Bias, accumulators, prefix + "ffn1Bias", learningRate, batchSize);
-        ApplyGradient(_ffn2, accumulators, prefix + "ffn2", learningRate, batchSize);
-        ApplyGradient(_ffn2Bias, accumulators, prefix + "ffn2Bias", learningRate, batchSize);
-        ApplyGradient(_layerNorm1Gamma, accumulators, prefix + "ln1Gamma", learningRate, batchSize);
-        ApplyGradient(_layerNorm1Beta, accumulators, prefix + "ln1Beta", learningRate, batchSize);
-        ApplyGradient(_layerNorm2Gamma, accumulators, prefix + "ln2Gamma", learningRate, batchSize);
-        ApplyGradient(_layerNorm2Beta, accumulators, prefix + "ln2Beta", learningRate, batchSize);
-        ApplyGradient(_layerNorm3Gamma, accumulators, prefix + "ln3Gamma", learningRate, batchSize);
-        ApplyGradient(_layerNorm3Beta, accumulators, prefix + "ln3Beta", learningRate, batchSize);
-    }
-
-    private void ApplyGradient(Tensor<T> tensor, Dictionary<string, Tensor<T>> accumulators, string key, T learningRate, T batchSize)
-    {
-        if (accumulators.TryGetValue(key, out var gradient))
-        {
-            for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
-            {
-                T avgGrad = NumOps.Divide(gradient[i], batchSize);
-                T update = NumOps.Multiply(learningRate, avgGrad);
-                tensor[i] = NumOps.Subtract(tensor[i], update);
-            }
-        }
-    }
 }
 
 /// <summary>
