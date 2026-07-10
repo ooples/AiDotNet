@@ -229,11 +229,17 @@
          activations from a prior training step on the same thread) leaked straight into the concat
          result — an intermittent, pool-state-dependent NaN, exactly the failure mode behind the
          model-family shard flakes this PR targets. 0.111.2 is PUBLISHED to NuGet and is a superset of
-         0.111.1, so all rationale above is retained. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.111.2" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.111.2" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.111.2" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.111.2" />
+         0.111.1, so all rationale above is retained.
+
+         Bumped 0.111.2 -> 0.112.0: brings AiDotNet.Tensors #759 (N-BEATS resident blow-up — zero only
+         accumulating multi-consumer grad buffers) and #764 (GPU-resident-parameter fused-Adam mistrain
+         fix), which together make this PR's TimeSeries GPU-resident training path train faithfully (the
+         resident run now lowers the eager-forward training MSE and improves held-out MSE, so the N-BEATS
+         correctness gate accepts it). 0.112.0 is PUBLISHED to NuGet and is a superset of 0.111.2. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.112.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.112.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.112.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.112.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />

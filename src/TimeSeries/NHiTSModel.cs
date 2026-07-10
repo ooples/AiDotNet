@@ -1,7 +1,12 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
+using AiDotNet.Optimizers;
+using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TimeSeries;
 
@@ -74,6 +79,27 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
     private readonly List<NHiTSStackTensor<T>> _stacks;
     private readonly Random _random;
 
+    // Normalization statistics computed during training (zero-mean / unit-variance
+    // of the training series). Applied to inputs before the network and inverted on
+    // the network output so gradient flow stays well-scaled — mirrors NBEATSModel.
+    private T _normMean = MathHelper.GetNumericOperations<T>().Zero;
+    private T _normStd = MathHelper.GetNumericOperations<T>().One;
+
+    /// <summary>
+    /// True when the most recent <c>TrainCore</c> completed via the GPU-resident
+    /// fused compiled plan (weights / activations / Adam moments resident on the
+    /// device across the whole loop). False when the eager tape path ran instead —
+    /// either because <c>CanTrainOnGpu</c> was false, the resident attempt didn't
+    /// improve the validation baseline, or the config's pool sizes don't divide the
+    /// lookback cleanly (see <see cref="TryTrainGpuResident"/>).
+    /// </summary>
+    /// <remarks>
+    /// Internal diagnostic: the public surface stays limited to the facade
+    /// (<c>AiModelBuilder</c>/<c>AiModelResult</c>). Visible to the test and
+    /// serving assemblies via <c>InternalsVisibleTo</c>.
+    /// </remarks>
+    internal bool LastRunUsedGpuResidentPath { get; private set; }
+
     /// <summary>
     /// Initializes a new instance of the NHiTSModel class.
     /// </summary>
@@ -101,6 +127,14 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         if (_options.PoolingKernelSizes is null || _options.PoolingKernelSizes.Length != _options.NumStacks)
             throw new ArgumentException($"Pooling kernel sizes length must match number of stacks ({_options.NumStacks}).");
 
+        for (int i = 0; i < _options.PoolingKernelSizes.Length; i++)
+        {
+            if (_options.PoolingKernelSizes[i] <= 0)
+                throw new ArgumentException(
+                    $"Pooling kernel size at index {i} must be positive (was {_options.PoolingKernelSizes[i]}); " +
+                    "a zero kernel divides by zero and a negative kernel produces an invalid downsampled length.");
+        }
+
         if (_options.LookbackWindow <= 0)
             throw new ArgumentException("Lookback window must be positive.");
 
@@ -118,7 +152,11 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _options.NumStacks; i++)
         {
             int poolingSize = _options.PoolingKernelSizes[i];
-            int downsampledLength = _options.LookbackWindow / poolingSize;
+            // Ceil division so the stack's declared input length matches the number
+            // of windows ApplyPoolingTensor actually produces for a LookbackWindow-long
+            // series (ceil(L / k)); floor division would leave a size mismatch when L
+            // is not divisible by the kernel.
+            int downsampledLength = (_options.LookbackWindow + poolingSize - 1) / poolingSize;
 
             var stack = new NHiTSStackTensor<T>(
                 downsampledLength > 0 ? downsampledLength : 1,
@@ -135,10 +173,36 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the N-HiTS model using proper backpropagation via automatic differentiation.
+    /// Trains the N-HiTS model with tape-based automatic differentiation and the Adam
+    /// optimizer (Challu et al. 2023 use Adam), mirroring the working NBEATSModel path.
     /// </summary>
+    /// <remarks>
+    /// The previous implementation built an EMPTY gradient dictionary in
+    /// <c>ForwardWithGradients</c> (the block backward pass had been stubbed out), so
+    /// <c>ApplyGradients</c> updated nothing and the model never learned. This rewrite
+    /// re-expresses the forward pass under a <see cref="GradientTape{T}"/> so autodiff
+    /// produces the gradients for every stack weight/bias and <c>AdamOptimizer.Step</c>
+    /// applies them. Interpreting the label vector <paramref name="y"/> as the univariate
+    /// series, each sample supervises the full H-step horizon window (paper §3), and each
+    /// stack forecasts from a multi-rate pooled view of the L-step lookback.
+    /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Reject series that cannot produce a single training window BEFORE the
+        // mean/variance pass (which divides by y.Length) and the window builder.
+        // An empty series would divide by zero; any series shorter than
+        // LookbackWindow + ForecastHorizon yields no valid windows and would train
+        // silently on nothing (zero parameter updates).
+        int requiredLength = checked(_options.LookbackWindow + _options.ForecastHorizon);
+        if (y.Length < requiredLength)
+        {
+            throw new ArgumentException(
+                $"Training series must contain at least {requiredLength} values " +
+                $"(LookbackWindow {_options.LookbackWindow} + ForecastHorizon {_options.ForecastHorizon}); " +
+                $"got {y.Length}.",
+                nameof(y));
+        }
+
         // Store training series BEFORE training loop for cancellation safety
         _trainingSeries = new Vector<T>(y.Length);
         for (int i = 0; i < y.Length; i++)
@@ -146,41 +210,402 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = NumOps.FromDouble(y.Length);
 
-        T learningRate = NumOps.FromDouble(_options.LearningRate);
-        int numSamples = x.Rows;
+        // Normalize the series to zero mean / unit variance for stable gradient flow.
+        T yMean = NumOps.Zero;
+        for (int i = 0; i < y.Length; i++)
+            yMean = NumOps.Add(yMean, y[i]);
+        yMean = NumOps.Divide(yMean, NumOps.FromDouble(y.Length));
 
-        for (int epoch = 0; epoch < _options.Epochs; epoch++)
+        T yVar = NumOps.Zero;
+        for (int i = 0; i < y.Length; i++)
         {
+            T diff = NumOps.Subtract(y[i], yMean);
+            yVar = NumOps.Add(yVar, NumOps.Multiply(diff, diff));
+        }
+        yVar = NumOps.Divide(yVar, NumOps.FromDouble(y.Length));
+        T yStd = NumOps.Sqrt(yVar);
+        if (NumOps.LessThanOrEquals(yStd, NumOps.FromDouble(1e-10)))
+            yStd = NumOps.One;
+
+        _normMean = yMean;
+        _normStd = yStd;
+
+        var yNorm = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            yNorm[i] = NumOps.Divide(NumOps.Subtract(y[i], yMean), yStd);
+
+        // GPU-RESIDENT fast path (float + DirectGpuTensorEngine + compilation).
+        // Same seam NBEATSModel uses via TimeSeriesModelBase.TryFusedResidentStep —
+        // forward + backward + Adam captured as a single on-device plan, weights /
+        // activations / Adam moments resident across every step. Only in epoch-bounded
+        // mode: the resident attempt is validated against the untrained baseline and
+        // rejected (with a fresh block reinit) if it didn't help, so in a wall-clock-
+        // bounded run a rejected attempt would burn the whole budget and leave nothing
+        // for the eager fallback. Epoch budgets don't have that hazard.
+        LastRunUsedGpuResidentPath = false;
+        if (CanTrainOnGpu && _options.MaxTrainingTimeSeconds <= 0
+            && TryTrainGpuResident(yNorm))
+        {
+            LastRunUsedGpuResidentPath = true;
+            return;
+        }
+
+        // Adam optimizer (Challu et al. 2023).
+        var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        {
+            InitialLearningRate = _options.LearningRate
+        };
+        var optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
+
+        // Collect every trainable weight/bias tensor from all stacks (registered via
+        // RegisterTrainableParameter in the stack constructor).
+        var allStacks = _stacks.Cast<Interfaces.ILayer<T>>().ToList();
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allStacks, -1);
+
+        var trainingLoss = new MeanSquaredErrorLoss<T>();
+
+        int lookback = _options.LookbackWindow;
+        int horizon = _options.ForecastHorizon;
+        int numSamples = y.Length;
+
+        bool timeBounded = _options.MaxTrainingTimeSeconds > 0;
+        int maxEpochs = timeBounded ? int.MaxValue : _options.Epochs;
+
+        // Best-checkpoint / early-stopping restore. Mini-batch Adam on a small
+        // series is stable while descending but, once near the minimum, the noisy
+        // per-batch gradient is amplified by Adam's 1/sqrt(v) term and the run can
+        // walk away from the optimum in late epochs (full-batch training does not
+        // show this). We therefore snapshot the parameters at the end of every
+        // epoch whose mean training loss improves on the best seen, and restore the
+        // best snapshot after training — so extra epochs can never make the returned
+        // model worse. This is standard best-model checkpointing and needs no change
+        // to the public options.
+        double bestLoss = double.PositiveInfinity;
+        List<Vector<T>>? bestSnapshot = null;
+
+        // Valid window positions (idx with a full lookback AND target horizon), used
+        // to score each epoch's FROZEN end-of-epoch weights for best-checkpoint
+        // selection. Built once — the series doesn't change across epochs.
+        var checkpointWindows = new List<int>();
+        for (int idx = 0; idx < numSamples; idx++)
+            if (idx >= lookback && idx + horizon <= yNorm.Length)
+                checkpointWindows.Add(idx);
+
+        for (int epoch = 0; epoch < maxEpochs; epoch++)
+        {
+            if (timeBounded && TrainingCancellationToken.IsCancellationRequested)
+                break;
             TrainingCancellationToken.ThrowIfCancellationRequested();
 
-            // Shuffle training order for each epoch
             var indices = Enumerable.Range(0, numSamples).OrderBy(_ => _random.Next()).ToList();
+
+            int epochSampleCount = 0;
 
             for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
             {
+                if (timeBounded && TrainingCancellationToken.IsCancellationRequested)
+                    break;
+                TrainingCancellationToken.ThrowIfCancellationRequested();
+
                 int batchEnd = Math.Min(batchStart + _options.BatchSize, numSamples);
-                int batchSize = batchEnd - batchStart;
+                int batchCount = batchEnd - batchStart;
 
-                // Accumulate gradients over batch
-                var batchGradients = new List<Dictionary<string, Tensor<T>>>();
-
-                for (int bi = 0; bi < batchSize; bi++)
+                // Keep only samples with a complete lookback AND target window
+                // (idx ∈ [L, N - H]); mirrors the paper's windowed sampling.
+                var validIndices = new List<int>(batchCount);
+                for (int bi = 0; bi < batchCount; bi++)
                 {
-                    if (bi % 8 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
-                    int i = indices[batchStart + bi];
-                    var input = ConvertRowToTensor(x, i);
-                    T target = y[i];
-
-                    // Forward pass and compute loss with gradient tracking
-                    var (_, gradients) = ForwardWithGradients(input, target);
-                    batchGradients.Add(gradients);
+                    int idx = indices[batchStart + bi];
+                    if (idx < lookback || idx + horizon > yNorm.Length)
+                        continue;
+                    validIndices.Add(idx);
                 }
 
-                // Average and apply gradients
-                ApplyGradients(batchGradients, learningRate, batchSize);
+                if (validIndices.Count == 0)
+                    continue;
+
+                int effectiveBatch = validIndices.Count;
+
+                // Target horizon window [B, H] (normalized).
+                var targetData = new T[effectiveBatch * horizon];
+                for (int bi = 0; bi < effectiveBatch; bi++)
+                {
+                    int idx = validIndices[bi];
+                    for (int h = 0; h < horizon; h++)
+                        targetData[bi * horizon + h] = yNorm[idx + h];
+                }
+                var batchTarget = new Tensor<T>(new[] { effectiveBatch, horizon }, new Vector<T>(targetData));
+
+                using var tape = new GradientTape<T>();
+
+                // Each stack forecasts from its own multi-rate pooled view of the
+                // lookback. Pooling has no trainable parameters, so we materialize the
+                // pooled inputs eagerly as tape leaves and let ForwardTape carry the
+                // gradient back into the stack's MLP weights.
+                Tensor<T>? aggregatedForecast = null;
+                foreach (var stack in _stacks)
+                {
+                    int pooledLen = stack.InputLength;
+                    var pooledData = new T[effectiveBatch * pooledLen];
+                    for (int bi = 0; bi < effectiveBatch; bi++)
+                    {
+                        int idx = validIndices[bi];
+                        var window = new Tensor<T>(new[] { lookback });
+                        for (int j = 0; j < lookback; j++)
+                            window[j] = yNorm[idx - lookback + j];
+                        var pooled = ApplyPoolingTensor(window, stack.PoolingSize);
+                        for (int j = 0; j < pooledLen; j++)
+                            pooledData[bi * pooledLen + j] = j < pooled.Shape[0] ? pooled[j] : NumOps.Zero;
+                    }
+
+                    var pooledInput = new Tensor<T>(new[] { effectiveBatch, pooledLen }, new Vector<T>(pooledData));
+                    var stackForecast = stack.ForwardTape(pooledInput); // [B, H]
+                    aggregatedForecast = aggregatedForecast is null
+                        ? stackForecast
+                        : Engine.TensorAdd(aggregatedForecast, stackForecast);
+                }
+
+                var batchLoss = trainingLoss.ComputeTapeLoss(aggregatedForecast!, batchTarget);
+
+                var allGrads = tape.ComputeGradients(batchLoss, sources: null);
+                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var param in trainableParams)
+                {
+                    if (allGrads.TryGetValue(param, out var grad))
+                        grads[param] = grad;
+                }
+
+                // Count trained samples this epoch so best-checkpoint selection only
+                // fires when training actually ran. The epoch is SCORED separately on
+                // the frozen end-of-epoch weights (see ValidationMse below), so the
+                // per-batch pre-update loss is no longer accumulated here.
+                epochSampleCount += effectiveBatch;
+
+                var context = new TapeStepContext<T>(
+                    trainableParams, grads,
+                    batchLoss.Length > 0 ? batchLoss[0] : NumOps.Zero);
+
+                optimizer.Step(context);
+            }
+
+            // Snapshot the parameters if this epoch's FROZEN end-of-epoch weights are
+            // the best so far. Score with ValidationMse (a no-update forward over the
+            // window set) so bestLoss measures exactly the weights bestSnapshot
+            // captures. Scoring by the epoch's mean PRE-update batch loss instead
+            // would measure a mix of intra-epoch weight states, not the snapshot, so
+            // a late-diverging epoch (good early batches, bad end weights) could be
+            // wrongly selected as best. The extra pass is forward-only (no backprop).
+            if (epochSampleCount > 0)
+            {
+                double epochLoss = ValidationMse(checkpointWindows, yNorm, lookback, horizon);
+                if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
+                {
+                    bestLoss = epochLoss;
+                    bestSnapshot = new List<Vector<T>>(_stacks.Count);
+                    foreach (var stack in _stacks)
+                        bestSnapshot.Add(stack.GetParameters());
+                }
             }
         }
 
+        // Restore the best checkpoint so late-epoch divergence cannot degrade the
+        // returned model.
+        if (bestSnapshot is not null)
+        {
+            for (int s = 0; s < _stacks.Count; s++)
+                _stacks[s].SetParameters(bestSnapshot[s]);
+        }
+    }
+
+    /// <summary>
+    /// Batched, tape-recordable average pooling for the fused-resident forward.
+    /// <c>[B, L] → [B, L/kernelSize]</c> via <c>Reshape → ReduceMean(axis=2)</c>.
+    /// Requires <c>L % kernelSize == 0</c>; returns null otherwise so the caller
+    /// can fall back to the eager path. Kernel=1 is identity (returned as-is).
+    /// </summary>
+    private Tensor<T>? PoolBatchedTape(Tensor<T> input, int kernelSize)
+    {
+        if (kernelSize <= 1) return input;
+        int B = input.Shape[0];
+        int L = input.Shape[1];
+        if (L % kernelSize != 0) return null;
+        int poolCount = L / kernelSize;
+        var reshaped = Engine.Reshape(input, new[] { B, poolCount, kernelSize });
+        return Engine.ReduceMean(reshaped, new[] { 2 }, keepDims: false);
+    }
+
+    /// <summary>
+    /// Runs the full multi-rate stack over a <c>[B, L]</c> batch using on-tape
+    /// pooling + per-stack forecast + sum. Returns null when any stack's pooling
+    /// size doesn't divide the lookback cleanly (fused path unsupported for that
+    /// config; caller falls back to eager).
+    /// </summary>
+    private Tensor<T>? RunForwardBatched(Tensor<T> input)
+    {
+        Tensor<T>? aggregated = null;
+        foreach (var stack in _stacks)
+        {
+            var pooled = PoolBatchedTape(input, stack.PoolingSize);
+            if (pooled is null) return null;
+            var forecast = stack.ForwardTape(pooled);
+            aggregated = aggregated is null
+                ? forecast
+                : Engine.TensorAdd(aggregated, forecast);
+        }
+        return aggregated;
+    }
+
+    /// <summary>
+    /// Validation MSE across up to 256 windows for the accept/reject gate. Uses
+    /// the current stack weights so it correctly reflects the pre- or post-resident
+    /// state depending on when it's called.
+    /// </summary>
+    private double ValidationMse(List<int> valid, Vector<T> yNorm, int L, int H)
+    {
+        int m = Math.Min(valid.Count, 256);
+        if (m == 0) return double.NaN;
+        var inputData = new T[m * L];
+        var targetData = new T[m * H];
+        for (int bi = 0; bi < m; bi++)
+        {
+            int idx = valid[bi];
+            for (int j = 0; j < L; j++) inputData[bi * L + j] = yNorm[idx - L + j];
+            for (int h = 0; h < H; h++) targetData[bi * H + h] = yNorm[idx + h];
+        }
+        var input = new Tensor<T>(new[] { m, L }, new Vector<T>(inputData));
+        var pred = RunForwardBatched(input);
+        if (pred is null) return double.NaN;
+        double sum = 0.0;
+        int n = pred.Length;
+        for (int i = 0; i < n; i++)
+        {
+            double d = NumOps.ToDouble(pred[i]) - NumOps.ToDouble(targetData[i]);
+            sum += d * d;
+        }
+        return sum / n;
+    }
+
+    /// <summary>
+    /// GPU-resident training via the fused compiled-plan capture path — mirrors
+    /// NBEATSModel.TryTrainGpuResident. Returns false when the fused path can't
+    /// engage, when the pool sizes don't divide the lookback cleanly, or when the
+    /// resident run failed to improve on the untrained baseline (blocks are
+    /// re-initialized before returning so the eager fallback starts clean).
+    /// </summary>
+    private bool TryTrainGpuResident(Vector<T> yNorm)
+    {
+        int L = _options.LookbackWindow;
+        int H = _options.ForecastHorizon;
+        int batchSize = _options.BatchSize;
+
+        // Precondition: every stack's pooling divides L cleanly so PoolBatchedTape
+        // works. Fall back to eager for non-power-of-two configs.
+        foreach (var stack in _stacks)
+        {
+            if (stack.PoolingSize > 1 && L % stack.PoolingSize != 0)
+                return false;
+        }
+
+        // Time-ordered windows; reserve the latest ~20% as a holdout the resident
+        // optimizer never trains on, so the accept/reject gate measures
+        // GENERALIZATION rather than training-set fit.
+        var valid = new List<int>();
+        for (int idx = 0; idx < yNorm.Length; idx++)
+            if (idx >= L && idx + H <= yNorm.Length)
+                valid.Add(idx);
+        int holdoutCount = Math.Max(1, valid.Count / 5);
+        int trainCount = valid.Count - holdoutCount;
+        var trainWindows = valid.Take(trainCount).ToList();
+        var holdoutWindows = valid.Skip(trainCount).ToList();
+        if (trainWindows.Count < batchSize) return false;
+
+        var layers = _stacks.Cast<ITrainableLayer<T>>().ToList();
+        var trainingLoss = new MeanSquaredErrorLoss<T>();
+
+        Tensor<T> ForwardStack(Tensor<T> input) => RunForwardBatched(input)!;
+        Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>
+            trainingLoss.ComputeTapeLoss(pred, target);
+
+        double preMse = ValidationMse(holdoutWindows, yNorm, L, H);
+
+        float lr = (float)_options.LearningRate;
+        const float beta1 = 0.9f;
+        const float beta2 = 0.999f;
+        const float epsilon = 1e-8f;
+        const float weightDecay = 0f;
+
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate();
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount();
+
+        var random = RandomHelper.CreateSeededRandom(42);
+        int maxEpochs = _options.Epochs;
+        bool fusedEngaged = false;
+        bool diverged = false;
+        double firstStepLoss = double.NaN;
+
+        for (int epoch = 0; epoch < maxEpochs && !diverged; epoch++)
+        {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+            var order = trainWindows.OrderBy(_ => random.Next()).ToList();
+            int fullBatches = order.Count / batchSize;
+
+            for (int b = 0; b < fullBatches; b++)
+            {
+                TrainingCancellationToken.ThrowIfCancellationRequested();
+                int baseIdx = b * batchSize;
+                var inputData = new T[batchSize * L];
+                var targetData = new T[batchSize * H];
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    int idx = order[baseIdx + bi];
+                    for (int j = 0; j < L; j++) inputData[bi * L + j] = yNorm[idx - L + j];
+                    for (int h = 0; h < H; h++) targetData[bi * H + h] = yNorm[idx + h];
+                }
+                var batchInput = new Tensor<T>(new[] { batchSize, L }, new Vector<T>(inputData));
+                var batchTarget = new Tensor<T>(new[] { batchSize, H }, new Vector<T>(targetData));
+
+                bool ran = TryFusedResidentStep(
+                    layers, batchInput, batchTarget, ForwardStack, ComputeLoss,
+                    lr, beta1, beta2, epsilon, weightDecay, out T stepLoss);
+                if (!ran)
+                {
+                    if (!fusedEngaged) return false;
+                    // Engaged earlier but this step couldn't run: don't silently skip
+                    // (a partial run could still be accepted). Diverge so the gate
+                    // reinitializes and hands off to the eager path.
+                    diverged = true;
+                    break;
+                }
+                fusedEngaged = true;
+                double stepLossD = NumOps.ToDouble(stepLoss);
+                if (double.IsNaN(stepLossD) || double.IsInfinity(stepLossD))
+                {
+                    diverged = true;
+                    break;
+                }
+                if (double.IsNaN(firstStepLoss)) firstStepLoss = stepLossD;
+                else if (stepLossD > 1e3 && stepLossD > firstStepLoss * 1e3)
+                {
+                    diverged = true;
+                    break;
+                }
+            }
+        }
+
+        if (fusedEngaged)
+        {
+            double postMse = ValidationMse(holdoutWindows, yNorm, L, H);
+            bool improved = !double.IsNaN(postMse) && !double.IsInfinity(postMse)
+                            && postMse < preMse * 0.98;
+            if (diverged || !improved)
+            {
+                _stacks.Clear();
+                InitializeStacks();
+                return false;
+            }
+        }
+        return fusedEngaged;
     }
 
     public override Vector<T> Predict(Matrix<T> input)
@@ -199,126 +624,6 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
             predictions[i] = PredictSingle(input.GetRow(i));
         }
         return predictions;
-    }
-
-    /// <summary>
-    /// Converts a row from the training matrix to a Tensor.
-    /// </summary>
-    private Tensor<T> ConvertRowToTensor(Matrix<T> x, int rowIndex)
-    {
-        var tensor = new Tensor<T>([x.Columns]);
-        for (int j = 0; j < x.Columns; j++)
-        {
-            tensor[j] = x[rowIndex, j];
-        }
-        return tensor;
-    }
-
-    /// <summary>
-    /// Forward pass with automatic differentiation for proper gradient computation.
-    /// </summary>
-    private (T loss, Dictionary<string, Tensor<T>> gradients) ForwardWithGradients(Tensor<T> input, T target)
-    {
-        // Forward through all stacks and collect predictions
-        var predictions = new List<Tensor<T>>();
-
-        foreach (var stack in _stacks)
-        {
-            var pooledInput = ApplyPoolingTensor(input, stack.PoolingSize);
-            var stackOutput = stack.ForwardInternal(pooledInput);
-            predictions.Add(stackOutput);
-        }
-
-        // Aggregate predictions from all stacks
-        var aggregatedForecast = new Tensor<T>([_options.ForecastHorizon]);
-        foreach (var pred in predictions)
-        {
-            var interpolated = ApplyInterpolationTensor(pred, _options.ForecastHorizon);
-            for (int i = 0; i < _options.ForecastHorizon; i++)
-            {
-                aggregatedForecast[i] = NumOps.Add(aggregatedForecast[i], interpolated[i]);
-            }
-        }
-
-        // Compute MSE loss averaged over all forecast steps
-        // For single-target training, we use the first step's prediction
-        // and distribute gradients to all steps proportionally
-        var outputGradients = new Tensor<T>([_options.ForecastHorizon]);
-
-        // Primary loss on first step (where we have the target)
-        T prediction = aggregatedForecast[0];
-        T error = NumOps.Subtract(prediction, target);
-        T loss = NumOps.Multiply(error, error);
-
-        // Compute gradient for first step: dL/dy = 2 * (y - target)
-        outputGradients[0] = NumOps.Multiply(NumOps.FromDouble(2.0), error);
-
-        // For other steps, we apply a regularization gradient to keep them close to the first
-        // This ensures all layers receive gradient signal, not just those affecting step 0
-        T regularizationWeight = NumOps.FromDouble(0.01);
-        for (int step = 1; step < _options.ForecastHorizon; step++)
-        {
-            T diff = NumOps.Subtract(aggregatedForecast[step], aggregatedForecast[0]);
-            outputGradients[step] = NumOps.Multiply(regularizationWeight, diff);
-        }
-
-        // Compute gradients for each stack using backpropagation
-        var gradients = new Dictionary<string, Tensor<T>>();
-
-        for (int stackIdx = 0; stackIdx < _stacks.Count; stackIdx++)
-        {
-            var stack = _stacks[stackIdx];
-            var pooledInput = ApplyPoolingTensor(input, stack.PoolingSize);
-            var stackGradients = new Dictionary<string, Tensor<T>>(); // Backward removed — tape handles gradients
-
-            foreach (var kvp in stackGradients)
-            {
-                gradients[$"stack{stackIdx}_{kvp.Key}"] = kvp.Value;
-            }
-        }
-
-        return (loss, gradients);
-    }
-
-    /// <summary>
-    /// Applies accumulated gradients to update all stack parameters.
-    /// </summary>
-    private void ApplyGradients(List<Dictionary<string, Tensor<T>>> batchGradients, T learningRate, int batchSize)
-    {
-        if (batchGradients.Count == 0) return;
-
-        T batchSizeT = NumOps.FromDouble(batchSize);
-
-        for (int stackIdx = 0; stackIdx < _stacks.Count; stackIdx++)
-        {
-            var stack = _stacks[stackIdx];
-
-            // Average gradients across batch and apply
-            foreach (var paramName in stack.GetParameterNames())
-            {
-                string key = $"stack{stackIdx}_{paramName}";
-
-                // Sum gradients from all batch items
-                Tensor<T>? sumGradient = null;
-                foreach (var grad in batchGradients)
-                {
-                    if (grad.TryGetValue(key, out var g) && g is not null)
-                    {
-                        sumGradient = sumGradient is null ? g.Clone() : Engine.TensorAdd(sumGradient, g);
-                    }
-                }
-
-                if (sumGradient is not null)
-                {
-                    // Average gradient
-                    var avgGradient = Engine.TensorDivideScalar(sumGradient, batchSizeT);
-
-                    // Apply gradient descent: param = param - lr * gradient
-                    var scaledGradient = Engine.TensorMultiplyScalar(avgGradient, learningRate);
-                    stack.UpdateParameter(paramName, scaledGradient);
-                }
-            }
-        }
     }
 
     /// <summary>
@@ -426,11 +731,12 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     public Vector<T> ForecastHorizon(Vector<T> input)
     {
-        // Convert Vector to Tensor
+        // Normalize the input window with the training statistics so inference
+        // matches the normalized space the network was trained in.
         var inputTensor = new Tensor<T>([input.Length]);
         for (int i = 0; i < input.Length; i++)
         {
-            inputTensor[i] = input[i];
+            inputTensor[i] = NumOps.Divide(NumOps.Subtract(input[i], _normMean), _normStd);
         }
 
         var aggregatedForecast = new Tensor<T>([_options.ForecastHorizon]);
@@ -449,11 +755,11 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        // Convert Tensor back to Vector
+        // Denormalize and convert Tensor back to Vector
         var result = new Vector<T>(_options.ForecastHorizon);
         for (int i = 0; i < _options.ForecastHorizon; i++)
         {
-            result[i] = aggregatedForecast[i];
+            result[i] = NumOps.Add(NumOps.Multiply(aggregatedForecast[i], _normStd), _normMean);
         }
 
         return result;
@@ -470,6 +776,12 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         {
             stack.Serialize(writer);
         }
+
+        // Normalization statistics learned in TrainCore. Without these a reloaded
+        // model denormalizes with the defaults (_normMean=0, _normStd=1), so its
+        // forecasts differ from the original trained model. Written as doubles.
+        writer.Write(NumOps.ToDouble(_normMean));
+        writer.Write(NumOps.ToDouble(_normStd));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -485,6 +797,11 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         {
             _stacks[s].Deserialize(reader);
         }
+
+        // Restore the normalization statistics written by SerializeCore so the
+        // reloaded model reproduces the original's forecasts.
+        _normMean = NumOps.FromDouble(reader.ReadDouble());
+        _normStd = NumOps.FromDouble(reader.ReadDouble());
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -531,6 +848,8 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
             clone._trainingSeries = new Vector<T>(_trainingSeries);
         if (ModelParameters is not null && ModelParameters.Length > 0)
             clone.ModelParameters = new Vector<T>(ModelParameters);
+        clone._normMean = _normMean;
+        clone._normStd = _normStd;
         return clone;
     }
 
@@ -548,15 +867,18 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private readonly int _numLayers;
     private readonly Random _random;
 
-    // Tensor-based weights and biases
+    // Tensor-based weights and biases (registered as trainable parameters; updated
+    // by the Adam optimizer from tape-computed gradients).
     private readonly List<Tensor<T>> _weights;
     private readonly List<Tensor<T>> _biases;
 
-    // Cached activations for backprop
-    private readonly List<Tensor<T>> _layerInputs;
-    private readonly List<Tensor<T>> _layerOutputs;
-
     public int PoolingSize { get; }
+
+    /// <summary>
+    /// The pooled input length this stack's MLP expects (number of pooling windows
+    /// over the lookback). Used by the model to shape the pooled batch tensor.
+    /// </summary>
+    public int InputLength => _inputLength;
 
     public override long ParameterCount
     {
@@ -572,8 +894,8 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     }
 
     public override bool SupportsTraining => true;
-    public override void ResetState() { _layerInputs.Clear(); _layerOutputs.Clear(); _lastForwardInput = null; }
-    public override void UpdateParameters(T learningRate) { /* handled by ApplyGradients */ }
+    public override void ResetState() { _lastForwardInput = null; }
+    public override void UpdateParameters(T learningRate) { /* tape-based optimizer updates registered params */ }
 
     public override Vector<T> GetParameters()
     {
@@ -642,10 +964,15 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
         _weights = new List<Tensor<T>>();
         _biases = new List<Tensor<T>>();
-        _layerInputs = new List<Tensor<T>>();
-        _layerOutputs = new List<Tensor<T>>();
 
         InitializeWeights();
+
+        // Register every weight/bias so TapeTrainingStep.CollectParameters picks
+        // them up and the Adam optimizer updates them from tape-computed gradients.
+        foreach (var w in _weights)
+            RegisterTrainableParameter(w, PersistentTensorRole.Weights);
+        foreach (var b in _biases)
+            RegisterTrainableParameter(b, PersistentTensorRole.Biases);
     }
 
     private void InitializeWeights()
@@ -690,9 +1017,12 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public Tensor<T> ForwardInternal(Tensor<T> input)
     {
-        _layerInputs.Clear();
-        _layerOutputs.Clear();
-
+        // Inference forward. Uses the EXACT same Engine tensor ops as ForwardTape
+        // so a trained model's inference output matches what training optimized —
+        // a prior hand-rolled scalar matmul here disagreed with the tape path,
+        // producing garbage predictions from correctly-trained weights. Running
+        // outside a GradientTape, these Engine ops execute eagerly (and stay
+        // GPU-dispatchable).
         var x = input;
 
         // Ensure input matches expected size
@@ -707,169 +1037,47 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             x = resized;
         }
 
-        // Forward through all layers
+        // Column vector [inputLength, 1] so weight[out, in] @ col = [out, 1].
+        var col = Engine.Reshape(x, new[] { _inputLength, 1 });
+
         for (int layer = 0; layer < _weights.Count; layer++)
         {
-            _layerInputs.Add(x.Clone());
-
             var weight = _weights[layer];
-            var bias = _biases[layer];
-            int outSize = weight.Shape[0];
-            int inSize = weight.Shape[1];
-
-            var output = new Tensor<T>([outSize]);
-
-            // Matrix-vector multiply: output = weight * x + bias
-            for (int i = 0; i < outSize; i++)
-            {
-                T sum = bias[i];
-                for (int j = 0; j < Math.Min(x.Shape[0], inSize); j++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(weight[i, j], x[j]));
-                }
-                output[i] = sum;
-            }
-
-            // ReLU activation for all but last layer
-            if (layer < _weights.Count - 1)
-            {
-                var activated = new Tensor<T>([outSize]);
-                for (int i = 0; i < outSize; i++)
-                {
-                    activated[i] = NumOps.GreaterThan(output[i], NumOps.Zero) ? output[i] : NumOps.Zero;
-                }
-                _layerOutputs.Add(output.Clone()); // Store pre-activation for backprop
-                x = activated;
-            }
-            else
-            {
-                _layerOutputs.Add(output.Clone());
-                x = output;
-            }
+            var linear = Engine.TensorMatMul(weight, col);                 // [out, 1]
+            var biasCol = Engine.Reshape(_biases[layer], new[] { weight.Shape[0], 1 });
+            linear = Engine.TensorBroadcastAdd(linear, biasCol);
+            col = layer < _weights.Count - 1 ? Engine.ReLU(linear) : linear;
         }
 
-        return x;
+        return Engine.Reshape(col, new[] { _outputLength });
     }
 
-    public Dictionary<string, Tensor<T>> Backward(Tensor<T> outputGradient, Tensor<T> originalInput)
+    /// <summary>
+    /// Tape-tracked forward pass over a batched, already-pooled input <c>[B, inputLength]</c>,
+    /// returning the stack forecast <c>[B, outputLength]</c>. Uses <c>Engine.Tensor*</c>
+    /// ops so <see cref="GradientTape{T}"/> can differentiate the loss with respect to every
+    /// registered weight and bias. This is the training-time counterpart of the eager
+    /// <see cref="ForwardInternal"/> used at inference — both read the same weight tensors, so
+    /// Adam updates applied to the registered tensors are visible to inference immediately.
+    /// </summary>
+    public Tensor<T> ForwardTape(Tensor<T> input)
     {
-        var gradients = new Dictionary<string, Tensor<T>>();
+        // [B, in] -> [in, B] so weight[out, in] @ x[in, B] = [out, B].
+        var x = Engine.TensorPermute(input, new[] { 1, 0 });
 
-        if (_layerInputs.Count == 0 || _layerOutputs.Count == 0)
+        for (int layer = 0; layer < _weights.Count; layer++)
         {
-            // Forward wasn't called, return empty gradients
-            return gradients;
+            var weight = _weights[layer];               // [outSize, inSize]
+            var linear = Engine.TensorMatMul(weight, x); // [outSize, B]
+            var biasCol = Engine.Reshape(_biases[layer], new[] { weight.Shape[0], 1 });
+            linear = Engine.TensorBroadcastAdd(linear, biasCol);
+
+            // ReLU on every layer except the linear output head.
+            x = layer < _weights.Count - 1 ? Engine.ReLU(linear) : linear;
         }
 
-        // Initialize delta from full output gradient tensor for proper multi-horizon training
-        var delta = new Tensor<T>([_outputLength]);
-        int n = Math.Min(_outputLength, outputGradient.Shape[0]);
-        for (int i = 0; i < n; i++)
-        {
-            delta[i] = outputGradient[i];
-        }
-
-        // Backpropagate through layers in reverse
-        for (int layer = _weights.Count - 1; layer >= 0; layer--)
-        {
-            var weight = _weights[layer];
-            var layerInput = _layerInputs[layer];
-            var layerOutput = _layerOutputs[layer];
-            int outSize = weight.Shape[0];
-            int inSize = weight.Shape[1];
-
-            // Apply ReLU derivative for non-output layers
-            if (layer < _weights.Count - 1)
-            {
-                for (int i = 0; i < delta.Shape[0] && i < layerOutput.Shape[0]; i++)
-                {
-                    if (!NumOps.GreaterThan(layerOutput[i], NumOps.Zero))
-                    {
-                        delta[i] = NumOps.Zero;
-                    }
-                }
-            }
-
-            // Compute weight gradient: outer product of delta and input
-            var weightGrad = new Tensor<T>([outSize, inSize]);
-            for (int i = 0; i < outSize && i < delta.Shape[0]; i++)
-            {
-                for (int j = 0; j < inSize && j < layerInput.Shape[0]; j++)
-                {
-                    weightGrad[i, j] = NumOps.Multiply(delta[i], layerInput[j]);
-                }
-            }
-            gradients[$"weight_{layer}"] = weightGrad;
-
-            // Compute bias gradient: copy of delta
-            var biasGrad = new Tensor<T>([outSize]);
-            for (int i = 0; i < outSize && i < delta.Shape[0]; i++)
-            {
-                biasGrad[i] = delta[i];
-            }
-            gradients[$"bias_{layer}"] = biasGrad;
-
-            // Compute input gradient: weight^T * delta
-            var newDelta = new Tensor<T>([inSize]);
-            for (int j = 0; j < inSize; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < outSize && i < delta.Shape[0]; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(weight[i, j], delta[i]));
-                }
-                newDelta[j] = sum;
-            }
-
-            if (layer > 0)
-            {
-                delta = newDelta;
-            }
-            else
-            {
-                // Store the input gradient for the Backward(Tensor<T>) override
-                gradients["input_gradient"] = newDelta;
-            }
-        }
-
-        return gradients;
-    }
-
-    public override IEnumerable<string> GetParameterNames()
-    {
-        for (int i = 0; i < _weights.Count; i++)
-        {
-            yield return $"weight_{i}";
-            yield return $"bias_{i}";
-        }
-    }
-
-    public void UpdateParameter(string name, Tensor<T> gradient)
-    {
-        if (name.StartsWith("weight_"))
-        {
-            int idx = int.Parse(name.Substring(7));
-            if (idx < _weights.Count)
-            {
-                var weight = _weights[idx];
-                for (int i = 0; i < weight.Length && i < gradient.Length; i++)
-                {
-                    weight[i] = NumOps.Subtract(weight[i], gradient[i]);
-                }
-            }
-        }
-        else if (name.StartsWith("bias_"))
-        {
-            int idx = int.Parse(name.Substring(5));
-            if (idx < _biases.Count)
-            {
-                var bias = _biases[idx];
-                for (int i = 0; i < bias.Length && i < gradient.Length; i++)
-                {
-                    bias[i] = NumOps.Subtract(bias[i], gradient[i]);
-                }
-            }
-        }
+        // [outputLength, B] -> [B, outputLength]
+        return Engine.TensorPermute(x, new[] { 1, 0 });
     }
 
     public override void Serialize(BinaryWriter writer)
