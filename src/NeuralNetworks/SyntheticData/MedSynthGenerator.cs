@@ -557,6 +557,41 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         // Non-DP fast path: single batched forward+backward.
         var (realBatch, fakeBatch) = BuildRealAndFakeBatches(data, startRow, endRow);
 
+        // GPU-RESIDENT fast path — pack (real, fake) into a single persistent
+        // input tensor along axis 0 so both scores can be computed from one
+        // forward call, then split in the loss for BCE-real + BCE-fake.
+        var discLayerList = BuildDiscLayerList();
+        var trainableDisc = discLayerList.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableDisc.Count > 0)
+        {
+            int realN = realBatch.Shape[0];
+            int fakeN = fakeBatch.Shape[0];
+            var stacked = Engine.TensorConcatenate([realBatch, fakeBatch], axis: 0);
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> both) => DiscriminatorForwardBatched(both, isTraining: true);
+            Tensor<T> Loss(Tensor<T> allScores, Tensor<T> _)
+            {
+                var rShape = allScores._shape.ToArray(); rShape[0] = realN;
+                var fShape = allScores._shape.ToArray(); fShape[0] = fakeN;
+                var rStart = new int[allScores.Rank];
+                var fStart = new int[allScores.Rank]; fStart[0] = realN;
+                var rScores = Engine.TensorSlice(allScores, rStart, rShape);
+                var fScores = Engine.TensorSlice(allScores, fStart, fShape);
+                var axes = Enumerable.Range(0, rScores.Shape.Length).ToArray();
+                var lossR = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(rScores), axes, keepDims: false));
+                var lossF = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(fScores)), axes, keepDims: false));
+                return Engine.TensorAdd(lossR, lossF);
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableDisc, stacked, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _discriminatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
         using var tape = new GradientTape<T>();
         var discParams = TapeTrainingStep<T>.CollectParameters(BuildDiscLayerList());
 
