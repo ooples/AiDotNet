@@ -3280,6 +3280,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Output is the class logits (DGCNNOptions.NumClasses default 40), independent of N.
             sb.AppendLine("    protected override int[] InputShape => new[] { 128, 3 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 40 };");
+            // DGCNN is a multi-class classifier trained with CrossEntropyWithLogitsLoss (fused
+            // LogSoftmax + NLL). The base CreateRandomTargetTensor yields dense uniform [0,1)
+            // floats — an ill-posed target for cross-entropy: the softmax-minus-target gradient
+            // is dominated by the (unnormalised) target and drives the logits to grow without
+            // bound, so training loss rises instead of falling. Feed a proper one-hot class label
+            // (the same convention MobileNetV2/Jamba classifier scaffolds use) so the CE objective
+            // is well-posed. This is a test-data adaptation to the model family's expected output
+            // type, NOT an assertion weakening — the loss-should-decrease assertions are unchanged.
+            sb.AppendLine();
+            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        var target = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
+            sb.AppendLine("        int classes = System.Math.Max(1, shape[shape.Length - 1]);");
+            sb.AppendLine("        int samples = System.Math.Max(1, target.Length / classes);");
+            sb.AppendLine("        for (int i = 0; i < samples; i++)");
+            sb.AppendLine("            target[i * classes + rng.Next(classes)] = 1.0;");
+            sb.AppendLine("        return target;");
+            sb.AppendLine("    }");
         }
         else if (isVisionModel && IsTokenConsumingVisionLanguageModel(model.ClassName))
         {

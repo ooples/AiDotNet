@@ -131,7 +131,13 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
     /// <param name="options">Configuration options for the DGCNN model.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
     public DGCNN(DGCNNOptions options, ILossFunction<T>? lossFunction = null, DGCNNOptions? modelOptions = null)
-        : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification))
+        // Default to CrossEntropyWithLogitsLoss (fused LogSoftmax + NLL, = PyTorch F.cross_entropy,
+        // the loss the reference DGCNN trains with) rather than the generic MultiClassClassification
+        // default (CategoricalCrossEntropyLoss, which has RequiresProbabilityInputs = true). The head
+        // emits raw logits, so the loss must be the logits form; pairing raw logits with the
+        // probability-input loss made the per-class gradient ill-posed and drove the logits to grow
+        // without bound (training loss climbed instead of falling).
+        : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = modelOptions ?? new DGCNNOptions();
         Options = _options;
@@ -281,6 +287,11 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
         int classifierInput = totalFeatures;
         if (_classifierChannels.Length == 0)
         {
+            // Raw-logit classification head: DGCNN's loss is CrossEntropyWithLogitsLoss (see ctor),
+            // which fuses LogSoftmax + NLL internally (PyTorch nn.CrossEntropyLoss / F.cross_entropy —
+            // exactly what the reference DGCNN uses). So the output layer must emit RAW LOGITS, not a
+            // pre-softmaxed distribution: applying softmax here then LogSoftmax in the loss would
+            // double-normalize.
             var outputLayer = new DenseLayer<T>(
                 _numClasses,
                 activationFunction: new IdentityActivation<T>());
@@ -306,6 +317,8 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
             }
         }
 
+        // Raw-logit output (see the no-hidden-layer branch above): CrossEntropyWithLogitsLoss fuses
+        // LogSoftmax + NLL, so the head must emit logits, not probabilities.
         var output = new DenseLayer<T>(
             _numClasses,
             activationFunction: new IdentityActivation<T>());
