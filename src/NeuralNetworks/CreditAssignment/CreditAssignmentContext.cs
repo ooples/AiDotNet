@@ -9,10 +9,11 @@ namespace AiDotNet.NeuralNetworks.CreditAssignment;
 /// </summary>
 internal sealed class CreditLayer<T> : ICreditLayer<T>
 {
-    internal CreditLayer(int index, bool isOutputLayer, Tensor<T> output, Matrix<T>? weights)
+    internal CreditLayer(int index, bool isOutputLayer, Tensor<T> input, Tensor<T> output, Matrix<T>? weights)
     {
         Index = index;
         IsOutputLayer = isOutputLayer;
+        Input = input;
         Output = output;
         OutputShape = output.Shape.ToArray();
         Weights = weights;
@@ -27,6 +28,7 @@ internal sealed class CreditLayer<T> : ICreditLayer<T>
     public bool IsOutputLayer { get; }
     public int[] OutputShape { get; }
     public int FlatFeatureSize { get; }
+    public Tensor<T> Input { get; }
     public Tensor<T> Output { get; }
     public Matrix<T>? Weights { get; }
     public Tensor<T>? TeachingSignal { get; set; }
@@ -40,17 +42,20 @@ internal sealed class CreditAssignmentContext<T> : ICreditAssignmentContext<T>
     internal CreditAssignmentContext(
         IReadOnlyList<ICreditLayer<T>> layers,
         Tensor<T> outputError,
+        Tensor<T> target,
         INumericOperations<T> numOps,
         Random random)
     {
         Layers = layers;
         OutputError = outputError;
+        Target = target;
         NumOps = numOps;
         Random = random;
     }
 
     public IReadOnlyList<ICreditLayer<T>> Layers { get; }
     public Tensor<T> OutputError { get; }
+    public Tensor<T> Target { get; }
     public int BatchSize => OutputError.Shape[0];
     public INumericOperations<T> NumOps { get; }
     public Random Random { get; }

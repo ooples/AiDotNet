@@ -21,6 +21,10 @@ public static class CreditRuleFactory<T>
         CreditRule.FeedbackAlignment => new FeedbackAlignmentCreditRule<T>(seed),
         CreditRule.DirectFeedbackAlignment => new DirectFeedbackAlignmentCreditRule<T>(seed),
         CreditRule.SignSymmetric => new SignSymmetricCreditRule<T>(seed),
+        CreditRule.KolenPollack => new KolenPollackCreditRule<T>(seed),
+        CreditRule.DirectKolenPollack => new DirectKolenPollackCreditRule<T>(seed),
+        CreditRule.DRTP => new DrtpCreditRule<T>(seed),
+        CreditRule.DFANormalized => new NormalizedDfaCreditRule<T>(seed),
         _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, "Unknown credit rule."),
     };
 }
