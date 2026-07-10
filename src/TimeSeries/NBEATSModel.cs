@@ -525,14 +525,25 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         int batchSize = _options.BatchSize;
 
         // Valid sample positions: a full lookback window AND a full target horizon.
+        // Built in ascending index order, so the window list stays time-ordered.
         var valid = new List<int>();
         for (int idx = 0; idx < numSamples; idx++)
             if (idx >= L && idx + H <= yNorm.Length)
                 valid.Add(idx);
 
-        // Need at least one full constant-shape batch for the compiled plan to
-        // capture and replay; otherwise let the eager path handle it.
-        if (valid.Count < batchSize)
+        // Reserve a TIME-ORDERED holdout (the latest ~20% of windows) that the
+        // resident optimizer never trains on, so the accept/reject gate measures
+        // GENERALIZATION rather than training-set fit — a resident run that merely
+        // memorizes its training windows must not pass the gate. The earlier
+        // windows train; the holdout alone scores preMse/postMse.
+        int holdoutCount = Math.Max(1, valid.Count / 5);
+        int trainCount = valid.Count - holdoutCount;
+        var trainWindows = valid.Take(trainCount).ToList();
+        var holdoutWindows = valid.Skip(trainCount).ToList();
+
+        // Need at least one full constant-shape batch of TRAINING windows for the
+        // compiled plan to capture and replay; otherwise let the eager path handle it.
+        if (trainWindows.Count < batchSize)
             return false;
 
         var layers = _blocks.Cast<ITrainableLayer<T>>().ToList();
@@ -543,9 +554,9 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>
             trainingLoss.ComputeTapeLoss(pred, target);
 
-        // Baseline (untrained) validation MSE — the resident result is only kept
-        // if it improves on this; otherwise we reinit + fall back to eager.
-        double preMse = ValidationStackMse(valid, yNorm, L, H);
+        // Baseline (untrained) validation MSE on the HOLDOUT — the resident result
+        // is only kept if it improves on this; otherwise we reinit + fall back to eager.
+        double preMse = ValidationStackMse(holdoutWindows, yNorm, L, H);
 
         // Standard Adam hyperparameters (Oreshkin et al. 2020 use Adam). Betas/eps
         // match AdamOptimizerOptions defaults so numerics track the eager path.
@@ -563,32 +574,25 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         _lastRunEpochLosses = new List<double>();
 
         var random = new Random(42);
-        bool timeBounded = _options.MaxTrainingTimeSeconds > 0;
-        int maxEpochs = timeBounded ? int.MaxValue : _options.Epochs;
-        var stopwatch = timeBounded ? System.Diagnostics.Stopwatch.StartNew() : null;
         bool fusedEngaged = false;
         bool diverged = false;
         double firstStepLoss = double.NaN;
 
-        for (int epoch = 0; epoch < maxEpochs && !diverged; epoch++)
+        // Epoch-bounded only: TrainCore gates this method on MaxTrainingTimeSeconds <= 0
+        // (a rejected wall-clock-bounded resident run would burn the whole budget and
+        // leave nothing for the eager fallback), so there is no wall-clock stop here —
+        // just the standard cancellation checks.
+        for (int epoch = 0; epoch < _options.Epochs && !diverged; epoch++)
         {
-            if (timeBounded &&
-                (TrainingCancellationToken.IsCancellationRequested ||
-                 stopwatch!.Elapsed.TotalSeconds >= _options.MaxTrainingTimeSeconds))
-                break;
             TrainingCancellationToken.ThrowIfCancellationRequested();
 
-            var order = valid.OrderBy(_ => random.Next()).ToList();
+            var order = trainWindows.OrderBy(_ => random.Next()).ToList();
             int fullBatches = order.Count / batchSize;
             double epochLossSum = 0.0;
             int epochStepCount = 0;
 
             for (int b = 0; b < fullBatches; b++)
             {
-                if (timeBounded &&
-                    (TrainingCancellationToken.IsCancellationRequested ||
-                     stopwatch!.Elapsed.TotalSeconds >= _options.MaxTrainingTimeSeconds))
-                    break;
                 TrainingCancellationToken.ThrowIfCancellationRequested();
 
                 int baseIdx = b * batchSize;
@@ -616,9 +620,13 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                     // compilable here — abandon and let TrainCore run eager.
                     if (!fusedEngaged)
                         return false;
-                    // Engaged earlier but this step couldn't (rare): the plan
-                    // holds the committed Adam state, so skip rather than reset it.
-                    continue;
+                    // Engaged earlier but this step couldn't run (rare). Do NOT
+                    // silently skip the batch: a partially-executed resident run
+                    // could still pass the gate and be accepted. Treat it as
+                    // divergence so the correctness gate below reinitializes the
+                    // blocks and hands off to the eager path.
+                    diverged = true;
+                    break;
                 }
 
                 fusedEngaged = true;
@@ -666,7 +674,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         // the GPU-resident attempt can never ship worse weights than eager.
         if (fusedEngaged)
         {
-            double postMse = ValidationStackMse(valid, yNorm, L, H);
+            double postMse = ValidationStackMse(holdoutWindows, yNorm, L, H);
             bool improved = !double.IsNaN(postMse) && !double.IsInfinity(postMse)
                             && postMse < preMse * 0.98;
             if (diverged || !improved)

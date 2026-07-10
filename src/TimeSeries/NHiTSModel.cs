@@ -507,11 +507,18 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
                 return false;
         }
 
+        // Time-ordered windows; reserve the latest ~20% as a holdout the resident
+        // optimizer never trains on, so the accept/reject gate measures
+        // GENERALIZATION rather than training-set fit.
         var valid = new List<int>();
         for (int idx = 0; idx < yNorm.Length; idx++)
             if (idx >= L && idx + H <= yNorm.Length)
                 valid.Add(idx);
-        if (valid.Count < batchSize) return false;
+        int holdoutCount = Math.Max(1, valid.Count / 5);
+        int trainCount = valid.Count - holdoutCount;
+        var trainWindows = valid.Take(trainCount).ToList();
+        var holdoutWindows = valid.Skip(trainCount).ToList();
+        if (trainWindows.Count < batchSize) return false;
 
         var layers = _stacks.Cast<ITrainableLayer<T>>().ToList();
         var trainingLoss = new MeanSquaredErrorLoss<T>();
@@ -520,7 +527,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>
             trainingLoss.ComputeTapeLoss(pred, target);
 
-        double preMse = ValidationMse(valid, yNorm, L, H);
+        double preMse = ValidationMse(holdoutWindows, yNorm, L, H);
 
         float lr = (float)_options.LearningRate;
         const float beta1 = 0.9f;
@@ -540,7 +547,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         for (int epoch = 0; epoch < maxEpochs && !diverged; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
-            var order = valid.OrderBy(_ => random.Next()).ToList();
+            var order = trainWindows.OrderBy(_ => random.Next()).ToList();
             int fullBatches = order.Count / batchSize;
 
             for (int b = 0; b < fullBatches; b++)
@@ -564,7 +571,11 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
                 if (!ran)
                 {
                     if (!fusedEngaged) return false;
-                    continue;
+                    // Engaged earlier but this step couldn't run: don't silently skip
+                    // (a partial run could still be accepted). Diverge so the gate
+                    // reinitializes and hands off to the eager path.
+                    diverged = true;
+                    break;
                 }
                 fusedEngaged = true;
                 double stepLossD = NumOps.ToDouble(stepLoss);
@@ -584,7 +595,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
         if (fusedEngaged)
         {
-            double postMse = ValidationMse(valid, yNorm, L, H);
+            double postMse = ValidationMse(holdoutWindows, yNorm, L, H);
             bool improved = !double.IsNaN(postMse) && !double.IsInfinity(postMse)
                             && postMse < preMse * 0.98;
             if (diverged || !improved)
