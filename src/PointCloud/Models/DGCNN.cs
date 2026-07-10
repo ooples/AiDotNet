@@ -654,8 +654,9 @@ internal class EdgeConvLayer<T> : LayerBase<T>
     private readonly int _outputChannels;
     private readonly int _k; // Number of nearest neighbors
     private readonly PointConvolutionLayer<T> _mlp;
+    private readonly BatchNormalizationLayer<T> _bn;
     private Tensor<T>? _lastInput;
-    private int[,]? _knnIndices; // Store k-NN indices for backward pass        
+    private int[,]? _knnIndices; // Store k-NN indices for backward pass
     private int[,]? _maxIndices; // Store max neighbor indices for backward pass
 
     public EdgeConvLayer(int inputChannels, int outputChannels, int k)
@@ -665,11 +666,17 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         _outputChannels = outputChannels;
         _k = k;
 
-        // MLP processes edge features (point + neighbor difference)
-        // Input: 2 * inputChannels (point feature + difference feature)
-        _mlp = new PointConvolutionLayer<T>(2 * inputChannels, outputChannels, new ReLUActivation<T>());
-
-        Parameters = _mlp.GetParameters();
+        // EdgeConv (Wang et al. 2019) is a COMPOSITE block: a shared MLP over the per-edge
+        // features [x_i, x_j - x_i] -> BatchNorm -> ReLU -> max-pool over the k neighbors.
+        // Register the MLP and BN as SUB-LAYERS (the ResNet BasicBlock composite pattern)
+        // so the tape recurses into them to train their parameters, ParameterCount includes
+        // them, and SetTrainingMode propagates to BN. BN is essential for stable training —
+        // without it the multi-scale concatenated features grow and the loss diverges. The
+        // MLP carries no activation of its own (Conv -> BN -> ReLU order).
+        _mlp = new PointConvolutionLayer<T>(2 * inputChannels, outputChannels, new IdentityActivation<T>());
+        _bn = new BatchNormalizationLayer<T>(outputChannels);
+        RegisterSubLayer(_mlp);
+        RegisterSubLayer(_bn);
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
@@ -680,14 +687,13 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         // Build k-NN graph based on current features
         _knnIndices = BuildKNNGraph(input, _k);
 
-        // Compute edge features
-        var edgeFeatures = ComputeEdgeFeatures(input, _knnIndices);
-
-        // Apply MLP to edge features
-        var transformedEdges = _mlp.Forward(edgeFeatures);
-
-        // Aggregate: max pool over neighbors for each point
-        var output = AggregateEdgeFeatures(transformedEdges, numPoints);
+        // Edge features [x_i, x_j - x_i] -> shared MLP -> BatchNorm -> ReLU, then max-pool
+        // over the k neighbors. All tape-tracked; the sub-layers are trained via the tape.
+        var edgeFeatures = ComputeEdgeFeatures(input, _knnIndices);   // [P*k, 2C]
+        var transformedEdges = _mlp.Forward(edgeFeatures);           // [P*k, outC] (linear)
+        var normalized = _bn.Forward(transformedEdges);             // [P*k, outC] BN per channel
+        var activated = Engine.ReLU(normalized);                   // [P*k, outC] tape-tracked ReLU
+        var output = AggregateEdgeFeatures(activated, numPoints);  // [P, outC] max over k
 
         return output;
     }
@@ -785,16 +791,25 @@ internal class EdgeConvLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _mlp.UpdateParameters(learningRate);
+        _bn.UpdateParameters(learningRate);
     }
 
     public override void ClearGradients()
     {
         _mlp.ClearGradients();
+        _bn.ClearGradients();
     }
 
     public override Vector<T> GetParameters()
     {
-        return _mlp.GetParameters();
+        // Aggregate the sub-layers' parameters in [mlp | bn] order (matches the
+        // ParameterCount the base derives from the registered sub-layers).
+        var mp = _mlp.GetParameters();
+        var bp = _bn.GetParameters();
+        var all = new Vector<T>(mp.Length + bp.Length);
+        for (int i = 0; i < mp.Length; i++) all[i] = mp[i];
+        for (int i = 0; i < bp.Length; i++) all[mp.Length + i] = bp[i];
+        return all;
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -804,8 +819,9 @@ internal class EdgeConvLayer<T> : LayerBase<T>
             throw new ArgumentException("Parameter vector length does not match layer parameter count.", nameof(parameters));
         }
 
-        _mlp.UpdateParameters(parameters);
-        Parameters = _mlp.GetParameters();
+        int mlpCount = (int)_mlp.ParameterCount;
+        _mlp.UpdateParameters(parameters.SubVector(0, mlpCount));
+        _bn.UpdateParameters(parameters.SubVector(mlpCount, (int)_bn.ParameterCount));
     }
 
     public override void ResetState()
@@ -814,9 +830,10 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         _knnIndices = null;
         _maxIndices = null;
         _mlp.ResetState();
+        _bn.ResetState();
     }
 
-    public override long ParameterCount => _mlp.ParameterCount;
+    // ParameterCount is derived by the base from the registered sub-layers (_mlp + _bn).
 
     public override bool SupportsTraining => true;
 }
