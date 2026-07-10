@@ -34,6 +34,15 @@ public class GraphBasedDocumentTests
         return new Tensor<double>(new[] { 1, 3, size, size }, data);
     }
 
+    // A rank-2 [N, F] node-feature matrix (one row per document node/segment).
+    private static Tensor<double> CreateNodeFeatures(int numNodes, int featureDim)
+    {
+        var data = new Vector<double>(numNodes * featureDim);
+        for (int i = 0; i < data.Length; i++)
+            data[i] = 0.01 * ((i % 11) + 1);
+        return new Tensor<double>(new[] { numNodes, featureDim }, data);
+    }
+
     #region DocGCN Tests
 
     [Fact(Timeout = 120000)]
@@ -63,6 +72,27 @@ public class GraphBasedDocumentTests
         var model = new DocGCN<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocGCN", meta.Name);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DocGCN_FusedMultimodal_CombinesHeterogeneousNodes()
+    {
+        await Task.Yield();
+        var model = new DocGCN<double>(CreateArchitecture());
+        var textNodes = CreateNodeFeatures(6, 128);
+        var visualNodes = CreateNodeFeatures(10, 128);
+
+        var textOnly = model.PredictMultimodal(textNodes, null);        // graceful degradation
+        var visualOnly = model.PredictMultimodal(null, visualNodes);    // graceful degradation
+        var fused = model.PredictMultimodal(textNodes, visualNodes);    // heterogeneous joint graph
+
+        AssertAllFinite(textOnly, "DocGCN text-only");
+        AssertAllFinite(visualOnly, "DocGCN visual-only");
+        AssertAllFinite(fused, "DocGCN fused");
+
+        Assert.Equal(textNodes.Shape[0] + visualNodes.Shape[0], fused.Shape[0]);
+        Assert.True(fused.Shape[0] > textOnly.Shape[0] && fused.Shape[0] > visualOnly.Shape[0],
+            "Fused heterogeneous node count should exceed each single modality.");
     }
 
     #endregion
