@@ -755,6 +755,46 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     private void TrainVAEBatch(Matrix<T> transformedData, int startRow, int endRow, T scaledLr)
     {
+        // Build the VAE sub-network's layer list once — same set used per row.
+        var vaeLayers = new List<ILayer<T>>(Layers);
+        if (_meanLayer is not null) vaeLayers.Add(_meanLayer);
+        if (_logVarLayer is not null) vaeLayers.Add(_logVarLayer);
+        vaeLayers.AddRange(_decoderLayers);
+
+        // GPU-RESIDENT fast path — the ELBO closure is identical per row, so
+        // the fused plan compiles on the first row and replays across the batch
+        // with refreshed input per iteration.
+        var trainableVaeLayers = vaeLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableVaeLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        {
+            Tensor<T> Fwd(Tensor<T> inp)
+            {
+                var enc = EncoderForwardOnTape(inp);
+                var (m, lv) = SplitEncoderOutput(enc);
+                var zz = Reparameterize(m, lv);
+                return DecoderForward(zz);
+            }
+            Tensor<T> Loss(Tensor<T> rawOutput, Tensor<T> target)
+            {
+                var enc = EncoderForwardOnTape(target);
+                var (m, lv) = SplitEncoderOutput(enc);
+                return ComputeElboLossTape(rawOutput, target, m, lv);
+            }
+            bool fusedEngaged = false;
+            for (int row = startRow; row < endRow; row++)
+            {
+                var inputTensor = VectorToTensor(GetRow(transformedData, row));
+                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableVaeLayers, inputTensor, inputTensor,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _optimizer,
+                    out T _);
+                if (!ran) { if (!fusedEngaged) break; continue; }
+                fusedEngaged = true;
+            }
+            if (fusedEngaged) return;
+        }
+
         for (int row = startRow; row < endRow; row++)
         {
             var inputTensor = VectorToTensor(GetRow(transformedData, row));
@@ -766,11 +806,6 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var rawOutput = DecoderForward(z);
             var loss = ComputeElboLossTape(rawOutput, inputTensor, mean, logVar);
 
-            // Step only the VAE sub-network (encoder + heads + decoder).
-            var vaeLayers = new List<ILayer<T>>(Layers);
-            if (_meanLayer is not null) vaeLayers.Add(_meanLayer);
-            if (_logVarLayer is not null) vaeLayers.Add(_logVarLayer);
-            vaeLayers.AddRange(_decoderLayers);
             TapeStepOver(tape, loss, vaeLayers);
         }
     }
