@@ -2569,7 +2569,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 RunImageSpaceTrainingLoop(
                     imageTrainable, typedImageLoader,
                     raysPerBatch, imageEpochs, configuredOptimizerOptions,
-                    cancellationToken: default);
+                    cancellationToken: cancellationToken);
 
                 optimizationResult = new OptimizationResult<T, TInput, TOutput>
                 {
