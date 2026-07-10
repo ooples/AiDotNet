@@ -287,6 +287,36 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
+        // GPU-RESIDENT fast path — fused SGD on the denoising-score-matching
+        // objective. The forward closure re-samples timestep + noise per step
+        // (via ComputeDenoisingPairTape), so replay produces fresh noise each
+        // step even though the compiled plan's captured graph shape is fixed.
+        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableLayers.Count > 0)
+        {
+            Tensor<T> ForwardDenoise(Tensor<T> inp)
+            {
+                var (pred, _) = ComputeDenoisingPairTape(inp, target);
+                return pred;
+            }
+            Tensor<T> ComputeDenoiseLoss(Tensor<T> pred, Tensor<T> _)
+            {
+                // Recompute the noise target to match this replay's noise sample.
+                var (_, eps) = ComputeDenoisingPairTape(input, target);
+                return loss.ComputeTapeLoss(pred, eps);
+            }
+            if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+                    trainableLayers, input, target,
+                    forward: ForwardDenoise, computeLoss: ComputeDenoiseLoss,
+                    optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
+                    learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
+                    out T fusedLoss))
+            {
+                LastLoss = fusedLoss;
+                return;
+            }
+        }
+
         using var tape = new GradientTape<T>();
         var (epsilonPred, epsilonTarget) = ComputeDenoisingPairTape(input, target);
 

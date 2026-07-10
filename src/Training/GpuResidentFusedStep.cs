@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using OptimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType;
 
@@ -107,6 +108,7 @@ public static class GpuResidentFusedStep<T>
         double maxGradNorm = 1.0)
     {
         lossValue = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
+        if (!IsGpuResidentAvailable) return false;
         if (layers is null || layers.Count == 0) return false;
         if (!TryResolveOptimizerConfig(optimizer, out var type, out var lr, out var b1, out var b2, out var eps, out var wd))
             return false;
@@ -115,4 +117,17 @@ public static class GpuResidentFusedStep<T>
             type, lr, b1, b2, eps, wd, out lossValue,
             maxGradNorm: maxGradNorm);
     }
+
+    /// <summary>
+    /// True when the fused-resident training path is reachable on this thread's
+    /// current engine (mirrors <c>TimeSeriesModelBase.CanTrainOnGpu</c> /
+    /// <c>NeuralNetworkBase.CanTrainOnGpu</c>). Three conditions must hold:
+    /// T == float, the current engine is a <see cref="DirectGpuTensorEngine"/>
+    /// with GPU available, and graph compilation is enabled. When false, callers
+    /// should stay on their eager tape+optimizer path.
+    /// </summary>
+    public static bool IsGpuResidentAvailable =>
+        typeof(T) == typeof(float)
+        && AiDotNetEngine.Current is DirectGpuTensorEngine gpu && gpu.SupportsGpu
+        && AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
 }

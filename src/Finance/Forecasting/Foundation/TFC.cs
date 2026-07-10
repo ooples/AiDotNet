@@ -274,6 +274,46 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
+        // GPU-RESIDENT fast path — compiled fused SGD on the combined
+        // supervised + contrastive objective. Both branches run through
+        // the fused forward closure so gradients accumulate into shared
+        // params on-device. Falls through to the in-place SGD loop below
+        // when the fused path can't engage.
+        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableLayers.Count > 0)
+        {
+            Tensor<T> ForwardCombined(Tensor<T> inp)
+            {
+                // supervised forecast head (same alignment as eager path below).
+                var f = ForwardForTraining(inp);
+                return f;
+            }
+            Tensor<T> ComputeLossCombined(Tensor<T> pred, Tensor<T> tgt)
+            {
+                var alignedT = tgt;
+                if (pred.Rank > tgt.Rank && pred.Shape[0] == 1 && pred.Length == tgt.Length)
+                    pred = Engine.Reshape(pred, tgt._shape);
+                else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
+                    alignedT = Engine.Reshape(tgt, pred._shape);
+                var supervised = loss.ComputeTapeLoss(pred, alignedT);
+                var contrastive = ComputeContrastiveLossTape(input);
+                if (!supervised._shape.SequenceEqual(contrastive._shape)
+                    && supervised.Length == contrastive.Length)
+                    contrastive = Engine.Reshape(contrastive, supervised._shape);
+                return Engine.TensorAdd(supervised, contrastive);
+            }
+            if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+                    trainableLayers, input, target,
+                    forward: ForwardCombined, computeLoss: ComputeLossCombined,
+                    optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
+                    learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
+                    out T fusedLoss))
+            {
+                LastLoss = fusedLoss;
+                return;
+            }
+        }
+
         // Custom tape step: TFC's loss is supervised forecast + weighted
         // contrastive alignment between the time-domain and frequency-
         // domain encoder outputs. Both terms must be recorded under the

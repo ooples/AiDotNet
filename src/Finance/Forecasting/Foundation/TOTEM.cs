@@ -330,6 +330,40 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
+        // GPU-RESIDENT fast path — recon + commitment on a fused SGD plan.
+        // Falls through to the in-place SGD loop below when the fused path
+        // can't engage.
+        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableLayers.Count > 0)
+        {
+            Tensor<T> ForwardCombined(Tensor<T> inp)
+            {
+                var (fc, _) = ForwardNativeForTrainingWithCommitment(inp);
+                return fc;
+            }
+            Tensor<T> ComputeLossCombined(Tensor<T> pred, Tensor<T> tgt)
+            {
+                var alignedT = tgt;
+                if (pred.Rank > tgt.Rank && pred.Shape[0] == 1 && pred.Length == tgt.Length)
+                    pred = Engine.Reshape(pred, tgt._shape);
+                else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
+                    alignedT = Engine.Reshape(tgt, pred._shape);
+                var recon = loss.ComputeTapeLoss(pred, alignedT);
+                var (_, commit) = ForwardNativeForTrainingWithCommitment(input);
+                return Engine.TensorAdd(recon, commit);
+            }
+            if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+                    trainableLayers, input, target,
+                    forward: ForwardCombined, computeLoss: ComputeLossCombined,
+                    optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
+                    learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
+                    out T fusedLoss))
+            {
+                LastLoss = fusedLoss;
+                return;
+            }
+        }
+
         using var tape = new GradientTape<T>();
         var (forecast, commitmentLoss) = ForwardNativeForTrainingWithCommitment(input);
 
