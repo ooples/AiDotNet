@@ -602,6 +602,49 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     private void TrainDiscriminatorStepBatched(Matrix<T> transformedData, int batchSize)
     {
         var (realBatch, fakeBatch) = BuildRealAndFakeBatches(transformedData, batchSize);
+        var discLayerList = _discLayers.Cast<ILayer<T>>().ToList();
+
+        // GPU-RESIDENT WGAN-GP disc via Tensors PR #763 (createGraph=true on
+        // compiled backward). The gradient-penalty inner tape's ops now record
+        // on the outer tape, so the fused plan can compile the full
+        // Wasserstein + λ·GP objective as one graph and backprop the penalty
+        // through the disc weights.
+        var trainableDiscLayers = discLayerList.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableDiscLayers.Count > 0)
+        {
+            // Pack real + fake into a single persistent input along axis 0 so
+            // both scores compute from one forward. Split in the loss closure.
+            int realN = realBatch.Shape[0];
+            int fakeN = fakeBatch.Shape[0];
+            var stacked = Engine.TensorConcatenate([realBatch, fakeBatch], axis: 0);
+            var target = new Tensor<T>(new[] { 1 });
+
+            Tensor<T> Fwd(Tensor<T> both) => DiscriminatorForwardBatched(both, isTraining: true);
+            Tensor<T> Loss(Tensor<T> allScores, Tensor<T> _)
+            {
+                var rShape = allScores._shape.ToArray(); rShape[0] = realN;
+                var fShape = allScores._shape.ToArray(); fShape[0] = fakeN;
+                var rStart = new int[allScores.Rank];
+                var fStart = new int[allScores.Rank]; fStart[0] = realN;
+                var rScores = Engine.TensorSlice(allScores, rStart, rShape);
+                var fScores = Engine.TensorSlice(allScores, fStart, fShape);
+                var axes = Enumerable.Range(0, rScores.Shape.Length).ToArray();
+                var avgReal = Engine.ReduceMean(rScores, axes, keepDims: false);
+                var avgFake = Engine.ReduceMean(fScores, axes, keepDims: false);
+                var wasserstein = Engine.TensorSubtract(avgFake, avgReal);
+                var gp = ComputeGradientPenalty(realBatch, fakeBatch);
+                return Engine.TensorAdd(wasserstein,
+                    Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableDiscLayers, stacked, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _discriminatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
 
         using var tape = new GradientTape<T>();
         var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers.Cast<ILayer<T>>());
@@ -1064,7 +1107,11 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             var scores = DiscriminatorForwardBatched(interpolated, true);
             var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
             var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
-            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated]);
+            // AiDotNet #1844: createGraph=true records the inner backward's ops on the
+            // outer tape so the gradient penalty actually backpropagates into the
+            // discriminator weights. Without this, WGAN-GP silently degrades to plain
+            // WGAN — the 1-Lipschitz constraint from Gulrajani 2017 is not enforced.
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated], createGraph: true);
             inputGradients = gradients.TryGetValue(interpolated, out var gradient)
                 ? gradient
                 : new Tensor<T>(interpolated._shape);

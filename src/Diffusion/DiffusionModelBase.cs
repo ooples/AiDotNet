@@ -1094,7 +1094,34 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             var noiseSpan = noiseBatch.AsWritableSpan();
             for (int i = 0; i < noiseSpan.Length; i++)
                 noiseSpan[i] = NumOps.FromDouble(RandomGenerator.NextGaussian());
-            noisySampleTensor = _scheduler.AddNoiseBatched(input, noiseBatch, timesteps);
+            // AddNoiseBatched lives on NoiseSchedulerBase (not INoiseScheduler — that
+            // interface can't carry a default implementation on net471). Fall back to
+            // per-element scalar AddNoise if a caller passed a scheduler that doesn't
+            // derive from NoiseSchedulerBase (shouldn't happen for framework schedulers).
+            if (_scheduler is Schedulers.NoiseSchedulerBase<T> baseScheduler)
+            {
+                noisySampleTensor = baseScheduler.AddNoiseBatched(input, noiseBatch, timesteps);
+            }
+            else
+            {
+                noisySampleTensor = new Tensor<T>(input._shape);
+                var cleanSpan = input.AsSpan();
+                var noisedSpan = noisySampleTensor.AsWritableSpan();
+                int perElement = input.Length / batchSize;
+                for (int b = 0; b < batchSize; b++)
+                {
+                    var cleanVec = new Vector<T>(perElement);
+                    var noiseVec = new Vector<T>(perElement);
+                    for (int j = 0; j < perElement; j++)
+                    {
+                        cleanVec[j] = cleanSpan[b * perElement + j];
+                        noiseVec[j] = noiseSpan[b * perElement + j];
+                    }
+                    var noised = _scheduler.AddNoise(cleanVec, noiseVec, timesteps[b]);
+                    for (int j = 0; j < perElement; j++)
+                        noisedSpan[b * perElement + j] = noised[j];
+                }
+            }
             noiseVector = noiseBatch.ToVector();
         }
         else

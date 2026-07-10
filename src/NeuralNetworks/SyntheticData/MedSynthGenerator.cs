@@ -643,90 +643,52 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         var discLayerList = BuildDiscLayerList();
         var discParams = TapeTrainingStep<T>.CollectParameters(discLayerList);
 
-        // Accumulator for sum of clipped per-example gradients
-        var gradSum = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var p in discParams)
-        {
-            var zero = new Tensor<T>(p._shape);
-            zero.Fill(NumOps.Zero);
-            gradSum[p] = zero;
-        }
-
-        double clipNorm = _options.ClipNorm;
-        double noiseStd = clipNorm * noiseMultiplier;
-        T lossSum = NumOps.Zero;
-
-        // Capture the EXACT per-example (real, fake) tensors that produced
-        // the per-example losses + clipped gradients, so the replay closure
-        // can reconstruct the same objective. Replay built from
-        // BuildRealAndFakeBatches(...startRow, endRow) draws fresh noise
-        // (= different fake rows), which decouples the replayed scalar loss
-        // from the noisedAvgGrads — the optimizer's replay would compute a
-        // loss tied to a different objective than the gradients it applies.
-        var perExampleReal = new List<Tensor<T>>(endRow - startRow);
-        var perExampleFake = new List<Tensor<T>>(endRow - startRow);
-
+        // Route through the shared DpSgdStep helper (Phase 4H). The helper enforces
+        // the Abadi 2016 Algorithm 1 clip-BEFORE-aggregate order via its structure,
+        // so a future refactor cannot silently reverse it and break the privacy proof.
+        //
+        // We capture per-example (real, fake) tensors so the optimizer's replay
+        // closure can reconstruct the exact objective the noisedAvgGrads were
+        // computed against — replay noise != training noise would train against a
+        // different objective than the gradients that got noised + averaged.
+        var perExampleReal = new List<Tensor<T>>(batchSize);
+        var perExampleFake = new List<Tensor<T>>(batchSize);
         for (int row = startRow; row < endRow; row++)
         {
-            var (realBatch, fakeBatch) = BuildRealAndFakeBatches(data, row, row + 1);
-            perExampleReal.Add(realBatch);
-            perExampleFake.Add(fakeBatch);
-
-            using var tape = new GradientTape<T>();
-            var realScores = DiscriminatorForwardBatched(realBatch, isTraining: true);
-            var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: true);
-
-            var perExampleAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
-            var negFakeScores = Engine.TensorNegate(fakeScores);
-            var lossReal = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(realScores), perExampleAxes, keepDims: false));
-            var lossFake = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(negFakeScores), perExampleAxes, keepDims: false));
-            var lossTensor = Engine.TensorAdd(lossReal, lossFake);
-
-            if (lossTensor.Length > 0)
-                lossSum = NumOps.Add(lossSum, lossTensor[0]);
-
-            var grads = tape.ComputeGradients(lossTensor, discParams);
-
-            // GLOBAL L2 norm across all parameter gradients concatenated.
-            // Required by Abadi's L2-sensitivity bound — per-tensor norms
-            // do NOT provide the same privacy guarantee.
-            double globalSqSum = 0.0;
-            foreach (var g in grads.Values)
-            {
-                for (int i = 0; i < g.Length; i++)
-                {
-                    double v = NumOps.ToDouble(g[i]);
-                    globalSqSum += v * v;
-                }
-            }
-            double globalNorm = Math.Sqrt(globalSqSum + 1e-12);
-            double clipFactor = Math.Min(1.0, clipNorm / globalNorm);
-            T clipFactorT = NumOps.FromDouble(clipFactor);
-
-            foreach (var kvp in grads)
-            {
-                var scaled = Engine.TensorMultiplyScalar(kvp.Value, clipFactorT);
-                gradSum[kvp.Key] = Engine.TensorAdd(gradSum[kvp.Key], scaled);
-            }
+            var (rb, fb) = BuildRealAndFakeBatches(data, row, row + 1);
+            perExampleReal.Add(rb);
+            perExampleFake.Add(fb);
         }
 
-        // Add Gaussian noise to the SUM, then average by batchSize.
-        var noisedAvgGrads = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-        double invBatch = 1.0 / batchSize;
-        foreach (var kvp in gradSum)
-        {
-            var noisy = new Tensor<T>(kvp.Value._shape);
-            for (int i = 0; i < kvp.Value.Length; i++)
+        // Sum of per-example scalar losses (unclipped) — used to report avgLoss.
+        // Compute alongside the DP-SGD helper by running the same forward inside
+        // its perExampleLoss callback.
+        T lossSum = NumOps.Zero;
+        var noisedAvgGrads = AiDotNet.Training.DpSgdStep<T>.ComputeClippedAggregatedGradients(
+            batchSize: batchSize,
+            perExampleLoss: exIdx =>
             {
-                double sumVal = NumOps.ToDouble(kvp.Value[i]);
-                double u1 = Math.Max(1e-10, _random.NextDouble());
-                double u2 = _random.NextDouble();
-                double zn = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                noisy[i] = NumOps.FromDouble((sumVal + zn * noiseStd) * invBatch);
-            }
-            noisedAvgGrads[kvp.Key] = noisy;
-        }
+                var realBatch = perExampleReal[exIdx];
+                var fakeBatch = perExampleFake[exIdx];
+                var realScores = DiscriminatorForwardBatched(realBatch, isTraining: true);
+                var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: true);
+                var axes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+                var negFakeScores = Engine.TensorNegate(fakeScores);
+                var lossReal = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(realScores), axes, keepDims: false));
+                var lossFake = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(negFakeScores), axes, keepDims: false));
+                var lossTensor = Engine.TensorAdd(lossReal, lossFake);
+                if (lossTensor.Length > 0)
+                    lossSum = NumOps.Add(lossSum, lossTensor[0]);
+                return lossTensor;
+            },
+            parameters: discParams,
+            clipNorm: _options.ClipNorm,
+            noiseMultiplier: noiseMultiplier,
+            rng: _random);
 
+        var stackedReal = Engine.TensorConcatenate([.. perExampleReal], axis: 0);
+        var stackedFake = Engine.TensorConcatenate([.. perExampleFake], axis: 0);
+        var allAxesFull = Enumerable.Range(0, stackedReal.Shape.Length).ToArray();
         T avgLoss = NumOps.Divide(lossSum, NumOps.FromDouble(batchSize));
 
         // Replay-correct closure: each per-example lossTensor was
@@ -738,9 +700,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         // here would tie the replayed loss to a different objective than
         // the noisedAvgGrads (silent training drift on any optimizer.Step
         // that exercises the replay path).
-        var stackedReal = Engine.TensorConcatenate([.. perExampleReal], axis: 0);
-        var stackedFake = Engine.TensorConcatenate([.. perExampleFake], axis: 0);
-        var allAxesFull = Enumerable.Range(0, stackedReal.Shape.Length).ToArray();
         var capturedFake = stackedFake;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
         Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _)

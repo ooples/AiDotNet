@@ -668,6 +668,43 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
         var (realPacked, fakePacked) = BuildPackedRealAndFakeBatches(transformedData, numPacks);
 
+        // GPU-RESIDENT WGAN-GP disc via Tensors PR #763. Same pack-real-fake pattern
+        // as CausalGAN; loss closure re-runs the gradient penalty on the outer tape
+        // via the fixed inner-tape createGraph=true (see AiDotNet #1844).
+        var trainableDiscLayers = _discLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableDiscLayers.Count > 0)
+        {
+            int realN = realPacked.Shape[0];
+            int fakeN = fakePacked.Shape[0];
+            var stacked = Engine.TensorConcatenate([realPacked, fakePacked], axis: 0);
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> both) => DiscriminatorForwardBatched(both, isTraining: true);
+            Tensor<T> Loss(Tensor<T> allScores, Tensor<T> _)
+            {
+                var rShape = allScores._shape.ToArray(); rShape[0] = realN;
+                var fShape = allScores._shape.ToArray(); fShape[0] = fakeN;
+                var rStart = new int[allScores.Rank];
+                var fStart = new int[allScores.Rank]; fStart[0] = realN;
+                var rScores = Engine.TensorSlice(allScores, rStart, rShape);
+                var fScores = Engine.TensorSlice(allScores, fStart, fShape);
+                var axes = Enumerable.Range(0, rScores.Shape.Length).ToArray();
+                var wasserstein = Engine.TensorSubtract(
+                    Engine.ReduceMean(fScores, axes, keepDims: false),
+                    Engine.ReduceMean(rScores, axes, keepDims: false));
+                var gp = ComputeGradientPenalty(realPacked, fakePacked);
+                return Engine.TensorAdd(wasserstein,
+                    Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableDiscLayers, stacked, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _discriminatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
         using var tape = new GradientTape<T>();
         var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers);
 
@@ -896,7 +933,9 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             var scores = DiscriminatorForwardBatched(interpolated, true);
             var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
             var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
-            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated]);
+            // AiDotNet #1844: createGraph=true records inner backward on outer tape
+            // so gradient penalty actually flows to disc weights (WGAN-GP correctness).
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated], createGraph: true);
             inputGradients = gradients.TryGetValue(interpolated, out var gradient)
                 ? gradient
                 : new Tensor<T>(interpolated._shape);

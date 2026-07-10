@@ -659,7 +659,32 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             wasserstein,
             Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
 
-        var noisedGrads = ComputePerExampleNoisedGradients(realPacked, fakePacked, discParams);
+        // Route the per-example DP-SGD gradient computation through the shared
+        // Training.DpSgdStep helper (Phase 4H). Enforces clip-BEFORE-aggregate
+        // order via the helper's structure so a future refactor can't accidentally
+        // reverse it (which would break the Abadi 2016 privacy proof).
+        int exampleCount = Math.Max(1, realPacked.Shape[0]);
+        var noisedGrads = AiDotNet.Training.DpSgdStep<T>.ComputeClippedAggregatedGradients(
+            batchSize: exampleCount,
+            perExampleLoss: exIdx =>
+            {
+                var realEx = ExtractPackedExample(realPacked, exIdx);
+                var fakeEx = ExtractPackedExample(fakePacked, exIdx);
+                var rs = DiscriminatorForwardBatched(realEx, isTraining: true);
+                var fs = DiscriminatorForwardBatched(fakeEx, isTraining: true);
+                var axes = Enumerable.Range(0, rs.Shape.Length).ToArray();
+                var w = Engine.TensorSubtract(
+                    Engine.ReduceMean(fs, axes, keepDims: false),
+                    Engine.ReduceMean(rs, axes, keepDims: false));
+                var gpEx = ComputeGradientPenalty(realEx, fakeEx);
+                return Engine.TensorAdd(
+                    w,
+                    Engine.TensorMultiplyScalar(gpEx, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+            },
+            parameters: discParams,
+            clipNorm: _options.ClipNorm,
+            noiseMultiplier: _computedNoiseMultiplier,
+            rng: _random);
 
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         // Replay must reproduce the full objective (Wasserstein + λ·GP).
@@ -900,7 +925,9 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             var scores = DiscriminatorForwardBatched(interpolated, true);
             var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
             var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
-            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated]);
+            // AiDotNet #1844: createGraph=true records inner backward on outer tape
+            // so gradient penalty actually flows to disc weights (WGAN-GP correctness).
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated], createGraph: true);
             inputGradients = gradients.TryGetValue(interpolated, out var gradient)
                 ? gradient
                 : new Tensor<T>(interpolated._shape);
