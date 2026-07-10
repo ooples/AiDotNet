@@ -356,6 +356,15 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         // matching the explicit-iteration-count contract.
         bool timeBounded = _options.MaxTrainingTimeSeconds > 0;
         int maxEpochs = timeBounded ? int.MaxValue : _options.Epochs;
+
+        // Best-epoch-weights checkpointing. On noisy / fat-tailed real series the eager Adam loop can DIVERGE —
+        // the normalized training loss climbs instead of falling (measured 1.20 -> 1.55 over 15 epochs on SPY
+        // daily log-returns) and the final weights produce predictions blown up to hundreds of times the target
+        // scale. Adam's adaptive step makes gradient clipping alone insufficient here, so we additionally keep the
+        // parameters from the LOWEST-loss epoch and restore them after training — inference then always uses the
+        // best-fit weights, never a diverged tail. Standard early-stopping-style checkpointing.
+        double bestEpochLoss = double.PositiveInfinity;
+        Tensor<T>[]? bestParamSnapshot = null;
         for (int epoch = 0; epoch < maxEpochs; epoch++)
         {
             if (timeBounded && TrainingCancellationToken.IsCancellationRequested)
@@ -467,6 +476,13 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                         grads[param] = grad;
                 }
 
+                // Global-norm gradient clipping (Oreshkin et al. 2020). WITHOUT it the deep doubly-residual stack's
+                // gradients explode on fat-tailed real series at the default LR: the normalized training loss
+                // DIVERGES upward (measured 1.20 -> 1.55 over 15 epochs on SPY daily log-returns) and inference
+                // predictions blow up to ~hundreds of times the target scale. Clip the whole gradient set to
+                // GradientClipNorm before the optimizer step so a single outlier batch can't send the weights flying.
+                ClipGradientsByGlobalNorm(grads.Values, _options.GradientClipNorm);
+
                 Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => batchLoss;
                 Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt) =>
                     trainingLoss.ComputeTapeLoss(pred, tgt);
@@ -481,8 +497,60 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             }
 
             if (epochStepCount > 0)
-                _lastRunEpochLosses.Add(epochLossSum / epochStepCount);
+            {
+                double epochLoss = epochLossSum / epochStepCount;
+                _lastRunEpochLosses.Add(epochLoss);
+
+                // Snapshot the weights (as Tensors) whenever this epoch improved on the best loss so far.
+                // Allocate the snapshot tensors once, then reuse them via a vectorized copy (dest = src * 1).
+                if (epochLoss < bestEpochLoss && !double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss))
+                {
+                    bestEpochLoss = epochLoss;
+                    if (bestParamSnapshot is null)
+                    {
+                        bestParamSnapshot = new Tensor<T>[trainableParams.Count];
+                        for (int pi = 0; pi < trainableParams.Count; pi++)
+                            bestParamSnapshot[pi] = trainableParams[pi].Clone();
+                    }
+                    else
+                    {
+                        for (int pi = 0; pi < trainableParams.Count; pi++)
+                            Engine.TensorMultiplyScalarInto(bestParamSnapshot[pi], trainableParams[pi], NumOps.One);
+                    }
+                }
+            }
         }
+
+        // Restore the best-loss weights so inference never runs on a diverged tail (vectorized copy).
+        if (bestParamSnapshot is not null)
+            for (int pi = 0; pi < trainableParams.Count; pi++)
+                Engine.TensorMultiplyScalarInto(trainableParams[pi], bestParamSnapshot[pi], NumOps.One);
+    }
+
+    /// <summary>
+    /// Scales every gradient in <paramref name="grads"/> in place so their combined L2 (global) norm does not
+    /// exceed <paramref name="maxNorm"/>. No-op when <paramref name="maxNorm"/> ≤ 0 or the norm is already under
+    /// it. This is the standard exploding-gradient guard N-BEATS needs on the eager tape path — see
+    /// <see cref="NBEATSModelOptions{T}.GradientClipNorm"/>.
+    /// </summary>
+    private void ClipGradientsByGlobalNorm(ICollection<Tensor<T>> grads, double maxNorm)
+    {
+        if (maxNorm <= 0.0) return;
+
+        // Global L2 norm = sqrt(Σ_p ||g_p||²). Per-tensor sum-of-squares runs on the vectorized engine
+        // (TensorSumOfSquares); the only cross-tensor accumulation is over the already-reduced per-tensor scalars.
+        T sumSq = NumOps.Zero;
+        foreach (var g in grads)
+            if (g is not null)
+                sumSq = NumOps.Add(sumSq, Engine.TensorSumOfSquares(g));
+
+        double totalNorm = Math.Sqrt(NumOps.ToDouble(sumSq));
+        if (totalNorm < 1e-12 || totalNorm <= maxNorm) return;
+
+        T scale = NumOps.FromDouble(maxNorm / totalNorm);
+        foreach (var g in grads)
+            if (g is not null)
+                Engine.TensorMultiplyScalarInPlace(g, scale);   // vectorized in-place scale
     }
 
     /// <summary>
