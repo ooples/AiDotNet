@@ -3,6 +3,11 @@ export default {
   rules: {
     // Allow longer body lines (default is 100, increase to 200 for detailed technical explanations)
     'body-max-line-length': [1, 'always', 200],
+    // Match the body limit for footers. The conventional-commits parser classifies any
+    // "word: value" line (e.g. a "L=2, per-epoch: ..." benchmark line, or a squashed PR's
+    // "* fix(x): ..." bullet) as a footer, so detailed messages tripped the default 100.
+    // Kept a warning at 200, consistent with body-max-line-length above.
+    'footer-max-line-length': [1, 'always', 200],
     // Add 'deps' as valid type for dependabot commits
     'type-enum': [2, 'always', [
       'feat', 'fix', 'docs', 'refactor', 'perf', 'test', 'chore', 'ci', 'style', 'revert',
