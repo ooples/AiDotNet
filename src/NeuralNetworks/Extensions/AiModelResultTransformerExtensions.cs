@@ -43,7 +43,11 @@ public static class AiModelResultTransformerExtensions
         int? eosTokenId = null)
     {
         RequireTransformerCapability(result, nameof(GenerateGreedy));
-        return GenerateInternal(result, startTokens, maxNewTokens, argmax: true, temperature: default!, eosTokenId, seed: null, onToken: null, cancellationToken: default);
+        return AiDotNet.Extensions.Telemetry.AiModelResultInferenceTelemetry.TimeAndLog(
+            result,
+            nameof(GenerateGreedy),
+            () => GenerateInternal(result, startTokens, maxNewTokens, argmax: true, temperature: default!, eosTokenId, seed: null, onToken: null, cancellationToken: default),
+            resultCount: maxNewTokens);
     }
 
     /// <summary>
