@@ -1502,59 +1502,55 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <param name="batchIndices">The indices to use for the current batch.</param>
     /// <returns>A vector representing the gradient of the loss function with respect to the model parameters.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> The gradient tells us which direction to adjust our model's
-    /// parameters to improve performance. It's like a compass showing the way to a better solution.
+    /// <para>
+    /// This overload historically shipped a fallback that computed
+    /// <c>gradient[j] += loss × input_feature[j]</c>. That formula is algebraically wrong for
+    /// every model class — <c>error</c> is <see cref="ILossFunction{T}.CalculateLoss"/>, a scalar
+    /// mean-squared-error, NOT the per-element residual <c>(pred − target)</c>. Even for linear
+    /// regression (the case it was likely intended for), the correct formula is
+    /// <c>(pred − target) × x_j</c>. For any neural network the correct gradient requires
+    /// backprop through the chain rule. On top of that, the inner loop indexed the input
+    /// feature vector by <c>j &lt; parameters.Length</c> — for models with more parameters than
+    /// input dimensions (every non-trivial model), <c>GetFeatureValue(input, j)</c> either
+    /// threw or returned garbage past the input dimension.
+    /// </para>
+    /// <para>
+    /// The fallback was unreachable in the shipped model set because
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}"/> implements
+    /// <see cref="IGradientComputable{T, TInput, TOutput}"/> and the 3-argument
+    /// <see cref="CalculateGradient(IFullModel{T, TInput, TOutput}, TInput, TOutput)"/>
+    /// overload dispatches through that interface. But it was a landmine — any subclass that
+    /// overrode this virtual "to extend the base," or any future model class that skipped
+    /// <c>IGradientComputable</c>, silently trained with algebraic garbage.
+    /// </para>
+    /// <para>
+    /// The fix removes the wrong-formula body and routes callers to the correct path via
+    /// <see cref="InterfaceGuard.GradientComputable{T, TInput, TOutput}"/> — matching PyTorch,
+    /// Keras, and JAX's fail-fast convention when a model can't compute gradients. Closes #1837.
     /// </para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <paramref name="solution"/> does not implement
+    /// <see cref="IGradientComputable{T, TInput, TOutput}"/> — gradient-based optimizers require
+    /// a model that supports backprop. Inherit from <see cref="NeuralNetworks.NeuralNetworkBase{T}"/>
+    /// (which implements the interface) or implement <c>IGradientComputable&lt;T, TInput, TOutput&gt;</c>
+    /// directly.
+    /// </exception>
     protected virtual Vector<T> CalculateGradient(
         IFullModel<T, TInput, TOutput> solution,
         TInput xTrain,
         TOutput yTrain,
         int[] batchIndices)
     {
-        // Extract batch data using your InputHelper
+        // Route through the proper gradient path. InterfaceGuard.GradientComputable throws
+        // with a clear message if the model doesn't implement IGradientComputable — the same
+        // fail-fast convention PyTorch/Keras/JAX use when a model can't backprop.
+        var gradientComputable = InterfaceGuard.GradientComputable(solution);
         var xBatch = InputHelper<T, TInput>.GetBatch(xTrain, batchIndices);
         var yBatch = InputHelper<T, TOutput>.GetBatch(yTrain, batchIndices);
 
-        // Get the current parameters
-        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        var gradient = new Vector<T>(parameters.Length);
-
-        // Initialize gradient vector with zeros
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = NumOps.Zero;
-        }
-
-        // For each sample in the batch
-        for (int i = 0; i < batchIndices.Length; i++)
-        {
-            // Get the current input and output for this sample
-            var input = InputHelper<T, TInput>.GetItem(xBatch, i);
-            var target = InputHelper<T, TOutput>.GetItem(yBatch, i);
-
-            // Predict the output
-            var prediction = solution.Predict(input);
-
-            // Calculate the error
-            var error = LossFunction.CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(prediction), ConversionsHelper.ConvertToVector<T, TOutput>(target));
-
-            // Update gradient based on the error
-            for (int j = 0; j < parameters.Length; j++)
-            {
-                var featureValue = InputHelper<T, TInput>.GetFeatureValue(input, j);
-                var contribution = NumOps.Multiply(error, featureValue);
-                gradient[j] = NumOps.Add(gradient[j], contribution);
-            }
-        }
-
-        // Average the gradient using vectorized division
-        var batchSizeScalar = NumOps.FromDouble(batchIndices.Length);
-        gradient = (Vector<T>)Engine.Divide(gradient, batchSizeScalar);
-
-        // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
+        var gradient = gradientComputable.ComputeGradients(xBatch, yBatch, LossFunction);
         _lastComputedGradients = gradient;
-
         return gradient;
     }
 

@@ -75,7 +75,11 @@ public class MemFlow<T> : OpticalFlowBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            // 2 frames stacked channel-wise (2×3=6): the lazy _featureExtract conv is sized from
+            // InputDepth by ResolveLazyLayerShapes, and EstimateFlow feeds it the concatenated pair,
+            // so it must be 6 not 3. Single-encoder flow models only (RAFT/GMFlow have a separate
+            // 3-channel context encoder and are excluded). PredictCore splits per-frame via Shape[1]/2.
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
             outputSize: 2))
     {
     }
@@ -258,8 +262,29 @@ public class MemFlow<T> : OpticalFlowBase<T>
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
+
+        // Re-link the cached role fields to the layers the BASE already deserialized (with their
+        // trained, shape-resolved weights) — do NOT call InitializeNativeLayers, which allocates
+        // FRESH random-initialized convolutions and, via InitializeLayers, replaces the deserialized
+        // layers in Layers. Doing so discarded the trained weights so a cloned/loaded model predicted
+        // from random init (#1221 class: Clone_AfterTraining / Clone_ShouldProduceIdenticalOutput).
+        // Layer order matches InitializeLayers: [featureExtract, ...processingBlocks, outputConv].
+        if (Layers.Count < _numLayers + 2)
+            throw new InvalidDataException(
+                $"MemFlow serialized layer count {Layers.Count} is too small for {_numLayers} processing blocks.");
+
+        _featureExtract = Layers[0] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("MemFlow feature extractor layer is missing or has the wrong type.");
+
         _processingBlocks.Clear();
-        InitializeNativeLayers(Architecture);
+        for (int i = 0; i < _numLayers; i++)
+        {
+            _processingBlocks.Add(Layers[i + 1] as ConvolutionalLayer<T>
+                ?? throw new InvalidDataException($"MemFlow processing block {i} is missing or has the wrong type."));
+        }
+
+        _outputConv = Layers[_numLayers + 1] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("MemFlow output layer is missing or has the wrong type.");
     }
 
     /// <inheritdoc/>

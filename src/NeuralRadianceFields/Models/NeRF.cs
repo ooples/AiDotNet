@@ -133,7 +133,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis", "https://doi.org/10.1007/978-3-030-58452-8_24", Year = 2020, Authors = "Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, Ren Ng")]
-public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
+public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
     private readonly NeRFOptions _options;
 
@@ -440,6 +440,11 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
     /// </summary>
     protected override void InitializeLayers()
     {
+        // Rebuilding the layer collection invalidates any prior shape resolution — the fresh
+        // lazy DenseLayers must be re-resolved through NeRF's real topology (see
+        // ResolveLazyLayerShapes) before the next ParameterCount / GetParameters query.
+        _nerfShapesResolved = false;
+
         ClearLayers();
         _positionLayers.Clear();
         _colorLayers.Clear();
@@ -476,6 +481,90 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         // Color output
         _colorOutputLayer = (DenseLayer<T>)Layers[idx++];
+    }
+
+    private bool _nerfShapesResolved;
+
+    /// <summary>
+    /// Resolves NeRF's lazy <see cref="DenseLayer{T}"/> input shapes through the model's REAL
+    /// (non-sequential) topology instead of the base class's left-to-right walk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NeRF is not a plain sequential stack: a positional-encoding front end feeds the position
+    /// MLP, and the colour MLP consumes the feature vector CONCATENATED with the direction
+    /// encoding (see <see cref="QueryField"/>). The base
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.ResolveLazyLayerShapes"/> assumes each
+    /// layer's input equals the previous layer's output, so it mis-sizes the first position layer
+    /// (real input = positional-encoding width, not the raw architecture input) and the first
+    /// colour layer (real input = feature width + direction-encoding width). That left NeRF
+    /// reporting an unstable, partly-wrong <c>ParameterCount</c> before the first forward and a
+    /// different value after it — which blocked the facade optimizer from writing trained
+    /// parameters back into a freshly-constructed model (that writeback only fires when the
+    /// caller's parameter count is zero or already equals the trained count).
+    /// </para>
+    /// <para>
+    /// The base method is <c>virtual</c> precisely so non-sequential topologies (its own docs
+    /// cite U-Net concatenation) can resolve through their real graph. Resolution here is
+    /// shape-only via <see cref="LayerBase{T}.ResolveShapesOnly"/>: it fixes each layer's declared
+    /// input/output shape WITHOUT allocating weights or consuming RNG, so weight allocation still
+    /// happens lazily on the first real forward — no eager-materialization cost.
+    /// </para>
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_nerfShapesResolved)
+        {
+            return;
+        }
+
+        // Custom-architecture path (Architecture.Layers supplied) doesn't follow NeRF's fixed
+        // head layout, so defer to the base sequential walk in that case.
+        if (_densityLayer is null || _featureLayer is null || _colorOutputLayer is null)
+        {
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        int positionDim = 3 * 2 * _positionEncodingLevels;
+        int directionDim = 3 * 2 * _directionEncodingLevels;
+
+        // Position MLP: layer 0 reads the positional encoding; later layers read the previous
+        // hidden output; a skip-connection layer additionally concatenates the positional encoding.
+        for (int i = 0; i < _positionLayers.Count; i++)
+        {
+            int inputDim = i == 0 ? positionDim : _hiddenDim;
+            if (_skipConnectionLayer >= 0 && i == _skipConnectionLayer)
+            {
+                inputDim = _hiddenDim + positionDim;
+            }
+            ResolveDenseLayerShape(_positionLayers[i], inputDim);
+        }
+
+        // Density + feature heads both read the position MLP's hidden output.
+        ResolveDenseLayerShape(_densityLayer, _hiddenDim);
+        ResolveDenseLayerShape(_featureLayer, _hiddenDim);
+
+        // Colour MLP: layer 0 reads [feature ⊕ direction-encoding]; later layers read the colour
+        // hidden width.
+        int colorInputDim = _hiddenDim + directionDim;
+        for (int i = 0; i < _colorLayers.Count; i++)
+        {
+            ResolveDenseLayerShape(_colorLayers[i], i == 0 ? colorInputDim : _colorHiddenDim);
+        }
+
+        // Colour output reads the last colour hidden width (or the concatenated colour input when
+        // there are no colour hidden layers).
+        ResolveDenseLayerShape(
+            _colorOutputLayer, _colorLayers.Count > 0 ? _colorHiddenDim : colorInputDim);
+
+        _nerfShapesResolved = true;
+    }
+
+    private static void ResolveDenseLayerShape(DenseLayer<T> layer, int inputDim)
+    {
+        // [batch=1, inputDim] — the batch axis is irrelevant to weight-shape resolution.
+        layer.ResolveShapesOnly(new[] { 1, inputDim });
     }
 
     #endregion
@@ -1108,6 +1197,96 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         return new Tensor<T>(output, [numPoints, 4]);
     }
+
+    /// <summary>
+    /// Image-space photometric training (#1834). Pulls one batch from the loader, volume-
+    /// renders each sampled ray, computes MSE against ground-truth pixel colors, and drives
+    /// a full gradient step through the volume-rendering integral into the MLP weights via
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.BackwardAndStepOnPrecomputedLoss"/>.
+    /// </summary>
+    /// <remarks>
+    /// This is the paper-standard NeRF training path — every call applies a real Adam step
+    /// to the density + color MLPs from the photometric residual. Sample count ramps
+    /// automatically per <see cref="ProgressiveSamplingSchedule"/> (coarse → fine) so early
+    /// iterations use fewer samples for speed and late iterations use more for quality.
+    /// </remarks>
+    public T TrainOnImageBatch(
+        AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader,
+        int raysPerBatch,
+        AiDotNet.Models.Options.OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>? optimizerOptions,
+        NeuralRadianceFields.Data.ImageTrainingOptions? imageTrainingOptions = null)
+    {
+        var batch = NeuralRadianceFields.Helpers.ImageTrainingHelpers.PullOneBatch(loader, raysPerBatch);
+        if (batch is null)
+        {
+            return NumOps.Zero;
+        }
+        var (view, pixels) = batch.Value;
+
+        // Excellence goal #4: progressive coarse-to-fine sample count.
+        var schedule = imageTrainingOptions?.Schedule ?? NeuralRadianceFields.Data.ProgressiveSamplingSchedule.Paper();
+        int numSamples = schedule.SamplesForIteration(_imageTrainingIteration);
+        _imageTrainingIteration++;
+
+        // Excellence goal #3: auto scene bounds.
+        NeuralRadianceFields.Data.SceneBounds? bounds = imageTrainingOptions?.SceneBounds ?? _autoBounds;
+        if (bounds is null)
+        {
+            bounds = TryEstimateBoundsFromLoader(loader);
+            _autoBounds = bounds;
+        }
+        T near = bounds is not null ? NumOps.FromDouble(bounds.Near) : _renderNearBound;
+        T far  = bounds is not null ? NumOps.FromDouble(bounds.Far)  : _renderFarBound;
+
+        // Excellence goal #4 (LearnedPrior single-image mode): blend the current view's
+        // prior hallucination into the ray targets so single-photo reconstruction gets
+        // training signal from directions the caller didn't photograph. No-op when the
+        // view has no prior or the caller set PriorConfidenceOverride to 0.
+        var targetColors = NeuralRadianceFields.Helpers.ImageTrainingHelpers.ApplyPriorToRayTargets(
+            Engine, pixels.TargetColors, view, imageTrainingOptions?.PriorConfidenceOverride);
+
+        // Tape-recorded forward + photometric MSE → BackwardAndStepOnPrecomputedLoss drives a
+        // real gradient step through RenderRays into the MLP weights.
+        SetTrainingMode(true);
+        try
+        {
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
+            var rendered = RenderRays(
+                pixels.RayOrigins,
+                pixels.RayDirections,
+                numSamples: numSamples,
+                near,
+                far);
+            var diff = Engine.TensorSubtract(rendered, targetColors);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
+            var meanLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+            return BackwardAndStepOnPrecomputedLoss(tape, meanLoss);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    private NeuralRadianceFields.Data.SceneBounds? _autoBounds;
+
+    private static NeuralRadianceFields.Data.SceneBounds? TryEstimateBoundsFromLoader(
+        AiDotNet.Interfaces.IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> loader)
+    {
+        // Only the in-memory loader factory produces a loader that exposes its full view
+        // set. For streaming loaders we skip bounds estimation and let the caller pass
+        // ImageTrainingOptions.SceneBounds explicitly.
+        if (loader is NeuralRadianceFields.Data.IViewSetProvider<T> vs)
+        {
+            return NeuralRadianceFields.Data.SceneBoundsEstimator.EstimateFromViews(vs.Views);
+        }
+        return null;
+    }
+
+    // Per-model image-space training step counter used to drive the progressive schedule.
+    // Facade calls TrainOnImageBatch once per iteration; we increment monotonically.
+    private int _imageTrainingIteration;
 
     /// <summary>
     /// Trains the model on input data.

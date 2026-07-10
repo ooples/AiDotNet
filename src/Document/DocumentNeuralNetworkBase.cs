@@ -185,6 +185,16 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> PreprocessDocument(Tensor<T> rawImage)
     {
+        // Token-based document models (LayoutLM / LayoutXLM / LiLT / DocFormer / DocGCN / PICK /
+        // TRIE / DocOwl / UDOP / InfographicVQA) consume a rank-1/2 sequence of TOKEN IDs, not raw
+        // RGB pixels — their first layer is an EmbeddingLayer. Default image preprocessing (ImageNet
+        // mean/std normalization over [C, H, W], which routes through EnsureBatchDimension and rejects
+        // rank < 3) does not apply to token inputs, so pass them through unchanged. Genuine page-image
+        // models (Donut, DocBank) are only ever fed rank-3/4 tensors, so this never bypasses their
+        // normalization.
+        if (rawImage.Rank < 3)
+            return rawImage;
+
         // Priority 1: Instance-level transformer (set explicitly on this model)
         var transformer = PreprocessingTransformer;
         if (transformer is not null && transformer.IsFitted)

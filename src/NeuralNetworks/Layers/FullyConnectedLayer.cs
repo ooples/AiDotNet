@@ -310,11 +310,22 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         int inputSize = input.Shape[rank - 1];
         int outputSize = OutputShape[0];
 
-        _weights = AllocateLazyWeight([outputSize, inputSize]);
-        _biases = AllocateLazyWeight([outputSize]);
-        InitializeParameters();
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Idempotent allocation: skip re-allocation/re-init when correctly-shaped weights already
+        // exist (installed by SetParameters/SetTrainableParameters on deserialize, or shared by a
+        // copy-on-write clone) so a cloned model's first forward does not overwrite restored/shared
+        // TRAINED weights with fresh random ones (#1221 Clone_AfterTraining). See Conv1DLayer.
+        bool weightsAlreadyValid = _weights is { Rank: 2 } wt
+            && wt.Shape[0] == outputSize && wt.Shape[1] == inputSize
+            && _biases is { } b && b.Length == outputSize;
+
+        if (!weightsAlreadyValid)
+        {
+            _weights = AllocateLazyWeight([outputSize, inputSize]);
+            _biases = AllocateLazyWeight([outputSize]);
+            InitializeParameters();
+            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { inputSize }, new[] { outputSize });
     }

@@ -391,11 +391,15 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
         int outH = (h - 1) * Stride - 2 * Padding + KernelSize;
         int outW = (w - 1) * Stride - 2 * Padding + KernelSize;
 
-        _kernels = AllocateLazyWeight([c, OutputDepth, KernelSize, KernelSize]);
-        _biases = AllocateLazyWeight([OutputDepth]);
-        InitializeParameters();
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_kernels, c, OutputDepth, KernelSize, KernelSize))
+        {
+            _kernels = AllocateLazyWeight([c, OutputDepth, KernelSize, KernelSize]);
+            _biases = AllocateLazyWeight([OutputDepth]);
+            InitializeParameters();
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { c, h, w }, new[] { OutputDepth, outH, outW });
     }

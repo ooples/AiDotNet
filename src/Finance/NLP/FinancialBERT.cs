@@ -185,14 +185,12 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
         if (Layers.Count > idx) _typeEmbedding = Layers[idx++];
         idx += 2; // skip norm/dropout
 
+        // Each transformer layer is now a single composite TransformerEncoderBlock (residual
+        // attention + residual FFN internally), so one Layers entry per block — not the former
+        // six flat sublayers.
         _transformerLayers.Clear();
         for (int i = 0; i < 12; i++)
         {
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
             if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
         }
 

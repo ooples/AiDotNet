@@ -1,4 +1,5 @@
-﻿using AiDotNet.Interfaces;
+﻿using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 
@@ -189,11 +190,182 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         return 10.0 * Math.Log10(1.0 / mse);
     }
 
+    // Lazily-created RNG for the per-training-step synthetic mask (see CreateTrainingMask). Seeded from
+    // the architecture seed when one is set (so seeded training runs are reproducible), else a
+    // cryptographically-secure RNG per the project RNG policy.
+    private Random? _trainingMaskRng;
+
+    private Random TrainingMaskRng =>
+        _trainingMaskRng ??= Architecture?.RandomSeed is int seed
+            ? RandomHelper.CreateSeededRandom(seed)
+            : RandomHelper.CreateSecureRandom();
+
+    /// <summary>
+    /// Builds a fresh, RANDOM single-channel hole mask <c>[n, 1, h, w]</c> for one training step — a
+    /// randomly sized and positioned rectangular hole (1 = hole, 0 = keep) re-drawn on every call. This
+    /// is the PyTorch video-inpainting training recipe (STTN / FuseFormer / E2FGVI / ProPainter train
+    /// on random per-sample synthetic masks): because the mask varies every step the model cannot treat
+    /// it as a constant shortcut and zero out its frame-channel weights, so training keeps using the
+    /// frame content (the encoder's mask-channel weights are exercised with real gradient, and the model
+    /// stays input-sensitive). Reproducible under a seeded architecture (see <see cref="TrainingMaskRng"/>).
+    /// Inference uses the deterministic <see cref="CreateDefaultInpaintingMask"/> instead.
+    /// </summary>
+    /// <param name="n">Batch / frame count.</param>
+    /// <param name="h">Frame height.</param>
+    /// <param name="w">Frame width.</param>
+    protected Tensor<T> CreateTrainingMask(int n, int h, int w)
+    {
+        var mask = new Tensor<T>([n, 1, h, w]);
+        double ratio = MaxMaskRatio;
+        if (ratio < 0.0) ratio = 0.0;
+        if (ratio > 1.0) ratio = 1.0;
+        double maxSide = Math.Sqrt(ratio);
+        var rng = TrainingMaskRng;
+        var span = mask.Data.Span;
+        var one = NumOps.One;
+        int plane = h * w;
+        for (int b = 0; b < n; b++)
+        {
+            // Random box: 50-100% of the max side, at a random position — varies every training step.
+            double side = maxSide * (0.5 + 0.5 * rng.NextDouble());
+            int holeH = Math.Max(1, (int)(h * side));
+            int holeW = Math.Max(1, (int)(w * side));
+            if (holeH > h) holeH = h;
+            if (holeW > w) holeW = w;
+            int top = h > holeH ? rng.Next(h - holeH + 1) : 0;
+            int left = w > holeW ? rng.Next(w - holeW + 1) : 0;
+            int baseOffset = b * plane;
+            for (int y = top; y < top + holeH; y++)
+            {
+                int rowOffset = baseOffset + y * w;
+                for (int x = left; x < left + holeW; x++)
+                    span[rowOffset + x] = one;
+            }
+        }
+        return mask;
+    }
+
+    /// <summary>
+    /// Builds the deterministic single-channel hole mask <c>[n, 1, h, w]</c> used by the generic
+    /// inference path (<see cref="PredictCore"/>) when no explicit mask is supplied: a centred
+    /// rectangular hole covering roughly <see cref="MaxMaskRatio"/> of the frame area (1 = hole to fill,
+    /// 0 = keep). It is deterministic (no per-call RNG) so inference is reproducible for the
+    /// Clone/determinism invariants. Training uses the RANDOM <see cref="CreateTrainingMask"/> instead;
+    /// callers that have a real mask supply it directly through <see cref="Inpaint(Tensor{T}, Tensor{T})"/>.
+    /// </summary>
+    /// <param name="n">Batch / frame count.</param>
+    /// <param name="h">Frame height.</param>
+    /// <param name="w">Frame width.</param>
+    protected Tensor<T> CreateDefaultInpaintingMask(int n, int h, int w)
+    {
+        var mask = new Tensor<T>([n, 1, h, w]);
+        // side = sqrt(ratio) so a centred square hole covers ~MaxMaskRatio of the area. Clamp the
+        // ratio to [0, 1] by hand (no Math.Clamp — net471) and guarantee at least a 1px hole.
+        double ratio = MaxMaskRatio;
+        if (ratio < 0.0) ratio = 0.0;
+        if (ratio > 1.0) ratio = 1.0;
+        double side = Math.Sqrt(ratio);
+        int holeH = Math.Max(1, (int)(h * side));
+        int holeW = Math.Max(1, (int)(w * side));
+        int top = (h - holeH) / 2;
+        int left = (w - holeW) / 2;
+        var span = mask.Data.Span;
+        var one = NumOps.One;
+        int plane = h * w;
+        for (int b = 0; b < n; b++)
+        {
+            int baseOffset = b * plane;
+            for (int y = top; y < top + holeH; y++)
+            {
+                int rowOffset = baseOffset + y * w;
+                for (int x = left; x < left + holeW; x++)
+                    span[rowOffset + x] = one;
+            }
+        }
+        return mask;
+    }
+
+    // Frame-normalization scale last chosen by NormalizeInpaintFrames, so DenormalizeInpaintFrames
+    // inverts the SAME mapping within a single forward. Defaults to 255 for a denormalize with no prior
+    // normalize. Only ever set/read on the sequential normalize -> forward -> denormalize path.
+    private double _frameNormalizationScale = 255.0;
+
+    /// <summary>
+    /// Scale-adaptive frame normalization for these mask-conditioned models. Divides [0, 255] pixel
+    /// frames by 255, but passes frames that are already in [0, 1] through unchanged — so the frame
+    /// signal stays on the same scale as the concatenated single-channel 0/1 mask. Dividing an already
+    /// normalized frame by 255 drives it to ~0.004, which the 0/1 mask channel (~1.0) then numerically
+    /// swamps through the network, collapsing the model to input-independent output. Records the applied
+    /// scale so <see cref="DenormalizeInpaintFrames"/> applies the exact inverse.
+    /// </summary>
+    protected Tensor<T> NormalizeInpaintFrames(Tensor<T> frames)
+    {
+        _frameNormalizationScale = InferFrameScale(frames);
+        return _frameNormalizationScale == 1.0
+            ? frames
+            : Engine.TensorDivideScalar(frames, NumOps.FromDouble(_frameNormalizationScale));
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="NormalizeInpaintFrames"/>: rescales the model output by the scale the
+    /// matching normalize used and clamps to that scale's valid pixel range ([0, 1] or [0, 255]).
+    /// </summary>
+    protected Tensor<T> DenormalizeInpaintFrames(Tensor<T> frames)
+    {
+        double scale = _frameNormalizationScale;
+        var restored = scale == 1.0
+            ? frames
+            : Engine.TensorMultiplyScalar(frames, NumOps.FromDouble(scale));
+
+        // The pixel-range clamp is an INFERENCE-only step. Engine.TensorClamp is a hard clamp with ZERO
+        // gradient outside [0, scale], so applying it on the training forward path (PostprocessOutput is
+        // called inside ForwardForTraining in AVID/FlowLens/FuseFormer/STTN) would stop the loss from
+        // correcting any pixel the model pushed past the valid range — the reconstruction gradient for
+        // over/undershoot pixels vanishes. During training, return the raw continuous denormalized frames
+        // so those gradients flow; only clamp for inference output that must be valid pixels.
+        if (IsTrainingMode)
+            return restored;
+
+        return Engine.TensorClamp(restored, NumOps.Zero, NumOps.FromDouble(scale));
+    }
+
+    // Picks the normalization scale from the data: a max value clearly above [0, 1] means the frames are
+    // in [0, 255] pixel space (scale 255); otherwise they are already normalized (scale 1, no-op). Only
+    // selects a scalar — the actual divide/multiply stays a differentiable Engine op. Uses the vectorized
+    // tensor max rather than a per-element scan so it stays negligible on the per-forward training path.
+    private double InferFrameScale(Tensor<T> frames)
+    {
+        if (frames.Length == 0) return 1.0;
+        return NumOps.ToDouble(frames.Max().maxVal) > 1.5 ? 255.0 : 1.0;
+    }
+
+    private bool _shapesProbed;
+
+    /// <summary>
+    /// Resolves lazy layer shapes for these mask-conditioned models. Their inference path
+    /// (<see cref="PredictCore"/> -> <see cref="Inpaint(Tensor{T}, Tensor{T})"/>) concatenates a
+    /// 1-channel mask before the encoder, so the lazy first conv must resolve to <c>InputDepth + 1</c> —
+    /// not the <c>InputDepth</c> the base linear shape-walk infers from the architecture input shape.
+    /// Probe the real inference forward once on a tiny dummy frame so callers that run before any real
+    /// forward (GetParameters, serialization, Clone) resolve the encoder to the same depth training and
+    /// inference feed it. The probe dispatches through the virtual <see cref="PredictCore"/>, so a model
+    /// with its own PredictCore override is probed through its own path.
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_shapesProbed || Layers.Count == 0) return;
+        _shapesProbed = true;
+        int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        _ = PredictCore(new Tensor<T>([1, c, 32, 32]));
+    }
+
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // Default: create empty mask (no inpainting needed)
-        var mask = new Tensor<T>([input.Shape[0], 1, input.Shape[2], input.Shape[3]]);
+        // Use the same default hole mask the training forward sees (CreateDefaultInpaintingMask) so
+        // inference measures the model in the value space it was trained in. Callers with a real mask
+        // use Inpaint directly.
+        var mask = CreateDefaultInpaintingMask(input.Shape[0], input.Shape[2], input.Shape[3]);
         return Inpaint(input, mask);
     }
 }

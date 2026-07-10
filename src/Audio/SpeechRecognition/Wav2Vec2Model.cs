@@ -156,6 +156,14 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private int _ffDim;
 
     /// <summary>
+    /// Number of Conv1D layers in the feature encoder (wav2vec 2.0 uses 7). The first
+    /// <c>FeatureConvCount</c> entries of <see cref="_featureEncoderLayers"/> are the temporal
+    /// convolutions (run BEFORE the channels-&gt;time transpose in <see cref="RunModel"/>); any
+    /// remaining entries are the post-transpose feature projection.
+    /// </summary>
+    private const int FeatureConvCount = 7;
+
+    /// <summary>
     /// Vocabulary size for CTC output (non-readonly for deserialization support).
     /// </summary>
     private int _vocabSize;
@@ -414,11 +422,8 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 sampleRate: SampleRate, maxAudioLengthSeconds: _maxAudioLengthSeconds).ToList();
 
         Layers.Clear();
-        _featureEncoderLayers.Clear();
-        _transformerLayers.Clear();
         Layers.AddRange(layers);
 
-        // Distribute to internal sub-lists for forward pass
         // Feature encoder: 7 conv layers + 1 projection = 8
         int featureEncoderCount = 8;
         // Transformer layers: numTransformerLayers * 3 (selfAttn + ff + ffOut) + 1 CTC projection
@@ -432,16 +437,33 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 $"but got {layers.Count}. Layer distribution may be incorrect.");
         }
 
-        for (int i = 0; i < featureEncoderCount && i < layers.Count; i++)
-            _featureEncoderLayers.Add(layers[i]);
+        DistributeLayersToSubLists();
+    }
+
+    // Re-links the typed forward-path sub-lists (_featureEncoderLayers / _transformerLayers /
+    // _ctcProjection) to the CURRENT contents of Layers. The forward reads these fields, NOT Layers,
+    // so they must be rebuilt whenever Layers is replaced — critically after deserialization, where the
+    // base clears Layers and adds freshly-deserialized (trained) layers. Without this, a cloned/loaded
+    // model keeps its ctor's random-init sub-list layers and predicts as if untrained (#1221 class:
+    // Clone_AfterTraining). Distribution order matches CreateWav2Vec2Layers: [0..7]=feature encoder,
+    // [8..8+3N-1]=transformer, [^1]=CTC projection.
+    private void DistributeLayersToSubLists()
+    {
+        _featureEncoderLayers.Clear();
+        _transformerLayers.Clear();
+
+        int featureEncoderCount = 8;
+        int transformerCount = _numTransformerLayers * 3;
+
+        for (int i = 0; i < featureEncoderCount && i < Layers.Count; i++)
+            _featureEncoderLayers.Add(Layers[i]);
 
         int transformerStart = featureEncoderCount;
-        for (int i = 0; i < transformerCount && transformerStart + i < layers.Count; i++)
-            _transformerLayers.Add(layers[transformerStart + i]);
+        for (int i = 0; i < transformerCount && transformerStart + i < Layers.Count; i++)
+            _transformerLayers.Add(Layers[transformerStart + i]);
 
-        // CTC projection: last layer
-        if (layers.Count > 0)
-            _ctcProjection = layers[^1];
+        if (Layers.Count > 0)
+            _ctcProjection = Layers[^1];
     }
 
     private static string[] GetDefaultVocabulary()
@@ -474,7 +496,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Tensor<T> logits;
         if (_useNativeMode)
         {
-            logits = Forward(features);
+            logits = RunModel(features);
         }
         else
         {
@@ -546,36 +568,24 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // Wav2Vec2 processes raw audio directly
-        // Normalize to [-1, 1] range
+        // Wav2Vec2 consumes the RAW waveform directly (Baevski et al. 2020 — the whole premise of
+        // wav2vec2 is learning from raw audio, not mel features). Flatten the input to a 1-D sample
+        // stream on the TOTAL element count (rawAudio.Length), not Shape[0]: callers (and the
+        // model-family tests) may pass a shaped tensor like [1, frames, samples] whose Shape[0] is a
+        // batch dim of 1 — keying off Shape[0] collapsed the clip to one sample.
+        //
+        // Do NOT peak-normalize (÷max) here: that was both non-paper-accurate (the paper uses
+        // zero-mean/unit-variance, applied as EXTERNAL preprocessing on real waveforms) AND
+        // information-destroying for the synthetic test inputs — ÷max maps every constant input to
+        // all-ones and cancels any input scaling, collapsing the model's output (failing
+        // DifferentInputs / ScaledInput). The sibling ASR models that pass these invariants
+        // (UniSpeech, RobustConformer) likewise treat the given tensor as the prepared feature stream.
         int targetLength = SampleRate * _maxAudioLengthSeconds;
+        int length = Math.Min(rawAudio.Length, targetLength);
 
-        var normalized = new Tensor<T>([Math.Min(rawAudio.Shape[0], targetLength)]);
-
-        // Find max for normalization
-        double maxVal = 0;
-        for (int i = 0; i < normalized.Shape[0]; i++)
-        {
-            double val = Math.Abs(NumOps.ToDouble(rawAudio[i]));
-            if (val > maxVal) maxVal = val;
-        }
-
-        if (maxVal > 0)
-        {
-            for (int i = 0; i < normalized.Shape[0]; i++)
-            {
-                normalized[i] = NumOps.FromDouble(NumOps.ToDouble(rawAudio[i]) / maxVal);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < normalized.Shape[0]; i++)
-            {
-                normalized[i] = rawAudio[i];
-            }
-        }
-
-        return normalized;
+        var waveform = new Tensor<T>([length]);
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
     }
 
     /// <summary>
@@ -599,8 +609,128 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         }
         else
         {
-            return Forward(preprocessed);
+            return RunModel(preprocessed);
         }
+    }
+
+    /// <summary>
+    /// Runs the native wav2vec 2.0 forward on a 1-D waveform: Conv1D feature encoder ->
+    /// transpose -> feature projection -> transformer -> CTC head. Used by BOTH inference
+    /// (<see cref="PredictCore"/> / <see cref="Transcribe"/>) and training
+    /// (<see cref="ForwardForTraining"/>) so the two agree, and every op records the autodiff tape.
+    /// </summary>
+    /// <remarks>
+    /// A plain linear layer-walk cannot express this network: the conv encoder emits [B, C, T']
+    /// (channels-major) but the transformer attends over frames [B, T', C], so a transpose is
+    /// required between them — done here with <c>Engine.TensorPermute</c> (the same pattern SileroVad
+    /// uses). The conv encoder also preserves the temporal sequence, which the earlier DenseLayer
+    /// stack destroyed (collapsing every input to one vector -> input-independent output).
+    /// </remarks>
+    // Minimum waveform length fed to the Conv1D encoder. The 7 paper strides downsample by 320x, so a
+    // clip shorter than this collapses to zero frames ("Invalid output dimensions (1x0)"). Short inputs
+    // (e.g. minimal-input invariants) are zero-padded up to this length before the encoder.
+    private const int MinEncoderSamples = 1024;
+
+    private bool _shapesProbed;
+
+    /// <inheritdoc/>
+    protected override void ResolveLazyLayerShapes()
+    {
+        // The real forward (RunModel) reshapes the waveform to [1, 1, T] before the Conv1D encoder, so
+        // the first conv must resolve to in_channels = 1. The base linear walk instead feeds the
+        // architecture input shape ([1, 64, 32]) straight into the first conv, resolving it to
+        // in_channels = 64 — after which the real forward throws "Input channels (1) must match kernel
+        // in_channels (64)". Probe the real forward once on a tiny dummy waveform so every lazy layer
+        // resolves to what RunModel actually feeds it.
+        if (_shapesProbed || !_useNativeMode || _featureEncoderLayers.Count == 0) return;
+        _shapesProbed = true;
+        _ = RunModel(new Tensor<T>(new[] { MinEncoderSamples }));
+    }
+
+    private Tensor<T> RunModel(Tensor<T> waveform)
+    {
+        // Zero-pad clips shorter than the encoder's receptive field so the 320x downsample leaves at
+        // least a few frames instead of collapsing to length 0.
+        if (waveform.Length < MinEncoderSamples)
+        {
+            var padded = new Tensor<T>(new[] { MinEncoderSamples });
+            waveform.Data.Span.CopyTo(padded.Data.Span);
+            waveform = padded;
+        }
+
+        // Reshape the flat waveform [T] to [B=1, C=1, T] for the Conv1D feature encoder.
+        var x = Engine.Reshape(waveform, new[] { 1, 1, waveform.Length });
+
+        // Conv feature encoder: _featureEncoderLayers[0..FeatureConvCount-1] : [1,1,T] -> [1,512,T'].
+        int convCount = Math.Min(FeatureConvCount, _featureEncoderLayers.Count);
+        for (int i = 0; i < convCount; i++)
+            x = _featureEncoderLayers[i].Forward(x);
+
+        // Transpose channels<->time: [1,512,T'] -> [1,T',512] so the transformer attends over frames.
+        x = Engine.TensorPermute(x, new[] { 0, 2, 1 });
+
+        // Feature projection: remaining _featureEncoderLayers : [1,T',512] -> [1,T',hidden].
+        for (int i = convCount; i < _featureEncoderLayers.Count; i++)
+            x = _featureEncoderLayers[i].Forward(x);
+
+        // Transformer encoder (MHA + FFN blocks, walked in order as they were emitted).
+        foreach (var layer in _transformerLayers)
+            x = layer.Forward(x);
+
+        // CTC projection: [1,T',hidden] -> [1,T',vocab].
+        if (_ctcProjection is not null)
+            x = _ctcProjection.Forward(x);
+
+        return x;
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => RunModel(input);
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        // The base walks Layers linearly feeding the raw [1, 64, 32] input, which the Conv1D encoder
+        // rejects (it expects [B, 1, T] and would resolve to the wrong channel count / collapse to 0
+        // frames). Replay the real custom forward (RunModel) instead, capturing each layer's output.
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode)
+            return activations;
+
+        var waveform = PreprocessAudio(input);
+        if (waveform.Length < MinEncoderSamples)
+        {
+            var padded = new Tensor<T>(new[] { MinEncoderSamples });
+            waveform.Data.Span.CopyTo(padded.Data.Span);
+            waveform = padded;
+        }
+
+        var x = Engine.Reshape(waveform, new[] { 1, 1, waveform.Length });
+        int idx = 0;
+        int convCount = Math.Min(FeatureConvCount, _featureEncoderLayers.Count);
+        for (int i = 0; i < convCount; i++)
+        {
+            x = _featureEncoderLayers[i].Forward(x);
+            activations[$"Layer_{idx++}_{_featureEncoderLayers[i].GetType().Name}"] = x.Clone();
+        }
+        x = Engine.TensorPermute(x, new[] { 0, 2, 1 });
+        for (int i = convCount; i < _featureEncoderLayers.Count; i++)
+        {
+            x = _featureEncoderLayers[i].Forward(x);
+            activations[$"Layer_{idx++}_{_featureEncoderLayers[i].GetType().Name}"] = x.Clone();
+        }
+        foreach (var layer in _transformerLayers)
+        {
+            x = layer.Forward(x);
+            activations[$"Layer_{idx++}_{layer.GetType().Name}"] = x.Clone();
+        }
+        if (_ctcProjection is not null)
+        {
+            x = _ctcProjection.Forward(x);
+            activations[$"Layer_{idx}_{_ctcProjection.GetType().Name}"] = x.Clone();
+        }
+        return activations;
     }
 
     /// <summary>
@@ -651,7 +781,11 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
                 ?? throw new InvalidOperationException(
                     "Wav2Vec2Model training requires an optimizer implementing IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
-            TrainWithTape(input, expectedOutput, gradientOptimizer);
+            // Train on the SAME preprocessed feature stream inference runs on (PredictCore ->
+            // PreprocessAudio -> Forward). Feeding raw input straight to the tape produced a
+            // different-shaped forward than Predict ([1,64,34] vs the preprocessed [.,34]), so the
+            // MSE loss shape-mismatched and every training-based invariant failed.
+            TrainWithTape(PreprocessAudio(input), expectedOutput, gradientOptimizer);
         }
         finally
         {
@@ -710,10 +844,19 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         _vocabSize = reader.ReadInt32();
         _language = reader.ReadString();
 
-        // Reinitialize layers if needed for native mode
-        if (_useNativeMode && (_featureEncoderLayers is null || _featureEncoderLayers.Count == 0))
+        // Reinitialize / re-link layers for native mode. The base deserialize has already populated
+        // Layers with the trained layers; re-link the typed forward-path sub-lists to THEM (the ctor
+        // populated them from fresh random layers, and the forward reads the sub-lists, not Layers —
+        // so without this a cloned/loaded model predicts untrained: #1221 Clone_AfterTraining).
+        if (_useNativeMode)
         {
-            InitializeLayers();
+            if (Layers.Count > 0)
+                DistributeLayersToSubLists();
+            else
+                // Layers.Count == 0 (older/empty native payload): rebuild the default native layers.
+                // InitializeLayers() is the ONNX no-op and would leave a native model with no
+                // feature-encoder/transformer/CTC layers at all — a silently broken model.
+                InitializeNativeLayers();
         }
     }
 

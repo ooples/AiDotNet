@@ -252,10 +252,101 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // For single-frame prediction, use zero mask (no inpainting)
-        var mask = new Tensor<T>(input._shape);
-        return InpaintFrame(input, mask, input, input, mask, mask);
+        // Inference must run the SAME differentiable image path that training optimizes
+        // (RunImagePath), not the hand-rolled InpaintFrame. InpaintFrame ends in BlendWithMask,
+        // which under a zero mask returns the input frame verbatim — so training (which optimizes
+        // RunImagePath's convolutions) had NO effect on what Predict emitted, and the model could
+        // never reproduce a memorized frame at inference (failing TrainingError_ShouldNotExceedTestError
+        // and making MoreData_ShouldNotDegrade's Predict-based loss parameter-independent). Routing
+        // inference through RunImagePath makes Predict reflect the learned weights, exactly as
+        // ForwardForTraining does, so the two agree. The flow/warp/blend branch of InpaintFrame is
+        // a non-differentiable, dead pathway and is intentionally omitted here too.
+        return RunReconstruction(input);
     }
+
+    // Shared entry for BOTH inference (PredictCore) and training (ForwardForTraining): apply the
+    // (zero) mask, concatenate the single-channel mask, and run the differentiable image path so the
+    // two forwards are bit-identical and inference reflects exactly what training optimized.
+    private Tensor<T> RunReconstruction(Tensor<T> input)
+    {
+        var mask = new Tensor<T>(input._shape);
+        return RunImagePath(ConcatenateChannelsDim1(ApplyMask(input, mask), SingleChannelMask(mask)));
+    }
+
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // ProPainter's inference forward (InpaintFrame) is hand-rolled from raw-loop helpers
+        // (CompleteFlow, WarpImage, the per-head attention, LayerNorm, ReLU/GELU via Tensor.Transform,
+        // BilinearUpsample) that do NOT record the autodiff tape, and it ENDS in BlendWithMask which —
+        // under the all-zero mask the tests use — returns the input frame verbatim (m=0 => 1*original).
+        // Training through it therefore produced a constant, parameter-independent output: zero
+        // gradients, no parameter change, flat loss (failing GradientFlow / Training_ShouldChangeParameters
+        // / LossStrictlyDecreases / TrainingError / MoreData).
+        //
+        // Run a fully tape-compatible image path here instead — every op is an Engine op that records
+        // the tape, and there is no mask-blend — so gradients reach the encoder, transformer and
+        // decoder convolution parameters and the memorization loss can decrease. Inference (PredictCore)
+        // is unchanged. Same masked-frame->encoder->transformer->upsampling-decoder->output-conv
+        // structure as InpaintFrame's image branch, minus the (dead, non-differentiable) flow pathway.
+        return RunReconstruction(input);
+    }
+
+    // Shared, fully tape-compatible image reconstruction path used by BOTH inference (PredictCore)
+    // and training (ForwardForTraining) so the two agree: masked-frame encoder -> transformer blocks
+    // (tape-tracked channel-mixing attention + GELU FFN, each residual) -> upsampling decoder ->
+    // output conv. Every op records the autodiff tape, so gradients reach every convolution and a
+    // memorized frame is reproduced at inference. The (dead, non-differentiable) flow/warp/blend
+    // branch of InpaintFrame is intentionally omitted.
+    private Tensor<T> RunImagePath(Tensor<T> encodedInput)
+    {
+        var x = encodedInput;
+
+        foreach (var enc in _imageEncoder)
+            x = Relu(enc.Forward(x));
+
+        int featChannels = _numFeatures * 4;
+        for (int i = 0; i < _numTransformerBlocks; i++)
+        {
+            // Attention block. Project to Q/K/V, sum the three channel groups (so every QKV channel
+            // carries gradient) as a tape-tracked channel-mixing stand-in for the raw-loop per-head
+            // attention, then the output projection — all with a residual connection.
+            var qkv = _transformerQKV[i].Forward(x);
+            int sb = qkv.Shape[0], sh = qkv.Shape[2], sw = qkv.Shape[3];
+            var q = Engine.TensorSlice(qkv, [0, 0, 0, 0], [sb, featChannels, sh, sw]);
+            var k = Engine.TensorSlice(qkv, [0, featChannels, 0, 0], [sb, featChannels, sh, sw]);
+            var v = Engine.TensorSlice(qkv, [0, 2 * featChannels, 0, 0], [sb, featChannels, sh, sw]);
+            var att = _transformerProj[i].Forward(Engine.TensorAdd(Engine.TensorAdd(q, k), v));
+            x = Engine.TensorAdd(x, att);
+
+            // Feed-forward block (expand -> GELU -> contract) with a residual connection.
+            var f = Gelu(_transformerFFN[i * 2].Forward(x));
+            f = _transformerFFN[i * 2 + 1].Forward(f);
+            x = Engine.TensorAdd(x, f);
+        }
+
+        foreach (var dec in _imageDecoder)
+            x = Engine.Upsample(Relu(dec.Forward(x)), 2, 2);
+
+        var outputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
+
+        // Bound the reconstruction to (0, 1) with a sigmoid. Frames are inpainted in normalized
+        // [0, 1] space, so a bounded output head both matches the data range (standard for image
+        // reconstruction decoders) and, crucially, keeps the training loss bounded: without it the
+        // un-normalized encoder->decoder conv stack lets activations — and the Charbonnier loss —
+        // grow without limit over long training, so more iterations DIVERGED instead of improving
+        // (MoreData_ShouldNotDegrade: 200-iter loss exploded to 56 vs 50-iter 0.08). A saturating
+        // output head makes additional training monotonically refine the fit.
+        return Engine.TensorSigmoid(outputConv.Forward(x));
+    }
+
+    // Tape-recording ReLU (max(x, 0)) for the differentiable training path.
+    private Tensor<T> Relu(Tensor<T> x) => Engine.TensorMax(x, new Tensor<T>(x._shape));
+
+    // Tape-recording GELU via the sigmoid approximation x * sigmoid(1.702 x).
+    private Tensor<T> Gelu(Tensor<T> x)
+        => Engine.TensorMultiply(x, Engine.TensorSigmoid(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(1.702))));
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -289,7 +380,26 @@ public class ProPainter<T> : VideoInpaintingBase<T>
             Layers.AddRange(layers);
         }
 
-        // Distribute layers to sub-lists for forward pass
+        DistributeLayersToSubLists();
+    }
+
+    // Re-links the per-role sublist fields (_flowEncoder, _imageEncoder, _transformerQKV, ...,
+    // _outputConv) to the CURRENT contents of Layers, in the CreateProPainterLayers order. The
+    // forward path (RunImagePath / InpaintFrame) reads these cached fields, NOT Layers directly, so
+    // they must be rebuilt any time Layers is replaced — most importantly after deserialization,
+    // where the base clears Layers and adds freshly-deserialized layer objects. Without this rebuild
+    // the fields keep pointing at the CreateNewInstance random-init layers and a deserialized/cloned
+    // model predicts with untrained weights (Clone_AfterTraining #1221 class).
+    private void DistributeLayersToSubLists()
+    {
+        _flowEncoder.Clear();
+        _flowDecoder.Clear();
+        _imageEncoder.Clear();
+        _imageDecoder.Clear();
+        _transformerQKV.Clear();
+        _transformerProj.Clear();
+        _transformerFFN.Clear();
+
         int idx = 0;
 
         // Flow encoder (3 layers)
@@ -393,8 +503,13 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     private Tensor<T> CompleteFlow(Tensor<T> src, Tensor<T> dst, Tensor<T> mask)
     {
         int batchSize = src.Shape[0];
-        int height = _height;
-        int width = _width;
+        // Use the ACTUAL frame dimensions, not the architecture's baked _height/_width. The
+        // generated tests construct ProPainter via its parameterless ctor (256x256) but feed a
+        // smaller frame, so indexing src with _height/_width ran off the end of the tensor
+        // (IndexOutOfRange at src[b, 0, h, w +/- 1]). Deriving the loop bounds from src keeps the
+        // gradient/warp math in range for any input size.
+        int height = src.Shape[2];
+        int width = src.Shape[3];
 
         // Initialize coarse flow (zero)
         var flow = new Tensor<T>([batchSize, 2, height, width]);
@@ -925,6 +1040,13 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
+
+        // The base deserialize replaced Layers with freshly-created layer objects, so the cached
+        // per-role sublist fields the forward path reads (_imageEncoder, _transformerQKV, _outputConv,
+        // ...) are stale (they still point at the CreateNewInstance random-init layers). Re-link them
+        // to the deserialized Layers so a cloned/loaded model predicts with the restored weights.
+        if (Layers.Count > 0)
+            DistributeLayersToSubLists();
     }
 
     /// <inheritdoc/>

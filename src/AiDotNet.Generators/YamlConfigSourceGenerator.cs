@@ -66,7 +66,7 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
         var sections = AnalyzeSections(configureMethods, compilation);
 
         // Discover additional types marked with [YamlConfigurable] attribute.
-        var attributeSections = DiscoverAttributeMarkedTypes(compilation, sections);
+        var attributeSections = DiscoverAttributeMarkedTypes(compilation, sections, builderType);
         sections.AddRange(attributeSections);
 
         // Emit helper types.
@@ -212,7 +212,8 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
     /// </summary>
     private static List<SectionInfo> DiscoverAttributeMarkedTypes(
         Compilation compilation,
-        List<SectionInfo> existingSections)
+        List<SectionInfo> existingSections,
+        INamedTypeSymbol builderType)
     {
         var results = new List<SectionInfo>();
         var existingNames = new HashSet<string>(
@@ -230,7 +231,44 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
         foreach (var (markedType, sectionName) in visitor.DiscoveredTypes)
         {
             // Skip if a Configure method already covers this section name.
-            if (existingNames.Contains(sectionName)) continue;
+            if (existingNames.Contains(sectionName))
+            {
+                // Collision case: a Configure-method section already claims this name. If that
+                // section is a POCO/options section (no registry entries of its own) and the marked
+                // type is an INTERFACE with concrete implementations, merge those implementations
+                // onto the existing section so the type registry exposes them under this name — while
+                // leaving the section's strongly-typed POCO config property intact. This is what lets
+                // ConfigureAutoML(AutoMLOptions) (the "AutoML" POCO section) and IAutoMLModel
+                // (marked [YamlConfigurable("AutoML")]) share one "AutoML" section that BOTH configures
+                // via options AND resolves concrete IAutoMLModel implementations from YAML.
+                if (markedType.TypeKind == TypeKind.Interface)
+                {
+                    var existing = existingSections.FirstOrDefault(s =>
+                        string.Equals(s.Method.SectionName, sectionName, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null && existing.ConcreteImplementations.Count == 0)
+                    {
+                        var mergedImpls = FindImplementations(markedType, compilation);
+                        if (mergedImpls.Count > 0)
+                        {
+                            existing.ConcreteImplementations = mergedImpls;
+                            existing.Method.RegistryMerged = true;
+
+                            // Only enable the applier's YAML `type:` -> CreateInstance branch when the
+                            // builder actually exposes a Configure<Section>(interface) overload to receive
+                            // the resolved implementation. Without it (e.g. a section that only has a POCO
+                            // options overload), the merge stays registry-only: the impls are discoverable
+                            // in schema/docs but the applier keeps using the options path, so we don't emit
+                            // a call to a non-existent overload.
+                            if (HasConfigureOverloadAccepting(builderType, sectionName, markedType))
+                            {
+                                existing.Method.MergedInterfaceTypeName =
+                                    markedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
 
             var info = new ConfigureMethodInfo
             {
@@ -274,6 +312,59 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="builderType"/> exposes a public instance method
+    /// <c>Configure&lt;sectionName&gt;</c> whose first parameter can receive an instance of
+    /// <paramref name="interfaceType"/> (the parameter is that interface, or implements it). Scans the
+    /// RAW member list (not the deduped Configure-method set) so an interface overload that shares a
+    /// section name with a POCO options overload is still found.
+    /// </summary>
+    private static bool HasConfigureOverloadAccepting(
+        INamedTypeSymbol builderType, string sectionName, ITypeSymbol interfaceType)
+    {
+        var methodName = "Configure" + sectionName;
+        foreach (var member in builderType.GetMembers())
+        {
+            if (member is not IMethodSymbol method) continue;
+            if (method.IsStatic || method.DeclaredAccessibility != Accessibility.Public) continue;
+            if (!string.Equals(method.Name, methodName, StringComparison.Ordinal)) continue;
+            if (method.Parameters.Length == 0) continue;
+
+            // The applier emits `builder.Configure<Section>(instance)` where `instance` is typed
+            // as `interfaceType`. That single-argument call only binds when every trailing parameter
+            // is optional (or params), so reject overloads with required trailing parameters.
+            if (HasRequiredTrailingParameters(method)) continue;
+
+            // For `builder.Configure<Section>(instance)` to compile, the first parameter must be
+            // assignable FROM `interfaceType` — i.e. it is `interfaceType` itself or a base interface
+            // that `interfaceType` implements. (Checking `paramType.AllInterfaces` would be the wrong
+            // direction: it would also accept a MORE-derived concrete parameter that an
+            // `interfaceType`-typed argument cannot satisfy.)
+            var paramType = method.Parameters[0].Type;
+            if (SymbolEqualityComparer.Default.Equals(paramType.OriginalDefinition, interfaceType.OriginalDefinition))
+                return true;
+            if (interfaceType.AllInterfaces.Any(i =>
+                    SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, paramType.OriginalDefinition)))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="method"/> has any parameter after the first that is neither
+    /// optional nor a <c>params</c> array — i.e. a single-argument invocation of it would not compile.
+    /// </summary>
+    private static bool HasRequiredTrailingParameters(IMethodSymbol method)
+    {
+        for (var i = 1; i < method.Parameters.Length; i++)
+        {
+            var p = method.Parameters[i];
+            if (!p.IsOptional && !p.IsParams)
+                return true;
+        }
+        return false;
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -534,6 +625,33 @@ internal static class YamlParamsHelper
 
             var hasGenericParams = ContainsTypeParameters(section.Method.ParameterType);
 
+            // Merged POCO+interface section (e.g. AutoML): a YAML `type:` selects a concrete
+            // implementation of the merged interface through the type registry and passes it to the
+            // interface overload of the Configure method; otherwise the POCO options object is built
+            // from `params:` and passed to the options overload. This makes the registry entries the
+            // merge exposes genuinely instantiable from YAML, not just discoverable in schema/docs.
+            if (section.Method.RegistryMerged && section.Method.MergedInterfaceTypeName is not null)
+            {
+                var mergedPocoType = section.Method.ParameterType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                sb.AppendLine($"        if (config.{propName} is not null)");
+                sb.AppendLine($"        {{");
+                sb.AppendLine($"            if (!string.IsNullOrWhiteSpace(config.{propName}.Type))");
+                sb.AppendLine($"            {{");
+                sb.AppendLine($"                var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<{section.Method.MergedInterfaceTypeName}>(");
+                sb.AppendLine($"                    \"{section.Method.SectionName}\", config.{propName}.Type, config.{propName}.Params);");
+                sb.AppendLine($"                builder.{section.Method.MethodName}(instance);");
+                sb.AppendLine($"            }}");
+                sb.AppendLine($"            else");
+                sb.AppendLine($"            {{");
+                sb.AppendLine($"                var options = new {mergedPocoType}();");
+                sb.AppendLine($"                YamlParamsHelper.ApplyParams(options, config.{propName}.Params);");
+                sb.AppendLine($"                builder.{section.Method.MethodName}(options);");
+                sb.AppendLine($"            }}");
+                sb.AppendLine($"        }}");
+                sb.AppendLine();
+                continue;
+            }
+
             switch (section.Method.Category)
             {
                 case SectionCategory.PocoConfig when !hasGenericParams && section.Method.IsAbstract:
@@ -623,7 +741,8 @@ internal static class YamlParamsHelper
             .Where(s => s.ConcreteImplementations.Count > 0 &&
                 (s.Method.Category == SectionCategory.Interface ||
                  (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract) ||
-                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered)))
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered) ||
+                 s.Method.RegistryMerged))
             .ToList();
 
         var sb = new StringBuilder();
@@ -863,7 +982,8 @@ internal static class YamlParamsHelper
             .Where(s => s.ConcreteImplementations.Count > 0 &&
                 (s.Method.Category == SectionCategory.Interface ||
                  (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract) ||
-                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered)))
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered) ||
+                 s.Method.RegistryMerged))
             .ToList();
 
         var sb = new StringBuilder();
@@ -1145,6 +1265,17 @@ internal static class YamlParamsHelper
 
     private static string GetYamlPropertyType(SectionInfo section)
     {
+        // A merged POCO+interface section whose builder exposes the interface overload emits a
+        // `type:`/`params:` applier branch (see EmitYamlConfigApplier), so the YAML property MUST be
+        // a YamlTypeSection regardless of the POCO's own shape. Otherwise a non-generic merged POCO
+        // would surface its concrete type here and the applier's `config.<Section>.Type` access
+        // would not compile. This mirrors the applier's `RegistryMerged && MergedInterfaceTypeName`
+        // guard exactly; registry-only merges (no interface overload) keep the POCO path below.
+        if (section.Method.RegistryMerged && section.Method.MergedInterfaceTypeName is not null)
+        {
+            return "YamlTypeSection";
+        }
+
         return section.Method.Category switch
         {
             SectionCategory.Interface => "YamlTypeSection",
@@ -1215,6 +1346,24 @@ internal static class YamlParamsHelper
         public SectionCategory Category { get; set; }
         public ITypeSymbol? ActionInnerType { get; set; }
         public bool IsAttributeDiscovered { get; set; }
+
+        /// <summary>
+        /// Set when a [YamlConfigurable]-marked INTERFACE's section name collides with an existing
+        /// POCO/options Configure section (e.g. ConfigureAutoML(AutoMLOptions) claims "AutoML" while
+        /// IAutoMLModel is marked [YamlConfigurable("AutoML")]). The interface's concrete
+        /// implementations are merged onto the existing section so the TYPE REGISTRY exposes them
+        /// under this name — WITHOUT flipping <see cref="IsAttributeDiscovered"/>, which would drop
+        /// the section's strongly-typed POCO config property from YamlModelConfig (see EmitYamlModelConfig).
+        /// </summary>
+        public bool RegistryMerged { get; set; }
+
+        /// <summary>
+        /// For a <see cref="RegistryMerged"/> section, the fully-qualified name of the merged
+        /// [YamlConfigurable] INTERFACE (e.g. <c>global::AiDotNet.Interfaces.IAutoMLModel&lt;T,TInput,TOutput&gt;</c>).
+        /// The applier uses it to build a <c>CreateInstance&lt;interface&gt;()</c> branch so a YAML
+        /// <c>type:</c> on this section resolves a concrete implementation, alongside the POCO options path.
+        /// </summary>
+        public string? MergedInterfaceTypeName { get; set; }
     }
 
     private class SectionInfo

@@ -585,12 +585,23 @@ public partial class GRULayer<T> : LayerBase<T>
 
             T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
 
-            _Wz = InitializeTensor(_hiddenSize, _inputSize, scale);
-            _Wr = InitializeTensor(_hiddenSize, _inputSize, scale);
-            _Wh = InitializeTensor(_hiddenSize, _inputSize, scale);
-            _Uz = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-            _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-            _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale);
+            // Seed weight init from the layer's wired RandomSeed (populated from the
+            // architecture seed) so construction is DETERMINISTIC across runs. The prior
+            // unseeded CreateSecureRandom re-randomized every construction, making two
+            // same-seed models diverge from parameter[0] — which surfaced as (and was
+            // misdiagnosed as) a TensorArena arena-on!=arena-off equivalence failure.
+            // ONE rng is shared across all six weight matrices so they draw distinct
+            // (continuous) sequences rather than six identical blocks. Mirrors DenseLayer.
+            var rng = RandomSeed.HasValue
+                ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
+                : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+
+            _Wz = InitializeTensor(_hiddenSize, _inputSize, scale, rng);
+            _Wr = InitializeTensor(_hiddenSize, _inputSize, scale, rng);
+            _Wh = InitializeTensor(_hiddenSize, _inputSize, scale, rng);
+            _Uz = InitializeTensor(_hiddenSize, _hiddenSize, scale, rng);
+            _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale, rng);
+            _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale, rng);
 
             _bz = AllocateLazyWeight([_hiddenSize]);
             _br = AllocateLazyWeight([_hiddenSize]);
@@ -635,7 +646,7 @@ public partial class GRULayer<T> : LayerBase<T>
     /// The scale factor helps prevent values from being too large or too small at the start of training.
     /// </para>
     /// </remarks>
-    private Tensor<T> InitializeTensor(int rows, int cols, T scale)
+    private Tensor<T> InitializeTensor(int rows, int cols, T scale, Random rng)
     {
         // Streaming-aware allocation: route through AllocateLazyWeight
         // so the streaming pool can pre-evict competing weights to disk
@@ -647,8 +658,9 @@ public partial class GRULayer<T> : LayerBase<T>
         // AllocateLazyWeight, fill in-place with `(rng - 0.5) × scale`.
         // For non-streaming models this still goes through plain
         // `new Tensor<T>(shape)` so behavior matches the old path.
+        // The rng is supplied by the caller (seeded from the layer's
+        // RandomSeed when available) so weight init is deterministic.
         var t = AllocateLazyWeight([rows, cols]);
-        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         T half = NumOps.FromDouble(0.5);
         for (int i = 0; i < t.Length; i++)
         {

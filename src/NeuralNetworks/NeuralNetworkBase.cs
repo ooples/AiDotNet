@@ -369,11 +369,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected T MaxGradNormT => NumOps.FromDouble(MaxGradNormValue);
 
-    /// <summary>
-    /// Cached parameter count to avoid repeated Sum() calculations.
-    /// Null when invalid (layers modified).
-    /// </summary>
-    private long? _cachedParameterCount;
+    // NOTE: the previous _cachedParameterCount field has been removed as part of #1832.
+    // It cached the sum of layer ParameterCounts at first access, but never invalidated when
+    // a Layer's ParameterCount grew mid-training via lazy input-shape resolution — leaving
+    // ParameterCount reporting a stale pre-resolution size while GetParameters returned the
+    // resolved (larger) post-training size. ParameterCount now sums layers fresh on every
+    // read (see the getter). InvalidateParameterCountCache() is retained as a
+    // structure-version bump for downstream caches (buffers, tape training step, layer info)
+    // even though the ParameterCount cache itself is gone.
 
     /// <summary>
     /// Mixed-precision training context (null if mixed-precision is disabled).
@@ -442,7 +445,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
-        _cachedParameterCount = null;
         _sensitiveFeatures = new Vector<int>(0);
         // Concrete subclass's type name threads through so disk-cached plans in
         // PlanCache.Current don't collide between different model classes.
@@ -1944,45 +1946,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         get
         {
-            if (_cachedParameterCount == null)
-            {
-                // Pre-resolve any lazy layers' shapes from the architecture
-                // BEFORE summing per-layer ParameterCount. Lazy DenseLayer /
-                // ConvolutionalLayer / FullyConnectedLayer / FeedForwardLayer
-                // return 0 from ParameterCount when InputShape[0] is still
-                // the -1 sentinel (issue #1209's lazy-shape-inference
-                // migration), which makes a freshly-constructed model
-                // report ParameterCount == 0 even though the architecture
-                // fully defines the layer chain. Resolving shapes via
-                // chain-walked input/output shapes turns the -1 sentinel
-                // into the architecture's concrete dim and lets the test
-                // (issue #1136 plan part 5) `network.ParameterCount > 0`
-                // pre-Forward query work as designed.
-                ResolveLazyLayerShapes();
+            // Pre-resolve any lazy layers' shapes from the architecture BEFORE summing
+            // per-layer ParameterCount. Lazy DenseLayer / ConvolutionalLayer / FullyConnectedLayer
+            // / FeedForwardLayer return 0 from ParameterCount when InputShape[0] is still the -1
+            // sentinel (issue #1209's lazy-shape-inference migration).
+            ResolveLazyLayerShapes();
 
-                // Sum the per-layer counts in long throughout — both the
-                // accumulator and the cache are long, so this getter returns
-                // the genuine count even for >2.1B-parameter models. The
-                // public signature has been long since PR #1244 (#1237);
-                // this is the matching internal storage migration that
-                // unblocks weight-streaming auto-detect on PaLM-E-class
-                // models (#1271 / #1222) where ParameterCount is the input
-                // to the threshold check. Consumers of the flat-Vector<T>
-                // parameter API (GetParameters / SetParameters /
-                // GetAllLayerInfo) STILL cannot represent more than
-                // int.MaxValue elements in a single Vector<T> — that
-                // invariant is enforced at THOSE call sites, where the
-                // throw is actionable, rather than blocking every read of
-                // the count itself (e.g. weight-streaming auto-detect,
-                // model-metadata reporting, telemetry).
-                long total = 0L;
-                for (int i = 0; i < Layers.Count; i++)
-                {
-                    total += Layers[i].ParameterCount;
-                }
-                _cachedParameterCount = total;
+            // Sum per-layer counts FRESH on every access. The previous cached
+            // implementation went stale — a Layer's ParameterCount can grow AFTER
+            // construction when its lazy input shape resolves inside a model-class-owned
+            // forward path (e.g. NeRF's DenseLayer inputs going from [1] sentinel to
+            // [60] after positional encoding + skip-concat on first Forward). The base
+            // class had no signal for those layer-internal transitions, so the cache
+            // reported the pre-resolution size while GetParameters (which also walked
+            // layers fresh) returned the post-resolution size. Downstream SetParameters
+            // then rejected the correctly-sized saved vector with a length-mismatch
+            // exception. Full diagnostic in #1832.
+            //
+            // Matches PyTorch's sum(p.numel() for p in model.parameters()) — walked on
+            // every call, always fresh. Sum of ~10-200 longs runs in nanoseconds even
+            // for deep transformers; ParameterCount is not a hot-path read (used by
+            // weight-streaming auto-detect + telemetry, not per-batch gradient loops),
+            // so the removed cache saves nothing observable and the correctness win is
+            // worth the microscopic per-access cost. Fixes #1832.
+            long total = 0L;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                total += Layers[i].ParameterCount;
             }
-            return _cachedParameterCount.Value;
+            return total;
         }
     }
 
@@ -2013,12 +2005,83 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Runs a one-shot dry-run forward with the supplied sample input to materialize every
+    /// lazy-shape layer. After this returns, all <c>DenseLayer</c> / <c>ConvolutionalLayer</c> /
+    /// concat / skip-connection layer input shapes have resolved from their placeholder
+    /// sentinels to their real dimensions, <see cref="ParameterCount"/> reports the resolved
+    /// count, and <see cref="GetParameters"/> / <see cref="SetParameters"/> agree on size —
+    /// so a flat-vector round-trip (train model → GetParameters → save → new fresh model →
+    /// ResolveShapes → SetParameters → resume) works.
+    /// </summary>
+    /// <param name="sampleInput">
+    /// One sample with the same shape the trained model saw. Content is irrelevant —
+    /// only the shape drives lazy layer materialization. For NeRF pass a <c>[1, 6]</c>
+    /// (position + view direction) tensor; for a Transformer pass <c>[1, seqLen]</c>; etc.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <b>Beyond industry standard.</b> PyTorch materializes lazy modules implicitly on the
+    /// first forward that uses them; Keras exposes <c>compile(input_signature=...)</c> but
+    /// couples it to the training-graph build step. AiDotNet's <c>ResolveShapes</c> is the
+    /// same materialization decoupled from any training/inference call — the caller opts
+    /// into up-front determinism for save/load, HPO trial pre-check, distributed sharding
+    /// pre-plan, or any workflow that needs stable shapes BEFORE a real forward. Neither
+    /// PyTorch nor Keras exposes this as a first-class opt-in method.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Neural networks in AiDotNet defer some size decisions until
+    /// the first time they see a real input — a memory optimization. That means
+    /// <c>ParameterCount</c> and <c>GetParameters()</c> can grow on the first training
+    /// step, which trips up "save weights to disk, load them into a fresh network later"
+    /// workflows because the fresh network hasn't seen an input yet. <c>ResolveShapes</c>
+    /// tells the network "here's what the input will look like — go finalize your sizes
+    /// now." After you call it, save/load round-trips just work.
+    /// </para>
+    /// <para>
+    /// Added by #1832. Fixes the NeRF save/load failure mode where
+    /// <c>SetParameters(loaded)</c> on a fresh model threw
+    /// "Expected 285444 parameters, got 348036" because the fresh model's lazy layers
+    /// hadn't resolved to their post-positional-encoding sizes.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sampleInput"/> is null.</exception>
+    public virtual void ResolveShapes(Tensor<T> sampleInput)
+    {
+        if (sampleInput is null) throw new ArgumentNullException(nameof(sampleInput));
+
+        // Architecture-based shape walk covers layers whose input shape is inferable from
+        // the declared architecture. This is idempotent and cheap — runs once per instance.
+        ResolveLazyLayerShapes();
+
+        // The architecture walk can't see shape transformations that happen INSIDE the
+        // model class's forward BEFORE the input hits Layers[0] — e.g. NeRF's positional
+        // encoding turns [N, 3] positions into [N, 60] before Layers[0] sees them, and
+        // Layers[0] only resolves its DenseLayer input width on that real forward. Drive
+        // one full forward now (SetTrainingMode(false) so batchnorm/dropout stay inference)
+        // to trigger those inside-forward resolutions. The output is discarded; only the
+        // side-effect of materializing lazy layer shapes matters here.
+        bool previousTrainingMode = IsTrainingMode;
+        try
+        {
+            SetTrainingMode(false);
+            _ = ForwardWithMemory(sampleInput);
+        }
+        finally
+        {
+            SetTrainingMode(previousTrainingMode);
+        }
+    }
+
+    /// <summary>
     /// Invalidates the parameter count cache.
     /// Call this method whenever layers are added, removed, or modified.
     /// </summary>
     protected void InvalidateParameterCountCache()
     {
-        _cachedParameterCount = null;
+        // ParameterCount itself no longer caches (see #1832), so nothing to null out here.
+        // The version bump + downstream cache invalidations below remain the useful
+        // side-effects of this call — kept as-is for backward compatibility with the
+        // dozens of internal call sites that already invoke this on structural mutations.
         _layerStructureVersion++;
         _parameterBuffer = null;
         // Layer structure changed — re-test the skip-buffer threshold next
@@ -3310,17 +3373,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (!_firstForwardCompleted)
             {
                 _firstForwardCompleted = true;
-                // Invalidate the cached ParameterCount before the retry.
-                // The pre-forward auto-detect attempt at the top of
-                // Predict (above) called ParameterCount when lazy
-                // layers still reported 0, populating the cache with
-                // 0. Without this invalidation the post-forward retry
-                // would re-read the SAME cached 0 (because the cache
-                // sticks until layer mutation) and never engage
-                // streaming for the NEXT call — defeating the entire
-                // point of the lazy-layer retry path. Closes review-
-                // comments #1271.uxiB / .vbtb.
-                _cachedParameterCount = null;
+                // Retry weight-streaming auto-detect now that lazy layers have resolved
+                // their shapes. Pre-#1832 this had to also null out the stale
+                // ParameterCount cache; ParameterCount now sums layers fresh so the retry
+                // sees the correct post-forward count without any manual invalidation.
                 TryAutoEnableWeightStreaming();
             }
             return output;
@@ -4064,17 +4120,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         // Post-first-forward auto-detect retry (mirrors Predict's path).
-        // Lazy training-only networks that never call Predict (e.g. a
-        // fine-tuning loop where forward is always paired with
-        // backward) need this hook to ever engage streaming. Invalidate
-        // the cached ParameterCount first — the pre-forward attempt may
-        // have populated it with 0 from lazy placeholder layers, and a
-        // retry that reuses the stale cache would never engage. Closes
-        // review-comment #1271.vbtm.
+        // Lazy training-only networks that never call Predict (e.g. a fine-tuning loop
+        // where forward is always paired with backward) need this hook to ever engage
+        // streaming. Pre-#1832 this also had to null out the stale ParameterCount cache;
+        // ParameterCount now sums layers fresh, so TryAutoEnableWeightStreaming sees the
+        // correct resolved count post-forward without any manual invalidation.
         if (!_firstForwardCompleted)
         {
             _firstForwardCompleted = true;
-            _cachedParameterCount = null;
             TryAutoEnableWeightStreaming();
         }
 
@@ -11171,7 +11224,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int totalParameterCount = (int)totalParameterCountLong;
         if (parameters.Length != totalParameterCount)
         {
-            throw new ArgumentException($"Expected {totalParameterCount} parameters, got {parameters.Length}");
+            throw new ArgumentException(
+                $"Expected {totalParameterCount} parameters, got {parameters.Length}. " +
+                $"If you're loading weights into a fresh model whose lazy layer shapes haven't " +
+                $"resolved yet (e.g. NeRF/InstantNGP where positional encoding grows DenseLayer " +
+                $"inputs on first forward), call model.ResolveShapes(sampleInput) first with a " +
+                $"tensor of the expected input shape — that materializes lazy layers so " +
+                $"SetParameters sees the same size that GetParameters returned on the trained " +
+                $"model. See #1832 for the diagnostic and #1826 for the facade context.");
         }
 
         int currentIndex = 0;

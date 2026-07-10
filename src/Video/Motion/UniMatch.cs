@@ -69,7 +69,11 @@ public class UniMatch<T> : OpticalFlowBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            // 2 frames stacked channel-wise (2×3=6): the lazy _featureExtract conv is sized from
+            // InputDepth by ResolveLazyLayerShapes, and EstimateFlow feeds it the concatenated pair,
+            // so it must be 6 not 3. Single-encoder flow models only (RAFT/GMFlow have a separate
+            // 3-channel context encoder and are excluded). PredictCore splits per-frame via Shape[1]/2.
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
             outputSize: 2))
     {
     }
@@ -249,15 +253,14 @@ public class UniMatch<T> : OpticalFlowBase<T>
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
-        // Reinitialize native layers from deserialized parameters
-        int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-        int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
-        int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
-        _featureExtract = new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1);
-        _processingBlocks.Clear();
-        for (int i = 0; i < _numLayers; i++)
-            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1));
-        _outputConv = new ConvolutionalLayer<T>(2, 3, 1, 1);
+
+        // Re-link the typed role fields via the shared OpticalFlowBase helper (validates the untrusted
+        // count, then casts-or-throws each role layer) rather than allocating FRESH random-init
+        // convolutions here — the fresh convs left the typed fields (which EstimateFlow reads directly)
+        // pointing at untrained weights while the trained weights sat unused in Layers, so a
+        // cloned/loaded model predicted from random init (#1221 class). Order matches InitializeLayers:
+        // [featureExtract, ...processingBlocks, outputConv].
+        RelinkOpticalFlowLayers(_numLayers, "UniMatch", out _featureExtract, _processingBlocks, out _outputConv);
     }
 
     /// <inheritdoc/>
