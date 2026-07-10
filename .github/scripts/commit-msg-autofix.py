@@ -61,18 +61,19 @@ def _infer_type(text: str) -> str:
 
 
 def _lower_first(s: str) -> str:
-    """Lower-case only the first character (Sentence-case -> lower-case).
+    """Lower-case the first character so the subject cannot be classified as
+    sentence-/start-/pascal-/upper-case (the cases config-conventional's
+    subject-case rejects).
 
-    Leaves an all-caps leading token (an acronym like 'BN', 'GPU') alone so we
-    don't mangle it — config-conventional's subject-case only rejects a subject
-    whose overall casing is Sentence/Start/Pascal/UPPER, and a leading acronym
-    followed by lower-case words does not trip it.
+    We deliberately lower-case even a leading acronym/PascalCase class name
+    ('DeepFilterNet' -> 'deepFilterNet', 'DFA' -> 'dFA'): commitlint keys the
+    check off the leading character, so this is the reliable automated fix. It
+    is slightly less pretty than a human rephrase, but an auto-fixer's job is to
+    make CI pass deterministically — a maintainer can always reword afterward.
+    Interior words (e.g. a mid-subject 'BN'/'GPU') are untouched.
     """
     if not s:
         return s
-    first = s.split(" ", 1)[0]
-    if len(first) > 1 and first.isupper():
-        return s  # leading acronym — leave as-is
     if s[0].isupper():
         return s[0].lower() + s[1:]
     return s
@@ -134,6 +135,9 @@ def fix_message(msg: str) -> str:
         if type_l not in ALLOWED_TYPES:
             type_l = _infer_type(subject)
         scope = scope.lower()
+        # Drop a scope made redundant by a type remap, e.g. build(deps) -> deps.
+        if scope.strip("()") == type_l:
+            scope = ""
         subject = _lower_first(subject.rstrip())
         if subject.endswith(".") and not subject.endswith("..."):
             subject = subject[:-1]
