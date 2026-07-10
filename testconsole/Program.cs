@@ -26,6 +26,7 @@ class Program
         ["informer-verify"]     = InformerProfile.RunVerify,
         ["informer-gpu"]        = InformerProfile.RunGpu,
         ["autoformer-profile"]  = AutoformerProfile.Run,
+        ["autoformer-verify"]   = AutoformerVerify.Run,
         ["resnet50-profile"]    = ResNet50Profile.Run,
         ["whispertimestamped-profile"] = WhisperTimestampedProfile.Run,
         ["whispertimestamped-profile-f32"] = WhisperTimestampedProfile.RunFloat,
