@@ -718,23 +718,77 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     private void TrainBatch(Matrix<T> data, int startRow, int endRow, T lr)
     {
         if (_alphasCumprod is null) return;
-        for (int row = startRow; row < endRow; row++)
+
+        // Cache MultiSlotFusedStep across rows so the compiled plan is built
+        // once and replayed via slot-data refresh for subsequent rows. See
+        // ooples/AiDotNet#1846.
+        AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
+        try
         {
-            int t = _random.Next(_numTimesteps);
-            var x0 = GetRow(data, row);
-            var noise = CreateStandardNormalVector(_dataWidth);
-            double sqrtAbar = Math.Sqrt(NumOps.ToDouble(_alphasCumprod[t]));
-            double sqrtOneMinusAbar = Math.Sqrt(1.0 - NumOps.ToDouble(_alphasCumprod[t]));
+            var denoiserLayers = BuildDenoiserLayerList();
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(denoiserLayers).ToArray();
+            AiDotNet.Tensors.Engines.Compilation.OptimizerType mfsOptType = default;
+            float mfsLr = 0f, mfsB1 = 0f, mfsB2 = 0f, mfsEps = 0f, mfsWd = 0f;
+            bool fusedEligible = false;
+            if (trainableParams.Length > 0)
+            {
+                fusedEligible = NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                    _optimizer,
+                    out mfsOptType, out mfsLr, out mfsB1, out mfsB2,
+                    out mfsEps, out mfsWd, out _, out _);
+            }
 
-            var xt = new Vector<T>(_dataWidth);
-            for (int j = 0; j < _dataWidth; j++)
-                xt[j] = NumOps.FromDouble(sqrtAbar * NumOps.ToDouble(x0[j]) + sqrtOneMinusAbar * NumOps.ToDouble(noise[j]));
+            for (int row = startRow; row < endRow; row++)
+            {
+                int t = _random.Next(_numTimesteps);
+                var x0 = GetRow(data, row);
+                var noise = CreateStandardNormalVector(_dataWidth);
+                double sqrtAbar = Math.Sqrt(NumOps.ToDouble(_alphasCumprod[t]));
+                double sqrtOneMinusAbar = Math.Sqrt(1.0 - NumOps.ToDouble(_alphasCumprod[t]));
 
-            using var tape = new GradientTape<T>();
-            var pred = DenoiserForward(BuildDenoiserInput(xt, t));
-            var target = VectorToTensor(noise);
-            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(pred, target)));
-            TapeStepOver(tape, loss, BuildDenoiserLayerList());
+                var xt = new Vector<T>(_dataWidth);
+                for (int j = 0; j < _dataWidth; j++)
+                    xt[j] = NumOps.FromDouble(sqrtAbar * NumOps.ToDouble(x0[j]) + sqrtOneMinusAbar * NumOps.ToDouble(noise[j]));
+
+                // Preferred fused path: MultiSlotFusedStep with (denoiserInput, targetNoise)
+                // as persistent slots. The denoiser layer set replays per row with fresh slots.
+                if (fusedEligible)
+                {
+                    multiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                    var denoiserInput = BuildDenoiserInput(xt, t);
+                    var targetNoiseT = VectorToTensor(noise);
+                    var slots = new[] { denoiserInput, targetNoiseT };
+                    Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s) => DenoiserForward(s[0]);
+                    Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s) =>
+                        ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(pred, s[1])));
+                    if (multiSlotStep.TryStep(
+                            parameters: trainableParams,
+                            zeroGradAction: null,
+                            freshSlotData: slots,
+                            forward: ForwardFromSlots,
+                            computeLoss: ComputeLossFromSlots,
+                            optimizerType: mfsOptType,
+                            learningRate: mfsLr,
+                            beta1: mfsB1,
+                            beta2: mfsB2,
+                            epsilon: mfsEps,
+                            weightDecay: mfsWd,
+                            out T _))
+                    {
+                        continue;
+                    }
+                }
+
+                using var tape = new GradientTape<T>();
+                var pred = DenoiserForward(BuildDenoiserInput(xt, t));
+                var target = VectorToTensor(noise);
+                var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(pred, target)));
+                TapeStepOver(tape, loss, denoiserLayers);
+            }
+        }
+        finally
+        {
+            multiSlotStep?.Dispose();
         }
     }
 
