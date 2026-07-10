@@ -105,17 +105,23 @@ public static class GpuResidentFusedStep<T>
         Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
         object? optimizer,
         out T lossValue,
-        double maxGradNorm = 1.0)
+        double maxGradNorm = 1.0,
+        IReadOnlyList<Tensor<T>>? extraTensors = null)
     {
         lossValue = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
         if (!IsGpuResidentAvailable) return false;
-        if (layers is null || layers.Count == 0) return false;
+        // A callsite with only extras (no layers) is a valid config — e.g. a model
+        // whose whole training surface is raw trainable tensors (learned scalars).
+        if ((layers is null || layers.Count == 0) && (extraTensors is null || extraTensors.Count == 0))
+            return false;
         if (!TryResolveOptimizerConfig(optimizer, out var type, out var lr, out var b1, out var b2, out var eps, out var wd))
             return false;
         return CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
-            layers, input, target, forward, computeLoss,
+            layers ?? System.Array.Empty<ITrainableLayer<T>>(),
+            input, target, forward, computeLoss,
             type, lr, b1, b2, eps, wd, out lossValue,
-            maxGradNorm: maxGradNorm);
+            maxGradNorm: maxGradNorm,
+            extraTensors: extraTensors);
     }
 
     /// <summary>
