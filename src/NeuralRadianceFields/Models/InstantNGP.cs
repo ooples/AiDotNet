@@ -631,6 +631,11 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
 
     protected override void InitializeLayers()
     {
+        // Rebuilding the layer collection invalidates any prior shape resolution — the fresh
+        // lazy DenseLayers must be re-resolved through the model's real topology (see
+        // ResolveLazyLayerShapes) before the next ParameterCount / GetParameters query.
+        _ngpShapesResolved = false;
+
         ClearLayers();
         _densityLayers.Clear();
         _colorLayers.Clear();
@@ -667,6 +672,77 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
 
         // Color output
         _colorOutputLayer = (DenseLayer<T>)Layers[idx++];
+    }
+
+    private bool _ngpShapesResolved;
+
+    /// <summary>
+    /// Resolves InstantNGP's lazy <see cref="DenseLayer{T}"/> input shapes through the model's
+    /// REAL (non-sequential) topology instead of the base class's left-to-right walk.
+    /// </summary>
+    /// <remarks>
+    /// InstantNGP is not a plain sequential stack: a multiresolution hash encoding feeds the
+    /// density MLP, and the colour MLP consumes the feature vector CONCATENATED with the view
+    /// direction (see <see cref="QueryField"/>). The base
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.ResolveLazyLayerShapes"/> assumes each
+    /// layer's input equals the previous layer's output, so it mis-sizes the first density layer
+    /// (real input = hash-encoding width, not the raw architecture input) and the first colour
+    /// layer (real input = feature width + 3 direction dims), leaving an unstable
+    /// <c>ParameterCount</c> that blocks the facade optimizer's post-train writeback into a
+    /// freshly-constructed model. Resolution here is shape-only via
+    /// <see cref="LayerBase{T}.ResolveShapesOnly"/> — no weight allocation, no RNG, no forward
+    /// compute; weights still allocate lazily on the first real forward.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_ngpShapesResolved)
+        {
+            return;
+        }
+
+        // Custom-architecture path (Architecture.Layers supplied) doesn't follow the fixed head
+        // layout, so defer to the base sequential walk in that case.
+        if (_densityOutputLayer is null || _featureLayer is null || _colorOutputLayer is null)
+        {
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        int hashFeatureDim = _numLevels * _featuresPerLevel;
+
+        // Density MLP: layer 0 reads the multiresolution hash encoding; later layers read the
+        // previous hidden output.
+        for (int i = 0; i < _densityLayers.Count; i++)
+        {
+            ResolveDenseLayerShape(_densityLayers[i], i == 0 ? hashFeatureDim : _mlpHiddenDim);
+        }
+
+        // Density + feature heads read the density MLP's hidden output (or the hash encoding
+        // directly when there are no density hidden layers).
+        int densityHeadInput = _densityLayers.Count > 0 ? _mlpHiddenDim : hashFeatureDim;
+        ResolveDenseLayerShape(_densityOutputLayer, densityHeadInput);
+        ResolveDenseLayerShape(_featureLayer, densityHeadInput);
+
+        // Colour MLP: layer 0 reads [feature ⊕ direction (3 dims)]; later layers read the colour
+        // hidden width.
+        int colorInputDim = _featureDim + 3;
+        for (int i = 0; i < _colorLayers.Count; i++)
+        {
+            ResolveDenseLayerShape(_colorLayers[i], i == 0 ? colorInputDim : _colorHiddenDim);
+        }
+
+        // Colour output reads the last colour hidden width (or the concatenated colour input when
+        // there are no colour hidden layers).
+        ResolveDenseLayerShape(
+            _colorOutputLayer, _colorLayers.Count > 0 ? _colorHiddenDim : colorInputDim);
+
+        _ngpShapesResolved = true;
+    }
+
+    private static void ResolveDenseLayerShape(DenseLayer<T> layer, int inputDim)
+    {
+        // [batch=1, inputDim] — the batch axis is irrelevant to weight-shape resolution.
+        layer.ResolveShapesOnly(new[] { 1, inputDim });
     }
 
     public (Tensor<T> rgb, Tensor<T> density) QueryField(Tensor<T> positions, Tensor<T> viewingDirections)
