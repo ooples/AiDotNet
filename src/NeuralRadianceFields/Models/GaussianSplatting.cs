@@ -2423,6 +2423,34 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         }
     }
 
+    /// <summary>
+    /// Exposes inspectable activations for this explicit-representation model. GaussianSplatting
+    /// has no <c>Layers</c>, so the base class's layer-walking implementation returns an empty
+    /// map — which breaks introspection/visualization callers and the model-family
+    /// <c>NamedLayerActivations_ShouldBeNonEmpty</c> invariant. Instead surface the render
+    /// pipeline's meaningful tensors: the flattened Gaussian parameter state and the rendered
+    /// output for the supplied ray batch. Both are real tensors produced by the model (no
+    /// fabricated placeholders).
+    /// </summary>
+    public override System.Collections.Generic.Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var activations = new System.Collections.Generic.Dictionary<string, Tensor<T>>();
+
+        var parameters = GetParameters();
+        if (parameters.Length > 0)
+        {
+            activations["gaussians"] = new Tensor<T>(new[] { parameters.Length }, parameters);
+        }
+
+        // The rendered radiance (RGB + density per ray) is the model's forward output — the
+        // explicit-representation analogue of a final-layer activation.
+        activations["render"] = Predict(input);
+
+        return activations;
+    }
+
     public override Vector<T> GetParameters()
     {
         if (_gaussians.Count == 0) return new Vector<T>(0);
