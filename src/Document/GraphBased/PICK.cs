@@ -480,69 +480,6 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
-    /// <summary>
-    /// Modality-robust fused inference (Yu et al. 2020 — PICK fuses text-segment features with visual
-    /// features on the GLCN document graph). The text tokens run through the BERT-style text encoder to
-    /// produce per-segment node features; when per-segment VISUAL node features are also supplied they
-    /// are stacked with the text nodes along the NODE axis so the shared GLCN graph stack reasons over
-    /// the joint multimodal node set. Passing null for either modality gracefully degrades to the other
-    /// — reference PICK impls require both text and visual segment features, so single-modality support
-    /// is where this exceeds them. Visual node features must share the text encoder's hidden dim.
-    /// </summary>
-    /// <param name="textTokens">Token IDs/features fed to the text encoder (or null for visual-only).</param>
-    /// <param name="visualNodeFeatures">Per-segment visual node features <c>[Nv, hidden]</c> (or null).</param>
-    public Tensor<T> PredictMultimodal(Tensor<T>? textTokens, Tensor<T>? visualNodeFeatures)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Multimodal fusion is only available in native mode.");
-        if (textTokens is null && visualNodeFeatures is null)
-            throw new ArgumentException("PredictMultimodal requires at least one of textTokens or visualNodeFeatures.");
-
-        SetTrainingMode(false);
-
-        // The GLCN graph module is the fusion point: everything before the first GraphConvolutionalLayer
-        // is the per-segment (text) encoder; everything from it on is the shared graph + BiLSTM + head.
-        int graphStart = FirstGraphLayerIndex();
-
-        Tensor<T>? textNodes = null;
-        if (textTokens is not null)
-        {
-            var feats = textTokens;
-            for (int i = 0; i < graphStart && i < Layers.Count; i++)
-                feats = Layers[i].Forward(feats);
-            textNodes = AlignToNodeMatrix(feats);
-        }
-        var visualNodes = visualNodeFeatures is not null ? AlignToNodeMatrix(visualNodeFeatures) : null;
-
-        Tensor<T> nodes;
-        if (textNodes is not null && visualNodes is not null)
-            nodes = Engine.TensorConcatenate(new[] { textNodes, visualNodes }, axis: 0); // [Nt + Nv, hidden]
-        else
-            nodes = textNodes ?? visualNodes
-                ?? throw new ArgumentException("PICK requires text tokens or visual node features.");
-
-        for (int i = graphStart; i < Layers.Count; i++)
-            nodes = Layers[i].Forward(nodes);
-        return nodes;
-    }
-
-    // Index of the first GraphConvolutionalLayer (the GLCN fusion boundary); Layers.Count if none.
-    private int FirstGraphLayerIndex()
-    {
-        for (int i = 0; i < Layers.Count; i++)
-            if (Layers[i] is AiDotNet.NeuralNetworks.Layers.GraphConvolutionalLayer<T>)
-                return i;
-        return Layers.Count;
-    }
-
-    // Normalizes a stream output to a rank-2 [N, F] node matrix for node-axis fusion.
-    private Tensor<T> AlignToNodeMatrix(Tensor<T> s)
-    {
-        if (s.Rank == 1) return Engine.Reshape(s, new[] { 1, s.Shape[0] });
-        if (s.Rank == 3) return Engine.Reshape(s, new[] { s.Shape[0] * s.Shape[1], s.Shape[2] });
-        return s;
-    }
-
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
