@@ -128,6 +128,35 @@ public class GraphBasedDocumentTests
         Assert.Equal("PICK", meta.Name);
     }
 
+    // Small integer token IDs (rank-1 [N]) for PICK's text embedding layer.
+    private static Tensor<double> CreateTokenIds(int numTokens)
+    {
+        var data = new Vector<double>(numTokens);
+        for (int i = 0; i < numTokens; i++)
+            data[i] = (i % 20) + 1;
+        return new Tensor<double>(new[] { numTokens }, data);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PICK_FusedMultimodal_CombinesTextAndVisualSegments()
+    {
+        await Task.Yield();
+        var model = new PICK<double>(CreateArchitecture());
+        var tokens = CreateTokenIds(6);
+        var visualNodes = CreateNodeFeatures(10, 256);  // per-segment visual features at the hidden dim
+
+        var textOnly = model.PredictMultimodal(tokens, null);         // graceful degradation
+        var visualOnly = model.PredictMultimodal(null, visualNodes);  // graceful degradation
+        var fused = model.PredictMultimodal(tokens, visualNodes);     // joint GLCN graph
+
+        AssertAllFinite(textOnly, "PICK text-only");
+        AssertAllFinite(visualOnly, "PICK visual-only");
+        AssertAllFinite(fused, "PICK fused");
+
+        Assert.True(fused.Shape[0] > textOnly.Shape[0] && fused.Shape[0] > visualOnly.Shape[0],
+            $"Fused segment count ({fused.Shape[0]}) should exceed text-only ({textOnly.Shape[0]}) and visual-only ({visualOnly.Shape[0]}).");
+    }
+
     #endregion
 
     #region TRIE Tests
