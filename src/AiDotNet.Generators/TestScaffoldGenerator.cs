@@ -2331,6 +2331,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
                     "imageSize: 64, backboneChannels: 32, numClasses: 4, hiddenDim: 16)";
             }
+            else if (model.ClassName == "InstantNGP" && model.TypeParameterCount == 1)
+            {
+                // InstantNGP (Müller et al. 2022) has a paper-scale parameterless default:
+                // a 2^19 (524288) hash table and a 128^3 (~2M-cell) occupancy grid. Running
+                // the generated invariant scaffold's 100-200 training iterations against that
+                // blows past the xUnit 120 s envelope before any assertion runs. Construct the
+                // identical architecture family (multiresolution hash encoding -> density MLP ->
+                // colour MLP fed by feature + view direction) at CI-smoke scale so the
+                // training invariants exercise the real forward/backward path cheaply. Must
+                // precede the parameterless-constructor branch below, which would otherwise
+                // route through the production default.
+                constructorExpr = $"new {typeName}<double>(hashTableSize: 4096, numLevels: 4, " +
+                    "featuresPerLevel: 2, finestResolution: 256, coarsestResolution: 16, " +
+                    "mlpHiddenDim: 16, mlpNumLayers: 2, occupancyGridResolution: 16, learningRate: 1e-2)";
+            }
             else if (model.HasParameterlessConstructor)
             {
                 // Zero-arg constructor: simple instantiation
