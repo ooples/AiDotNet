@@ -165,6 +165,59 @@ public interface INoiseScheduler<T>
     Vector<T> AddNoise(Vector<T> originalSample, Vector<T> noise, int timestep);
 
     /// <summary>
+    /// Batched forward-diffusion (industry-standard batching, HuggingFace diffusers /
+    /// DDPM reference): applies a distinct timestep to each batch element instead of
+    /// a single timestep to the whole batch. <paramref name="cleanBatch"/> and
+    /// <paramref name="noiseBatch"/> are shape <c>[B, ...]</c>; <paramref name="timesteps"/>
+    /// is a <c>[B]</c> int vector, one entry per batch element.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Per-element timesteps decorrelate the noise-schedule signal across the batch,
+    /// which the DDPM / EDM reference implementations use as the canonical training
+    /// pattern (Ho et al. 2020, Karras et al. 2022). Applied to a single-element
+    /// batch (<c>B = 1</c>) this reduces to the scalar overload above.
+    /// </para>
+    /// <para>
+    /// Default implementation delegates to the scalar overload per-element for
+    /// backward compatibility with existing schedulers; concrete schedulers should
+    /// override with a fused batched implementation for on-device efficiency.
+    /// </para>
+    /// </remarks>
+    Tensor<T> AddNoiseBatched(Tensor<T> cleanBatch, Tensor<T> noiseBatch, int[] timesteps)
+    {
+        int batchSize = cleanBatch.Shape[0];
+        if (noiseBatch.Shape[0] != batchSize)
+            throw new System.ArgumentException(
+                $"noiseBatch batch size {noiseBatch.Shape[0]} does not match cleanBatch batch size {batchSize}.",
+                nameof(noiseBatch));
+        if (timesteps.Length != batchSize)
+            throw new System.ArgumentException(
+                $"timesteps length {timesteps.Length} does not match batch size {batchSize}.",
+                nameof(timesteps));
+
+        int perElement = cleanBatch.Length / batchSize;
+        var result = new Tensor<T>(cleanBatch._shape);
+        var cleanSpan = cleanBatch.AsSpan();
+        var noiseSpan = noiseBatch.AsSpan();
+        var resultSpan = result.AsWritableSpan();
+        for (int b = 0; b < batchSize; b++)
+        {
+            var cleanVec = new Vector<T>(perElement);
+            var noiseVec = new Vector<T>(perElement);
+            for (int j = 0; j < perElement; j++)
+            {
+                cleanVec[j] = cleanSpan[b * perElement + j];
+                noiseVec[j] = noiseSpan[b * perElement + j];
+            }
+            var noised = AddNoise(cleanVec, noiseVec, timesteps[b]);
+            for (int j = 0; j < perElement; j++)
+                resultSpan[b * perElement + j] = noised[j];
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Gets the scheduler configuration.
     /// </summary>
     /// <remarks>
