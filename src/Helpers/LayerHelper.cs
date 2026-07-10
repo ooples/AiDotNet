@@ -4784,10 +4784,18 @@ public static class LayerHelper<T>
 
             currentChannels = outChannels;
 
-            // Optional batch normalization
+            // Optional batch normalization. Pass the known channel count (outChannels
+            // from the SpiralConv above) so gamma/beta/runningStats allocate eagerly at
+            // the RIGHT size. SpiralNet feeds rank-3 [B, V, C] (batch, vertices, channels)
+            // — features-last. Left lazy, BatchNorm's OnFirstForward applies the rank-3
+            // channels-FIRST image convention ([C, H, W]) and mis-sizes gamma to axis 0
+            // (the batch dim, size 1) → a size-1 gamma that goes NaN under training and
+            // never updates the running stats. With the feature count supplied, the
+            // Forward path's features-last auto-flatten ([B, V, C] → [B*V, C]) normalizes
+            // per-channel correctly. (BatchNormalizationLayer docs prescribe exactly this.)
             if (useBatchNorm)
             {
-                yield return new BatchNormalizationLayer<T>();
+                yield return new BatchNormalizationLayer<T>(outChannels);
             }
         }
 
