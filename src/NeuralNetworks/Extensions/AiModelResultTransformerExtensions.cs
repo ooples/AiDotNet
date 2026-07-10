@@ -215,9 +215,12 @@ public static class AiModelResultTransformerExtensions
     }
 
     /// <summary>
-    /// Batched greedy generation — runs N independent prompt sequences through the model in
-    /// parallel batches (per-prompt independence). Reference impls loop one prompt at a
-    /// time; batched generation is the paper-standard way to amortize KV-cache setup.
+    /// Batched greedy generation — runs N independent prompt sequences in parallel using
+    /// the .NET thread pool. Each prompt is an independent forward-only inference (no
+    /// shared cross-prompt state), so throughput scales with cores. Note: this is a
+    /// data-parallel batch, not a KV-cache-fused batch (the current
+    /// <see cref="AiDotNet.Interfaces.ILanguageModel{T}"/> primitive doesn't expose a
+    /// shared-cache batched-forward hook — future work).
     /// </summary>
     public static Tensor<T>[] GenerateGreedyBatch<T, TInput, TOutput>(
         this AiModelResult<T, TInput, TOutput> result,
@@ -227,11 +230,12 @@ public static class AiModelResultTransformerExtensions
     {
         RequireTransformerCapability(result, nameof(GenerateGreedyBatch));
         if (startTokensPerPrompt is null) throw new ArgumentNullException(nameof(startTokensPerPrompt));
+        if (maxNewTokens <= 0) throw new ArgumentOutOfRangeException(nameof(maxNewTokens));
         var outputs = new Tensor<T>[startTokensPerPrompt.Length];
-        for (int i = 0; i < startTokensPerPrompt.Length; i++)
+        System.Threading.Tasks.Parallel.For(0, startTokensPerPrompt.Length, i =>
         {
             outputs[i] = GenerateInternal(result, startTokensPerPrompt[i], maxNewTokens, argmax: true, default!, eosTokenId, seed: null, onToken: null, cancellationToken: default);
-        }
+        });
         return outputs;
     }
 

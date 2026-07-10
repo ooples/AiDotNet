@@ -1031,27 +1031,45 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 ? adamOpts.BatchSize
                 : PaperRaysPerBatch;
 
+        RunImageSpaceTrainingLoop(imageTrainable, typedLoader, raysPerBatch, imageEpochs, optimizerOptions, cancellationToken);
+
+        var result = new AiModelResult<T, TInput, TOutput> { Model = _model };
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Shared image-space training loop used by both <see cref="BuildImageOnlyInternalAsync"/>
+    /// and the <c>imageSpaceHandled</c> branch inside <see cref="BuildSupervisedInternalAsync"/>.
+    /// Runs <paramref name="epochs"/> iterations of <c>TrainOnImageBatch</c> and, when the
+    /// model is a <see cref="NeuralRadianceFields.Models.GaussianSplatting{T}"/> with
+    /// <see cref="AiDotNet.Models.Options.GaussianSplattingOptions.CompressOnBuildComplete"/>
+    /// set, runs the post-training compression pass exactly once at the end.
+    /// </summary>
+    private void RunImageSpaceTrainingLoop(
+        NeuralRadianceFields.Interfaces.IImageTrainable<T> imageTrainable,
+        IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> typedLoader,
+        int raysPerBatch,
+        int epochs,
+        AiDotNet.Models.Options.OptimizationAlgorithmOptions<T, TInput, TOutput>? optimizerOptions,
+        CancellationToken cancellationToken)
+    {
         var imgOpts = optimizerOptions as AiDotNet.Models.Options.OptimizationAlgorithmOptions<
             T,
             AiDotNet.Tensors.LinearAlgebra.Tensor<T>,
             AiDotNet.Tensors.LinearAlgebra.Tensor<T>>;
 
-        for (int epoch = 0; epoch < imageEpochs; epoch++)
+        for (int epoch = 0; epoch < epochs; epoch++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             imageTrainable.TrainOnImageBatch(typedLoader, raysPerBatch, imgOpts);
         }
 
-        // #1835 excellence goal #3: optional post-training compression pass.
         if (_model is NeuralRadianceFields.Models.GaussianSplatting<T> gs
             && gs.GetOptions() is AiDotNet.Models.Options.GaussianSplattingOptions gsOpts
             && gsOpts.CompressOnBuildComplete)
         {
             gs.RunCompressionPass();
         }
-
-        var result = new AiModelResult<T, TInput, TOutput> { Model = _model };
-        return Task.FromResult(result);
     }
 
     /// <summary>
@@ -2545,32 +2563,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         && adamOpts.BatchSize != AdamDefaultBatchSize
                         ? adamOpts.BatchSize
                         : PaperRaysPerBatch;
-                // OptimizerOptions type-alignment: IImageTrainable wants
-                // OptimizationAlgorithmOptions<T, Tensor<T>, Tensor<T>>. The builder is generic
-                // over TInput/TOutput which for image-space training is expected to be
-                // Tensor<T>/Tensor<T> at the call site — cast conditionally, pass null on
-                // mismatch (model uses its constructor defaults). No lossy fallback here.
-                var imageOptimizerOptions = configuredOptimizerOptions as AiDotNet.Models.Options.OptimizationAlgorithmOptions<
-                    T,
-                    AiDotNet.Tensors.LinearAlgebra.Tensor<T>,
-                    AiDotNet.Tensors.LinearAlgebra.Tensor<T>>;
-                for (int epoch = 0; epoch < imageEpochs; epoch++)
-                {
-                    imageTrainable.TrainOnImageBatch(typedImageLoader, raysPerBatch, imageOptimizerOptions);
-                }
 
-                // #1835 excellence goal #3: post-training compression pass when the caller
-                // opted in via GaussianSplattingOptions.CompressOnBuildComplete. Prunes
-                // low-opacity Gaussians, merges nearby overlapping ellipses, quantizes SH
-                // coefficients. Runs once at the end of image-space training so the compressed
-                // cloud flows through to AiModelResult.Model without a separate post-processing
-                // script.
-                if (model is NeuralRadianceFields.Models.GaussianSplatting<T> gsForCompress
-                    && gsForCompress.GetOptions() is AiDotNet.Models.Options.GaussianSplattingOptions gsOpts
-                    && gsOpts.CompressOnBuildComplete)
-                {
-                    gsForCompress.RunCompressionPass();
-                }
+                // Shared image-space training loop (extracted so both this branch and
+                // BuildImageOnlyInternalAsync route through the same helper).
+                RunImageSpaceTrainingLoop(
+                    imageTrainable, typedImageLoader,
+                    raysPerBatch, imageEpochs, configuredOptimizerOptions,
+                    cancellationToken: default);
 
                 optimizationResult = new OptimizationResult<T, TInput, TOutput>
                 {

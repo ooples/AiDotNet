@@ -151,12 +151,37 @@ public static class AiModelResultGraphExtensions
         CancellationToken cancellationToken = default)
     {
         var graph = RequireGraphModel(result, nameof(PredictOnGraphAsync));
+        if (adjacencyMatrix is null) throw new ArgumentNullException(nameof(adjacencyMatrix));
+        if (nodeFeatures is null) throw new ArgumentNullException(nameof(nodeFeatures));
+
+        // SetAdjacencyMatrix + ForwardOnGraph mutate model-internal state that isn't
+        // guarded against concurrent access. Two PredictOnGraphAsync callers on the same
+        // AiModelResult would race: caller A sets its adjacency, caller B overwrites it,
+        // caller A forwards against B's adjacency. Serialize via a per-model lock keyed
+        // on the graph instance (not `result` — the same underlying model can be shared
+        // across multiple result wrappers, and we care about the model's internal state,
+        // not the wrapper's identity).
         return Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            graph.SetAdjacencyMatrix(adjacencyMatrix);
-            return graph.ForwardOnGraph(nodeFeatures);
+            lock (GraphInferenceLocks.GetLock(graph))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                graph.SetAdjacencyMatrix(adjacencyMatrix);
+                return graph.ForwardOnGraph(nodeFeatures);
+            }
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Per-model lock table for graph-inference serialization. Uses a
+    /// <see cref="System.Runtime.CompilerServices.ConditionalWeakTable{TKey, TValue}"/>
+    /// so the lock is GC'd when the model is — no leak.
+    /// </summary>
+    private static class GraphInferenceLocks
+    {
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, object> Table = new();
+        public static object GetLock(object graph) => Table.GetValue(graph, _ => new object());
     }
 
     /// <summary>

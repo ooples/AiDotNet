@@ -88,9 +88,11 @@ public static class AiModelResultDiffusionExtensions
     }
 
     /// <summary>
-    /// Async diffusion sampling with progress reporting — reference impls (diffusers,
-    /// stable-diffusion.cpp) are all synchronous. Reports intermediate progress once per
-    /// inference step so callers can render live previews / cancel long generations.
+    /// Async diffusion sampling — dispatches the atomic <see cref="IDiffusionModel{T}.Generate"/>
+    /// call onto the thread pool so the caller isn't blocked. Progress is reported at 0.0
+    /// before generation begins and 1.0 after it completes (per-step progress requires
+    /// scheduler-aware overrides — the current <see cref="IDiffusionModel{T}"/> interface
+    /// treats <c>Generate</c> as atomic).
     /// </summary>
     public static Task<Tensor<T>> GenerateAsync<T, TInput, TOutput>(
         this AiModelResult<T, TInput, TOutput> result,
@@ -115,8 +117,10 @@ public static class AiModelResultDiffusionExtensions
     }
 
     /// <summary>
-    /// Batched Generate: generates multiple samples concurrently. Callers seed each sample
-    /// independently for diversity, or leave seeds null for random diverse outputs.
+    /// Batched Generate: generates <paramref name="batchCount"/> independent samples. Each
+    /// sample can carry its own seed for diversity (or leave <paramref name="seeds"/> null
+    /// for random). Samples run in parallel on the thread pool since each Generate call is
+    /// independent — no shared scheduler / model-mutating state.
     /// </summary>
     public static Tensor<T>[] GenerateBatch<T, TInput, TOutput>(
         this AiModelResult<T, TInput, TOutput> result,
@@ -126,13 +130,15 @@ public static class AiModelResultDiffusionExtensions
         int[]? seeds = null)
     {
         var model = RequireDiffusion(result, nameof(GenerateBatch));
+        if (shape is null) throw new ArgumentNullException(nameof(shape));
         if (batchCount <= 0) throw new ArgumentOutOfRangeException(nameof(batchCount));
+        if (numInferenceSteps <= 0) throw new ArgumentOutOfRangeException(nameof(numInferenceSteps));
         var outputs = new Tensor<T>[batchCount];
-        for (int i = 0; i < batchCount; i++)
+        System.Threading.Tasks.Parallel.For(0, batchCount, i =>
         {
             int? seed = seeds is not null && i < seeds.Length ? seeds[i] : (int?)null;
             outputs[i] = model.Generate(shape, numInferenceSteps, seed);
-        }
+        });
         return outputs;
     }
 

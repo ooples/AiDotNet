@@ -146,4 +146,36 @@ public class GaussianSplattingDensificationTests
 
         Assert.Equal(startCount, gs.GaussianCount);
     }
+
+    [Fact]
+    public void DensifyAndPrune_InsideActiveWindow_ActuallyMutates()
+    {
+        // Positive case — inside [Start, End], with a gradient magnitude above the split
+        // threshold AND opacity below the prune threshold, DensifyAndPrune MUST mutate.
+        // Without this test the schedule window gates could be no-ops and the pass-only
+        // suite (before/after) wouldn't catch it.
+        var o = new GaussianSplattingOptions
+        {
+            ShDegree = 0,
+            EnableDensification = true,
+            EnableSpatialIndex = false,
+            MaxGaussians = 32,
+            DensificationStartIteration = 5,
+            DensificationEndIteration = 100,
+            // Very high prune threshold — every default-opacity (0.5) Gaussian gets culled.
+            OpacityPruneThreshold = 0.99,
+            // Very low split threshold — anything non-zero triggers splits.
+            GradientNormThreshold = 1e-9,
+        };
+        var gs = BuildGS(o);
+        int startCount = gs.GaussianCount;
+
+        // Iteration 50 is comfortably inside the window.
+        gs.RunDensifyAndPruneForTest(iteration: 50, gradientsMagnitude: 1.0);
+
+        // Both prune (opacity 0.5 < 0.99 threshold) and split (gradient 1.0 > 1e-9 threshold)
+        // should fire. Exact post-count depends on ordering; the invariant is the count
+        // CHANGED. Either splits raced under the MaxGaussians cap, or prune emptied the cloud.
+        Assert.NotEqual(startCount, gs.GaussianCount);
+    }
 }

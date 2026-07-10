@@ -2191,7 +2191,15 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
             target.Position[i] = numOps.Divide(numOps.Add(target.Position[i], source.Position[i]), numOps.FromDouble(2.0));
             target.Scale[i]    = numOps.GreaterThan(target.Scale[i], source.Scale[i]) ? target.Scale[i] : source.Scale[i];
         }
-        target.Opacity = numOps.GreaterThan(target.Opacity, source.Opacity) ? target.Opacity : source.Opacity;
+        // Opacity: convert both from logit → probability, SUM (matches the doc's
+        // "sum opacities" semantics), clamp back into a valid probability range, and
+        // convert back to logit. Taking max would leave the merged Gaussian no more
+        // opaque than either input — the point of merging near-duplicates is that their
+        // COMBINED contribution should be preserved.
+        double srcOpProb = Sigmoid(numOps.ToDouble(source.Opacity));
+        double tgtOpProb = Sigmoid(numOps.ToDouble(target.Opacity));
+        double summedProb = Math.Min(0.9999, srcOpProb + tgtOpProb);
+        target.Opacity = numOps.FromDouble(Logit(summedProb));
     }
 
     /// <summary>

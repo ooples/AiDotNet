@@ -19,7 +19,7 @@ namespace AiDotNet.NeuralRadianceFields.Data;
 /// Optional interface for image-space loaders that hold their view set in memory. Allows
 /// pose-based scene-bounds estimation without materializing the full loader.
 /// </summary>
-public interface IViewSetProvider<T>
+internal interface IViewSetProvider<T>
 {
     /// <summary>The full in-memory view set backing this loader.</summary>
     IReadOnlyList<ImageView<T>> Views { get; }

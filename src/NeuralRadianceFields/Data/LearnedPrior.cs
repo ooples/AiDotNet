@@ -49,19 +49,28 @@ public abstract class LearnedPrior<T>
 public sealed class IsotropicPrior<T> : LearnedPrior<T>
 {
     private readonly Tensor<T> _anchorPhoto;
+    private readonly T _rMean;
+    private readonly T _gMean;
+    private readonly T _bMean;
 
     public IsotropicPrior(Tensor<T> anchorPhoto)
     {
         _anchorPhoto = anchorPhoto ?? throw new System.ArgumentNullException(nameof(anchorPhoto));
-    }
 
-    public override Tensor<T> SynthesizeNovelView(
-        Vector<T> cameraPosition,
-        Matrix<T> cameraRotation,
-        int height,
-        int width)
-    {
-        // Compute mean RGB across the anchor and broadcast to every pixel.
+        // Shape validation matches ImageView's constructor (rank-3 with 3 or 4 channels).
+        if (_anchorPhoto.Shape.Length != 3
+            || (_anchorPhoto.Shape[2] != 3 && _anchorPhoto.Shape[2] != 4))
+        {
+            var dims = new int[_anchorPhoto.Shape.Length];
+            for (int i = 0; i < dims.Length; i++) dims[i] = _anchorPhoto.Shape[i];
+            throw new System.ArgumentException(
+                $"anchorPhoto must be [H, W, 3] or [H, W, 4]; got [{string.Join(",", dims)}].",
+                nameof(anchorPhoto));
+        }
+
+        // Cache the anchor mean at construction — SynthesizeNovelView is called every
+        // training iteration, so recomputing an O(H*W) sum on every call would dominate
+        // training time on large anchors.
         var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         int aH = _anchorPhoto.Shape[0];
         int aW = _anchorPhoto.Shape[1];
@@ -76,16 +85,23 @@ public sealed class IsotropicPrior<T> : LearnedPrior<T>
             }
         }
         T count = numOps.FromDouble(aH * aW);
-        T rMean = numOps.Divide(rSum, count);
-        T gMean = numOps.Divide(gSum, count);
-        T bMean = numOps.Divide(bSum, count);
+        _rMean = numOps.Divide(rSum, count);
+        _gMean = numOps.Divide(gSum, count);
+        _bMean = numOps.Divide(bSum, count);
+    }
 
+    public override Tensor<T> SynthesizeNovelView(
+        Vector<T> cameraPosition,
+        Matrix<T> cameraRotation,
+        int height,
+        int width)
+    {
         var data = new T[height * width * 3];
         for (int i = 0; i < height * width; i++)
         {
-            data[i * 3 + 0] = rMean;
-            data[i * 3 + 1] = gMean;
-            data[i * 3 + 2] = bMean;
+            data[i * 3 + 0] = _rMean;
+            data[i * 3 + 1] = _gMean;
+            data[i * 3 + 2] = _bMean;
         }
         return new Tensor<T>(new[] { height, width, 3 }, new Vector<T>(data));
     }

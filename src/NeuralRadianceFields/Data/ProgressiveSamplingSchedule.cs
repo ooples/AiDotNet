@@ -29,10 +29,36 @@ public class ProgressiveSamplingSchedule
     /// </summary>
     public virtual int SamplesForIteration(int iteration)
     {
+        ValidateSchedule();
         if (iteration <= 0) return CoarseSamples;
         if (iteration >= RampEndIteration) return FineSamples;
         double t = (double)iteration / RampEndIteration;
         return (int)Math.Round(CoarseSamples + t * (FineSamples - CoarseSamples));
+    }
+
+    /// <summary>
+    /// Guard against invalid configuration: zero/negative sample counts break the render
+    /// (empty allocations, no-op MSE) and zero/negative ramp windows would divide by zero
+    /// or ramp instantaneously. Called at every <see cref="SamplesForIteration"/> — cheap
+    /// per-call cost, catches misuse at the schedule boundary instead of inside the model.
+    /// </summary>
+    protected void ValidateSchedule()
+    {
+        if (CoarseSamples <= 0)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(ProgressiveSamplingSchedule)}.{nameof(CoarseSamples)} must be positive; got {CoarseSamples}.");
+        }
+        if (FineSamples <= 0)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(ProgressiveSamplingSchedule)}.{nameof(FineSamples)} must be positive; got {FineSamples}.");
+        }
+        if (RampEndIteration <= 0)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(ProgressiveSamplingSchedule)}.{nameof(RampEndIteration)} must be positive; got {RampEndIteration}.");
+        }
     }
 
     /// <summary>

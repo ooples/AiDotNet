@@ -140,6 +140,11 @@ public static class AiModelResultRadianceFieldExtensions
         CancellationToken cancellationToken = default)
     {
         var field = RequireRadianceField(result, nameof(RenderImageAsync));
+        // Same validation as the sync variant — surface bad args before we spawn a Task.
+        if (cameraPosition is null) throw new ArgumentNullException(nameof(cameraPosition));
+        if (cameraRotation is null) throw new ArgumentNullException(nameof(cameraRotation));
+        if (imageWidth <= 0) throw new ArgumentOutOfRangeException(nameof(imageWidth));
+        if (imageHeight <= 0) throw new ArgumentOutOfRangeException(nameof(imageHeight));
         return Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -148,9 +153,10 @@ public static class AiModelResultRadianceFieldExtensions
     }
 
     /// <summary>
-    /// Batched variant that renders N views in one call, letting the underlying engine
-    /// amortize kernel-launch overhead. Reference impls render one view at a time; batching
-    /// yields ~1.5-3x throughput on GPU-backed engines for orbit trajectories.
+    /// Batched variant that renders N views in parallel using the .NET thread pool. Each
+    /// frame is an independent render (no shared model-mutating state on the render side),
+    /// so this scales linearly with the number of cores available and lets IO-heavy
+    /// orbit-trajectory workflows amortize per-frame Task setup.
     /// </summary>
     /// <param name="views">Sequence of (position, rotation, W, H, focal) per view.</param>
     public static Tensor<T>[] RenderImageBatch<T, TInput, TOutput>(
@@ -161,12 +167,22 @@ public static class AiModelResultRadianceFieldExtensions
         if (views is null) throw new ArgumentNullException(nameof(views));
 
         var list = new List<(Vector<T>, Matrix<T>, int, int, T)>(views);
-        var outputs = new Tensor<T>[list.Count];
+        // Per-view validation up front so a bad late entry doesn't leave the parallel
+        // tasks in an inconsistent state.
         for (int i = 0; i < list.Count; i++)
+        {
+            var (pos, rot, w, h, _) = list[i];
+            if (pos is null) throw new ArgumentException($"views[{i}].Position is null.", nameof(views));
+            if (rot is null) throw new ArgumentException($"views[{i}].Rotation is null.", nameof(views));
+            if (w <= 0)  throw new ArgumentException($"views[{i}].Width must be positive; got {w}.",  nameof(views));
+            if (h <= 0)  throw new ArgumentException($"views[{i}].Height must be positive; got {h}.", nameof(views));
+        }
+        var outputs = new Tensor<T>[list.Count];
+        System.Threading.Tasks.Parallel.For(0, list.Count, i =>
         {
             var (pos, rot, w, h, f) = list[i];
             outputs[i] = field.RenderImage(pos, rot, w, h, f);
-        }
+        });
         return outputs;
     }
 

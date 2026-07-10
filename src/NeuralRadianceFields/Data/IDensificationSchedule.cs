@@ -82,8 +82,13 @@ public sealed class AdaptiveDensificationSchedule : IDensificationSchedule
         _lossSum = 0;
         _windowCount = 0;
 
+        // Plateau = improvement is small AND non-negative. `improvement < threshold` alone
+        // would ALSO fire on loss DIVERGENCE (negative improvement satisfies < threshold),
+        // which is the opposite of what we want — densifying during a divergence event
+        // adds more capacity to an already-unstable cloud. Require improvement >= 0 so
+        // the fire only happens when the model is still moving forward but slowly.
         bool eligible = iteration - _lastFireIteration >= MinInterval;
-        bool plateaued = improvement < LossPlateauThreshold;
+        bool plateaued = improvement >= 0 && improvement < LossPlateauThreshold;
         if (eligible && plateaued)
         {
             _lastFireIteration = iteration;

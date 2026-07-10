@@ -16,7 +16,7 @@ namespace AiDotNet.NeuralRadianceFields.Helpers;
 /// (which auto-records on the gradient tape — the mechanism NeRF/InstantNGP use to
 /// backprop-through-render into the MLP weights via <c>BackwardAndStepOnPrecomputedLoss</c>).
 /// </summary>
-public static class ImageTrainingHelpers
+internal static class ImageTrainingHelpers
 {
     /// <summary>
     /// Pulls one batch from the loader; returns <see langword="null"/> if the loader is
