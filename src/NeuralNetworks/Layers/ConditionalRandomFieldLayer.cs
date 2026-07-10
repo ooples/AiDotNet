@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -567,35 +568,42 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // VECTORIZED: Initialize parameters with scaled random values
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numClasses + _numClasses)));
-        T half = NumOps.FromDouble(0.5);
+        // Fill the ctor-allocated OWNED param tensors in place with scaled, centered uniform
+        // values: (random − 0.5) · sqrt(2 / (fan_in + fan_out)).
+        //
+        // A persistent trainable parameter MUST be an owned tensor, NOT a pool-rented
+        // Engine-op result. The prior code built each parameter via Engine.TensorSubtract /
+        // Engine.TensorMultiplyScalar, whose outputs come from AutoTensorCache.RentOrAllocate —
+        // a pooled rental. Under a TensorArena (the ModelFamily / integration test harness wraps
+        // every train step in one) the pool later re-rents that exact tensor object — same
+        // instance, same backing storage AND the same _shape array — to satisfy an unrelated
+        // allocation, silently mutating the transition matrix from [C, C] to whatever the next
+        // rental needed (e.g. [1, C·C]) mid-training. Every subsequent forward then failed with
+        // "Tensor shapes must match. Got [C] and [1, C]" / broadcast errors. RegisterTrainable-
+        // Parameter does not un-pool a rented tensor. Writing directly into the owned tensors the
+        // constructor already allocated (new Tensor<T>([...])) keeps the parameters out of the
+        // pool for their whole lifetime — the SGD/Adam step mutates them in place, preserving
+        // ownership. Mirrors how the other hand-written layers (DenseLayer, PointConvolutionLayer)
+        // initialize their weights.
+        double scale = Math.Sqrt(2.0 / (_numClasses + _numClasses));
+        var random = Random ?? RandomHelper.CreateSecureRandom();
 
-        // Initialize transition matrix: (random - 0.5) * scale
-        var transRandom = Tensor<T>.CreateRandom(_transitionMatrix.Length, 1).Reshape(_transitionMatrix._shape);
-        var transHalf = new Tensor<T>(_transitionMatrix._shape);
-        transHalf.Fill(half);
-        var transCentered = Engine.TensorSubtract(transRandom, transHalf);
-        _transitionMatrix = Engine.TensorMultiplyScalar(transCentered, scale);
+        FillCenteredUniform(_transitionMatrix, scale, random);
+        FillCenteredUniform(_startScores, scale, random);
+        FillCenteredUniform(_endScores, scale, random);
 
-        // Initialize start scores: (random - 0.5) * scale
-        var startRandom = Tensor<T>.CreateRandom(_startScores.Length, 1).Reshape(_startScores._shape);
-        var startHalf = new Tensor<T>(_startScores._shape);
-        startHalf.Fill(half);
-        var startCentered = Engine.TensorSubtract(startRandom, startHalf);
-        _startScores = Engine.TensorMultiplyScalar(startCentered, scale);
-
-        // Initialize end scores: (random - 0.5) * scale
-        var endRandom = Tensor<T>.CreateRandom(_endScores.Length, 1).Reshape(_endScores._shape);
-        var endHalf = new Tensor<T>(_endScores._shape);
-        endHalf.Fill(half);
-        var endCentered = Engine.TensorSubtract(endRandom, endHalf);
-        _endScores = Engine.TensorMultiplyScalar(endCentered, scale);
-
-        // Register after all reassignments so references are to final tensors
+        // Register after filling so references are to the final owned tensors.
         RegisterTrainableParameter(_transitionMatrix, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_startScores, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_endScores, PersistentTensorRole.Weights);
+    }
+
+    /// <summary>Writes (random − 0.5)·scale into every element of an owned tensor, in place.</summary>
+    private void FillCenteredUniform(Tensor<T> tensor, double scale, Random random)
+    {
+        var span = tensor.Data.Span;
+        for (int i = 0; i < span.Length; i++)
+            span[i] = NumOps.FromDouble((random.NextDouble() - 0.5) * scale);
     }
 
     /// <summary>
