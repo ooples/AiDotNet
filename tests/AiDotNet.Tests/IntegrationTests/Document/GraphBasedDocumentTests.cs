@@ -131,6 +131,59 @@ public class GraphBasedDocumentTests
         Assert.Equal("TRIE", meta.Name);
     }
 
+    // ===== Modality-robust fusion (task #48): text-only, image-only, and fused inference. =====
+
+    private static Tensor<double> CreateTextTokens(int numTokens = 8, int featureDim = 128)
+    {
+        var data = new Vector<double>(numTokens * featureDim);
+        for (int i = 0; i < data.Length; i++)
+            data[i] = 0.01 * ((i % 7) + 1);
+        return new Tensor<double>(new[] { numTokens, featureDim }, data);
+    }
+
+    private static void AssertAllFinite(Tensor<double> t, string ctx)
+    {
+        for (int i = 0; i < t.Length; i++)
+        {
+            Assert.False(double.IsNaN(t[i]), $"{ctx}: output[{i}] is NaN");
+            Assert.False(double.IsInfinity(t[i]), $"{ctx}: output[{i}] is Infinity");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_TextOnly_ProducesFiniteOutput()
+    {
+        await Task.Yield();
+        var model = new TRIE<double>(CreateArchitecture());
+        var output = model.Predict(CreateTextTokens());   // rank-2 -> text stream (graceful single-modality)
+        Assert.True(output.Length > 0);
+        AssertAllFinite(output, "TRIE text-only");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TRIE_FusedMultimodal_CombinesTextAndVisualNodes()
+    {
+        await Task.Yield();
+        var model = new TRIE<double>(CreateArchitecture());
+        var tokens = CreateTextTokens();
+        var image = CreateSmallImage();
+
+        var textOnly = model.PredictMultimodal(tokens, null);   // graceful degradation
+        var imageOnly = model.PredictMultimodal(null, image);   // graceful degradation
+        var fused = model.PredictMultimodal(tokens, image);     // joint reasoning
+
+        AssertAllFinite(textOnly, "TRIE fused-text-only");
+        AssertAllFinite(imageOnly, "TRIE fused-image-only");
+        AssertAllFinite(fused, "TRIE fused");
+
+        // The fused node set is the union of text nodes and visual nodes, so it must have strictly
+        // more nodes than either single modality — proof the streams were actually concatenated.
+        Assert.True(fused.Shape[0] > textOnly.Shape[0],
+            $"Fused node count ({fused.Shape[0]}) should exceed text-only ({textOnly.Shape[0]}).");
+        Assert.True(fused.Shape[0] > imageOnly.Shape[0],
+            $"Fused node count ({fused.Shape[0]}) should exceed image-only ({imageOnly.Shape[0]}).");
+    }
+
     #endregion
 
     #region LayoutGraph Tests
