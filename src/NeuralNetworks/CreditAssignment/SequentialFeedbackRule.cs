@@ -44,47 +44,27 @@ internal abstract class SequentialFeedbackRule<T> : CreditRuleBase<T>
 /// <b>Feedback Alignment</b> (Lillicrap et al., 2016): the error is routed sequentially through a <i>fixed random</i>
 /// feedback matrix at each layer boundary instead of the transpose weights.
 /// </summary>
+/// <typeparam name="T">The numeric data type.</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Feedback Alignment replaces each layer's exact backward matrix with a fixed random one and
+/// passes the error back through those, one layer at a time. It still learns because the forward weights gradually
+/// rotate to line up with the random feedback — the original demonstration that back-propagation's exact weights
+/// are not strictly required.
+/// </para>
+/// </remarks>
 internal sealed class FeedbackAlignmentCreditRule<T> : SequentialFeedbackRule<T>
 {
-    private Matrix<T>[]? _feedback; // _feedback[i] : [M_{i+1}, M_i]
-    private int[]? _shapeSignature;
-
     public FeedbackAlignmentCreditRule(int? seed = null) : base(seed) { }
 
     public override string Name => "FeedbackAlignment";
 
-    public override void Initialize(ICreditAssignmentContext<T> context)
-    {
-        if (IsInitializedFor(context)) return;
-        var layers = context.Layers;
-        var random = ResolveRandom(context);
-
-        _feedback = new Matrix<T>[Math.Max(0, layers.Count - 1)];
-        _shapeSignature = new int[layers.Count];
-        for (int i = 0; i < layers.Count; i++)
-            _shapeSignature[i] = layers[i].FlatFeatureSize;
-        for (int i = 0; i < layers.Count - 1; i++)
-        {
-            int mNext = layers[i + 1].FlatFeatureSize;
-            int mThis = layers[i].FlatFeatureSize;
-            _feedback[i] = RandomGaussian(mNext, mThis, mNext, random, context.NumOps);
-        }
-    }
-
     protected override Matrix<T> FeedbackMatrix(int index, ICreditAssignmentContext<T> context)
     {
-        if (!IsInitializedFor(context)) Initialize(context);
-        return _feedback![index];
-    }
-
-    private bool IsInitializedFor(ICreditAssignmentContext<T> context)
-    {
-        if (_feedback is null || _shapeSignature is null) return false;
-        var layers = context.Layers;
-        if (_shapeSignature.Length != layers.Count) return false;
-        for (int i = 0; i < layers.Count; i++)
-            if (_shapeSignature[i] != layers[i].FlatFeatureSize) return false;
-        return true;
+        // Boundary matrix i maps layer i+1's output space to layer i's output space: [M_{i+1}, M_i].
+        var feedback = EnsureFeedback(context, (layers, i) =>
+            i < layers.Count - 1 ? (layers[i + 1].FlatFeatureSize, layers[i].FlatFeatureSize) : ((int, int)?)null);
+        return feedback[index]!;
     }
 }
 
@@ -94,6 +74,14 @@ internal sealed class FeedbackAlignmentCreditRule<T> : SequentialFeedbackRule<T>
 /// single weight matrix (dense layers); it is not defined for attention/normalization blocks, which have no single
 /// weight — use Direct Feedback Alignment for those architectures.
 /// </summary>
+/// <typeparam name="T">The numeric data type.</typeparam>
+/// <remarks>
+/// <para>
+/// <b>For Beginners:</b> Sign-Symmetric keeps only the <i>sign</i> (+/−) of each real weight for the backward pass
+/// and throws away the magnitude. Unlike the random rules its feedback tracks the live weight signs every step, so
+/// it stays closer to true back-propagation while still avoiding exact weight transport.
+/// </para>
+/// </remarks>
 internal sealed class SignSymmetricCreditRule<T> : SequentialFeedbackRule<T>
 {
     public SignSymmetricCreditRule(int? seed = null) : base(seed) { }
@@ -126,6 +114,7 @@ internal sealed class SignSymmetricCreditRule<T> : SequentialFeedbackRule<T>
 /// Standard reverse-mode back-propagation, exposed as a credit rule for API symmetry. Selecting it uses the
 /// network's exact gradient (identical to the default path); it produces no teaching signals.
 /// </summary>
+/// <typeparam name="T">The numeric data type.</typeparam>
 internal sealed class BackpropCreditRule<T> : CreditRuleBase<T>
 {
     public override string Name => "Backprop";

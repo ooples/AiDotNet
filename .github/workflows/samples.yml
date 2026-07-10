@@ -22,6 +22,7 @@ permissions:
 
 jobs:
   build-and-run:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     name: Build & run samples
     runs-on: ubuntu-latest
     timeout-minutes: 45
