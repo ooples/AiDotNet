@@ -49,11 +49,17 @@ public class ImageTrainingPathTests
         var (view, pixels) = enumerator.Current;
         Assert.NotNull(view);
         Assert.NotNull(pixels);
+        // .ToArray() + net471-portable equality: TensorShape has no IEnumerable<int>
+        // Assert.Equal overload on net471, and float.IsFinite is net5+; use the portable
+        // form pattern established elsewhere in this test project.
         Assert.Equal(8, pixels.Count);
-        Assert.Equal(new[] { 8, 3 }, pixels.RayOrigins.Shape);
-        Assert.Equal(new[] { 8, 3 }, pixels.RayDirections.Shape);
-        Assert.Equal(new[] { 8, 3 }, pixels.TargetColors.Shape);
+        Assert.Equal(new[] { 8, 3 }, pixels.RayOrigins.Shape.ToArray());
+        Assert.Equal(new[] { 8, 3 }, pixels.RayDirections.Shape.ToArray());
+        Assert.Equal(new[] { 8, 3 }, pixels.TargetColors.Shape.ToArray());
     }
+
+    // float.IsFinite is not on .NET Framework — replicate its semantics (not NaN, not ∞).
+    private static bool IsFiniteFloat(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
 
     [Fact]
     public void ImageTrainingDataLoaders_FromViews_NullThrows()
@@ -97,7 +103,7 @@ public class ImageTrainingPathTests
         var loader = ImageTrainingDataLoaders.FromViews(BuildViews(), seed: 7);
 
         float loss = nerf.TrainOnImageBatch(loader, raysPerBatch: 4, optimizerOptions: null);
-        Assert.True(float.IsFinite(loss), $"loss should be finite; got {loss}.");
+        Assert.True(IsFiniteFloat(loss), $"loss should be finite; got {loss}.");
         Assert.True(loss >= 0f, "MSE loss can't be negative.");
     }
 
@@ -115,7 +121,7 @@ public class ImageTrainingPathTests
         var ngp = new InstantNGP<float>();
         var loader = ImageTrainingDataLoaders.FromViews(BuildViews(), seed: 11);
         float loss = ngp.TrainOnImageBatch(loader, raysPerBatch: 4, optimizerOptions: null);
-        Assert.True(float.IsFinite(loss), $"InstantNGP loss should be finite; got {loss}.");
+        Assert.True(IsFiniteFloat(loss), $"InstantNGP loss should be finite; got {loss}.");
         Assert.True(loss >= 0f, "MSE loss can't be negative.");
     }
 
@@ -132,7 +138,7 @@ public class ImageTrainingPathTests
             });
         var loader = ImageTrainingDataLoaders.FromViews(BuildViews(count: 1, H: 4, W: 4), seed: 13);
         float loss = gs.TrainOnImageBatch(loader, raysPerBatch: 4, optimizerOptions: null);
-        Assert.True(float.IsFinite(loss), $"GS loss should be finite; got {loss}.");
+        Assert.True(IsFiniteFloat(loss), $"GS loss should be finite; got {loss}.");
         Assert.True(loss >= 0f, "Loss can't be negative.");
     }
 }
