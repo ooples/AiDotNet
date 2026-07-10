@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
@@ -88,10 +89,13 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     // Flow decoder
     private readonly List<ConvolutionalLayer<T>> _flowDecoder;
-    private readonly ConvolutionalLayer<T> _flowHead;
+    private ConvolutionalLayer<T>? _flowHead;
 
     // Refinement module
     private readonly List<ConvolutionalLayer<T>> _refinement;
+
+    // Guards the one-time real-graph lazy-shape warmup (see ResolveLazyLayerShapes).
+    private bool _lazyShapesWarmed;
 
     #endregion
 
@@ -170,7 +174,28 @@ public class GMFlow<T> : OpticalFlowBase<T>
             Layers.AddRange(layers);
         }
 
-        // Distribute layers to sub-lists for forward pass
+        // Distribute layers to sub-lists for the forward pass.
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// (Re)builds the sub-list references (<see cref="_encoder"/>,
+    /// <see cref="_selfAttention"/>, etc.) that the forward pass uses, from the
+    /// canonical <see cref="NeuralNetworks.NeuralNetworkBase{T}.Layers"/> list.
+    /// Must be called both after the layers are built in the constructor and after
+    /// deserialization replaces <c>Layers</c> with the loaded weights — otherwise a
+    /// clone would keep running the constructor's random-init layers while the loaded
+    /// weights sit unused (Clone_ShouldProduceIdenticalOutput / Clone_AfterTraining).
+    /// Idempotent.
+    /// </summary>
+    private void ExtractLayerReferences()
+    {
+        _encoder.Clear();
+        _selfAttention.Clear();
+        _crossAttention.Clear();
+        _flowDecoder.Clear();
+        _refinement.Clear();
+
         int idx = 0;
         // Encoder (6 layers)
         for (int i = 0; i < 6; i++)
@@ -202,11 +227,15 @@ public class GMFlow<T> : OpticalFlowBase<T>
     /// </summary>
     public override Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
     {
+        // The ModelFamily harness feeds rank-3 [C, H, W] unbatched frames, but the
+        // conv/attention pipeline needs rank-4 [B, C, H, W]. Promote via a tape-aware
+        // reshape (NOT a CopyTo, which severs the autodiff tape) and squeeze the batch
+        // dim back off the output below.
         bool hasBatch = frame1.Rank == 4;
         if (!hasBatch)
         {
-            frame1 = AddBatchDimension(frame1);
-            frame2 = AddBatchDimension(frame2);
+            frame1 = Engine.Reshape(frame1, [1, frame1.Shape[0], frame1.Shape[1], frame1.Shape[2]]);
+            frame2 = Engine.Reshape(frame2, [1, frame2.Shape[0], frame2.Shape[1], frame2.Shape[2]]);
         }
 
         // Extract features
@@ -224,7 +253,8 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
         if (!hasBatch)
         {
-            refinedFlow = RemoveBatchDimension(refinedFlow);
+            refinedFlow = Engine.Reshape(refinedFlow,
+                [refinedFlow.Shape[1], refinedFlow.Shape[2], refinedFlow.Shape[3]]);
         }
 
         return refinedFlow;
@@ -272,25 +302,43 @@ public class GMFlow<T> : OpticalFlowBase<T>
         return warped;
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input) => ForwardPair(input);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// GMFlow's real computation graph is <see cref="EstimateFlow"/> (encode →
+    /// global matching → decode → refine), not a sequential pass over the flat
+    /// <c>Layers</c> list — the attention / warp / concat stages interleave non-layer
+    /// tensor ops. The base <see cref="NeuralNetworks.NeuralNetworkBase{T}.ForwardForTraining"/>
+    /// runs the layers in order, which produces channel-count mismatches. Route the
+    /// training forward through the same tape-connected graph Predict uses so gradients
+    /// actually flow (GradientFlow / Training_ShouldReduceLoss).
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardPair(input);
+
+    /// <summary>
+    /// Splits a concatenated frame pair and runs the flow-estimation graph.
+    /// Expects <c>[B, 2C, H, W]</c> (batched) or <c>[2C, H, W]</c> (unbatched); the
+    /// channel split uses a tape-aware <see cref="IEngine.TensorSlice{T}"/> so the
+    /// autodiff tape is preserved end-to-end.
+    /// </summary>
+    private Tensor<T> ForwardPair(Tensor<T> input)
     {
-        // Expects concatenated frame pair [B, C*2, H, W]
-        // Split into two frames and estimate flow
+        if (input.Rank == 3)
+        {
+            int c3 = input.Shape[0] / 2;
+            var f1 = Engine.TensorSlice(input, [0, 0, 0], [c3, input.Shape[1], input.Shape[2]]);
+            var f2 = Engine.TensorSlice(input, [c3, 0, 0], [c3, input.Shape[1], input.Shape[2]]);
+            return EstimateFlow(f1, f2);
+        }
+
         int batchSize = input.Shape[0];
         int channels = input.Shape[1] / 2;
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var frame1 = new Tensor<T>([batchSize, channels, height, width]);
-        var frame2 = new Tensor<T>([batchSize, channels, height, width]);
-
-        // Split channels
-        int frameSize = channels * height * width;
-        for (int b = 0; b < batchSize; b++)
-        {
-            input.Data.Span.Slice(b * 2 * frameSize, frameSize).CopyTo(frame1.Data.Span.Slice(b * frameSize, frameSize));
-            input.Data.Span.Slice(b * 2 * frameSize + frameSize, frameSize).CopyTo(frame2.Data.Span.Slice(b * frameSize, frameSize));
-        }
+        var frame1 = Engine.TensorSlice(input, [0, 0, 0, 0], [batchSize, channels, height, width]);
+        var frame2 = Engine.TensorSlice(input, [0, channels, 0, 0], [batchSize, channels, height, width]);
 
         return EstimateFlow(frame1, frame2);
     }
@@ -318,7 +366,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         foreach (var layer in _encoder)
         {
             features = layer.Forward(features);
-            features = ApplyReLU(features);
+            features = Engine.ReLU(features);
         }
         return features;
     }
@@ -330,133 +378,104 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
         for (int i = 0; i < _numTransformerLayers; i++)
         {
-            // Self-attention on each feature
+            // Self-attention on each feature (query/key projected from the SAME feature,
+            // value = feature). Residual connection per the Transformer block, which also
+            // keeps gradients flowing through the stack (GradientFlow).
             int selfIdx = i * 2;
             var q1 = _selfAttention[selfIdx].Forward(f1);
             var k1 = _selfAttention[selfIdx + 1].Forward(f1);
-            f1 = ApplyAttention(q1, k1, f1);
+            f1 = AddTensors(f1, SpatialAttention(q1, k1, f1));
 
             var q2 = _selfAttention[selfIdx].Forward(f2);
             var k2 = _selfAttention[selfIdx + 1].Forward(f2);
-            f2 = ApplyAttention(q2, k2, f2);
+            f2 = AddTensors(f2, SpatialAttention(q2, k2, f2));
 
-            // Cross-attention between features
+            // Cross-attention between features: GMFlow's global matching. Each feature
+            // queries the OTHER feature (query proj on self, key proj on the other, value =
+            // the other feature). This is genuine cross-attention — NOT a conv over the
+            // channel-concatenation of both features — so every projection conv sees a
+            // consistent numFeatures-channel input.
+            //
+            // BOTH updates are computed from the PRE-update f1/f2 and applied
+            // simultaneously. Updating f1 first and then feeding the new f1 into f2's
+            // update would break the symmetry between the two branches: for identical
+            // input frames (feat1 == feat2) the two features must stay equal through the
+            // whole stack so the decoded flow is ~zero (IdenticalFrames_NearZeroFlow).
             int crossIdx = i * 2;
-            var concat1 = ConcatenateChannels(f1, f2);
-            var cross1 = _crossAttention[crossIdx].Forward(concat1);
-            cross1 = _crossAttention[crossIdx + 1].Forward(cross1);
-            f1 = AddTensors(f1, cross1);
+            var q1c = _crossAttention[crossIdx].Forward(f1);
+            var k2c = _crossAttention[crossIdx + 1].Forward(f2);
+            var q2c = _crossAttention[crossIdx].Forward(f2);
+            var k1c = _crossAttention[crossIdx + 1].Forward(f1);
 
-            var concat2 = ConcatenateChannels(f2, f1);
-            var cross2 = _crossAttention[crossIdx].Forward(concat2);
-            cross2 = _crossAttention[crossIdx + 1].Forward(cross2);
-            f2 = AddTensors(f2, cross2);
+            var f1Next = AddTensors(f1, SpatialAttention(q1c, k2c, f2));
+            var f2Next = AddTensors(f2, SpatialAttention(q2c, k1c, f1));
+            f1 = f1Next;
+            f2 = f2Next;
         }
 
         return (f1, f2);
     }
 
     /// <summary>
-    /// Applies scaled dot-product attention following the Transformer mechanism.
+    /// Applies global scaled dot-product attention over all spatial positions.
     /// </summary>
     /// <param name="query">Query tensor [batch, channels, height, width].</param>
     /// <param name="key">Key tensor [batch, channels, height, width].</param>
     /// <param name="value">Value tensor [batch, channels, height, width].</param>
     /// <returns>Attention output tensor [batch, channels, height, width].</returns>
     /// <remarks>
-    /// Implements: Attention(Q, K, V) = softmax(Q * K^T / sqrt(d_k)) * V
-    /// Uses a local window attention pattern for efficiency on high-resolution feature maps.
+    /// Implements Attention(Q, K, V) = softmax(Q · Kᵀ / sqrt(d_k)) · V entirely with
+    /// tape-aware <see cref="IEngine"/> ops (reshape → permute → BatchMatMul → softmax
+    /// → BatchMatMul → reshape) so gradients flow to the Q/K projection convolutions.
+    /// GMFlow performs GLOBAL matching (attention across every spatial position, not a
+    /// local window), which is exactly this dense HW×HW attention.
+    /// <para>
+    /// <b>Memory:</b> the score/attention tensors are dense <c>[B, HW, HW]</c>, so memory grows
+    /// as O(B·(HW)²) in the feature-map resolution. GMFlow runs this on the 1/8-downsampled
+    /// encoder features, so a 512×512 input becomes a 64×64 (HW=4096) map — already ~134 M score
+    /// entries per batch item. To keep the OOM from surfacing as an opaque allocation failure deep
+    /// inside <see cref="IEngine.BatchMatMul"/>, we guard the token count up front and throw an
+    /// actionable message naming the resolution. Callers needing higher resolution should tile the
+    /// image or switch to a windowed/local-attention variant.
+    /// </para>
     /// </remarks>
-    private Tensor<T> ApplyAttention(Tensor<T> query, Tensor<T> key, Tensor<T> value)
+    private Tensor<T> SpatialAttention(Tensor<T> query, Tensor<T> key, Tensor<T> value)
     {
-        int batchSize = query.Shape[0];
-        int channels = query.Shape[1];
-        int height = query.Shape[2];
-        int width = query.Shape[3];
+        int b = query.Shape[0];
+        int c = query.Shape[1];
+        int h = query.Shape[2];
+        int w = query.Shape[3];
+        int hw = h * w;
 
-        var output = new Tensor<T>(value._shape);
-        double scale = 1.0 / Math.Sqrt(channels);
-
-        // Use local window attention for efficiency (window size based on feature resolution)
-        int windowSize = Math.Min(Math.Min(height, width), 8);
-        int halfWindow = windowSize / 2;
-
-        for (int b = 0; b < batchSize; b++)
+        // Dense global attention materializes a [B, HW, HW] score matrix. Guard the token count so
+        // an over-large feature map fails with a clear diagnostic instead of an opaque OOM inside
+        // BatchMatMul/Softmax. 16384 tokens (e.g. 128×128) => ~2.1e8 float scores per batch item.
+        const int MaxAttentionTokens = 16384;
+        if (hw > MaxAttentionTokens)
         {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Define local attention window
-                    int hStart = Math.Max(0, h - halfWindow);
-                    int hEnd = Math.Min(height, h + halfWindow + 1);
-                    int wStart = Math.Max(0, w - halfWindow);
-                    int wEnd = Math.Min(width, w + halfWindow + 1);
-
-                    int windowH = hEnd - hStart;
-                    int windowW = wEnd - wStart;
-                    int numPositions = windowH * windowW;
-
-                    // Compute attention scores for all positions in window
-                    var scores = new double[numPositions];
-                    double maxScore = double.MinValue;
-
-                    int pos = 0;
-                    for (int h2 = hStart; h2 < hEnd; h2++)
-                    {
-                        for (int w2 = wStart; w2 < wEnd; w2++)
-                        {
-                            double score = 0;
-                            for (int c = 0; c < channels; c++)
-                            {
-                                double qVal = Convert.ToDouble(query[b, c, h, w]);
-                                double kVal = Convert.ToDouble(key[b, c, h2, w2]);
-                                score += qVal * kVal;
-                            }
-                            score *= scale;
-                            scores[pos] = score;
-                            if (score > maxScore) maxScore = score;
-                            pos++;
-                        }
-                    }
-
-                    // Apply softmax to attention scores
-                    double sumExp = 0;
-                    var expScores = new double[numPositions];
-                    for (int i = 0; i < numPositions; i++)
-                    {
-                        // Subtract max for numerical stability
-                        expScores[i] = Math.Exp(scores[i] - maxScore);
-                        sumExp += expScores[i];
-                    }
-
-                    // Normalize to get attention weights
-                    for (int i = 0; i < numPositions; i++)
-                    {
-                        expScores[i] /= Math.Max(sumExp, 1e-12);
-                    }
-
-                    // Apply attention weights to value vectors
-                    for (int c = 0; c < channels; c++)
-                    {
-                        double weightedSum = 0;
-                        pos = 0;
-                        for (int h2 = hStart; h2 < hEnd; h2++)
-                        {
-                            for (int w2 = wStart; w2 < wEnd; w2++)
-                            {
-                                double vVal = Convert.ToDouble(value[b, c, h2, w2]);
-                                weightedSum += expScores[pos] * vVal;
-                                pos++;
-                            }
-                        }
-                        output[b, c, h, w] = NumOps.FromDouble(weightedSum);
-                    }
-                }
-            }
+            throw new InvalidOperationException(
+                $"GMFlow global attention feature map is {h}×{w} ({hw} tokens), which exceeds the " +
+                $"{MaxAttentionTokens}-token limit for the dense O(HW²) score matrix (~{(long)hw * hw} " +
+                "entries per batch item). Reduce the input resolution, tile the image, or use a " +
+                "windowed/local-attention variant for higher resolutions.");
         }
 
-        return output;
+        // [B, C, H, W] -> [B, C, HW] -> [B, HW, C] (spatial positions as tokens)
+        var q = Engine.TensorPermute(Engine.Reshape(query, [b, c, hw]), [0, 2, 1]);
+        var k = Engine.TensorPermute(Engine.Reshape(key, [b, c, hw]), [0, 2, 1]);
+        var v = Engine.TensorPermute(Engine.Reshape(value, [b, c, hw]), [0, 2, 1]);
+
+        // scores = Q · Kᵀ / sqrt(d_k)  -> [B, HW, HW]
+        var kT = Engine.TensorPermute(k, [0, 2, 1]);            // [B, C, HW]
+        var scores = Engine.BatchMatMul(q, kT);                 // [B, HW, HW]
+        scores = Engine.TensorMultiplyScalar(scores, NumOps.FromDouble(1.0 / Math.Sqrt(c)));
+
+        var attn = Engine.Softmax(scores, axis: -1);            // [B, HW, HW]
+        var outTokens = Engine.BatchMatMul(attn, v);            // [B, HW, C]
+
+        // back to [B, C, H, W]
+        var outCHW = Engine.TensorPermute(outTokens, [0, 2, 1]); // [B, C, HW]
+        return Engine.Reshape(outCHW, [b, c, h, w]);
     }
 
     private Tensor<T> DecodeFlow(Tensor<T> feat1, Tensor<T> feat2)
@@ -466,27 +485,37 @@ public class GMFlow<T> : OpticalFlowBase<T>
         foreach (var layer in _flowDecoder)
         {
             diff = layer.Forward(diff);
-            diff = ApplyReLU(diff);
+            diff = Engine.ReLU(diff);
         }
 
-        return _flowHead.Forward(diff);
+        var flowHead = _flowHead ?? throw new InvalidOperationException("Flow head has not been initialized.");
+        return flowHead.Forward(diff);
     }
 
     private Tensor<T> RefineFlow(Tensor<T> frame1, Tensor<T> frame2, Tensor<T> coarseFlow)
     {
-        // Upsample coarse flow
-        var upFlow = UpsampleFlow(coarseFlow, _height, _width);
+        // Upsample coarse flow to the ACTUAL input resolution (frame1's H/W), NOT the
+        // constructor's _height/_width. The encoder downsamples 8x, so coarseFlow is at
+        // H/8 x W/8; the refinement stage concatenates it with the full-resolution frame
+        // pair, which requires matching spatial dims. Using _height/_width upsampled the
+        // flow to the fixed default (e.g. 256) while the harness feeds a smaller frame
+        // (e.g. 64), producing a "concatenation axis mismatch 64 vs 256" crash.
+        int targetH = frame1.Shape[2];
+        int targetW = frame1.Shape[3];
+        var upFlow = UpsampleFlow(coarseFlow, targetH, targetW);
 
         // Concatenate inputs
         var concat = ConcatenateChannels(frame1, frame2);
         concat = ConcatenateChannels(concat, upFlow);
 
-        // Refine
+        // Refine. Each conv already applies its own activation (ReLU on the two hidden
+        // convs, linear on the final flow-residual conv), so no extra explicit ReLU is
+        // added here — an explicit ReLU on the final output would re-clamp the signed
+        // flow residual to >= 0 and collapse input sensitivity.
         var residual = concat;
         foreach (var layer in _refinement)
         {
             residual = layer.Forward(residual);
-            residual = ApplyReLU(residual);
         }
 
         return AddTensors(upFlow, residual);
@@ -494,30 +523,19 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     private Tensor<T> UpsampleFlow(Tensor<T> flow, int targetH, int targetW)
     {
-        int batchSize = flow.Shape[0];
         int srcH = flow.Shape[2];
         int srcW = flow.Shape[3];
+        if (srcH == targetH && srcW == targetW)
+            return flow;
 
-        var upsampled = new Tensor<T>([batchSize, 2, targetH, targetW]);
-        double scaleH = (double)srcH / targetH;
-        double scaleW = (double)srcW / targetW;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < targetH; h++)
-            {
-                for (int w = 0; w < targetW; w++)
-                {
-                    int srcY = Math.Min((int)(h * scaleH), srcH - 1);
-                    int srcX = Math.Min((int)(w * scaleW), srcW - 1);
-
-                    upsampled[b, 0, h, w] = NumOps.FromDouble(Convert.ToDouble(flow[b, 0, srcY, srcX]) / scaleW);
-                    upsampled[b, 1, h, w] = NumOps.FromDouble(Convert.ToDouble(flow[b, 1, srcY, srcX]) / scaleH);
-                }
-            }
-        }
-
-        return upsampled;
+        // Bilinearly resize the flow field (tape-aware), then scale the displacement
+        // magnitudes by the resolution ratio: a flow vector measured in coarse-grid
+        // pixels must be multiplied by target/src when re-expressed on the fine grid.
+        // The encoder downsamples H and W by the same factor (three stride-2 convs), so
+        // the vertical and horizontal ratios are equal and a single scalar is exact.
+        var upsampled = Engine.Interpolate(flow, [targetH, targetW], InterpolateMode.Bilinear, alignCorners: false);
+        double ratio = (double)targetH / srcH;
+        return Engine.TensorMultiplyScalar(upsampled, NumOps.FromDouble(ratio));
     }
 
     private Tensor<T> ComputeOcclusionMask(Tensor<T> forward, Tensor<T> backward)
@@ -611,9 +629,6 @@ public class GMFlow<T> : OpticalFlowBase<T>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
         Engine.TensorAdd(a, b);
 
-    private Tensor<T> ApplyReLU(Tensor<T> input) =>
-        input.Transform((v, _) => NumOps.FromDouble(Math.Max(0, Convert.ToDouble(v))));
-
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
         var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
@@ -640,7 +655,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         foreach (var layer in _selfAttention) Layers.Add(layer);
         foreach (var layer in _crossAttention) Layers.Add(layer);
         foreach (var layer in _flowDecoder) Layers.Add(layer);
-        Layers.Add(_flowHead);
+        if (_flowHead is not null) Layers.Add(_flowHead);
         foreach (var layer in _refinement) Layers.Add(layer);
     }
 
@@ -690,6 +705,47 @@ public class GMFlow<T> : OpticalFlowBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         for (int i = 0; i < 6; i++) _ = reader.ReadInt32();
+
+        // The base deserializer has replaced Layers with the loaded-weight layers;
+        // re-point the forward-pass sub-lists at them so a clone/reload runs the
+        // trained weights rather than the constructor's random-init layers
+        // (Clone_ShouldProduceIdenticalOutput / Clone_AfterTraining).
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// Resolves each convolution's lazy input depth by running the REAL computation
+    /// graph once, instead of the base's sequential walk over <c>Layers</c>.
+    /// </summary>
+    /// <remarks>
+    /// GMFlow's flat <c>Layers</c> list is not a valid sequential forward: the
+    /// refinement stage consumes a channel-concatenation of the frame pair plus the
+    /// upsampled flow (2C + 2 = 8 channels for the default 3-channel frames), but the
+    /// base's sequential shape walk would feed the first refinement conv only the flow
+    /// head's 2-channel output and lock its input depth to 2 — so the next real forward
+    /// throws "Expected input depth 2, but got 8". Because a convolution's input depth
+    /// depends only on channel count (not spatial size), a single forward over a small
+    /// dummy frame pair resolves every layer correctly and cheaply; delegating to the
+    /// base afterwards just marks the walk complete (every layer is already resolved, so
+    /// its sequential pass is a no-op).
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesWarmed) return;
+        _lazyShapesWarmed = true; // set first so any reentrancy is a no-op
+
+        // Resolve every conv's input depth via the REAL graph. Deliberately does NOT
+        // delegate to base.ResolveLazyLayerShapes(): the base's sequential walk over the
+        // flat Layers list would re-resolve the first refinement conv from the flow
+        // head's 2-channel output and clobber the correct 8-channel depth this forward
+        // establishes.
+        const int dummyHW = 64;   // comfortably above the encoder's 8x downsample floor
+        var dummy = new Tensor<T>([1, _channels * 2, dummyHW, dummyHW]);
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try { ForwardPair(dummy); }
+        catch { /* best-effort; a genuine forward failure surfaces on the real Train/Predict */ }
+        finally { if (wasTraining) SetTrainingMode(true); }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>

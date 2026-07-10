@@ -486,17 +486,53 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    /// <summary>
+    /// Modality-robust HETEROGENEOUS-graph inference (Luo et al. 2022 — DocGCN is a heterogeneous
+    /// graph over text/visual/layout nodes). Each argument is one modality's node-feature matrix
+    /// (<c>[N_modality, F]</c>, sharing the feature dim <c>F</c>); present modalities are stacked along
+    /// the NODE axis into one joint heterogeneous node set that the shared GCN stack reasons over.
+    /// Supplying a single modality (or null for the others) gracefully degrades to that modality —
+    /// reference DocGCN impls expect a pre-fused node set, so accepting missing modalities is where
+    /// this exceeds them.
+    /// </summary>
+    /// <param name="modalityNodeFeatures">One rank-2 <c>[N, F]</c> node-feature matrix per modality;
+    /// null entries (absent modalities) are skipped.</param>
+    public Tensor<T> PredictMultimodal(params Tensor<T>?[] modalityNodeFeatures)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Multimodal fusion is only available in native mode.");
+        if (modalityNodeFeatures is null)
+            throw new ArgumentNullException(nameof(modalityNodeFeatures));
+
+        var present = System.Array.FindAll(modalityNodeFeatures, m => m is not null);
+        if (present.Length == 0)
+            throw new ArgumentException("PredictMultimodal requires at least one non-null modality node-feature matrix.", nameof(modalityNodeFeatures));
+
+        SetTrainingMode(false);
+        var fused = present.Length == 1
+            ? present[0]!
+            : Engine.TensorConcatenate(System.Array.ConvertAll(present, m => m!), axis: 0); // [ΣN_modality, F]
+        return Forward(fused);
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        // TrainWithTape already runs the forward, backprop, and optimizer update. The manual
+        // UpdateParameters(CollectGradients()) that followed was a redundant SECOND gradient step whose
+        // hand-collected vector length didn't match GetParameters, crashing training. Use the tape only.
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -512,13 +548,6 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         SetParameters(currentParams);
     }
 
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
 
     #endregion
 

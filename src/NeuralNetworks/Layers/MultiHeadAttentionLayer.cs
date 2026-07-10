@@ -516,6 +516,23 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         {
             if (_isInitialized) return;
 
+            // Idempotent allocation. If correctly-shaped Q/K/V/O weights are ALREADY present — because
+            // they were installed by SetTrainableParameters (deserialize) or shared by a copy-on-write
+            // clone before this first forward — mark the layer initialized WITHOUT re-allocating. Re-
+            // initializing would overwrite restored/shared TRAINED weights with fresh random ones on a
+            // cloned or deserialized model's first forward, silently dropping the training (the #1221
+            // Clone_AfterTraining failure class for lazy attention stacks). Those install paths already
+            // register the tensors as trainable, so we only flip the initialized flag here.
+            if (WeightsAlreadyAllocated(_queryWeights, _embeddingDimension, _embeddingDimension)
+                && WeightsAlreadyAllocated(_keyWeights, _embeddingDimension, _embeddingDimension)
+                && WeightsAlreadyAllocated(_valueWeights, _embeddingDimension, _embeddingDimension)
+                && WeightsAlreadyAllocated(_outputWeights, _embeddingDimension, _embeddingDimension)
+                && WeightsAlreadyAllocated(_outputBias, _embeddingDimension))
+            {
+                _isInitialized = true;
+                return;
+            }
+
             // Route lazy-weight allocation through AllocateLazyWeight: when
             // streaming is engaged on the parent network, this calls
             // WeightRegistry.AllocateStreaming which pre-evicts competing
@@ -703,6 +720,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         var metadata = base.GetMetadata();
         metadata["HeadCount"] = _headCount.ToString();
+        // Serialize the fixed embedding dimension (headCount × headDimension, set at construction).
+        // The lazy Q/K/V/O weights aren't allocated until the first Forward, so a model cloned/
+        // serialized before any forward reports a placeholder input shape ([seq, 1]); without this,
+        // deserialization derived embeddingDimension from that placeholder (1) and threw
+        // "embeddingDimension 1 is not divisible by headCount N".
+        metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
         metadata["PositionalEncoding"] = PositionalEncoding.ToString();
         return metadata;
     }

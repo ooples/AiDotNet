@@ -502,6 +502,24 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input) => Classify(input);
 
+    private bool _shapesProbed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// SlowFast's forward is a parallel dual-pathway DAG (slow + fast pathways, then a channel-concat
+    /// fusion), not a sequential pass over the flat Layers list, so the base linear walk mis-sizes the
+    /// fusion convs (it resolved one to the fused feature width while the real forward feeds the stem
+    /// width, throwing "Expected input depth 512, but got 3"). Resolve every lazy conv through a real
+    /// forward on a small dummy clip shaped like the generic temporal-video InputShape instead.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_shapesProbed || _slowLayerCount == 0) return;
+        _shapesProbed = true;
+        int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        _ = PredictCore(new Tensor<T>([4, c, 32, 32]));
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)

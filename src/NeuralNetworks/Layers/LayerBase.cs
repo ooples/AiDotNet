@@ -750,6 +750,28 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// True when <paramref name="weight"/> is already allocated with EXACTLY the given
+    /// <paramref name="expectedShape"/>. Lazy layers use this in <see cref="OnFirstForward"/> to make
+    /// weight allocation IDEMPOTENT: when a clone/deserialize path (SetParameters /
+    /// SetTrainableParameters / copy-on-write CloneShared) has already installed correctly-shaped
+    /// TRAINED weights before the first forward, the layer must NOT re-allocate and re-initialize
+    /// them — doing so overwrites the restored/shared weights with fresh random ones and silently
+    /// drops the training (the #1221 Clone_AfterTraining failure class). Guard the allocation with
+    /// <c>if (!WeightsAlreadyAllocated(_field, ...expectedShape)) { allocate + init + register }</c>.
+    /// </summary>
+    protected static bool WeightsAlreadyAllocated(Tensor<T>? weight, params int[] expectedShape)
+    {
+        if (weight is null || weight.Rank != expectedShape.Length)
+            return false;
+        for (int i = 0; i < expectedShape.Length; i++)
+        {
+            if (weight.Shape[i] != expectedShape[i])
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// Convenience helper for deferred-shape layers: invokes <see cref="OnFirstForward"/>
     /// (if shapes are not yet resolved) followed by <see cref="EnsureInitialized"/>. Lazy
     /// layer Forward overrides should call this instead of <see cref="EnsureInitialized"/>

@@ -202,12 +202,16 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         int tOut = ComputeOutputLength(tIn);
 
         _inputChannels = cIn;
-        _kernels = AllocateLazyWeight([cIn, _outputChannels, 1, _kernelSize]);
-        _biases = AllocateLazyWeight([_outputChannels]);
-        InitializeLayerWeights(_kernels, cIn * _kernelSize, _outputChannels);
-        InitializeLayerBiases(_biases);
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_kernels, cIn, _outputChannels, 1, _kernelSize))
+        {
+            _kernels = AllocateLazyWeight([cIn, _outputChannels, 1, _kernelSize]);
+            _biases = AllocateLazyWeight([_outputChannels]);
+            InitializeLayerWeights(_kernels, cIn * _kernelSize, _outputChannels);
+            InitializeLayerBiases(_biases);
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, tOut });
     }

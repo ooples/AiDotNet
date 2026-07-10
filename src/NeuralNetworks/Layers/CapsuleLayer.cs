@@ -215,10 +215,14 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int inputCapsules = input.Shape[rank - 2];
         int inputDimension = input.Shape[rank - 1];
-        _transformationMatrix = AllocateLazyWeight([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
-        InitializeParameters();
-        RegisterTrainableParameter(_transformationMatrix, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_transformationMatrix, inputCapsules, inputDimension, _numCapsules, _capsuleDimension))
+        {
+            _transformationMatrix = AllocateLazyWeight([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
+            InitializeParameters();
+            RegisterTrainableParameter(_transformationMatrix, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { inputCapsules, inputDimension }, new[] { _numCapsules, _capsuleDimension });
     }

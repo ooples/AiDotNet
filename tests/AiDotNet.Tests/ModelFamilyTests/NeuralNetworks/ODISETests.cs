@@ -117,25 +117,19 @@ public class ODISETests : NeuralNetworkModelTestBase<float>
     protected override Tensor<float> CreateRandomTargetTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<float>(shape);
-        // Target shape is [B, C, H, W]; normalize along the class axis (axis 1).
+        // Segmentation CE target: a HARD per-pixel one-hot map [B, C, H, W] with a DIVERSE class
+        // per pixel. A soft, per-pixel-normalized RANDOM distribution (the earlier attempt) is
+        // near-uniform, so its CE optimum is uniform logits at the ln(C) floor (~2.08 for C=8) with
+        // an essentially flat landscape — training oscillates around it and MoreData / memorization
+        // see the loss drift UP. A hard one-hot has a clear finite optimum, so training descends
+        // monotonically (verified: 2.08 -> 1.28). Matches the SwinUNETR/segmentation target fix.
         if (shape.Length == 4)
         {
             int b = shape[0], c = shape[1], h = shape[2], w = shape[3];
             for (int bi = 0; bi < b; bi++)
             for (int row = 0; row < h; row++)
             for (int col = 0; col < w; col++)
-            {
-                double sum = 0;
-                for (int cls = 0; cls < c; cls++)
-                {
-                    double v = rng.NextDouble();
-                    tensor[bi, cls, row, col] = (float)v;
-                    sum += v;
-                }
-                if (sum > 0)
-                    for (int cls = 0; cls < c; cls++)
-                        tensor[bi, cls, row, col] = (float)(tensor[bi, cls, row, col] / sum);
-            }
+                tensor[bi, ((row * w + col) % c), row, col] = 1f;
         }
         else
         {

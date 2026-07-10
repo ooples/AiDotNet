@@ -101,9 +101,16 @@ public class FlowLens<T> : VideoInpaintingBase<T>
     public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
     {
         ThrowIfDisposed();
-        var combined = ConcatFramesAndMasks(frames, masks);
+        // Inference MUST apply the same normalize -> concat-mask -> forward -> denormalize pipeline that
+        // ForwardForTraining trains on (and that every sibling model — STTN/AVID/FuseFormer — uses).
+        // Omitting PreprocessFrames/PostprocessOutput here left Predict measuring the model in a
+        // different value space than training optimized, so trained improvements did not show up at
+        // inference (Training_ShouldReduceLoss saw loss go 0.19 -> 0.34 even though the model was
+        // learning identically to STTN).
+        var preprocessed = PreprocessFrames(frames);
+        var combined = ConcatFramesAndMasks(preprocessed, masks);
         var output = IsOnnxMode ? RunOnnxInference(combined) : Forward(combined);
-        return output;
+        return PostprocessOutput(output);
     }
 
     /// <inheritdoc/>
@@ -126,10 +133,30 @@ public class FlowLens<T> : VideoInpaintingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeInpaintFrames(rawFrames);
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeInpaintFrames(modelOutput);
+
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Training must apply the SAME transform inference does (Inpaint): normalize the frames,
+        // concatenate a 1-channel mask (InputDepth -> InputDepth+1 so the encoder conv matches),
+        // run the layer stack, then denormalize. Feeding the raw InputDepth frames straight through
+        // the base would resolve/expect a different first-conv depth than inference AND train in a
+        // different value space, so the two paths would diverge. Delegate the actual layer walk
+        // (autodiff tape, gradient checkpointing, seed-wiring) to the base by handing it the
+        // mask-concatenated tensor; normalize/denormalize are Engine ops so gradients still flow.
+        // Use a fresh RANDOM per-step hole mask (PyTorch video-inpainting recipe). A mask that varies
+        // every step exercises the encoder's mask-channel weights without becoming a constant the model
+        // can exploit as a shortcut — so training keeps using the frame content and stays input-sensitive.
+        // Inference's PredictCore uses the deterministic CreateDefaultInpaintingMask.
+        var mask = CreateTrainingMask(input.Shape[0], input.Shape[2], input.Shape[3]);
+        var combined = ConcatFramesAndMasks(PreprocessFrames(input), mask);
+        return PostprocessOutput(base.ForwardForTraining(combined));
+    }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expected)

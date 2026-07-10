@@ -192,13 +192,10 @@ public class SECBERT<T> : FinancialNLPModelBase<T>
         idx += 2; // skip norm/dropout
 
         _transformerLayers.Clear();
+        // One composite TransformerEncoderBlock per layer now (residual attention + residual FFN
+        // internally) — a single Layers entry per block, not six flat sublayers.
         for (int i = 0; i < 12; i++)
         {
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
             if (idx < Layers.Count) _transformerLayers.Add(Layers[idx++]);
         }
 
