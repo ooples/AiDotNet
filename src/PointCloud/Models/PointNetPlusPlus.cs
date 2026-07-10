@@ -1034,7 +1034,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 /// - Input: Many points, basic features (XYZ)
 /// - Output: Fewer points, rich features (learned patterns)
 /// </remarks>
-internal class SetAbstractionLayer<T> : LayerBase<T>
+public class SetAbstractionLayer<T> : LayerBase<T>
 {
     private sealed class ScaleBranch
     {
