@@ -229,6 +229,11 @@ public class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, I
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        // Inference must run in eval mode: with the default DropoutRate=0.1 the encoder's
+        // DropoutLayers otherwise apply fresh random masks on every call, so the same audio
+        // produces different embeddings (SameInput_SameEmbedding) and speaker verification
+        // is non-reproducible. Disable training-mode stochastic layers for the forward.
+        SetTrainingMode(false);
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 

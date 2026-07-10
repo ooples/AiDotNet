@@ -392,15 +392,15 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutProbability);
 
+        // Residual transformer blocks (Vaswani et al. 2017 §3.1; Devlin et al. 2019). The residual
+        // skip connections are essential for gradient flow through a deep encoder; a residual-free
+        // MHA -> LN -> FFN -> LN stack collapses to a uniform, input-insensitive output after a few
+        // training steps. TransformerEncoderBlock provides the residual adds + linear FFN output.
         for (int i = 0; i < numHiddenLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenSize) / (numAttentionHeads), (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(hiddenSize);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DropoutLayer<T>(dropoutProbability);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize, numAttentionHeads, hiddenSize * 4, dropoutProbability,
+                new GELUActivation<T>());
         }
 
         // Pooler
@@ -489,25 +489,32 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutProbability);
 
-        // 2. Transformer Blocks
+        // 2. Transformer Blocks. Each block is a RESIDUAL self-attention sublayer + RESIDUAL
+        // position-wise FFN sublayer, each with its own LayerNorm (Vaswani et al. 2017 §3.1;
+        // Devlin et al. 2019). The residual (skip) connections are ESSENTIAL: a plain
+        // sequential MHA -> LN -> FFN -> LN stack with NO residual gives a 12-layer encoder no
+        // gradient highway, so the embedding barely trains and the model collapses to a
+        // uniform, input-insensitive output after only a few optimizer steps (the
+        // DifferentInputs_AfterTraining degenerate-solution failure). TransformerEncoderBlock
+        // wraps both sublayers in residual adds + LayerNorm and uses a GELU-then-linear FFN,
+        // matching BERT exactly.
         for (int i = 0; i < numHiddenLayers; i++)
         {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenSize) / (numAttentionHeads), (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feed-forward
-            yield return new DenseLayer<T>(hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(hiddenSize);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DropoutLayer<T>(dropoutProbability);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize, numAttentionHeads, hiddenSize * 4, dropoutProbability,
+                new GELUActivation<T>());
         }
 
         // 3. Pooler
         yield return new DenseLayer<T>(hiddenSize, new TanhActivation<T>() as IActivationFunction<T>);
 
-        // 4. Task Head (default to 1 for regression or 2 for binary classification)
-        yield return new DenseLayer<T>(1);
+        // 4. Task Head. BERT's classification/regression head is a LINEAR projection over
+        // the pooled [CLS] representation (Devlin et al. 2019 §4) — it emits raw logits /
+        // scores, NOT ReLU activations. Without an explicit Identity, DenseLayer's ReLU
+        // default clamps every negative score to 0, so any input whose pooled projection
+        // is negative collapses the whole output to zeros (dead-ReLU: identical outputs +
+        // zero gradient), which is exactly the failure the model-family invariants catch.
+        yield return new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -7941,8 +7948,15 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Decoder
+        // Decoder — the encoder applied two stride-2 convs (÷4 spatial), so mirror them with two
+        // ×2 upsamples to restore the input resolution. Video inpainting is a dense per-pixel task:
+        // the reconstructed frame MUST be the same spatial size as the input frame (otherwise
+        // Predict returns a ¼-resolution tensor and output.Length != input.Length).
+        yield return new UpsamplingLayer<T>(2);
+        h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>(2);
+        h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Output head
@@ -16217,31 +16231,17 @@ public static class LayerHelper<T>
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         // === Transformer Layers ===
-        // Stack of transformer encoder blocks
+        // Each block is a RESIDUAL self-attention sublayer + RESIDUAL GELU-FFN sublayer with
+        // per-sublayer LayerNorm (Vaswani et al. 2017 §3.1; Devlin et al. 2019). The residual
+        // (skip) connections are ESSENTIAL — a plain sequential MHA -> LN -> FFN -> LN stack with
+        // no residual leaves a deep encoder without a gradient highway, so the embedding barely
+        // trains and the model collapses to a uniform, input-insensitive output after a few
+        // optimizer steps. TransformerEncoderBlock supplies the residual adds + linear FFN output.
         for (int i = 0; i < numLayers; i++)
         {
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
-
-            // Add & Norm after attention
-            yield return new LayerNormalizationLayer<T>(
-                );
-
-            // Feed-forward network
-            yield return new DenseLayer<T>(
-                outputSize: intermediateDimension,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: null);
-
-            // Dropout in feed-forward
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-            // Add & Norm after feed-forward
-            yield return new LayerNormalizationLayer<T>(
-                );
+            yield return new TransformerEncoderBlock<T>(
+                hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
+                new GELUActivation<T>());
         }
 
         // === Pooler ===
@@ -16254,10 +16254,13 @@ public static class LayerHelper<T>
         // Final dropout before classification
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
-        // Classification layer
+        // Classification layer. Emits raw class logits — a LINEAR projection (Devlin et al.
+        // 2019 §4); softmax is applied downstream. activationFunction: null would fall back to
+        // DenseLayer's ReLU default and clamp negative logits to 0 (dead-ReLU collapse), so an
+        // explicit IdentityActivation is required.
         yield return new DenseLayer<T>(
             outputSize: numSentimentClasses,
-            activationFunction: null);
+            activationFunction: new IdentityActivation<T>());
 
         // Softmax for class probabilities (applied in model's forward pass)
     }
@@ -16345,9 +16348,13 @@ public static class LayerHelper<T>
                 outputSize: intermediateDimension,
                 activationFunction: new GELUActivation<T>());
 
+            // BERT FFN output projection is LINEAR (Vaswani et al. 2017 §3.3; Devlin et al.
+            // 2019 §3.1). NOTE: passing activationFunction: null does NOT give a linear layer
+            // — DenseLayer substitutes its ReLU default for null, which would clip the
+            // residual stream. An explicit IdentityActivation is required.
             yield return new DenseLayer<T>(
                 outputSize: hiddenDimension,
-                activationFunction: null);
+                activationFunction: new IdentityActivation<T>());
 
             // Dropout in feed-forward
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
@@ -23087,7 +23094,16 @@ public static class LayerHelper<T>
         // === Vision Encoder (CoAtNet: Dense approximation of CNN stages, then Transformer stages) ===
         // Note: Real CoAtNet uses depthwise convolutions + relative attention in early stages.
         // CNN stages here use Dense expand-project blocks as a simplified approximation.
-        yield return new LayerNormalizationLayer<T>();
+        //
+        // Input token projection (CLIP/ViT "trainable linear projection", Dosovitskiy et al. 2021
+        // §3.1). A leading BARE LayerNormalization was used here, but LayerNorm is scale/shift-
+        // invariant (LN(a*x+b) == LN(x)), so it discards the amplitude of the input and lets
+        // contrastive training collapse to an input-independent uniform embedding
+        // (DifferentImages_DifferentEmbeddings / DifferentInputs_AfterTraining). The affine
+        // projection preserves the input signal; the per-block LayerNormalizations below keep
+        // activations normalized. (Mirrors CreateDefaultViTLayers / the EVA-CLIP fix in
+        // CreateDefaultUnifiedGenerationLayers.)
+        yield return new DenseLayer<T>(visionEmbeddingDim, identityActivation);
 
         // First half: Dense expand-project blocks (approximates MBConv CNN stages)
         int cnnStages = numVisionLayers / 2;
@@ -23882,7 +23898,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === EVA-CLIP Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>();
+        // Input token projection — the ViT/CLIP "trainable linear projection of flattened
+        // patches" (Dosovitskiy et al. 2021 §3.1) applied before the transformer stack. A leading
+        // BARE LayerNormalization was used here, but LayerNorm is scale/shift-invariant
+        // (LN(a*x+b) == LN(x)), so scaling the input produced a bit-identical output
+        // (ScaledInput_ShouldChangeOutput) and training could collapse to an input-independent
+        // uniform state. The affine projection preserves the input signal while the per-block
+        // LayerNormalizations below keep activations normalized. (Mirrors CreateDefaultViTLayers /
+        // CreateDefaultEncoderDecoderVLMLayers.)
+        yield return new DenseLayer<T>(visionDim, identityActivation);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
@@ -30133,13 +30157,21 @@ public static class LayerHelper<T>
         featureEncoderStrides ??= [5, 2, 2, 2, 2, 2, 2];
         featureEncoderChannels ??= [512, 512, 512, 512, 512, 512, 512];
 
-        // Convolutional feature encoder
-        int currentDim = 1;
+        // Convolutional feature encoder (Baevski et al. 2020, wav2vec 2.0 §2): a stack of temporal
+        // Conv1D blocks over the RAW waveform [B, 1, T], each with GELU. The paper strides
+        // [5,2,2,2,2,2,2] downsample by 320x while the channels widen to 512, producing a latent
+        // feature sequence [B, 512, T']. (The previous DenseLayer stack collapsed the whole waveform
+        // to a single vector — no temporal sequence — so the model's output was input-independent.)
+        // The model's custom forward transposes [B,512,T'] -> [B,T',512] before the transformer.
         for (int i = 0; i < featureEncoderKernelSizes.Length; i++)
         {
-            int outputDim = featureEncoderChannels[i];
-            yield return new DenseLayer<T>(outputDim, gelu);
-            currentDim = outputDim;
+            yield return new Conv1DLayer<T>(
+                outputChannels: featureEncoderChannels[i],
+                kernelSize: featureEncoderKernelSizes[i],
+                dilation: 1,
+                stride: featureEncoderStrides[i],
+                padding: 0,
+                activation: gelu);
         }
 
         // Feature projection
@@ -30201,8 +30233,23 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(freqBins, (IActivationFunction<T>)new SigmoidActivation<T>());
     }
 
+    // Fixed-size segments of the DeepFilterNet layer layout, in emission order:
+    // [ERB encoder | GRU ×numGruLayers | deep-filter | gain | decoder]. These are the single source of
+    // truth shared by CreateDeepFilterNetLayers (which emits the layers in this order and these counts)
+    // and DeepFilterNet's deserialize re-link (which splits the flat Layers list back into role sub-lists
+    // by these counts) — keeping them here stops the emit order and the split from drifting apart.
+    /// <summary>Number of DeepFilterNet ERB-encoder layers (Dense, LayerNorm, Activation ×2).</summary>
+    internal const int DeepFilterNetErbEncoderLayers = 6;
+    /// <summary>Number of DeepFilterNet deep-filtering layers (Dense, Activation).</summary>
+    internal const int DeepFilterNetDeepFilterLayers = 2;
+    /// <summary>Number of DeepFilterNet gain-estimation layers (Dense).</summary>
+    internal const int DeepFilterNetGainLayers = 1;
+
     /// <summary>
-    /// Creates DeepFilterNet encoder, GRU, deep filtering, and decoder layers.
+    /// Creates DeepFilterNet encoder, GRU, deep filtering, and decoder layers. Emits, in order:
+    /// <see cref="DeepFilterNetErbEncoderLayers"/> ERB-encoder layers, <paramref name="numGruLayers"/>
+    /// GRU layers, <see cref="DeepFilterNetDeepFilterLayers"/> deep-filter layers,
+    /// <see cref="DeepFilterNetGainLayers"/> gain layer, then the remaining decoder layers.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDeepFilterNetLayers(
         int numErbBands = 32,
@@ -30215,20 +30262,26 @@ public static class LayerHelper<T>
         IActivationFunction<T> tanh = (IActivationFunction<T>)new TanhActivation<T>();
         int[] hiddenShape = [hiddenDim];
 
-        // ERB Encoder
+        // ERB Encoder. LayerNorm (not BatchNorm): DeepFilterNet runs per-frame on a rank-3
+        // [batch=1, T, features] sequence, where BatchNorm would normalize over the size-1 batch axis
+        // (degenerate — zero batch variance, and its running statistics don't clone deterministically).
+        // LayerNorm normalizes over the feature axis, is batch-independent, and is the standard choice
+        // for per-frame / recurrent sequence models.
         yield return new DenseLayer<T>(hiddenDim, elu);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new ActivationLayer<T>(elu);
         yield return new DenseLayer<T>(hiddenDim, elu);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new ActivationLayer<T>(elu);
 
-        // GRU layers — only the last layer in the stack collapses the time axis;
-        // intermediate layers must return sequences so the next GRU sees [B, T, F].
+        // GRU layers — ALL return sequences: DeepFilterNet estimates per-frame ERB gains and
+        // deep-filter coefficients, so the time axis must be preserved end to end (the downstream
+        // gain/DF heads and the inverse-STFT overlap-add operate frame-by-frame). Collapsing the time
+        // axis on the last GRU (previous behavior) produced a single pooled frame and broke the
+        // per-frame enhancement + differentiable reconstruction.
         for (int i = 0; i < numGruLayers; i++)
         {
-            bool isLast = i == numGruLayers - 1;
-            yield return new GRULayer<T>( hiddenDim, returnSequences: !isLast,
+            yield return new GRULayer<T>(hiddenDim, returnSequences: true,
                 (IActivationFunction<T>?)null, (IActivationFunction<T>?)null);
         }
 
@@ -30241,9 +30294,9 @@ public static class LayerHelper<T>
         // Gain estimation
         yield return new DenseLayer<T>(numErbBands);
 
-        // Decoder
+        // Decoder (LayerNorm for the same batch-independence reason as the encoder).
         yield return new DenseLayer<T>(hiddenDim, elu);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new ActivationLayer<T>(elu);
     }
 
@@ -30559,13 +30612,16 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
 
-        // Flow head
-        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
+        // Flow head — LINEAR activation: optical flow (dx, dy) is signed, so a ReLU
+        // head (the conv default) would clamp flow to >= 0, collapsing motion in the
+        // -x/-y directions and killing input sensitivity.
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Refinement (3 layers)
+        // Refinement (3 layers). The final conv emits the signed flow residual, so it
+        // is also LINEAR; the two hidden refinement convs keep the default ReLU.
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
         yield return new ConvolutionalLayer<T>(32, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
@@ -34131,6 +34187,16 @@ public static class LayerHelper<T>
         // [B, forecastHorizon, decoderHiddenDim] to match the decoder's
         // per-position sequence expectation.
         yield return new DenseLayer<T>( outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
+
+        // Reshape the flat seed [B, forecastHorizon·decoderHiddenDim] into the decoder's
+        // per-position sequence [B, forecastHorizon, decoderHiddenDim] AS A LAYER, so the shape
+        // transition is part of the Layers chain. Every sequential walk over the chain — forward,
+        // and critically serialize/deserialize (Clone) — then feeds the decoder a decoderHiddenDim-
+        // wide input. Without this layer the deserializer chains the seed Dense's flat 32768-wide
+        // output straight into the decoder, sizing its attention to 32768² → OutOfMemoryException
+        // (Clone_ShouldProduceIdenticalOutput / MoreData). ForwardNative still reshapes explicitly
+        // for its two-input cross-attention dispatch; this layer is the chain-visible equivalent.
+        yield return new ReshapeLayer<T>(new[] { forecastHorizon, decoderHiddenDim });
 
         // === Decoder stack: numDecoderLayers × TransformerDecoderLayer ===
         // TransformerDecoderLayer has BOTH masked self-attention AND

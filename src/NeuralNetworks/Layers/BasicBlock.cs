@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1")]
-public class BasicBlock<T> : LayerBase<T>
+public class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// The expansion factor for BasicBlock. BasicBlock does not expand channels.
@@ -249,6 +249,18 @@ public class BasicBlock<T> : LayerBase<T>
             _pendingParameters = null;
             ApplyParameters(pending);
         }
+
+        // Replay BN running-stats extras that arrived pre-resolution (see the
+        // ILayerSerializationExtras implementation): without this a cloned block's
+        // BN running mean/var stay at their reset defaults and eval-mode inference
+        // diverges from the trained model even though weights are byte-identical
+        // (Clone_AfterTraining).
+        if (_pendingExtraParameters is not null)
+        {
+            var pendingExtras = _pendingExtraParameters;
+            _pendingExtraParameters = null;
+            ApplyExtraParametersUnsafe(pendingExtras);
+        }
     }
 
     // Constructor args round-trip for serialization. DeserializationHelper
@@ -452,6 +464,62 @@ public class BasicBlock<T> : LayerBase<T>
         {
             Set(_downsampleConv); Set(_downsampleBn);
         }
+    }
+
+    // --- ILayerSerializationExtras: round-trip the internal BN layers' running
+    // mean/variance (non-trainable state excluded from GetParameters). Without
+    // this the block loses its BN statistics on serialize/clone and eval-mode
+    // inference diverges (Clone_AfterTraining). BN order matches GetParameters:
+    // bn1, bn2, then the optional downsample BN. ---
+
+    int ILayerSerializationExtras<T>.ExtraParameterCount
+    {
+        get
+        {
+            int count = 0;
+            if (_bn1 is ILayerSerializationExtras<T> b1) count += b1.ExtraParameterCount;
+            if (_bn2 is ILayerSerializationExtras<T> b2) count += b2.ExtraParameterCount;
+            if (_downsampleBn is ILayerSerializationExtras<T> db) count += db.ExtraParameterCount;
+            return count;
+        }
+    }
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        var parts = new List<T>();
+        if (_bn1 is ILayerSerializationExtras<T> b1) parts.AddRange(b1.GetExtraParameters().ToArray());
+        if (_bn2 is ILayerSerializationExtras<T> b2) parts.AddRange(b2.GetExtraParameters().ToArray());
+        if (_downsampleBn is ILayerSerializationExtras<T> db) parts.AddRange(db.GetExtraParameters().ToArray());
+        return new Vector<T>(parts.ToArray());
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        if (!IsShapeResolved)
+        {
+            _pendingExtraParameters = extraParameters;
+            return;
+        }
+        ApplyExtraParametersUnsafe(extraParameters);
+    }
+
+    private Vector<T>? _pendingExtraParameters;
+
+    private void ApplyExtraParametersUnsafe(Vector<T> extraParameters)
+    {
+        int offset = 0;
+        void Apply(BatchNormalizationLayer<T>? bn)
+        {
+            if (bn is not ILayerSerializationExtras<T> ex) return;
+            int count = ex.ExtraParameterCount;
+            if (count == 0) return;
+            if (offset + count > extraParameters.Length)
+                throw new ArgumentException(
+                    $"Truncated BasicBlock extra-parameters: need {offset + count} but got {extraParameters.Length}.");
+            ex.SetExtraParameters(extraParameters.SubVector(offset, count));
+            offset += count;
+        }
+        Apply(_bn1); Apply(_bn2); Apply(_downsampleBn);
     }
 
     /// <summary>

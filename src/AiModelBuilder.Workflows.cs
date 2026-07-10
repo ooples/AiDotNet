@@ -613,6 +613,30 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Configures AutoML with a custom <see cref="IAutoMLModel{T,TInput,TOutput}"/> search engine (advanced).
+    /// </summary>
+    /// <param name="autoMLModel">A concrete AutoML search engine to drive the search. Must not be null.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Use this overload to plug in a specific search strategy (e.g. a Bayesian, evolutionary, or NAS engine)
+    /// instead of the strategy-selected default built by <see cref="ConfigureAutoML(AutoMLOptions{T,TInput,TOutput})"/>.
+    /// This is also the overload the YAML loader targets when an <c>autoML.type</c> is specified — the named
+    /// implementation is resolved from the type registry and passed here.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Most users should use the options overload and let AiDotNet pick the engine. Reach
+    /// for this one only when you have a specific AutoML implementation you want to run.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel)
+    {
+        Guard.NotNull(autoMLModel);
+        _autoMLModel = autoMLModel;
+        return this;
+    }
+
+    /// <summary>
     /// Configures curriculum learning for training with ordered sample difficulty.
     /// </summary>
     /// <param name="options">Curriculum learning options (schedule type, phases, difficulty estimation).

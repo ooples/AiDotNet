@@ -300,11 +300,22 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         int outH = (h + 2 * Padding - KernelSize) / Stride + 1;
         int outW = (w + 2 * Padding - KernelSize) / Stride + 1;
 
-        _kernels = AllocateLazyWeight([OutputChannels, c, KernelSize, KernelSize, KernelSize]);
-        _biases = AllocateLazyWeight([OutputChannels]);
-        InitializeWeights();
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Idempotent allocation: skip re-allocation/re-init when correctly-shaped weights already
+        // exist (installed by SetParameters/SetTrainableParameters on deserialize, or shared by a
+        // copy-on-write clone) so a cloned model's first forward does not overwrite restored/shared
+        // TRAINED weights with fresh random ones (#1221 Clone_AfterTraining). See Conv1DLayer.
+        bool weightsAlreadyValid =
+            WeightsAlreadyAllocated(_kernels, OutputChannels, c, KernelSize, KernelSize, KernelSize)
+            && WeightsAlreadyAllocated(_biases, OutputChannels);
+
+        if (!weightsAlreadyValid)
+        {
+            _kernels = AllocateLazyWeight([OutputChannels, c, KernelSize, KernelSize, KernelSize]);
+            _biases = AllocateLazyWeight([OutputChannels]);
+            InitializeWeights();
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { c, d, h, w }, new[] { OutputChannels, outD, outH, outW });
     }

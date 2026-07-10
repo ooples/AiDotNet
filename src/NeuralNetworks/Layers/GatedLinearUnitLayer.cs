@@ -404,13 +404,17 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
                 $"GatedLinearUnitLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
         int inputDimension = input.Shape[rank - 1];
-        _linearWeights = AllocateLazyWeight([_outputDimension, inputDimension]);
-        _gateWeights = AllocateLazyWeight([_outputDimension, inputDimension]);
-        InitializeParameters();
-        RegisterTrainableParameter(_linearWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_linearBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
+        // Idempotent: don't re-init weights a clone/deserialize already installed (#1221). See Conv1DLayer.
+        if (!WeightsAlreadyAllocated(_linearWeights, _outputDimension, inputDimension))
+        {
+            _linearWeights = AllocateLazyWeight([_outputDimension, inputDimension]);
+            _gateWeights = AllocateLazyWeight([_outputDimension, inputDimension]);
+            InitializeParameters();
+            RegisterTrainableParameter(_linearWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_linearBias, PersistentTensorRole.Biases);
+            RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { inputDimension }, new[] { _outputDimension });
     }

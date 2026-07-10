@@ -68,7 +68,13 @@ public class RPKNet<T> : OpticalFlowBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            // Optical flow consumes the two RGB frames stacked channel-wise (2×3=6). The lazily
+            // resolved feature-extractor conv is sized by ResolveLazyLayerShapes from this
+            // InputDepth, and EstimateFlow feeds it the concatenated 6-channel pair — so InputDepth
+            // must be 6, not the single-frame 3 (which resolved the conv to 3 and made the real
+            // forward throw "Expected input depth 3, but got 6"). PredictCore still splits the input
+            // into two 3-channel frames via input.Shape[1]/2.
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
             outputSize: 2))
     {
     }

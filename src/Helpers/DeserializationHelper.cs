@@ -1262,6 +1262,73 @@ public static class DeserializationHelper
                 conv3d.ResolveShapesOnly(new[] { inC, inD, inH, inW });
             }
         }
+        else if (genericDef == typeof(NeuralNetworks.Layers.DeformableConvolutionalLayer<>))
+        {
+            // DeformableConvolutionalLayer(int outputChannels, int kernelSize, int stride, int padding,
+            //   int groups, int deformGroups, bool useModulation, IEngine? engine) — lazy ctor; input
+            // channels / spatial dims resolve on first Forward. The construction-shape hyperparameters are
+            // restored from GetMetadata; without them the reflection fallback built the layer with default
+            // ctor args (padding 0, wrong output channels), producing a mis-shaped output and breaking Clone
+            // for DCN-using models (InternImage, BasicVSR++).
+            int outputChannels = TryGetInt(additionalParams, "OutputChannels")
+                ?? (outputShape.Length switch { >= 4 => outputShape[1], 3 => outputShape[0], _ => outputShape.Length > 0 ? outputShape[0] : 1 });
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int padding = TryGetInt(additionalParams, "Padding") ?? 1;
+            int groups = TryGetInt(additionalParams, "Groups") ?? 1;
+            int deformGroups = TryGetInt(additionalParams, "DeformGroups") ?? 1;
+            bool useModulation = TryGetBool(additionalParams, "UseModulation") ?? true;
+
+            var engineType = typeof(AiDotNet.Tensors.Engines.IEngine);
+            var ctor = type.GetConstructor(new Type[]
+                { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), engineType });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find DeformableConvolutionalLayer constructor with expected signature.");
+            instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, groups, deformGroups, useModulation, null });
+
+            // Pre-resolve from saved inputShape so SetParameters sizes the (offset/mask/main) weights to
+            // match the saved parameter vector. inputShape is rank-3 [C,H,W] (layer-only) or rank-4
+            // [B,C,H,W] post-batch.
+            if (instance is NeuralNetworks.Layers.DeformableConvolutionalLayer<T> dcn && inputShape != null && inputShape.Length >= 3)
+            {
+                // Mirror the sibling ConvolutionalLayer branch: explicitly reject any rank other than
+                // 3 ([C, H, W]) or 4 ([N, C, H, W]) instead of treating everything non-rank-4 as rank-3,
+                // so a corrupt / forward-incompatible rank-5+ payload fails fast at the deserialization
+                // boundary rather than being silently mis-shaped.
+                int savedInC, savedInH, savedInW;
+                switch (inputShape.Length)
+                {
+                    case 4:
+                        savedInC = inputShape[1];
+                        savedInH = inputShape[2];
+                        savedInW = inputShape[3];
+                        break;
+                    case 3:
+                        savedInC = inputShape[0];
+                        savedInH = inputShape[1];
+                        savedInW = inputShape[2];
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            $"DeformableConvolutionalLayer deserialize: saved inputShape rank must be 3 ([C, H, W]) " +
+                            $"or 4 ([N, C, H, W]); got rank {inputShape.Length} ([{string.Join(", ", inputShape)}]).");
+                }
+
+                // Only pre-resolve when the saved input-channel count is concrete. Mirror the
+                // sibling ConvolutionalLayer branch: falling back to inC=1 here would mark the
+                // layer resolved with the wrong channel count, so SetParameters bypasses its
+                // pending-parameter auto-resolve path and writes into 0-length/mis-sized weights.
+                // When channels are unresolved (layer serialized before its first Forward, saved
+                // as <= 0), leave the layer lazy so SetParameters / the first real Forward size it.
+                if (savedInC > 0)
+                {
+                    int spatialFallback = Math.Max(1, kernelSize);
+                    int inH = savedInH > 0 ? savedInH : spatialFallback;
+                    int inW = savedInW > 0 ? savedInW : spatialFallback;
+                    dcn.ResolveShapesOnly(new[] { savedInC, inH, inW });
+                }
+            }
+        }
         else if (genericDef == typeof(NeuralNetworks.Layers.DeconvolutionalLayer<>))
         {
             // DeconvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?)
@@ -2809,7 +2876,10 @@ public static class DeserializationHelper
             throw new InvalidOperationException("MultiHeadAttentionLayer requires input shape [sequenceLength, embeddingDimension].");
         }
 
-        int embDim = inputShape[1];
+        // Prefer the serialized EmbeddingDimension (headCount × headDimension, fixed at construction)
+        // over inputShape[1]: a lazy MHA serialized before its first Forward reports a placeholder
+        // input shape ([seq, 1]), which would otherwise make embDim=1 and fail the divisibility guard.
+        int embDim = TryGetInt(additionalParams, "EmbeddingDimension") ?? inputShape[1];
         int headCount = TryGetInt(additionalParams, "HeadCount") ?? ResolveDefaultHeadCount(embDim);
         int headDimension = TryGetInt(additionalParams, "HeadDimension") ?? (embDim / headCount);
         if (headDimension * headCount != embDim)

@@ -698,9 +698,11 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
             return ForwardFromLayer(input, VisualBackbonePrefixLength);
         }
 
-        // Full multimodal path: normalize the image, then run the entire layer chain.
+        // Image-only path: normalize the image and run the real visual stream (backbone -> visual
+        // tokens) through the transformer — NOT the base linear chain, which would feed the visual
+        // backbone output into the text embedding layer.
         var preprocessedImage = PreprocessDocument(input);
-        return Forward(preprocessedImage);
+        return RunMultimodal(null, preprocessedImage);
     }
 
     /// <summary>
@@ -734,6 +736,109 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         return output;
     }
 
+    // Layer roles in CreateDefaultLayoutXLMLayers order: [0..VisualBackbonePrefixLength) = visual
+    // backbone (conv/BN/pool + a final C->hidden projection Dense), then 4 text-embedding layers, then
+    // the multimodal transformer + head. TextEmbeddingLayerCount mirrors LayoutLMv2's split.
+    private const int TextEmbeddingLayerCount = 4;
+
+    /// <summary>
+    /// Full text+image fusion entry (industry-standard LayoutXLM): encodes BOTH a token-ID sequence and
+    /// a document image through the two visual/text streams and fuses them via the transformer. Reference
+    /// LayoutXLM requires both; the single-input Predict path additionally supports each modality alone.
+    /// </summary>
+    public Tensor<T> EncodeMultimodal(Tensor<T> textTokens, Tensor<T> documentImage)
+    {
+        // Inference entry: mirror Predict()/PredictCore by suppressing gradient-tape recording
+        // (PyTorch torch.no_grad() semantics). RunMultimodal issues raw Engine.Reshape/Permute/
+        // Concatenate ops that would otherwise record onto the shared autodiff tape; if a prior
+        // training pass left that singleton tape non-empty, replaying it here poisons the fusion
+        // forward with stale/NaN buffers. NoGradScope makes this direct call as tape-clean as
+        // the Predict()-wrapped image-only path. ForwardForTraining keeps recording (no scope).
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return RunMultimodal(textTokens, PreprocessDocument(documentImage));
+    }
+
+    // Runs LayoutXLM's real two-stream forward: independent visual and text streams (whichever are
+    // present) concatenated on the sequence axis, then the shared multimodal transformer + head. Unlike
+    // ForwardFromLayer (text-only prefix skip), this actually encodes the image as visual tokens rather
+    // than chaining the conv backbone into the text embedding.
+    private Tensor<T> RunMultimodal(Tensor<T>? textTokens, Tensor<T>? documentImage)
+    {
+        Tensor<T>? textSeq = textTokens is not null ? RunTextStream(textTokens) : null;
+        Tensor<T>? visualSeq = documentImage is not null ? RunVisualStream(documentImage) : null;
+
+        Tensor<T> seq;
+        if (textSeq is not null && visualSeq is not null)
+        {
+            // Fuse the two streams the way LayoutXLM (Xu et al. 2021, §3.1) does: stack the visual
+            // token sequence and the text token sequence along the SEQUENCE axis into one joint
+            // sequence, then run the shared multimodal transformer over it. Both streams must first
+            // agree on layout — the visual backbone emits a batched [B, Lvis, D] but the text stream
+            // can emit an unbatched [Ltext, D] (and a continuous-valued token tensor projects to
+            // [1, D]); normalize both to [B, L, D] so the concatenation matches on batch and hidden
+            // and only grows the sequence axis. Concatenating on axis 0 with mismatched ranks (the
+            // previous behavior) was invalid and only appeared to work when the output buffer's
+            // unwritten tail happened to be zero.
+            var vis = AlignToBatchedSequence(visualSeq);
+            var txt = AlignToBatchedSequence(textSeq);
+            seq = Engine.TensorConcatenate([vis, txt], axis: 1);
+        }
+        else
+            seq = textSeq ?? visualSeq
+                ?? throw new ArgumentException("LayoutXLM requires text token IDs (rank <= 2) or a document image (rank >= 3).");
+
+        for (int i = VisualBackbonePrefixLength + TextEmbeddingLayerCount; i < Layers.Count; i++)
+            seq = Layers[i].Forward(seq);
+        return seq;
+    }
+
+    // Normalizes a token sequence to a batched [B, L, D] layout so the two fusion streams concatenate
+    // cleanly on the sequence axis. A [L, D] stream (unbatched, e.g. the text embedding on a rank-1
+    // token vector) gains a leading batch of 1; a continuous [1, D] projection becomes a single-token
+    // [1, 1, D]; an already-batched [B, L, D] passes through unchanged.
+    private Tensor<T> AlignToBatchedSequence(Tensor<T> t)
+    {
+        if (t.Rank == 3) return t;
+        if (t.Rank == 2) return Engine.Reshape(t, new[] { 1, t.Shape[0], t.Shape[1] });
+        throw new ArgumentException($"Fusion stream must be rank 2 or 3, got rank {t.Rank}.");
+    }
+
+    private Tensor<T> RunTextStream(Tensor<T> textTokens)
+    {
+        var x = textTokens;
+        for (int i = VisualBackbonePrefixLength; i < VisualBackbonePrefixLength + TextEmbeddingLayerCount && i < Layers.Count; i++)
+            x = Layers[i].Forward(x);
+        return x;
+    }
+
+    private Tensor<T> RunVisualStream(Tensor<T> documentImage)
+    {
+        var x = documentImage;
+        int projIndex = VisualBackbonePrefixLength - 1;
+        for (int i = 0; i < projIndex; i++)
+            x = Layers[i].Forward(x);
+        x = FlattenSpatialToTokens(x);
+        if (projIndex >= 0 && projIndex < Layers.Count)
+            x = Layers[projIndex].Forward(x);
+        return x;
+    }
+
+    // [C, H, W] -> [H*W, C]; [B, C, H, W] -> [B, H*W, C].
+    private Tensor<T> FlattenSpatialToTokens(Tensor<T> feat)
+    {
+        if (feat.Rank == 4)
+        {
+            int b = feat.Shape[0], c = feat.Shape[1], n = feat.Shape[2] * feat.Shape[3];
+            return Engine.TensorPermute(Engine.Reshape(feat, new[] { b, c, n }), new[] { 0, 2, 1 });
+        }
+        if (feat.Rank == 3)
+        {
+            int c = feat.Shape[0], n = feat.Shape[1] * feat.Shape[2];
+            return Engine.TensorPermute(Engine.Reshape(feat, new[] { c, n }), new[] { 1, 0 });
+        }
+        return feat;
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// Training-mode counterpart of <see cref="Predict"/>'s modality routing. Without
@@ -752,7 +857,8 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         {
             return ForwardFromLayer(input, VisualBackbonePrefixLength);
         }
-        return base.ForwardForTraining(input);
+        // Image-only training input: run the real visual stream, not the base linear chain.
+        return _useNativeMode ? RunMultimodal(null, input) : base.ForwardForTraining(input);
     }
 
     /// <inheritdoc/>

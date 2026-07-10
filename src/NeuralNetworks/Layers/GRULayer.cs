@@ -585,12 +585,13 @@ public partial class GRULayer<T> : LayerBase<T>
 
             T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
 
-            // Honor the architecture's RandomSeed so weight init is reproducible: without this
-            // the layer drew from the process-shared secure RNG, giving different weights every
-            // construction — which surfaced as arena-on != arena-off training divergence
-            // (TensorArenaTrainingEquivalenceTests.Gru_ArenaOnEqualsOff) even though the arena
-            // is numerically identical. One RNG shared across all six gate tensors keeps them
-            // distinct while staying deterministic when a seed is set.
+            // Seed weight init from the layer's wired RandomSeed (populated from the
+            // architecture seed) so construction is DETERMINISTIC across runs. The prior
+            // unseeded CreateSecureRandom re-randomized every construction, making two
+            // same-seed models diverge from parameter[0] — which surfaced as (and was
+            // misdiagnosed as) a TensorArena arena-on!=arena-off equivalence failure.
+            // ONE rng is shared across all six weight matrices so they draw distinct
+            // (continuous) sequences rather than six identical blocks. Mirrors DenseLayer.
             var rng = RandomSeed.HasValue
                 ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
                 : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
@@ -657,9 +658,8 @@ public partial class GRULayer<T> : LayerBase<T>
         // AllocateLazyWeight, fill in-place with `(rng - 0.5) × scale`.
         // For non-streaming models this still goes through plain
         // `new Tensor<T>(shape)` so behavior matches the old path.
-        // The RNG is supplied by the caller so a single seed spans all six
-        // gate tensors (deterministic when RandomSeed is set, and distinct
-        // per tensor because the shared RNG advances across calls).
+        // The rng is supplied by the caller (seeded from the layer's
+        // RandomSeed when available) so weight init is deterministic.
         var t = AllocateLazyWeight([rows, cols]);
         T half = NumOps.FromDouble(0.5);
         for (int i = 0; i < t.Length; i++)

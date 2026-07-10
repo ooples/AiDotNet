@@ -9,6 +9,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Models.Options;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
@@ -175,7 +176,8 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _spatialDim = spatialDim;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4, UseAMSGrad = true });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -237,7 +239,8 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _spatialDim = spatialDim;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4, UseAMSGrad = true });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -575,17 +578,138 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    // Layer roles in CreateDefaultDocFormerLayers order: [0..VisualEncoderLayerCount) = ResNet visual
+    // backbone (convs/BN/pool ending in a C->hidden projection Dense), then the text embeddings, then
+    // the shared spatial-encoding + multimodal transformer + head. DocFormer (Appalaraju et al. 2021)
+    // reads BOTH a document image and its text; this native forward is modality-robust and routes by
+    // input rank so a token-only input runs the text stream and an image runs the visual backbone, both
+    // feeding the shared stack. Without it the base linear walk sends the rank-1 token vector into the
+    // rank-4-only Conv backbone and throws ("ConvolutionalLayer expects rank-3/rank-4 input; got rank 1").
+    private const int VisualEncoderLayerCount = 8;
+    private const int TextEncoderLayerCount = 2;
+
+    private Tensor<T> RunModalityForward(Tensor<T> input)
+    {
+        Tensor<T> feats;
+        if (input.Rank <= 2)
+        {
+            // Token/text stream: word embeddings + positional encodings; skip the visual backbone.
+            feats = input;
+            for (int i = VisualEncoderLayerCount; i < VisualEncoderLayerCount + TextEncoderLayerCount && i < Layers.Count; i++)
+                feats = Layers[i].Forward(feats);
+        }
+        else
+        {
+            // Visual stream: conv backbone -> flatten spatial grid to tokens -> channel projection Dense.
+            feats = input;
+            int projIndex = VisualEncoderLayerCount - 1;
+            for (int i = 0; i < projIndex && i < Layers.Count; i++)
+                feats = Layers[i].Forward(feats);
+            feats = FlattenSpatialToTokens(feats);
+            if (projIndex >= 0 && projIndex < Layers.Count)
+                feats = Layers[projIndex].Forward(feats);
+        }
+        // Shared spatial-encoding + multimodal transformer + head.
+        for (int i = VisualEncoderLayerCount + TextEncoderLayerCount; i < Layers.Count; i++)
+            feats = Layers[i].Forward(feats);
+        return feats;
+    }
+
+    // [C, H, W] -> [H*W, C]; [B, C, H, W] -> [B, H*W, C]. Puts channels last so each spatial location
+    // becomes a token whose feature vector the projection Dense maps to the hidden dim.
+    private Tensor<T> FlattenSpatialToTokens(Tensor<T> feat)
+    {
+        if (feat.Rank == 4)
+        {
+            int b = feat.Shape[0], c = feat.Shape[1], n = feat.Shape[2] * feat.Shape[3];
+            return Engine.TensorPermute(Engine.Reshape(feat, new[] { b, c, n }), new[] { 0, 2, 1 });
+        }
+        if (feat.Rank == 3)
+        {
+            int c = feat.Shape[0], n = feat.Shape[1] * feat.Shape[2];
+            return Engine.TensorPermute(Engine.Reshape(feat, new[] { c, n }), new[] { 1, 0 });
+        }
+        return feat;
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> Forward(Tensor<T> input)
+        => _useNativeMode ? RunModalityForward(input) : base.Forward(input);
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _useNativeMode ? RunModalityForward(input) : base.ForwardForTraining(input);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Diagnostic counterpart of the modality routing in <see cref="RunModalityForward"/>: the base
+    /// implementation walks <c>Layers</c> from index 0, sending a token-only input into the rank-4-only
+    /// Conv backbone and throwing before it records anything. Record only the layers that actually fire.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input;
+        if (input.Rank <= 2)
+        {
+            for (int i = VisualEncoderLayerCount; i < VisualEncoderLayerCount + TextEncoderLayerCount && i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+        }
+        else
+        {
+            int projIndex = VisualEncoderLayerCount - 1;
+            for (int i = 0; i < projIndex && i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+            current = FlattenSpatialToTokens(current);
+            if (projIndex >= 0 && projIndex < Layers.Count)
+            {
+                current = Layers[projIndex].Forward(current);
+                activations[$"Layer_{projIndex}_{Layers[projIndex].GetType().Name}"] = current.Clone();
+            }
+        }
+        for (int i = VisualEncoderLayerCount + TextEncoderLayerCount; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+        return activations;
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        // TrainWithTape runs the full forward (ForwardForTraining -> RunModalityForward), backprops, and
+        // applies the optimizer update itself. The earlier UpdateParameters(CollectGradients()) was a
+        // redundant SECOND update whose hand-collected gradient vector did not line up with
+        // GetParameters(). TrainWithTape alone is the correct single update.
+        // Pass DocFormer's configured optimizer explicitly: the no-optimizer overload falls back to the
+        // base default Adam at lr 1e-3, which overshoots this 12-layer transformer's training and
+        // degrades with more iterations (MoreData_ShouldNotDegrade / collapsed post-training outputs).
+        // DocFormer's own optimizer is a lower-lr (1e-4) Adam matching the paper's fine-tuning recipe.
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -596,17 +720,9 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
 
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.00005);
-        
+
         currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
     }
 
     #endregion

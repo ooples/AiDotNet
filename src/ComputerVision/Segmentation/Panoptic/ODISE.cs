@@ -248,18 +248,24 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         if (_hasUserSuppliedOptimizer && _optimizer is not null)
             return _optimizer;
 
+        // Adam at 1e-3 (the standard deep-net rate), NOT 1e-2. A loss-trajectory probe on the
+        // from-scratch SD-U-Net showed 1e-2 OVERSHOOTS: the CE loss descends to ~1.49 through the
+        // low-LR warmup, then climbs monotonically (->1.82 by step 30) once the LR reaches the full
+        // 1e-2 — the deep encoder-decoder can't take 1e-2 Adam steps stably, so Training_ShouldReduceLoss
+        // / MemorizationTask / MoreData all saw the loss rise. 1e-3 with the same warmup gives a stable
+        // monotonic descent.
         return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 UseAMSGrad = false,
-                InitialLearningRate = 0.01,
+                InitialLearningRate = 0.001,
                 SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
                 LearningRateScheduler = new LearningRateSchedulers.LinearWarmupScheduler(
-                    baseLearningRate: 0.01,
+                    baseLearningRate: 0.001,
                     warmupSteps: 10,
-                    totalSteps: 0,         // 0 => no decay phase; hold at baseLearningRate after warmup
-                    warmupInitLr: 0.001)   // start small but NONZERO so the very first step still trains
+                    totalSteps: 0,          // 0 => no decay phase; hold at baseLearningRate after warmup
+                    warmupInitLr: 0.0001)   // start small but NONZERO so the very first step still trains
             });
     }
 
