@@ -941,19 +941,88 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         if (_latentDiffusion is null) return;
 
-        for (int row = startRow; row < endRow; row++)
+        // MultiSlotFusedStep cache: reused across rows so the compiled plan is
+        // built once (on the first row) and replayed per subsequent row by
+        // refreshing slot data. See ooples/AiDotNet#1846.
+        AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
+        try
         {
-            int t = _latentDiffusion.SampleTimestep();
-            var clean = GetRow(latentCodes, row);
-            var (noisy, actualNoise) = _latentDiffusion.AddNoise(clean, t);
-            var timeEmbed = CreateTimestepEmbedding(t);
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(_diffMLPLayers).ToArray();
+            AiDotNet.Tensors.Engines.Compilation.OptimizerType mfsOptType = default;
+            float mfsLr = 0f, mfsB1 = 0f, mfsB2 = 0f, mfsEps = 0f, mfsWd = 0f;
+            bool fusedEligible = false;
+            if (trainableParams.Length > 0)
+            {
+                fusedEligible = NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                    _optimizer,
+                    out mfsOptType, out mfsLr, out mfsB1, out mfsB2,
+                    out mfsEps, out mfsWd, out _, out _);
+            }
 
-            using var tape = new GradientTape<T>();
-            var predictedNoise = DiffusionMLPForwardOnTape(noisy, timeEmbed);
-            // ε-prediction MSE (Ho et al. 2020) on the VAE latent codes (Zhang et al. 2024 TabSyn).
-            var diff = Engine.TensorSubtract(predictedNoise, VectorToTensor(actualNoise));
-            var loss = ReduceToScalar(Engine.TensorSquare(diff));
-            TapeStepOver(tape, loss, _diffMLPLayers);
+            for (int row = startRow; row < endRow; row++)
+            {
+                int t = _latentDiffusion.SampleTimestep();
+                var clean = GetRow(latentCodes, row);
+                var (noisy, actualNoise) = _latentDiffusion.AddNoise(clean, t);
+                var timeEmbed = CreateTimestepEmbedding(t);
+
+                if (fusedEligible)
+                {
+                    // Slots: [noisyLatent, actualNoise, projectedTimeEmbed].
+                    // _timestepProjection is NOT in _diffMLPLayers (parity with the
+                    // eager path — it's detached there too), so we precompute the
+                    // projected embedding host-side and pass it as slot data.
+                    var slots = new[]
+                    {
+                        VectorToTensor(noisy),
+                        VectorToTensor(actualNoise),
+                        VectorToTensor(timeEmbed),
+                    };
+                    multiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                    Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
+                    {
+                        // s[0] noisyLatent, s[1] actualNoise (unused here — read
+                        // in Loss), s[2] projectedTimeEmbed. Concat + MLP forward.
+                        int totalLen = s[0].Length + s[2].Length;
+                        var input = Engine.TensorConcatenate(new[] { s[0], s[2] }, axis: 0);
+                        var current = input;
+                        foreach (var layer in _diffMLPLayers) current = layer.Forward(current);
+                        return current.Rank == 1 ? current : Engine.Reshape(current, new[] { current.Length });
+                    }
+                    Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
+                    {
+                        var diff = Engine.TensorSubtract(pred, s[1]);
+                        return ReduceToScalar(Engine.TensorSquare(diff));
+                    }
+                    if (multiSlotStep.TryStep(
+                            parameters: trainableParams,
+                            zeroGradAction: null,
+                            freshSlotData: slots,
+                            forward: ForwardFromSlots,
+                            computeLoss: ComputeLossFromSlots,
+                            optimizerType: mfsOptType,
+                            learningRate: mfsLr,
+                            beta1: mfsB1,
+                            beta2: mfsB2,
+                            epsilon: mfsEps,
+                            weightDecay: mfsWd,
+                            out T _))
+                    {
+                        continue;
+                    }
+                }
+
+                using var tape = new GradientTape<T>();
+                var predictedNoise = DiffusionMLPForwardOnTape(noisy, timeEmbed);
+                // ε-prediction MSE (Ho et al. 2020) on the VAE latent codes (Zhang et al. 2024 TabSyn).
+                var diff2 = Engine.TensorSubtract(predictedNoise, VectorToTensor(actualNoise));
+                var loss = ReduceToScalar(Engine.TensorSquare(diff2));
+                TapeStepOver(tape, loss, _diffMLPLayers);
+            }
+        }
+        finally
+        {
+            multiSlotStep?.Dispose();
         }
     }
 

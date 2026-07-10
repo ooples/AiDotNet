@@ -8800,7 +8800,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// configure-once contract: adaptive learning rates, attached LR schedulers,
     /// or AMSGrad mode (which the fused kernel doesn't model).
     /// </summary>
-    private static bool TryMapToFusedOptimizerConfig(
+    internal static bool TryMapToFusedOptimizerConfig(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         out AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
         out float learningRate,

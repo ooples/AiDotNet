@@ -287,16 +287,51 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
-        // CSDI's stochastic denoising step cannot be traced through the compiled
-        // fused plan on the current Tensors build. ComputeDenoisingPairTape samples
-        // a fresh (timestep, noise) pair each call, and calling it twice — once in
-        // the forward closure, once in the loss closure — produces two independent
-        // samples that don't correspond to each other. Since the compiled plan
-        // replays the SAME captured graph every step, we can't refresh the RNG
-        // sample per replay either. This path stays on the eager tape until
-        // Tensors' PersistentInputRegistry (PR #763) lands, at which point the
-        // (timestep, noise) pair can be sampled per step and passed in as data.
+        // Preferred fused path: MultiSlotFusedStep with the sampled (noise,
+        // xt-scale, sinT) tuple passed as persistent slots. Refreshes per step
+        // by host-sampling a fresh (t, ε) pair and copying values into the
+        // slot tensors — the compiled forward reads the CURRENT slot data on
+        // every replay. See ooples/AiDotNet#1846.
+        if (trainableParams.Length > 0
+            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                _optimizer,
+                out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
+                out var mfsEps, out var mfsWd, out _, out _))
+        {
+            var slots = BuildCsdiSlots(input, target);
+            if (slots is not null)
+            {
+                using var multiSlotStep = new AiDotNet.Training.MultiSlotFusedStep<T>();
+                Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s) => DenoiserForwardFromSlots(s);
+                Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
+                {
+                    // s[1] = ε_true (noise slot). Loss = MSE(ε_pred, ε_true) via
+                    // the model's LossFunctionBase so custom losses are respected.
+                    return loss.ComputeTapeLoss(pred, s[1]);
+                }
+                if (multiSlotStep.TryStep(
+                        parameters: trainableParams,
+                        zeroGradAction: null,
+                        freshSlotData: slots,
+                        forward: ForwardFromSlots,
+                        computeLoss: ComputeLossFromSlots,
+                        optimizerType: mfsOptType,
+                        learningRate: mfsLr,
+                        beta1: mfsB1,
+                        beta2: mfsB2,
+                        epsilon: mfsEps,
+                        weightDecay: mfsWd,
+                        out T fusedLoss))
+                {
+                    LastLoss = fusedLoss;
+                    return;
+                }
+            }
+        }
 
+        // Eager fallback: samples (t, ε) inline and runs the denoising pair on
+        // the tape. Same objective; used when the fused path can't engage
+        // (non-fuse-able optimizer, non-GPU host, etc.).
         using var tape = new GradientTape<T>();
         var (epsilonPred, epsilonTarget) = ComputeDenoisingPairTape(input, target);
 
@@ -350,6 +385,112 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
                 Engine.TensorSubtractInPlace(param, update);
             }
         }
+    }
+
+    /// <summary>
+    /// Assembles the persistent-slot data for the MultiSlotFusedStep wire-up:
+    /// samples (t, ε) host-side then packs everything the compiled forward
+    /// needs as tensor slots. Slot layout:
+    /// <list type="bullet">
+    /// <item><description>[0] target — the clean values to denoise (Ho 2020 x_0).</description></item>
+    /// <item><description>[1] ε_true — freshly-sampled Gaussian noise, same shape as target.</description></item>
+    /// <item><description>[2] sqrtAlphaBar_scalar — cumulative α scaling at the sampled t, shape [1].</description></item>
+    /// <item><description>[3] sqrtOneMinusAlphaBar_scalar — noise scaling at t, shape [1].</description></item>
+    /// <item><description>[4] sinT_scalar — sin(2π·t/T) timestep encoding, shape [1].</description></item>
+    /// <item><description>[5] conditioned — RevIN-normalized observed input, shape [1, seqLen].</description></item>
+    /// </list>
+    /// Returns null when the target is degenerate (zero length) so the caller
+    /// falls back to eager training.
+    /// </summary>
+    private IReadOnlyList<Tensor<T>>? BuildCsdiSlots(Tensor<T> input, Tensor<T> target)
+    {
+        int targetLen = target.Length;
+        if (targetLen <= 0) return null;
+
+        var rand = RandomHelper.CreateSecureRandom();
+        int t = rand.Next(_numDiffusionSteps);
+        var noiseData = new T[targetLen];
+        for (int i = 0; i < targetLen; i++) noiseData[i] = SampleStandardNormal(rand);
+        var epsilonTrue = new Tensor<T>(target._shape, new Vector<T>(noiseData));
+
+        T sqrtAlphaBar = NumOps.Sqrt(_alphasCumprod[t]);
+        T sqrtOneMinus = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
+        T sinT = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+
+        var sqrtAlphaBarT = new Tensor<T>(new[] { 1 });
+        sqrtAlphaBarT[0] = sqrtAlphaBar;
+        var sqrtOneMinusT = new Tensor<T>(new[] { 1 });
+        sqrtOneMinusT[0] = sqrtOneMinus;
+        var sinTT = new Tensor<T>(new[] { 1 });
+        sinTT[0] = sinT;
+
+        var conditioned = ApplyInstanceNormalization(input);
+        if (conditioned.Rank == 1)
+            conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
+        return new[] { target, epsilonTrue, sqrtAlphaBarT, sqrtOneMinusT, sinTT, conditioned };
+    }
+
+    /// <summary>
+    /// Fused-path denoiser forward: reads the slot tuple from
+    /// <see cref="BuildCsdiSlots"/>, builds x_t via traceable engine
+    /// arithmetic (no <c>.Data.Span</c> pack — the previous inline
+    /// implementation froze the trace batch's x_t into the compiled plan),
+    /// concatenates [x_t | conditioning_slice | sin(t)] via
+    /// <see cref="IEngine.TensorConcatenate{T}"/>, and runs the projection +
+    /// residual stack + output projection. Returns predicted noise aligned
+    /// with the noise slot's shape.
+    /// </summary>
+    private Tensor<T> DenoiserForwardFromSlots(IReadOnlyList<Tensor<T>> slots)
+    {
+        var target = slots[0];
+        var epsilonTrue = slots[1];
+        var sqrtAlphaBarT = slots[2];
+        var sqrtOneMinusT = slots[3];
+        var sinTT = slots[4];
+        var conditioned = slots[5];
+
+        int targetLen = target.Length;
+        // x_t = sqrt(α̅_t) * target + sqrt(1-α̅_t) * ε — all traceable.
+        var scaledTarget = Engine.TensorMultiplyScalar(target, sqrtAlphaBarT[0]);
+        var scaledNoise = Engine.TensorMultiplyScalar(epsilonTrue, sqrtOneMinusT[0]);
+        var xt = Engine.TensorAdd(scaledTarget, scaledNoise);
+        var xt1d = xt.Rank == 1 ? xt : Engine.Reshape(xt, new[] { targetLen });
+
+        // Conditioning slice: first Min(condLen, hiddenDimension) elements,
+        // flattened to 1-D so we can concat with xt1d + sinT.
+        var condFlat = conditioned.Rank == 1
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { conditioned.Length });
+        int condLen = Math.Min(condFlat.Length, _hiddenDimension);
+        var condSlice = condLen == condFlat.Length
+            ? condFlat
+            : Engine.TensorSlice(condFlat, new[] { 0 }, new[] { condLen });
+
+        // Pack [xt | conditioning | sin(t)] via TensorConcatenate — replaces
+        // the .Data.Span[i] fill that froze at trace time.
+        var packed1D = Engine.TensorConcatenate(new[] { xt1d, condSlice, sinTT }, axis: 0);
+        var denoisingInput = Engine.Reshape(packed1D, new[] { 1, targetLen + condLen + 1 });
+
+        var eps = (Tensor<T>)denoisingInput;
+        if (_inputProjection is not null)
+            eps = _inputProjection.Forward(eps);
+        foreach (var layer in _residualLayers)
+            eps = layer.Forward(eps);
+        if (_outputProjection is not null)
+            eps = _outputProjection.Forward(eps);
+
+        if (eps.Rank == 2 && eps.Shape[1] > epsilonTrue.Length)
+            eps = Engine.TensorNarrow(eps, dim: 1, start: 0, length: epsilonTrue.Length);
+        if (eps.Length != epsilonTrue.Length)
+        {
+            throw new InvalidOperationException(
+                $"CSDI denoising pair: predicted-noise length ({eps.Length}, shape=["
+                + $"{string.Join(",", eps._shape)}]) does not match true-noise length ("
+                + $"{epsilonTrue.Length}, shape=[{string.Join(",", epsilonTrue._shape)}]).");
+        }
+        if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
+            eps = Engine.Reshape(eps, epsilonTrue._shape);
+        return eps;
     }
 
     /// <summary>
@@ -535,23 +676,28 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) };
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Traceable RevIN forward — same pattern as
+    /// <see cref="TFC{T}.ApplyInstanceNormalization"/>. Uses
+    /// <see cref="IEngine.ReduceMean{T}"/> / <see cref="IEngine.ReduceVariance{T}"/>
+    /// / <see cref="IEngine.TensorSqrt{T}"/> / broadcast subtract+divide so the
+    /// per-batch stats re-execute on every replay under a compiled fused plan.
+    /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-            for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); }
-        }
-        return result;
+        if (seqLen <= 0) return input;
+
+        bool reshaped = input.Rank != 2;
+        var flat = reshaped ? Engine.Reshape(input, new[] { batchSize, seqLen }) : input;
+        var mean = Engine.ReduceMean(flat, new[] { 1 }, keepDims: true);
+        var variance = Engine.ReduceVariance(flat, new[] { 1 }, keepDims: true);
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5)));
+        var centered = Engine.TensorBroadcastSubtract(flat, mean);
+        var normalized = Engine.TensorBroadcastDivide(centered, std);
+        return reshaped ? Engine.Reshape(normalized, input._shape) : normalized;
     }
 
     public override Dictionary<string, T> GetFinancialMetrics()
