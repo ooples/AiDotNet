@@ -659,32 +659,50 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             wasserstein,
             Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
 
-        // Route the per-example DP-SGD gradient computation through the shared
-        // Training.DpSgdStep helper (Phase 4H). Enforces clip-BEFORE-aggregate
-        // order via the helper's structure so a future refactor can't accidentally
-        // reverse it (which would break the Abadi 2016 privacy proof).
+        // Route the per-example DP-SGD gradient computation through the fused
+        // DpSgdFusedStep helper (Phase 4H). Each per-example forward+backward
+        // runs the compiled plan (GPU-resident params, fused kernels); clip +
+        // aggregate + noise happens in host code because the per-example L2
+        // norm's control flow doesn't fit the compiled-plan capture model.
+        // The helper's structure enforces clip-BEFORE-aggregate so the Abadi
+        // 2016 privacy proof's L2-sensitivity contract can't be silently reversed.
         int exampleCount = Math.Max(1, realPacked.Shape[0]);
-        var noisedGrads = AiDotNet.Training.DpSgdStep<T>.ComputeClippedAggregatedGradients(
-            batchSize: exampleCount,
-            perExampleLoss: exIdx =>
+        using var dpSgdStep = new AiDotNet.Training.DpSgdFusedStep<T>();
+        var gpWeightConst = _options.GradientPenaltyWeight;
+        bool dpFusedRan = dpSgdStep.TryStep(
+            parameters: discParams,
+            perExampleSlotData: exIdx => new[]
             {
-                var realEx = ExtractPackedExample(realPacked, exIdx);
-                var fakeEx = ExtractPackedExample(fakePacked, exIdx);
-                var rs = DiscriminatorForwardBatched(realEx, isTraining: true);
-                var fs = DiscriminatorForwardBatched(fakeEx, isTraining: true);
-                var axes = Enumerable.Range(0, rs.Shape.Length).ToArray();
+                ExtractPackedExample(realPacked, exIdx),
+                ExtractPackedExample(fakePacked, exIdx),
+            },
+            forward: slots => DiscriminatorForwardBatched(slots[0], isTraining: true),
+            computeLoss: (realScore, slots) =>
+            {
+                var fake = slots[1];
+                var fakeScore = DiscriminatorForwardBatched(fake, isTraining: true);
+                var axes = Enumerable.Range(0, realScore.Shape.Length).ToArray();
                 var w = Engine.TensorSubtract(
-                    Engine.ReduceMean(fs, axes, keepDims: false),
-                    Engine.ReduceMean(rs, axes, keepDims: false));
-                var gpEx = ComputeGradientPenalty(realEx, fakeEx);
+                    Engine.ReduceMean(fakeScore, axes, keepDims: false),
+                    Engine.ReduceMean(realScore, axes, keepDims: false));
+                var gpEx = ComputeGradientPenalty(slots[0], fake);
                 return Engine.TensorAdd(
                     w,
-                    Engine.TensorMultiplyScalar(gpEx, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+                    Engine.TensorMultiplyScalar(gpEx, NumOps.FromDouble(gpWeightConst)));
             },
-            parameters: discParams,
+            batchSize: exampleCount,
             clipNorm: _options.ClipNorm,
             noiseMultiplier: _computedNoiseMultiplier,
-            rng: _random);
+            rng: _random,
+            out var noisedGrads);
+
+        // Fall back to the eager per-example loop if the fused DP-SGD path
+        // couldn't engage (non-GPU host, compilation disabled, etc.). Uses the
+        // pre-existing ComputePerExampleNoisedGradients path unchanged.
+        if (!dpFusedRan)
+        {
+            noisedGrads = ComputePerExampleNoisedGradients(realPacked, fakePacked, discParams);
+        }
 
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         // Replay must reproduce the full objective (Wasserstein + λ·GP).
@@ -811,7 +829,11 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         int exampleCount = Math.Max(1, realPacked.Shape[0]);
         var clippedSums = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var param in discParams)
-            clippedSums[param] = new Tensor<T>(param._shape);
+        {
+            var zero = new Tensor<T>(param._shape);
+            Engine.TensorFill(zero, NumOps.Zero);
+            clippedSums[param] = zero;
+        }
 
         for (int example = 0; example < exampleCount; example++)
         {
@@ -840,46 +862,48 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 grads = tape.ComputeGradients(loss, discParams);
             }
 
-            double normSquared = 0;
+            // Global L2 norm via vectorized per-param sum(g²) + scalar accumulation.
+            T normSquared = NumOps.Zero;
             foreach (var grad in grads.Values)
             {
-                for (int i = 0; i < grad.Length; i++)
-                {
-                    double value = NumOps.ToDouble(grad[i]);
-                    normSquared += value * value;
-                }
+                var sq = Engine.TensorMultiply(grad, grad);
+                var perParamSum = Engine.ReduceSum(sq, axes: null, keepDims: false);
+                normSquared = NumOps.Add(normSquared, perParamSum.Length > 0 ? perParamSum[0] : NumOps.Zero);
             }
-
-            double norm = Math.Sqrt(normSquared + 1e-12);
-            double clipFactor = Math.Min(1.0, _options.ClipNorm / norm);
+            double clipFactor = Math.Min(1.0, _options.ClipNorm / Math.Sqrt(NumOps.ToDouble(normSquared) + 1e-12));
+            var clipFactorT = NumOps.FromDouble(clipFactor);
 
             foreach (var param in discParams)
             {
                 if (!grads.TryGetValue(param, out var grad))
                     continue;
-
-                var sum = clippedSums[param];
-                for (int i = 0; i < grad.Length; i++)
-                {
-                    double value = NumOps.ToDouble(sum[i]) + NumOps.ToDouble(grad[i]) * clipFactor;
-                    sum[i] = NumOps.FromDouble(value);
-                }
+                var scaled = Engine.TensorMultiplyScalar(grad, clipFactorT);
+                clippedSums[param] = Engine.TensorAdd(clippedSums[param], scaled);
             }
         }
 
+        // Noise + average — vectorized: TensorRandomNormalInto for the
+        // Gaussian tensor, TensorMultiplyScalar(sum, 1/N), TensorAdd.
         var noisedAverage = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
         double inverseCount = 1.0 / exampleCount;
-        double noiseStd = _options.ClipNorm * _computedNoiseMultiplier * inverseCount;
+        double noiseStdD = _options.ClipNorm * _computedNoiseMultiplier * inverseCount;
+        var invCountT = NumOps.FromDouble(inverseCount);
+        var noiseStdT = NumOps.FromDouble(noiseStdD);
+        var zeroMean = NumOps.Zero;
         foreach (var param in discParams)
         {
             var sum = clippedSums[param];
-            var averaged = new Tensor<T>(sum._shape);
-            for (int i = 0; i < sum.Length; i++)
+            var scaledSum = Engine.TensorMultiplyScalar(sum, invCountT);
+            if (noiseStdD > 0)
             {
-                double noise = NumOps.ToDouble(SampleStandardNormal()) * noiseStd;
-                averaged[i] = NumOps.FromDouble(NumOps.ToDouble(sum[i]) * inverseCount + noise);
+                var noise = new Tensor<T>(sum._shape);
+                Engine.TensorRandomNormalInto(noise, zeroMean, noiseStdT);
+                noisedAverage[param] = Engine.TensorAdd(scaledSum, noise);
             }
-            noisedAverage[param] = averaged;
+            else
+            {
+                noisedAverage[param] = scaledSum;
+            }
         }
 
         return noisedAverage;
