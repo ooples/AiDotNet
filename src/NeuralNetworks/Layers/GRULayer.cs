@@ -585,12 +585,22 @@ public partial class GRULayer<T> : LayerBase<T>
 
             T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
 
-            _Wz = InitializeTensor(_hiddenSize, _inputSize, scale);
-            _Wr = InitializeTensor(_hiddenSize, _inputSize, scale);
-            _Wh = InitializeTensor(_hiddenSize, _inputSize, scale);
-            _Uz = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-            _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-            _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale);
+            // Honor the architecture's RandomSeed so weight init is reproducible: without this
+            // the layer drew from the process-shared secure RNG, giving different weights every
+            // construction — which surfaced as arena-on != arena-off training divergence
+            // (TensorArenaTrainingEquivalenceTests.Gru_ArenaOnEqualsOff) even though the arena
+            // is numerically identical. One RNG shared across all six gate tensors keeps them
+            // distinct while staying deterministic when a seed is set.
+            var rng = RandomSeed.HasValue
+                ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
+                : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+
+            _Wz = InitializeTensor(_hiddenSize, _inputSize, scale, rng);
+            _Wr = InitializeTensor(_hiddenSize, _inputSize, scale, rng);
+            _Wh = InitializeTensor(_hiddenSize, _inputSize, scale, rng);
+            _Uz = InitializeTensor(_hiddenSize, _hiddenSize, scale, rng);
+            _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale, rng);
+            _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale, rng);
 
             _bz = AllocateLazyWeight([_hiddenSize]);
             _br = AllocateLazyWeight([_hiddenSize]);
@@ -635,7 +645,7 @@ public partial class GRULayer<T> : LayerBase<T>
     /// The scale factor helps prevent values from being too large or too small at the start of training.
     /// </para>
     /// </remarks>
-    private Tensor<T> InitializeTensor(int rows, int cols, T scale)
+    private Tensor<T> InitializeTensor(int rows, int cols, T scale, Random rng)
     {
         // Streaming-aware allocation: route through AllocateLazyWeight
         // so the streaming pool can pre-evict competing weights to disk
@@ -647,8 +657,10 @@ public partial class GRULayer<T> : LayerBase<T>
         // AllocateLazyWeight, fill in-place with `(rng - 0.5) × scale`.
         // For non-streaming models this still goes through plain
         // `new Tensor<T>(shape)` so behavior matches the old path.
+        // The RNG is supplied by the caller so a single seed spans all six
+        // gate tensors (deterministic when RandomSeed is set, and distinct
+        // per tensor because the shared RNG advances across calls).
         var t = AllocateLazyWeight([rows, cols]);
-        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         T half = NumOps.FromDouble(0.5);
         for (int i = 0; i < t.Length; i++)
         {
