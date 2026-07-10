@@ -941,15 +941,19 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (_transitionMatrixGradient == null || _startScoresGradient == null || _endScoresGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Update using Engine tensor operations: param = param - lr * gradient
+        // Update IN PLACE (param -= lr * gradient). Reassigning to Engine.TensorSubtract's
+        // result would replace the owned parameter tensors with pool-rented ones, which the
+        // TensorArena can then re-rent out from under the layer mid-training (see
+        // InitializeParameters for the full failure mode). The in-place subtract preserves each
+        // parameter's owned storage.
         var scaledTransGrad = Engine.TensorMultiplyScalar(_transitionMatrixGradient, learningRate);
-        _transitionMatrix = Engine.TensorSubtract(_transitionMatrix, scaledTransGrad);
+        Engine.TensorSubtractInPlace(_transitionMatrix, scaledTransGrad);
 
         var scaledStartGrad = Engine.TensorMultiplyScalar(_startScoresGradient, learningRate);
-        _startScores = Engine.TensorSubtract(_startScores, scaledStartGrad);
+        Engine.TensorSubtractInPlace(_startScores, scaledStartGrad);
 
         var scaledEndGrad = Engine.TensorMultiplyScalar(_endScoresGradient, learningRate);
-        _endScores = Engine.TensorSubtract(_endScores, scaledEndGrad);
+        Engine.TensorSubtractInPlace(_endScores, scaledEndGrad);
     }
 
     /// <summary>
@@ -1358,14 +1362,30 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (parameters.Length != totalParams)
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
 
-        // VECTORIZED: Use Vector.Slice and Tensor.FromVector
+        // Copy the flat vector INTO the owned parameter tensors in place. Reassigning to
+        // Tensor.FromVector(...).Reshape(_transitionMatrix._shape) would (a) replace the owned
+        // tensors with new storage and (b) alias each new tensor's _shape array to the live
+        // parameter's array (Reshape reuses the array reference it is handed), reintroducing the
+        // pool/aliasing hazard InitializeParameters was fixed to avoid. In-place copy keeps the
+        // parameters owned with their own shapes.
         var transVec = parameters.Slice(0, transSize);
         var startVec = parameters.Slice(transSize, _numClasses);
         var endVec = parameters.Slice(transSize + _numClasses, _numClasses);
 
-        _transitionMatrix = Tensor<T>.FromVector(transVec).Reshape(_transitionMatrix._shape);
-        _startScores = Tensor<T>.FromVector(startVec).Reshape(_startScores._shape);
-        _endScores = Tensor<T>.FromVector(endVec).Reshape(_endScores._shape);
+        CopyVectorInto(_transitionMatrix, transVec);
+        CopyVectorInto(_startScores, startVec);
+        CopyVectorInto(_endScores, endVec);
+    }
+
+    /// <summary>Copies a flat vector into an owned tensor's storage in place (length must match).</summary>
+    private static void CopyVectorInto(Tensor<T> tensor, Vector<T> values)
+    {
+        var span = tensor.Data.Span;
+        if (span.Length != values.Length)
+            throw new ArgumentException(
+                $"Cannot copy {values.Length} values into a tensor with {span.Length} elements.", nameof(values));
+        for (int i = 0; i < span.Length; i++)
+            span[i] = values[i];
     }
 
     /// <summary>
