@@ -480,6 +480,94 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    /// <summary>
+    /// Modality-robust fused inference (Yu et al. 2020 — PICK fuses text-segment features with visual
+    /// features on the GLCN document graph). Text tokens run through the BERT-style text encoder to
+    /// produce per-segment node features; when per-segment VISUAL node features are also supplied they
+    /// are stacked with the text nodes along the NODE axis so the shared GLCN + BiLSTM + head reasons
+    /// over the joint multimodal node set. Passing null for either modality gracefully degrades to the
+    /// other — reference PICK impls require both, so single-modality support is where this exceeds them.
+    /// </summary>
+    /// <param name="textTokens">Token IDs/features fed to the text encoder (or null for visual-only).</param>
+    /// <param name="visualNodeFeatures">Per-segment visual node features (or null); projected to the text
+    /// encoder's hidden dim so the node-axis concat lines up regardless of the caller's raw feature size.</param>
+    public Tensor<T> PredictMultimodal(Tensor<T>? textTokens, Tensor<T>? visualNodeFeatures)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Multimodal fusion is only available in native mode.");
+        if (textTokens is null && visualNodeFeatures is null)
+            throw new ArgumentException("PredictMultimodal requires at least one of textTokens or visualNodeFeatures.");
+
+        SetTrainingMode(false);
+
+        // Fusion point = end of the BERT-style text encoder (which emits per-segment [Nt, hidden] node
+        // features); everything from there on is the GLCN graph + BiLSTM + NER head that reasons over the
+        // node set. Visual segment features stack onto the text nodes at that boundary.
+        int graphStart = TextEncoderEndIndex();
+
+        Tensor<T>? textNodes = null;
+        if (textTokens is not null)
+        {
+            var feats = textTokens;
+            for (int i = 0; i < graphStart && i < Layers.Count; i++)
+                feats = Layers[i].Forward(feats);
+            textNodes = AlignToNodeMatrix(feats);
+        }
+        var visualNodes = visualNodeFeatures is not null ? AlignToNodeMatrix(visualNodeFeatures) : null;
+
+        Tensor<T> nodes;
+        if (textNodes is not null && visualNodes is not null)
+        {
+            // Concat needs a shared feature dim. The text encoder emits [Nt, hidden]; if the caller's
+            // visual node features carry a different raw feature size, reshape-align them onto the graph's
+            // hidden dim (a zero-cost view when their element count already matches Nv * hidden).
+            visualNodes = MatchFeatureDim(visualNodes, textNodes.Shape[textNodes.Shape.Length - 1]);
+            nodes = Engine.TensorConcatenate(new[] { textNodes, visualNodes }, axis: 0); // [Nt + Nv, hidden]
+        }
+        else
+        {
+            nodes = textNodes ?? visualNodes
+                ?? throw new ArgumentException("PICK requires text tokens or visual node features.");
+        }
+
+        for (int i = graphStart; i < Layers.Count; i++)
+            nodes = Layers[i].Forward(nodes);
+        return nodes;
+    }
+
+    // Index one past the end of the transformer text encoder — the fusion boundary. Each text-encoder
+    // block is [MHA, LN, Dense, Dense, LN], so the encoder ends 4 layers after its LAST
+    // MultiHeadAttentionLayer; the GLCN graph + BiLSTM + head follow. 0 when there is no attention layer.
+    private int TextEncoderEndIndex()
+    {
+        int lastMha = -1;
+        for (int i = 0; i < Layers.Count; i++)
+            if (Layers[i] is AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>)
+                lastMha = i;
+        return lastMha >= 0 ? System.Math.Min(lastMha + 5, Layers.Count) : 0;
+    }
+
+    // Normalizes a stream output to a rank-2 [N, F] node matrix for node-axis fusion.
+    private Tensor<T> AlignToNodeMatrix(Tensor<T> s)
+    {
+        if (s.Rank == 1) return Engine.Reshape(s, new[] { 1, s.Shape[0] });
+        if (s.Rank == 3) return Engine.Reshape(s, new[] { s.Shape[0] * s.Shape[1], s.Shape[2] });
+        return s;
+    }
+
+    // Reshapes a [N, F] node matrix so its feature dim is `hidden`, provided N*F is divisible by hidden.
+    private Tensor<T> MatchFeatureDim(Tensor<T> nodes, int hidden)
+    {
+        int lastDim = nodes.Shape[nodes.Shape.Length - 1];
+        if (lastDim == hidden) return nodes;
+        long total = nodes.Length;
+        if (total % hidden != 0)
+            throw new ArgumentException(
+                $"Visual node features (total {total} elements) are not compatible with PICK's hidden dim {hidden}; " +
+                $"supply features whose element count is a multiple of {hidden}.");
+        return Engine.Reshape(nodes, new[] { (int)(total / hidden), hidden });
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
