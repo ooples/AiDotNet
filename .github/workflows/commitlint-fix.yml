@@ -61,25 +61,39 @@ jobs:
             exit 0
           fi
 
-          BEFORE=$(git rev-parse HEAD)
+          # First pass: does ANY commit's MESSAGE actually change under the fixer?
+          # We compare message CONTENT (not SHAs) because filter-branch resets
+          # committer dates and would otherwise churn a fully-compliant branch on
+          # every run (new SHAs -> force-push -> re-trigger). Command substitution
+          # strips trailing newlines on both sides, so the compare is exact on
+          # content and immune to trailing-newline noise.
+          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/commit-msg-autofix.py"
+          NEEDS_FIX=0
+          while IFS= read -r sha; do
+            [ -z "$sha" ] && continue
+            orig=$(git log -1 --format=%B "$sha")
+            fixed=$(printf '%s' "$orig" | python3 "$SCRIPT")
+            if [ "$orig" != "$fixed" ]; then
+              echo "Will fix: $(git log -1 --format=%s "$sha")"
+              NEEDS_FIX=1
+            fi
+          done < <(git rev-list --reverse "$RANGE")
 
-          export FILTER_BRANCH_SQUELCH_WARNING=1
-          git filter-branch -f \
-            --msg-filter 'python3 "$GITHUB_WORKSPACE/.github/scripts/commit-msg-autofix.py"' \
-            "$RANGE"
-
-          AFTER=$(git rev-parse HEAD)
-          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
-          echo "after=$AFTER" >> "$GITHUB_OUTPUT"
-
-          if [ "$BEFORE" = "$AFTER" ]; then
+          if [ "$NEEDS_FIX" -eq 0 ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "All commit messages already compliant — nothing to fix."
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Rewrote non-compliant commit messages:"
-            git log --format='  %h %s' "origin/${BASE_REF}..HEAD"
+            exit 0
           fi
+
+          # Apply the fixes in place (preserving diffs + merge topology).
+          export FILTER_BRANCH_SQUELCH_WARNING=1
+          git filter-branch -f \
+            --msg-filter "python3 \"$SCRIPT\"" \
+            "$RANGE"
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "Rewrote non-compliant commit messages:"
+          git log --format='  %h %s' "$RANGE"
 
       # Push the rewritten branch back with a correct lease (guards against a
       # concurrent push clobber) using the freshly fetched remote tip.
