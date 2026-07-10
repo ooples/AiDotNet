@@ -355,6 +355,48 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     {
         Critic.SetTrainingMode(true);
 
+        // Preferred fused path: WganGpFusedStep runs the full WGAN-GP critic
+        // objective (Wasserstein + λ·GP with createGraph=true GP) in one
+        // compiled plan. Bypasses the legacy flat-vector round-trip (which
+        // needs to Predict the critic three times per step, extract flat
+        // gradients, combine host-side, then apply). See ooples/AiDotNet#1845.
+        var criticDiscParams = Training.TapeTrainingStep<T>.CollectParameters(Critic.Layers);
+        if (criticDiscParams.Count > 0
+            && TryMapToFusedOptimizerConfig(
+                _criticOptimizer,
+                out var wganOptType, out var wganLr, out var wganB1,
+                out var wganB2, out var wganEps, out var wganWd,
+                out _, out _))
+        {
+            using var wganStep = new AiDotNet.Training.WganGpFusedStep<T>();
+            Tensor<T> DiscFwd(Tensor<T> inp)
+            {
+                Tensor<T> current = inp;
+                foreach (var layer in Critic.Layers)
+                    current = layer.Forward(current);
+                return current;
+            }
+            Tensor<T> EpsilonSampler(int bs) =>
+                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
+            if (wganStep.TryStep(
+                    discParameters: criticDiscParams,
+                    realBatch: realImages,
+                    fakeBatch: fakeImages,
+                    discForward: DiscFwd,
+                    epsilonSampler: EpsilonSampler,
+                    gradientPenaltyWeight: _gradientPenaltyCoefficient,
+                    optimizerType: wganOptType,
+                    learningRate: wganLr,
+                    beta1: wganB1,
+                    beta2: wganB2,
+                    epsilon: wganEps,
+                    weightDecay: wganWd,
+                    out T fusedLoss))
+            {
+                return (fusedLoss, NumOps.Zero);
+            }
+        }
+
         // Forward pass on real images to compute scores using vectorized reduction
         var realScores = Critic.Predict(realImages);
         T realScore = NumOps.Divide(Engine.TensorSum(realScores), NumOps.FromDouble(batchSize));
