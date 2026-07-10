@@ -8,7 +8,7 @@ permissions:
   contents: write
   pull-requests: write
 
-# Prevent concurrent runs on the same PR to avoid race conditions
+# Prevent concurrent runs on the same PR to avoid force-push races.
 concurrency:
   group: commitlint-fix-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -17,343 +17,102 @@ jobs:
   check-and-fix-commits:
     name: Check and Fix Non-Compliant Commits
     runs-on: ubuntu-latest
-    # Skip for dependabot PRs (they have special handling)
-    if: github.actor != 'dependabot[bot]'
 
     steps:
-      - name: Checkout code
+      # Check out the PR's HEAD BRANCH by name (not the detached pull/N/merge ref),
+      # so filter-branch rewrites the real branch and we can push it back. Prefer the
+      # AUTOFIX_PAT so the follow-up push is authenticated as a real user and therefore
+      # re-triggers the required checks (pushes made with GITHUB_TOKEN do not).
+      - name: Checkout PR head branch
         uses: actions/checkout@v7.0.0
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.AUTOFIX_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Get commits to check
-        id: get-commits
+      # Rewrite EVERY commit in origin/<base>..HEAD through the shared fixer via
+      # --msg-filter. This preserves each commit's diff and all merge topology (no
+      # destructive squash); commits whose message already passes hash back to the
+      # exact same SHA, so a fully-compliant branch is a no-op.
+      - name: Auto-fix commit messages
+        id: fix
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          BASE_BRANCH="${{ github.base_ref }}"
-          git fetch origin "$BASE_BRANCH"
+          set -euo pipefail
+          git fetch origin "$BASE_REF"
 
-          # Get all commits in PR
-          COMMITS=$(git rev-list --reverse "origin/$BASE_BRANCH..HEAD")
-          # Use wc -l with fallback to 0 for empty results (grep -c . returns non-zero if empty)
-          COMMITS_COUNT=$(echo "$COMMITS" | grep -c . || echo "0")
-
-          echo "commits<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMITS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "commit_count=$COMMITS_COUNT" >> $GITHUB_OUTPUT
-
-          echo "Found $COMMITS_COUNT commits to check"
-
-          # Early exit if no commits to check
-          if [ "$COMMITS_COUNT" -eq 0 ]; then
-            echo "No commits to check, skipping"
+          RANGE="origin/${BASE_REF}..HEAD"
+          COUNT=$(git rev-list --count "$RANGE")
+          echo "Commits in range: $COUNT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No commits to check."
             exit 0
           fi
 
-      - name: Check each commit for compliance
-        id: check-commits
-        run: |
-          COMMITS="${{ steps.get-commits.outputs.commits }}"
-          NEEDS_FIX=false
-          FIXED_COMMITS=()
+          BEFORE=$(git rev-parse HEAD)
 
-          while IFS= read -r commit_sha; do
-            if [ -z "$commit_sha" ]; then continue; fi
+          export FILTER_BRANCH_SQUELCH_WARNING=1
+          git filter-branch -f \
+            --msg-filter 'python3 "$GITHUB_WORKSPACE/.github/scripts/commit-msg-autofix.py"' \
+            "$RANGE"
 
-            COMMIT_MSG=$(git log -1 --format=%B "$commit_sha")
-            FIRST_LINE=$(echo "$COMMIT_MSG" | head -1)
+          AFTER=$(git rev-parse HEAD)
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
+          echo "after=$AFTER" >> "$GITHUB_OUTPUT"
 
-            # Skip merge commits
-            if [[ "$FIRST_LINE" =~ ^(Merge|Revert) ]]; then
-              echo "Skipping merge commit: $commit_sha"
-              continue
-            fi
-
-            # Check if commit follows conventional commits
-            # Valid types: feat, fix, docs, refactor, perf, test, chore, ci, style, deps
-            if [[ "$FIRST_LINE" =~ ^(feat|fix|docs|refactor|perf|test|chore|ci|style|deps)(\(.+\))?!?:\ .+ ]]; then
-              # Extract description after the colon
-              DESCRIPTION=$(echo "$FIRST_LINE" | sed 's/^[^:]*:[[:space:]]*//')
-              FIRST_CHAR=$(echo "$DESCRIPTION" | cut -c1)
-
-              # Check if description starts with lowercase (required for all types including deps)
-              if [[ "$FIRST_CHAR" =~ ^[a-z] ]]; then
-                echo "✅ Valid commit: $FIRST_LINE"
-              else
-                echo "❌ Invalid subject case: $FIRST_LINE"
-                NEEDS_FIX=true
-
-                # Fix the subject case
-                TYPE=$(echo "$FIRST_LINE" | cut -d':' -f1)
-                DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
-                FIXED_DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/./\L&/')
-                NEW_SUBJECT="$TYPE: $FIXED_DESCRIPTION"
-
-                # Get the body (everything after first line and blank line)
-                BODY=$(echo "$COMMIT_MSG" | tail -n +3 | awk '{$1=$1};1')
-
-                if [ -n "$BODY" ]; then
-                  NEW_MSG="$NEW_SUBJECT\n\n$BODY"
-                else
-                  NEW_MSG="$NEW_SUBJECT"
-                fi
-
-                echo "Will fix to: $NEW_SUBJECT"
-                FIXED_COMMITS+=("$commit_sha:$NEW_MSG")
-              fi
-            else
-              echo "❌ Invalid format: $FIRST_LINE"
-              NEEDS_FIX=true
-
-              # Try to fix based on common patterns
-              TYPE="chore"  # Default type
-              DESCRIPTION="$FIRST_LINE"
-
-              # Detect type from message
-              if [[ "$FIRST_LINE" =~ ^[Aa]dd.*|[Ii]mplement.*|[Cc]reate.*|[Ii]ntroduce.* ]]; then
-                TYPE="feat"
-              elif [[ "$FIRST_LINE" =~ ^[Ff]ix.*|[Cc]orrect.*|[Rr]esolve.*|[Pp]atch.* ]]; then
-                TYPE="fix"
-              elif [[ "$FIRST_LINE" =~ ^[Dd]ocument.*|[Uu]pdate\ documentation.* ]]; then
-                TYPE="docs"
-              elif [[ "$FIRST_LINE" =~ ^[Rr]efactor.* ]]; then
-                TYPE="refactor"
-              elif [[ "$FIRST_LINE" =~ ^[Tt]est.* ]]; then
-                TYPE="test"
-              elif [[ "$FIRST_LINE" =~ ^[Bb]ump.*|[Uu]pdate.*version.*|[Dd]ependency.* ]]; then
-                TYPE="deps"
-              fi
-
-              FIXED_DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/^[A-Z]/\L&/')
-              NEW_SUBJECT="$TYPE: $FIXED_DESCRIPTION"
-
-              # Get the body
-              BODY=$(echo "$COMMIT_MSG" | tail -n +3 | awk '{$1=$1};1')
-
-              if [ -n "$BODY" ]; then
-                NEW_MSG="$NEW_SUBJECT\n\n$BODY\n\nCommit message auto-fixed by GitHub Actions to follow conventional commits format.\n\nCo-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
-              else
-                NEW_MSG="$NEW_SUBJECT\n\nCommit message auto-fixed by GitHub Actions to follow conventional commits format.\n\nCo-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
-              fi
-
-              echo "Will fix to: $NEW_SUBJECT"
-              FIXED_COMMITS+=("$commit_sha:$NEW_MSG")
-            fi
-          done <<< "$COMMITS"
-
-          if [ "$NEEDS_FIX" = true ]; then
-            echo "needs_fix=true" >> $GITHUB_OUTPUT
-            echo "Fixed ${#FIXED_COMMITS[@]} commits"
+          if [ "$BEFORE" = "$AFTER" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "All commit messages already compliant — nothing to fix."
           else
-            echo "needs_fix=false" >> $GITHUB_OUTPUT
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Rewrote non-compliant commit messages:"
+            git log --format='  %h %s' "origin/${BASE_REF}..HEAD"
           fi
 
-      - name: Apply fixes to commits
-        if: steps.check-commits.outputs.needs_fix == 'true'
-        run: |
-          BASE_BRANCH="${{ github.base_ref }}"
-          COMMIT_COUNT=${{ steps.get-commits.outputs.commit_count }}
-
-          # For single-commit PRs, amend the commit directly to preserve history
-          if [ "$COMMIT_COUNT" -eq 1 ]; then
-            echo "Single commit PR - amending commit message directly"
-            # The fix has already been calculated, just amend with a proper message
-            COMMITS="${{ steps.get-commits.outputs.commits }}"
-            COMMIT_SHA=$(echo "$COMMITS" | head -1)
-            COMMIT_MSG=$(git log -1 --format=%B "$COMMIT_SHA")
-            FIRST_LINE=$(echo "$COMMIT_MSG" | head -1)
-
-            # Extract and fix the message
-            TYPE=$(echo "$FIRST_LINE" | cut -d':' -f1)
-            DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
-            FIXED_DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/./\L&/')
-            NEW_SUBJECT="$TYPE: $FIXED_DESCRIPTION"
-
-            # Get the body
-            BODY=$(echo "$COMMIT_MSG" | tail -n +3)
-
-            if [ -n "$BODY" ]; then
-              echo -e "$NEW_SUBJECT\n\n$BODY" | git commit --amend --file=-
-            else
-              git commit --amend -m "$NEW_SUBJECT"
-            fi
-          else
-            echo "Multi-commit PR - squashing to preserve code changes with fixed message"
-            # For multi-commit PRs, squash is the safest approach to avoid complex rebase conflicts
-            # This preserves all code changes while fixing the commit message
-            git reset --soft "origin/$BASE_BRANCH"
-
-            printf '%s\n' \
-              "chore: fix commit messages for conventional compliance" \
-              "" \
-              "This commit consolidates changes from a PR where commit messages" \
-              "did not follow conventional commits format. The code changes are" \
-              "preserved exactly as originally authored." \
-              "" \
-              "Note: Original commit history was consolidated due to message" \
-              "format issues. Review the PR for the full change context." \
-              "" \
-              "Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>" \
-              > /tmp/commit_msg.txt
-            git commit -F /tmp/commit_msg.txt
-          fi
-
-      - name: Force push fixes
-        if: steps.check-commits.outputs.needs_fix == 'true'
+      # Push the rewritten branch back with a correct lease (guards against a
+      # concurrent push clobber) using the freshly fetched remote tip.
+      - name: Force-push fixed commits
+        if: steps.fix.outputs.changed == 'true'
         env:
           AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
           BRANCH: ${{ github.head_ref }}
-        shell: bash
         run: |
-          if [ -n "$AUTOFIX_PAT" ]; then
-            git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH" --force-with-lease
+          set -euo pipefail
+          git fetch origin "$BRANCH"
+          REMOTE_SHA=$(git rev-parse "origin/$BRANCH")
+
+          if [ -n "${AUTOFIX_PAT:-}" ]; then
+            PUSH_URL="https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git"
           else
-            echo "::warning::AUTOFIX_PAT is not set. The force-push may not trigger CI workflows."
-            git push origin "HEAD:$BRANCH" --force-with-lease
+            echo "::warning::AUTOFIX_PAT is not set — pushing with GITHUB_TOKEN. The commit messages will be fixed, but the required checks may not auto-re-run; push any trivial change or re-run them to clear the required check."
+            PUSH_URL="origin"
           fi
 
+          git push "$PUSH_URL" "HEAD:refs/heads/$BRANCH" \
+            --force-with-lease="refs/heads/$BRANCH:$REMOTE_SHA"
+
       - name: Comment on PR
-        if: steps.check-commits.outputs.needs_fix == 'true'
+        if: steps.fix.outputs.changed == 'true'
         uses: actions/github-script@v9
         with:
           script: |
             const body = [
-              '### Commit Messages Auto-Fixed',
+              '### Commit messages auto-fixed',
               '',
-              'The commitlint check failed because one or more commit messages did not follow Conventional Commits format.',
+              'One or more commit messages did not follow Conventional Commits, so they were rewritten to comply (subject case, header length ≤ 100, valid type). **Each commit and its diff were preserved — no squashing.**',
               '',
-              '**Action taken** - All non-compliant commits have been fixed to follow the conventional commits format.',
-              '',
-              '**Changes made:**',
-              '- Subject lines are now lowercase (all types including deps)',
-              '- Types are now one of: feat, fix, docs, refactor, perf, test, chore, ci, style, or deps',
-              '',
-              'The PR branch has been force-pushed with the fixed commits. If you had local changes, you may need to git pull --rebase.'
+              'The branch was force-pushed with the corrected messages. If you have local work on this branch, run `git pull --rebase` (or reset to the remote) before pushing again.',
             ].join('\n');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: body
-            });
-
-  handle-dependabot:
-    name: Handle Dependabot PR
-    runs-on: ubuntu-latest
-    # Only run for dependabot PRs
-    if: github.actor == 'dependabot[bot]'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7.0.0
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Get dependabot commit
-        id: get-commit
-        run: |
-          BASE_BRANCH="${{ github.base_ref }}"
-          git fetch origin "$BASE_BRANCH"
-
-          # Get the dependabot commit
-          COMMIT_SHA=$(git rev-list "origin/$BASE_BRANCH..HEAD" | head -1)
-          COMMIT_MSG=$(git log -1 --format=%B "$COMMIT_SHA")
-          FIRST_LINE=$(echo "$COMMIT_MSG" | head -1)
-
-          echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
-          echo "first_line=$FIRST_LINE" >> $GITHUB_OUTPUT
-
-          echo "Found dependabot commit: $FIRST_LINE"
-
-      - name: Check if commit needs fixing
-        id: check-needs-fix
-        run: |
-          FIRST_LINE="${{ steps.get-commit.outputs.first_line }}"
-          NEEDS_FIX=false
-
-          # Check if it follows our allowed format for deps
-          if [[ "$FIRST_LINE" =~ ^deps:.* ]]; then
-            # Check if description is lowercase
-            DESCRIPTION=$(echo "$FIRST_LINE" | cut -d':' -f2- | sed 's/^ *//')
-            if [[ "$DESCRIPTION" =~ ^[A-Z].* ]]; then
-              NEEDS_FIX=true
-              # Fix to lowercase
-              FIXED_DESCRIPTION=$(echo "$DESCRIPTION" | sed 's/./\L&/')
-              NEW_SUBJECT="deps: $FIXED_DESCRIPTION"
-              echo "new_subject=$NEW_SUBJECT" >> $GITHUB_OUTPUT
-            fi
-          fi
-
-          echo "needs_fix=$NEEDS_FIX" >> $GITHUB_OUTPUT
-
-      - name: Fix dependabot commit
-        if: steps.check-needs-fix.outputs.needs_fix == 'true'
-        run: |
-          COMMIT_SHA="${{ steps.get-commit.outputs.commit_sha }}"
-          NEW_SUBJECT="${{ steps.check-needs-fix.outputs.new_subject }}"
-          COMMIT_MSG=$(git log -1 --format=%B "$COMMIT_SHA")
-
-          # Get the body (everything after first line and blank line)
-          BODY=$(echo "$COMMIT_MSG" | tail -n +3)
-
-          # Create new commit message
-          if [ -n "$BODY" ]; then
-            NEW_MSG="$NEW_SUBJECT\n\n$BODY"
-          else
-            NEW_MSG="$NEW_SUBJECT"
-          fi
-
-          # Amend the commit
-          echo -e "$NEW_MSG" | git commit --amend --file=-
-
-      - name: Force push fix
-        if: steps.check-needs-fix.outputs.needs_fix == 'true'
-        env:
-          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
-          BRANCH: ${{ github.head_ref }}
-        shell: bash
-        run: |
-          if [ -n "$AUTOFIX_PAT" ]; then
-            git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH" --force-with-lease
-          else
-            echo "::warning::AUTOFIX_PAT is not set. The force-push may not trigger CI workflows."
-            git push origin "HEAD:$BRANCH" --force-with-lease
-          fi
-
-      - name: Comment on PR
-        if: steps.check-needs-fix.outputs.needs_fix == 'true'
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const newSubject = '${{ steps.check-needs-fix.outputs.new_subject }}';
-            const originalSubject = '${{ steps.get-commit.outputs.first_line }}';
-            const body = [
-              '### Dependabot Commit Message Fixed',
-              '',
-              'The commitlint check failed because the dependabot commit message did not follow the required format.',
-              '',
-              '**Action taken** - Fixed the subject line to be lowercase.',
-              '',
-              '**Original:** ' + originalSubject,
-              '**Fixed:** ' + newSubject,
-              '',
-              'The PR branch has been force-pushed with the fixed commit.'
-            ].join('\n');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
+              body,
             });
