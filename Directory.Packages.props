@@ -230,7 +230,7 @@
          result — an intermittent, pool-state-dependent NaN, exactly the failure mode behind the
          model-family shard flakes this PR targets. 0.111.2 is PUBLISHED to NuGet and is a superset of
          0.111.1, so all rationale above is retained. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.111.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.112.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.111.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.111.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.111.2" />
