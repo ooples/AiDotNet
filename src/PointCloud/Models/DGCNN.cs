@@ -313,6 +313,17 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
         _classificationHeadLayers.Add(output);
     }
 
+    /// <summary>
+    /// Routes the tape-based training forward through <see cref="ForwardWithMemory"/> — the
+    /// DGCNN architecture (multi-scale EdgeConv skip-concatenation → global max-pool → head)
+    /// is NOT a plain sequential layer stack, so the base's default sequential
+    /// <c>ForwardForTraining</c> ran the wrong graph (and the wrong global-pool input width).
+    /// With the EdgeConv gather/aggregate and the skip-concatenation now built from
+    /// tape-tracked Engine ops, this makes training use the same differentiable graph as
+    /// inference, so the gradient reaches every EdgeConv/head parameter.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardWithMemory(input);
+
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != _inputFeatureDim)
@@ -358,24 +369,11 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
             throw new ArgumentException("No features to concatenate.");
         }
 
-        int numPoints = features[0].Shape[0];
-        int totalChannels = features.Sum(f => f.Shape[1]);
-        var concatenated = new T[numPoints * totalChannels];
-
-        for (int n = 0; n < numPoints; n++)
-        {
-            int outIdx = 0;
-            foreach (var feature in features)
-            {
-                int featureChannels = feature.Shape[1];
-                for (int c = 0; c < featureChannels; c++)
-                {
-                    concatenated[n * totalChannels + outIdx++] = feature.Data.Span[n * featureChannels + c];
-                }
-            }
-        }
-
-        return new Tensor<T>(concatenated, [numPoints, totalChannels]);
+        // Concatenate the per-EdgeConv features along the channel axis with a tape-tracked
+        // Engine.Concat. The prior scalar-loop copy into a fresh new Tensor severed the
+        // autodiff tape, blocking the gradient from flowing back into the EdgeConv layers
+        // (DGCNN's multi-scale skip aggregation, Wang et al. 2019).
+        return features.Count == 1 ? features[0] : Engine.Concat(features, 1);
     }
 
     public Vector<T> ExtractGlobalFeatures(Tensor<T> pointCloud)
@@ -729,68 +727,59 @@ internal class EdgeConvLayer<T> : LayerBase<T>
     {
         int numPoints = input.Shape[0];
         int k = knnIndices.GetLength(1);
-        var numOps = NumOps;
+        int total = numPoints * k;
 
-        // Edge features: [numPoints * k, 2 * inputChannels]
-        var edgeFeatures = new T[numPoints * k * 2 * _inputChannels];
-
+        // Flattened gather indices [numPoints*k]: for each point, its own index repeated
+        // k times (self), and its k neighbor indices. The kNN indices themselves are
+        // NON-differentiable (an arg-sort in feature space — exactly as DGCNN / PyTorch
+        // treat them), but GATHERING the point features by them IS differentiable, so the
+        // gradient flows back to the input point features through the edge features.
+        var selfIndices = new int[total];
+        var neighborIndices = new int[total];
         for (int i = 0; i < numPoints; i++)
         {
-            for (int kIdx = 0; kIdx < k; kIdx++)
+            for (int kk = 0; kk < k; kk++)
             {
-                int neighborIdx = knnIndices[i, kIdx];
-                int outIdx = (i * k + kIdx) * 2 * _inputChannels;
-
-                // First half: point feature
-                for (int c = 0; c < _inputChannels; c++)
-                {
-                    edgeFeatures[outIdx + c] = input.Data.Span[i * _inputChannels + c];
-                }
-
-                // Second half: difference feature (neighbor - point)
-                for (int c = 0; c < _inputChannels; c++)
-                {
-                    var neighborFeature = input.Data.Span[neighborIdx * _inputChannels + c];
-                    var pointFeature = input.Data.Span[i * _inputChannels + c];
-                    edgeFeatures[outIdx + _inputChannels + c] = numOps.Subtract(neighborFeature, pointFeature);
-                }
+                selfIndices[i * k + kk] = i;
+                neighborIndices[i * k + kk] = knnIndices[i, kk];
             }
         }
 
-        return new Tensor<T>(edgeFeatures, [numPoints * k, 2 * _inputChannels]);
+        var xi = Engine.TensorGather(input, new Tensor<int>(selfIndices, [total]), axis: 0);      // [P*k, C]
+        var xj = Engine.TensorGather(input, new Tensor<int>(neighborIndices, [total]), axis: 0);  // [P*k, C]
+        var diff = Engine.TensorSubtract(xj, xi);                                                 // [P*k, C]
+
+        // DGCNN edge feature (Wang et al. 2019): concat([x_i, x_j - x_i]) -> [P*k, 2C].
+        // Tape-tracked Engine ops throughout; the prior scalar-loop build detached the
+        // tape (a fresh new Tensor from Data.Span reads), so no gradient reached the
+        // input or, downstream, the MLP weights — training diverged.
+        return Engine.Concat(new[] { xi, diff }, 1);                                              // [P*k, 2C]
     }
 
     private Tensor<T> AggregateEdgeFeatures(Tensor<T> edgeFeatures, int numPoints)
     {
         int k = edgeFeatures.Shape[0] / numPoints;
-        var output = new T[numPoints * _outputChannels];
-        var numOps = NumOps;
+
+        // Symmetric max-pool over the k neighbors per point (DGCNN's permutation-
+        // invariant aggregation): reshape [P*k, outC] -> [P, k, outC], max over the k
+        // axis -> [P, outC]. Engine.ReduceMax is tape-tracked (its backward routes the
+        // gradient to the arg-max neighbor), so the whole EdgeConv is differentiable
+        // end-to-end. The prior scalar-loop max wrote a fresh new Tensor, severing the
+        // tape so the MLP weights received zero gradient and the loss diverged.
+        var reshaped = Engine.Reshape(edgeFeatures, [numPoints, k, _outputChannels]);
+        var pooled = Engine.ReduceMax(reshaped, new[] { 1 }, keepDims: false, out var argMax); // [P, outC]
+
+        // Preserve the per-(point,channel) arg-max neighbor index for the legacy manual
+        // ComputeGradients path (unused by the tape training path, kept for compatibility).
         _maxIndices = new int[numPoints, _outputChannels];
-
-        // Max pool over k neighbors for each point
-        for (int i = 0; i < numPoints; i++)
+        if (argMax is not null && argMax.Length >= numPoints * _outputChannels)
         {
-            for (int c = 0; c < _outputChannels; c++)
-            {
-                T maxVal = edgeFeatures.Data.Span[(i * k) * _outputChannels + c];
-                int maxIdx = 0;
-
-                for (int kIdx = 1; kIdx < k; kIdx++)
-                {
-                    T val = edgeFeatures.Data.Span[(i * k + kIdx) * _outputChannels + c];
-                    if (numOps.GreaterThan(val, maxVal))
-                    {
-                        maxVal = val;
-                        maxIdx = kIdx;
-                    }
-                }
-
-                output[i * _outputChannels + c] = maxVal;
-                _maxIndices[i, c] = maxIdx;
-            }
+            for (int i = 0; i < numPoints; i++)
+                for (int c = 0; c < _outputChannels; c++)
+                    _maxIndices[i, c] = argMax[i * _outputChannels + c];
         }
 
-        return new Tensor<T>(output, [numPoints, _outputChannels]);
+        return pooled;
     }
 
     public override void UpdateParameters(T learningRate)
