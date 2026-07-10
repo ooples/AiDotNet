@@ -2359,29 +2359,74 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         // ray-batch size so a 10-ray batch and a 1000-ray batch produce
         // updates of comparable scale.
         T invRays = NumOps.FromDouble(1.0 / numRays);
-        // Use the configured colour learning rate rather than a magic
-        // constant — 3DGS uses different LRs per parameter family
-        // (Kerbl et al. 2023 §B), and the ray-mode path should honour
-        // the same configuration as the image-supervised path.
+
+        // Mean RGB loss gradient over the ray batch. Only the first three channels are
+        // colour (a 4-channel target carries density in channel 3, handled by opacity below).
+        int rgbChannels = Math.Min(3, gradC);
+        var meanRgbGrad = new T[rgbChannels];
+        for (int c = 0; c < rgbChannels; c++)
+        {
+            T sum = NumOps.Zero;
+            for (int r = 0; r < numRays; r++)
+            {
+                sum = NumOps.Add(sum, lossGradient.Data.Span[r * gradC + c]);
+            }
+            meanRgbGrad[c] = NumOps.Multiply(sum, invRays);
+        }
+
+        // Colour parameter layout depends on the appearance model. With spherical harmonics
+        // (the default), gaussian.Color holds SH COEFFICIENTS: the per-channel DC term (which
+        // sets base RGB) lives at index channel*basisCount, NOT at channel. Writing the G/B
+        // residual into Color[1]/Color[2] would corrupt the RED channel's higher-order SH
+        // coefficients and never move green/blue — the appearance never descends toward the
+        // target. Map each RGB residual onto the correct DC coefficient index. The constant
+        // rgb = shBase * dc Jacobian factor is folded into the (tunable) colour learning rate:
+        // this ray-mode update is already a coarse mean-field approximation (uniform per-Gaussian
+        // attribution, no alpha weighting), so an exact SH-basis scale buys no accuracy and only
+        // shrinks the step.
+        bool sh = _useSphericalHarmonics;
+        int basisCount = sh ? GetShBasisCount() : 1;
+
+        // Whether the target carries a density/opacity channel we can descend on.
+        bool hasDensityChannel = gradC >= 4;
+        T meanDensityGrad = NumOps.Zero;
+        if (hasDensityChannel)
+        {
+            T sum = NumOps.Zero;
+            for (int r = 0; r < numRays; r++)
+            {
+                sum = NumOps.Add(sum, lossGradient.Data.Span[r * gradC + 3]);
+            }
+            meanDensityGrad = NumOps.Multiply(sum, invRays);
+        }
+
         for (int g = 0; g < _gaussians.Count; g++)
         {
             var gauss = _gaussians[g];
-            int colorLen = gauss.Color.Length;
-            int copyLen = Math.Min(Math.Min(colorLen, 3), gradC);
 
             // #1835 excellence goal #4 (persistent per-Gaussian LR state): scale the color
             // step by this Gaussian's ColorLrScale. Split children set this to
             // SplitChildLearningRateScales.Color at split time (default 1.0 = no effect).
-            var stepSize = NumOps.FromDouble(ColorLearningRate * gauss.ColorLrScale);
+            // Use the configured colour learning rate rather than a magic constant — 3DGS uses
+            // different LRs per parameter family (Kerbl et al. 2023 §B), and the ray-mode path
+            // honours the same configuration as the image-supervised path.
+            var colorStep = NumOps.FromDouble(ColorLearningRate * gauss.ColorLrScale);
 
-            for (int r = 0; r < numRays; r++)
+            for (int c = 0; c < rgbChannels; c++)
             {
-                for (int c = 0; c < copyLen; c++)
-                {
-                    var grad = lossGradient.Data.Span[r * gradC + c];
-                    var delta = NumOps.Multiply(NumOps.Multiply(grad, invRays), stepSize);
-                    gauss.Color[c] = NumOps.Subtract(gauss.Color[c], delta);
-                }
+                int colorIdx = sh ? c * basisCount : c;
+                if (colorIdx >= gauss.Color.Length) continue;
+                var delta = NumOps.Multiply(meanRgbGrad[c], colorStep);
+                gauss.Color[colorIdx] = NumOps.Subtract(gauss.Color[colorIdx], delta);
+            }
+
+            // Descend the density residual through opacity (the rendered density channel is a
+            // monotonic function of opacity), so a 4-channel ray target trains geometry too.
+            if (hasDensityChannel)
+            {
+                var opacityStep = NumOps.FromDouble(OpacityLearningRate * gauss.OpacityLrScale);
+                var delta = NumOps.Multiply(meanDensityGrad, opacityStep);
+                gauss.Opacity = NumOps.Subtract(gauss.Opacity, delta);
             }
         }
     }
@@ -2488,6 +2533,18 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>,
         for (int i = 0; i < flat.Length; i++) arr[i] = flat[i];
         yield return new Tensor<T>(arr, new[] { flat.Length });
     }
+
+    /// <summary>
+    /// Replaces the full Gaussian parameter state from a flat vector. GaussianSplatting stores
+    /// its parameters in <c>_gaussians</c>, not in <c>Layers</c>, so the base class's
+    /// layer-walking <c>SetParameters</c> is a silent no-op for this model — which meant the
+    /// optimizer's post-training writeback (<c>OptimizerBase.CreateOptimizationResult</c> copies
+    /// the trained best-solution parameters back into the caller's model via SetParameters)
+    /// never reached the Gaussians, so a facade-trained model appeared to never move from init.
+    /// Delegate to <see cref="UpdateParameters"/>, which performs the same GetParameters-ordered
+    /// full-state replacement.
+    /// </summary>
+    public override void SetParameters(Vector<T> parameters) => UpdateParameters(parameters);
 
     public override void UpdateParameters(Vector<T> parameters)
     {
