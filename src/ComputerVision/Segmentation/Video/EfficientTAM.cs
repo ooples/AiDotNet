@@ -113,7 +113,15 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         EfficientTAMModelSize modelSize = EfficientTAMModelSize.Tiny, double dropRate = 0,
         EfficientTAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // Binary/single-class mask segmentation (numClasses == 1) is a per-pixel FOREGROUND vs
+        // background decision, so it must use sigmoid + binary cross-entropy on the raw mask logit
+        // — the SAM/TAM-family mask contract. Multi-class softmax CrossEntropyWithLogitsLoss is
+        // DEGENERATE here: log_softmax over a single logit is identically 0, so the loss is 0 for
+        // ANY prediction, the gradient is 0, and the model never trains ("No parameters changed").
+        // Fall back to softmax CE only for a genuine multi-class (numClasses > 1) mask.
+        : base(architecture, lossFunction ?? (numClasses <= 1
+            ? new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>()))
     {
         _options = options ?? new EfficientTAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
@@ -178,6 +186,18 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <summary>
+    /// Routes the training forward through the SAME <see cref="Forward"/> the inference path uses,
+    /// so training adds the leading batch dim (the encoder's ConvolutionalLayers expect rank-4
+    /// [B,C,H,W]) and runs the encoder→decoder chain identically. The base
+    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> fed the raw rank-3 [C,H,W] test input
+    /// straight to the layers, so the forward it recorded on the tape did not match the trained
+    /// architecture and no gradient reached the parameters ("No parameters changed after
+    /// training"). The batch reshape is tape-safe (Engine.Reshape), so the gradient flows end to
+    /// end.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+
+    /// <summary>
     /// Performs one training step.
     /// </summary>
     /// <param name="input">The input tensor.</param>
@@ -237,11 +257,19 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
+    // Tape-safe add/remove of the leading batch dim: Engine.Reshape records the reshape on the
+    // autodiff tape, so gradients flow through it. The prior raw `new Tensor<T>(...)` +
+    // Data.Span.CopyTo SEVERED the tape — any training path that funnels through Forward would get
+    // zero gradient upstream of the reshape.
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+        => Engine.Reshape(tensor, new[] { 1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2] });
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    {
+        int[] s = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1];
+        return Engine.Reshape(tensor, s);
+    }
     #endregion
 
     #region Abstract Implementation
