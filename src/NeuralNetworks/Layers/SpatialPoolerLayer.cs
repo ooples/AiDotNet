@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -301,8 +302,23 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeConnections()
     {
-        // Initialize connections with random values using tensor ops
-        Connections = new Tensor<T>([InputSize, ColumnCount], Vector<T>.CreateRandom(InputSize * ColumnCount, 0.0, 1.0));
+        // Initialize synapse permanences from a SEEDED RNG (derived from the layer's RandomSeed,
+        // wired from architecture.RandomSeed via the LayerInitializationSeedScope) so the Spatial
+        // Pooler's connectivity is REPRODUCIBLE and order/platform-independent. The prior
+        // Vector.CreateRandom() drew from the process-shared RNG, so the permanences depended on
+        // how many prior constructions had advanced that RNG — making the SP activate a different
+        // SDR across test-execution contexts (ScaledInput_ShouldChangeOutput passed in isolation
+        // but failed in the full shard / on other platforms). Falls back to a secure RNG only when
+        // no seed was requested (production default).
+        var random = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
+        // CreateRandom(Random, …) fills serially from the SEEDED RNG — same code path as the
+        // prior unseeded CreateRandom (no perf change), but reproducible AND cross-platform. A
+        // parallel/chunk-seeded fill (Engine.TensorRandomUniformRangeInto) is NOT usable here: its
+        // per-chunk seed derives from the worker count, so it varies by CPU core count and would
+        // still diverge between a dev box and the CI runner.
+        Connections = Tensor<T>.CreateRandom(random, InputSize, ColumnCount);
     }
 
     /// <summary>

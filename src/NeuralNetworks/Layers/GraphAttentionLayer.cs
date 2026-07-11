@@ -204,7 +204,16 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         _numHeads = numHeads;
         _alpha = NumOps.FromDouble(alpha);
         _dropoutRate = dropoutRate;
-        _random = RandomHelper.CreateSecureRandom();
+        // Seed from the layer's RandomSeed (wired from architecture.RandomSeed via the
+        // LayerInitializationSeedScope) so weight init AND the training-time dropout mask are
+        // REPRODUCIBLE and order/platform-independent. The prior CreateSecureRandom() drew from a
+        // non-deterministic source, so the attention weights (and dropout) differed every run —
+        // which made training outcomes depend on the draw (some draws diverged to NaN) and
+        // Clone/ScaledInput invariants pass on one machine but fail on another. Falls back to a
+        // secure RNG only when no seed was requested (production default).
+        _random = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Initialize weights as Tensors for GPU acceleration
         _weights = new Tensor<T>([_numHeads, _inputFeatures, _outputFeatures]);
@@ -227,9 +236,12 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Xavier initialization for weights
         InitializeTensor(_weights, _inputFeatures, _outputFeatures);
 
-        // Initialize attention weights
+        // Initialize attention weights as (rand − 0.5)·scale, drawing the random tensor from the
+        // SEEDED _random (CreateRandom(Random, …) — not the process-shared CreateRandom(shape)
+        // overload that made this init order/platform-dependent). The vectorized Engine subtract +
+        // scalar-multiply are kept as-is.
         T attentionScale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _outputFeatures));
-        var randomAttn = Tensor<T>.CreateRandom(_attentionWeights._shape);
+        var randomAttn = Tensor<T>.CreateRandom(_random, _attentionWeights._shape);
         var halfTensor = new Tensor<T>(_attentionWeights._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shiftedAttn = Engine.TensorSubtract(randomAttn, halfTensor);

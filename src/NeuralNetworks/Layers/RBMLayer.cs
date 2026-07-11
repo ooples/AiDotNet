@@ -4,6 +4,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -462,8 +463,22 @@ public partial class RBMLayer<T> : LayerBase<T>
         // reassignment would discard the AllocateLazyWeight registration
         // from the lazy ctor's EnsureInitialized path. Closes review-
         // comment #1271.7BpA.
+        // Draw U(-a, a) from a SEEDED RNG (derived from the layer's RandomSeed, wired from
+        // architecture.RandomSeed via the LayerInitializationSeedScope) so the RBM's weights are
+        // REPRODUCIBLE and order/platform-independent. The prior Tensor.CreateRandom sampled the
+        // process-shared RNG, so the DBN's stacked-RBM init varied by test-execution context —
+        // making TrainingError_ShouldNotExceedTestError pass on one machine but fail on another
+        // (the CD fit quality tracks the init). Fills the lazy-allocated _weights in place (see the
+        // note above) — no reassignment, no pool-rented Engine-op result. Secure-RNG fallback only
+        // when no seed was requested (production default).
         double a = Math.Sqrt(6.0 / (_visibleUnits + _hiddenUnits));
-        var randomTensor = Tensor<T>.CreateRandom(_hiddenUnits, _visibleUnits);
+        var random = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
+        // CreateRandom(Random, …) draws U(0,1) serially from the SEEDED RNG (reproducible +
+        // cross-platform); the vectorized Engine scale/shift below map it to U(-a, a). Same op
+        // chain as before — only the RNG source changed from the process-shared overload.
+        var randomTensor = Tensor<T>.CreateRandom(random, _hiddenUnits, _visibleUnits);
         var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(2.0 * a));
         var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
         shiftTensor.Fill(NumOps.FromDouble(a));
