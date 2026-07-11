@@ -586,14 +586,37 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var xBatch = BuildFlattenedSequenceBatch(sequences, startIdx, endIdx);
         if (xBatch.Shape[0] == 0) return;
 
-        using var tape = new GradientTape<T>();
-
         var embedderRecoveryLayers = new List<ILayer<T>>();
         embedderRecoveryLayers.AddRange(_embedderLayers);
         if (_embedderOutput is not null) embedderRecoveryLayers.Add(_embedderOutput);
         embedderRecoveryLayers.AddRange(_recoveryLayers);
         if (_recoveryOutput is not null) embedderRecoveryLayers.Add(_recoveryOutput);
         var paramsList = TapeTrainingStep<T>.CollectParameters(embedderRecoveryLayers);
+
+        // GPU-RESIDENT fast path — Phase 1 embedder + recovery reconstruction.
+        var trainableEmbRec = embedderRecoveryLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableEmbRec.Count > 0)
+        {
+            Tensor<T> Fwd(Tensor<T> x) => RecoveryForwardBatched(EmbedderForwardBatched(x, true), true);
+            Tensor<T> Loss(Tensor<T> r, Tensor<T> x)
+            {
+                var d = Engine.TensorSubtract(r, x);
+                var s = Engine.TensorMultiply(d, d);
+                var axes = Enumerable.Range(0, s.Shape.Length).ToArray();
+                var m = Engine.ReduceMean(s, axes, keepDims: false);
+                return Engine.TensorMultiplyScalar(m, NumOps.FromDouble(_options.ReconstructionWeight));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableEmbRec, xBatch, xBatch,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _embedderOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
 
         var hBatch = EmbedderForwardBatched(xBatch, isTraining: true);
         var rBatch = RecoveryForwardBatched(hBatch, isTraining: true);
@@ -634,8 +657,6 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var (xt, xtNext) = BuildPairedSequenceBatch(sequences, startIdx, endIdx);
         if (xt.Shape[0] == 0) return;
 
-        using var tape = new GradientTape<T>();
-
         var supervisorLayers = new List<ILayer<T>>();
         supervisorLayers.AddRange(_supervisorLayers);
         if (_supervisorOutput is not null) supervisorLayers.Add(_supervisorOutput);
@@ -644,6 +665,31 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         // Embedder runs OUTSIDE the tape (frozen for this step).
         var ht = EmbedderForwardBatched(xt, isTraining: false);
         var htNext = EmbedderForwardBatched(xtNext, isTraining: false);
+
+        // GPU-RESIDENT fast path — supervisor's next-step prediction. Embedder
+        // is frozen; supervisor's layers are the only trainable set here.
+        var trainableSup = supervisorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableSup.Count > 0)
+        {
+            Tensor<T> Fwd(Tensor<T> h) => SupervisorForwardBatched(h, isTraining: true);
+            Tensor<T> Loss(Tensor<T> pred, Tensor<T> tgt)
+            {
+                var d = Engine.TensorSubtract(pred, tgt);
+                var s = Engine.TensorMultiply(d, d);
+                var axes = Enumerable.Range(0, s.Shape.Length).ToArray();
+                return Engine.ReduceMean(s, axes, keepDims: false);
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableSup, ht, htNext,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _supervisorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
 
         var htPred = SupervisorForwardBatched(ht, isTraining: true);
         var diff = Engine.TensorSubtract(htPred, htNext);

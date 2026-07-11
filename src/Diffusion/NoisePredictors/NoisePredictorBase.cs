@@ -1145,6 +1145,78 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     public abstract Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null);
 
     /// <summary>
+    /// Batched noise prediction (industry-standard: HuggingFace diffusers / DDPM
+    /// reference sample one timestep per batch element and condition per-element).
+    /// Default implementation calls the scalar <see cref="PredictNoise"/> per element
+    /// and stacks results — subclasses should override for a fused batched forward
+    /// to keep the training loop on-device.
+    /// </summary>
+    /// <param name="noisyBatch">Noisy samples, shape <c>[B, ...]</c>.</param>
+    /// <param name="timesteps">Per-batch-element timesteps, shape <c>[B]</c>.</param>
+    /// <param name="conditioning">Optional conditioning (e.g. class embedding, text).</param>
+    /// <returns>Predicted noise, shape matches <paramref name="noisyBatch"/>.</returns>
+    public virtual Tensor<T> PredictNoiseBatched(Tensor<T> noisyBatch, int[] timesteps, Tensor<T>? conditioning = null)
+    {
+        int batchSize = noisyBatch.Shape[0];
+        if (timesteps.Length != batchSize)
+            throw new System.ArgumentException(
+                $"timesteps length {timesteps.Length} does not match batch size {batchSize}.",
+                nameof(timesteps));
+
+        // Slice each element out of the batch, call the scalar predictor, stack results.
+        // Slow default; subclasses that expose a fused batched forward should override
+        // this to keep the whole thing on-device.
+        int perElement = noisyBatch.Length / batchSize;
+        var elemShape = new int[noisyBatch.Rank - 1];
+        for (int i = 1; i < noisyBatch.Rank; i++) elemShape[i - 1] = noisyBatch.Shape[i];
+        var resultShape = new int[noisyBatch.Rank];
+        System.Array.Copy(noisyBatch._shape, resultShape, noisyBatch.Rank);
+        var result = new Tensor<T>(resultShape);
+        var nbSpan = noisyBatch.AsSpan();
+        var resSpan = result.AsWritableSpan();
+        // Detect batch-aligned conditioning: if its leading dim matches batchSize
+        // (typical for classifier-free-guidance where each sample carries its own
+        // text/class embedding), slice per element. If the leading dim doesn't
+        // match batchSize, treat conditioning as shared (broadcast the same
+        // tensor to every scalar call). Bind conditioning to a local so the
+        // nullable analysis sees the null-guarded value across the slicing block.
+        var condLocal = conditioning;
+        int condPerElement = 0;
+        int[]? condElemShape = null;
+        if (condLocal is not null && condLocal.Rank > 0 && condLocal.Shape[0] == batchSize)
+        {
+            condPerElement = condLocal.Length / batchSize;
+            condElemShape = new int[condLocal.Rank - 1];
+            for (int i = 1; i < condLocal.Rank; i++) condElemShape[i - 1] = condLocal.Shape[i];
+        }
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            var elem = new Tensor<T>(elemShape);
+            var elemSpan = elem.AsWritableSpan();
+            for (int j = 0; j < perElement; j++)
+                elemSpan[j] = nbSpan[b * perElement + j];
+
+            Tensor<T>? elementConditioning = condLocal;
+            if (condLocal is not null && condElemShape is not null)
+            {
+                var condElem = new Tensor<T>(condElemShape);
+                var condElemSpan = condElem.AsWritableSpan();
+                var condFullSpan = condLocal.AsSpan();
+                for (int j = 0; j < condPerElement; j++)
+                    condElemSpan[j] = condFullSpan[b * condPerElement + j];
+                elementConditioning = condElem;
+            }
+
+            var pred = PredictNoise(elem, timesteps[b], elementConditioning);
+            var predSpan = pred.AsSpan();
+            for (int j = 0; j < perElement; j++)
+                resSpan[b * perElement + j] = predSpan[j];
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Async overload of <see cref="PredictNoise(Tensor{T}, int, Tensor{T})"/>.
     /// Routes the forward through <see cref="CompiledModelHost{T}.PredictAsync"/>
     /// so the underlying compiled plan's <c>ExecuteAsync</c> path is taken,

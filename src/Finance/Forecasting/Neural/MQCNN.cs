@@ -531,6 +531,22 @@ public class MQCNN<T> : ForecastingModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
+        // GPU-RESIDENT fast path — fused SGD on the multi-quantile pinball
+        // objective. Falls through to the in-place SGD loop below.
+        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableLayers.Count > 0
+            && AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+                trainableLayers, input, target,
+                forward: ForwardForTraining,
+                computeLoss: ComputeMultiQuantilePinballLossTape,
+                optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
+                learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
+                out T fusedLoss))
+        {
+            LastLoss = fusedLoss;
+            return;
+        }
+
         using var tape = new GradientTape<T>();
         var predictions = ForwardForTraining(input);
         var lossTensor = ComputeMultiQuantilePinballLossTape(predictions, target);

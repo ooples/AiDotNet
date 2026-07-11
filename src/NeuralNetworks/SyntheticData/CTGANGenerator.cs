@@ -614,8 +614,83 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
 
         var (realPacked, fakePacked) = BuildPackedRealAndFakeBatches(transformedData, numPacks);
 
-        using var tape = new GradientTape<T>();
+        // Preferred fused path: WganGpFusedStep runs the full WGAN-GP objective
+        // (Wasserstein + λ·GP with createGraph=true GP) in one compiled plan,
+        // with persistent (real, fake, ε) slots refreshed each Step. Falls
+        // through to the GpuResidentFusedStep path (which uses this critic's
+        // per-batch epsilon sampled inline) when the optimizer has no fused-
+        // kernel mapping (adaptive LR, non-fuse-able type) or the primitive
+        // itself declines. See ooples/AiDotNet#1845.
         var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers);
+        if (discParams.Count > 0
+            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                _discriminatorOptimizer,
+                out var wganOptType, out var wganLr, out var wganB1,
+                out var wganB2, out var wganEps, out var wganWd,
+                out _, out _))
+        {
+            using var wganStep = new AiDotNet.Training.WganGpFusedStep<T>();
+            Tensor<T> DiscFwd(Tensor<T> inp) => DiscriminatorForwardBatched(inp, isTraining: true);
+            Tensor<T> EpsilonSampler(int bs) =>
+                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
+            if (wganStep.TryStep(
+                    discParameters: discParams,
+                    realBatch: realPacked,
+                    fakeBatch: fakePacked,
+                    discForward: DiscFwd,
+                    epsilonSampler: EpsilonSampler,
+                    gradientPenaltyWeight: _options.GradientPenaltyWeight,
+                    optimizerType: wganOptType,
+                    learningRate: wganLr,
+                    beta1: wganB1,
+                    beta2: wganB2,
+                    epsilon: wganEps,
+                    weightDecay: wganWd,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        // Secondary fused path: GpuResidentFusedStep with the loss composed via
+        // this class's ComputeGradientPenalty (createGraph=true GP fix, #1844).
+        var trainableDiscLayers = _discLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableDiscLayers.Count > 0)
+        {
+            int realN = realPacked.Shape[0];
+            int fakeN = fakePacked.Shape[0];
+            var stacked = Engine.TensorConcatenate([realPacked, fakePacked], axis: 0);
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> both) => DiscriminatorForwardBatched(both, isTraining: true);
+            Tensor<T> Loss(Tensor<T> allScores, Tensor<T> _)
+            {
+                var rShape = allScores._shape.ToArray(); rShape[0] = realN;
+                var fShape = allScores._shape.ToArray(); fShape[0] = fakeN;
+                var rStart = new int[allScores.Rank];
+                var fStart = new int[allScores.Rank]; fStart[0] = realN;
+                var rScores = Engine.TensorSlice(allScores, rStart, rShape);
+                var fScores = Engine.TensorSlice(allScores, fStart, fShape);
+                var axes = Enumerable.Range(0, rScores.Shape.Length).ToArray();
+                var wasserstein = Engine.TensorSubtract(
+                    Engine.ReduceMean(fScores, axes, keepDims: false),
+                    Engine.ReduceMean(rScores, axes, keepDims: false));
+                var gp = ComputeGradientPenalty(realPacked, fakePacked);
+                return Engine.TensorAdd(wasserstein,
+                    Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableDiscLayers, stacked, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _discriminatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
+        // discParams already collected above for the WganGpFusedStep attempt;
+        // reuse it here to avoid a redundant Layers → parameter scan.
 
         var realScores = DiscriminatorForwardBatched(realPacked, isTraining: true);
         var fakeScores = DiscriminatorForwardBatched(fakePacked, isTraining: true);
@@ -727,8 +802,6 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     {
         if (_sampler is null) return;
 
-        using var tape = new GradientTape<T>();
-
         // Generator's trainable surface = Layers + per-layer BN.
         var generatorLayers = new List<ILayer<T>>();
         generatorLayers.AddRange(Layers);
@@ -741,9 +814,73 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
 
         // Build the conditional generator input batch [numPacks * pacSize, genInputDim],
         // capturing the mask so the conditional cross-entropy term can be computed.
-        var noiseBatch = GenerateNoiseBatchTensor(numPacks * pacSize);
-        var (condBatch, maskBatch) = SampleCondMaskBatch(numPacks * pacSize);
+        int totalSamples = numPacks * pacSize;
+        var noiseBatch = GenerateNoiseBatchTensor(totalSamples);
+        var (condBatch, maskBatch) = SampleCondMaskBatch(totalSamples);
         var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
+
+        // GPU-RESIDENT fast path — pack (genInput, maskBatch) into one persistent
+        // input tensor so replay uses fresh noise + cond + mask each step. The
+        // closure slices them back out. Conditional CE and -avgFake both captured
+        // on the fused plan.
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0)
+        {
+            int embedDim = _options.EmbeddingDimension;
+            int condDim = _condWidth;
+            // Fused-step input encodes [noise | cond | mask] side-by-side (columns).
+            var fusedInput = Engine.TensorConcatenate([genInput, maskBatch], axis: 1);
+            var target = new Tensor<T>(new[] { 1 });
+            // Closure-captured intermediates from Fwd's single generator pass —
+            // reused by Loss so we don't re-run GeneratorForwardWithResidualBatched
+            // and ApplyOutputActivationsBatched for the conditional-CE term.
+            // Fwd/Loss ordering is guaranteed by the fused-step contract.
+            Tensor<T>? capturedAct = null;
+            Tensor<T>? capturedCond = null;
+            Tensor<T>? capturedMask = null;
+            Tensor<T> Fwd(Tensor<T> packed)
+            {
+                var gi = Engine.TensorSlice(packed, [0, 0], [totalSamples, embedDim + condDim]);
+                var faked = GeneratorForwardWithResidualBatched(gi);
+                var act = ApplyOutputActivationsBatched(faked);
+                var condFromInput = Engine.TensorSlice(packed, [0, embedDim], [totalSamples, condDim]);
+                capturedAct = act;
+                capturedCond = condFromInput;
+                capturedMask = Engine.TensorSlice(packed, [0, embedDim + condDim], [totalSamples, condDim]);
+                var withCond = Engine.TensorConcatenate([act, condFromInput], axis: 1);
+                var pk = withCond.Reshape([numPacks, _packedInputDim]);
+                return DiscriminatorForwardBatched(pk, false);
+            }
+            Tensor<T> Loss(Tensor<T> scores, Tensor<T> _)
+            {
+                var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+                var lossT = Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
+                if (_condWidth > 0 && _catOutputBlocks.Count > 0)
+                {
+                    var act = capturedAct;
+                    var condFromInput = capturedCond;
+                    var maskFromInput = capturedMask;
+                    if (act is null || condFromInput is null || maskFromInput is null)
+                        throw new InvalidOperationException(
+                            "CTGAN fused step: generator intermediates were not captured by Fwd. " +
+                            "This indicates the fused-step framework called the loss closure before " +
+                            "the forward closure, violating its documented Fwd-then-Loss ordering.");
+                    var ce = ConditionalCrossEntropy(act, condFromInput, maskFromInput);
+                    lossT = Engine.TensorAdd(lossT, ce);
+                }
+                return lossT;
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, fusedInput, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _generatorOptimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
+        using var tape = new GradientTape<T>();
 
         // Forward through generator → produces [numPacks * pacSize, dataWidth].
         var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
@@ -918,7 +1055,9 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
             var scores = DiscriminatorForwardBatched(interpolated, true);
             var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
             var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
-            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated]);
+            // AiDotNet #1844: createGraph=true records inner backward on outer tape
+            // so gradient penalty actually flows to disc weights (WGAN-GP correctness).
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated], createGraph: true);
             inputGradients = gradients.TryGetValue(interpolated, out var gradient)
                 ? gradient
                 : new Tensor<T>(interpolated._shape);

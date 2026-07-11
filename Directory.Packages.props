@@ -237,19 +237,22 @@
          resident run now lowers the eager-forward training MSE and improves held-out MSE, so the N-BEATS
          correctness gate accepts it). 0.112.0 is PUBLISHED to NuGet and is a superset of 0.111.2.
 
-         Bumped 0.112.0 -> 0.114.0: brings AiDotNet.Tensors #772 — the DepthwiseConv1D engine
-         primitive (DepthwiseConv1D + DepthwiseConv1DBackwardInput/Kernel on IEngine / CpuEngine /
-         DirectGpuTensorEngine). This is the time-channel-separable temporal stage of NVIDIA Citrinet
-         (Majumdar et al., 2021), consumed by the new CitrinetBlockLayer so NeMoCitrinet is built
-         paper-faithfully (depthwise-temporal + pointwise-channel + SE + residual) instead of a plain
-         dense stack. 0.114.0 = 0.113.0 + the additive DepthwiseConv1D methods (strict superset).
-         CROSS-REPO ORDERING: this bump requires AiDotNet.Tensors 0.114.0 to be PUBLISHED to NuGet
-         (via that repo's automated-release on #772 merge — a feat: minor bump from the current
-         0.113.0) before this PR's CI restore can succeed. -->
+         Bumped 0.112.0 -> 0.113.0 (from master): brings AiDotNet.Tensors #763 — the engine half of the
+         non-time-series GPU-residency sweep. #763's key fix (4C): the compiled/persistent backward now
+         honors createGraph=true, so the WGAN-GP gradient penalty's inner backward differentiates into
+         the disc weights through the fused compiled plan instead of silently returning zeros (#1844).
+         0.113.0 also carries #765 (compiled-ReduceMax axis fill). Superset of 0.112.0.
+
+         Bumped 0.113.0 -> 0.114.0: brings AiDotNet.Tensors #772 — the DepthwiseConv1D engine primitive
+         (DepthwiseConv1D + DepthwiseConv1DBackwardInput/Kernel on IEngine / CpuEngine /
+         DirectGpuTensorEngine), the time-channel-separable temporal stage of NVIDIA Citrinet consumed
+         by CitrinetBlockLayer. 0.114.0 = 0.113.0 + the additive DepthwiseConv1D methods (strict
+         superset), so it retains master's #763/#765 fixes. All AiDotNet.Native packages coreleased in
+         lockstep at 0.114.0. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.114.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.112.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.112.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.112.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.114.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.114.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.114.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />

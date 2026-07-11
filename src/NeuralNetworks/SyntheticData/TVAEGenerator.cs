@@ -613,6 +613,35 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     private void ElboStep(Tensor<T> input)
     {
         EnsureSizedForInput(input);
+
+        // GPU-RESIDENT fast path — encoder + reparam + decoder + composite
+        // (recon + KL) loss all captured on the fused plan. Reparam re-samples
+        // per replay via the closure so training remains stochastic.
+        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableLayers.Count > 0)
+        {
+            Tensor<T> Fwd(Tensor<T> inp)
+            {
+                var (m, lv) = EncoderForward(inp);
+                var zz = Reparameterize(m, lv);
+                return DecoderForward(zz);
+            }
+            Tensor<T> Loss(Tensor<T> rawOutput, Tensor<T> target)
+            {
+                // Re-run encoder to get fresh mean/logVar for the KL term.
+                var (m, lv) = EncoderForward(target);
+                return ComputeElboLossTape(rawOutput, target, m, lv);
+            }
+            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableLayers, input, input,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _optimizer,
+                    out T _))
+            {
+                return;
+            }
+        }
+
         using var tape = new GradientTape<T>();
         var (mean, logVar) = EncoderForward(input);
         var z = Reparameterize(mean, logVar);

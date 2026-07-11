@@ -127,6 +127,29 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     public virtual ModelOptions GetOptions() => _options;
 
     /// <summary>
+    /// Opt-in flag: does this subclass's <see cref="PredictNoise"/> /
+    /// <see cref="PredictNoiseBatched"/> path use ONLY traceable engine ops (no
+    /// host-side <c>.Data.Span</c> loops, no per-step class-field mutation)?
+    /// When <c>true</c>, <see cref="Train"/> attempts a
+    /// <see cref="AiDotNet.Training.MultiSlotFusedStep{T}"/> fused-plan step
+    /// with (noisySample, noise) as persistent slots — the compiled plan replays
+    /// the forward per training call so <c>PredictNoise</c> must be free of
+    /// per-call side effects that would freeze at trace time.
+    /// <para>
+    /// Base default is <c>false</c> so existing subclasses (which may still use
+    /// <c>.Data.Span</c> internally) run through the eager tape as before. Override
+    /// after auditing your forward path. See ooples/AiDotNet#1846.
+    /// </para>
+    /// </summary>
+    protected virtual bool SupportsFusedDenoising => false;
+
+    private static void RestoreShadow(Tensor<T> param, Vector<T> shadow)
+    {
+        var span = param.Data.Span;
+        for (int k = 0; k < span.Length && k < shadow.Length; k++) span[k] = shadow[k];
+    }
+
+    /// <summary>
     /// The optional neural network architecture blueprint for custom layer configuration.
     /// </summary>
     private readonly NeuralNetworkArchitecture<T>? _architecture;
@@ -803,6 +826,41 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     public abstract Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep);
 
     /// <summary>
+    /// Batched per-element noise prediction (industry-standard DDPM training pattern).
+    /// Default implementation slices the batch and calls scalar <see cref="PredictNoise"/>
+    /// per element — subclasses should override with a fused batched forward to keep
+    /// training on-device. <paramref name="noisyBatch"/> is shape <c>[B, ...]</c>;
+    /// <paramref name="timesteps"/> is a <c>[B]</c> int vector.
+    /// </summary>
+    public virtual Tensor<T> PredictNoiseBatched(Tensor<T> noisyBatch, int[] timesteps)
+    {
+        int batchSize = noisyBatch.Shape[0];
+        if (timesteps.Length != batchSize)
+            throw new ArgumentException(
+                $"timesteps length {timesteps.Length} does not match batch size {batchSize}.",
+                nameof(timesteps));
+
+        int perElement = noisyBatch.Length / batchSize;
+        var elemShape = new int[noisyBatch.Rank - 1];
+        for (int i = 1; i < noisyBatch.Rank; i++) elemShape[i - 1] = noisyBatch.Shape[i];
+        var result = new Tensor<T>(noisyBatch._shape);
+        var nbSpan = noisyBatch.AsSpan();
+        var resSpan = result.AsWritableSpan();
+        for (int b = 0; b < batchSize; b++)
+        {
+            var elem = new Tensor<T>(elemShape);
+            var elemSpan = elem.AsWritableSpan();
+            for (int j = 0; j < perElement; j++)
+                elemSpan[j] = nbSpan[b * perElement + j];
+            var pred = PredictNoise(elem, timesteps[b]);
+            var predSpan = pred.AsSpan();
+            for (int j = 0; j < perElement; j++)
+                resSpan[b * perElement + j] = predSpan[j];
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Runs one denoising-step noise prediction, optionally inside a GPU deferred execution graph
     /// (AiDotNet.Tensors #642) when <see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/> is
     /// enabled and the active engine is a CUDA <c>DirectGpuTensorEngine</c>. Recording the whole
@@ -1034,19 +1092,143 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // tensors than GetParameters knows about, which is now the norm after
         // migrating layers like FlashAttentionLayer from Matrix<T> to Tensor<T>.
 
-        // Sample a random timestep and build the noisy training sample.
-        var timestep = RandomGenerator.Next(_scheduler.Config.TrainTimesteps);
-        var inputVector = input.ToVector();
-        var noiseVector = SampleNoise(inputVector.Length, RandomGenerator);
-        var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
-        var noisySampleTensor = new Tensor<T>(input._shape, noisySample);
+        // Industry-standard batched-per-element timesteps (Ho et al. 2020, HuggingFace
+        // diffusers reference): sample a distinct timestep per batch element instead of
+        // one timestep for the whole batch. Decorrelates the noise-schedule signal
+        // across the batch, which is the canonical DDPM training pattern.
+        //
+        // Rank-1 input (unbatched, historical AiDotNet contract) still gets a single
+        // timestep; rank ≥ 2 gets per-element timesteps.
+        bool isBatched = input.Rank >= 2;
+        int batchSize = isBatched ? input.Shape[0] : 1;
+        var timesteps = new int[batchSize];
+        for (int b = 0; b < batchSize; b++)
+            timesteps[b] = RandomGenerator.Next(_scheduler.Config.TrainTimesteps);
+        // Legacy scalar view — retained for downstream code that reads the "current"
+        // timestep (e.g. QAT hook telemetry). For batched inputs this reports element 0's
+        // timestep, matching the historical single-timestep-per-Train contract.
+        var timestep = timesteps[0];
+
+        Tensor<T> noisySampleTensor;
+        Vector<T> noiseVector;
+        if (isBatched)
+        {
+            var noiseBatch = new Tensor<T>(input._shape);
+            var noiseSpan = noiseBatch.AsWritableSpan();
+            for (int i = 0; i < noiseSpan.Length; i++)
+                noiseSpan[i] = NumOps.FromDouble(RandomGenerator.NextGaussian());
+            // AddNoiseBatched lives on NoiseSchedulerBase (not INoiseScheduler — that
+            // interface can't carry a default implementation on net471). Fall back to
+            // per-element scalar AddNoise if a caller passed a scheduler that doesn't
+            // derive from NoiseSchedulerBase (shouldn't happen for framework schedulers).
+            if (_scheduler is Schedulers.NoiseSchedulerBase<T> baseScheduler)
+            {
+                noisySampleTensor = baseScheduler.AddNoiseBatched(input, noiseBatch, timesteps);
+            }
+            else
+            {
+                noisySampleTensor = new Tensor<T>(input._shape);
+                var cleanSpan = input.AsSpan();
+                var noisedSpan = noisySampleTensor.AsWritableSpan();
+                int perElement = input.Length / batchSize;
+                for (int b = 0; b < batchSize; b++)
+                {
+                    var cleanVec = new Vector<T>(perElement);
+                    var noiseVec = new Vector<T>(perElement);
+                    for (int j = 0; j < perElement; j++)
+                    {
+                        cleanVec[j] = cleanSpan[b * perElement + j];
+                        noiseVec[j] = noiseSpan[b * perElement + j];
+                    }
+                    var noised = _scheduler.AddNoise(cleanVec, noiseVec, timesteps[b]);
+                    for (int j = 0; j < perElement; j++)
+                        noisedSpan[b * perElement + j] = noised[j];
+                }
+            }
+            noiseVector = noiseBatch.ToVector();
+        }
+        else
+        {
+            var inputVector = input.ToVector();
+            noiseVector = SampleNoise(inputVector.Length, RandomGenerator);
+            var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
+            noisySampleTensor = new Tensor<T>(input._shape, noisySample);
+        }
+
+        // Preferred fused path: MultiSlotFusedStep with (noisySample, noise,
+        // timestepsPerElement) as persistent slots. Only engages when the
+        // concrete subclass has certified its PredictNoise/PredictNoiseBatched
+        // path as fully traceable by opting in via SupportsFusedDenoising —
+        // eager PredictNoise implementations that use host-side .Data.Span
+        // loops would freeze at trace time. See ooples/AiDotNet#1846.
+        // Only try the fused path when an optimizer has already been resolved
+        // (avoids double-construction with a slightly-different config).
+        var trainingOptimizerForFused = _trainingOptimizer;
+        if (SupportsFusedDenoising
+            && trainingOptimizerForFused is not null
+            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                trainingOptimizerForFused,
+                out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
+                out var mfsEps, out var mfsWd, out _, out _))
+        {
+            var trainableForFused = CollectTrainableParameters();
+            var noiseSlotT = new Tensor<T>(noisySampleTensor._shape, noiseVector);
+            var slots = new Tensor<T>[]
+            {
+                noisySampleTensor,
+                noiseSlotT,
+            };
+            using var multiSlotStep = new AiDotNet.Training.MultiSlotFusedStep<T>();
+            var timestepsSnapshot = timesteps;
+            var timestepSnapshotSingle = timestep;
+            var isBatchedSnapshot = isBatched;
+            Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
+            {
+                return isBatchedSnapshot
+                    ? PredictNoiseBatched(s[0], timestepsSnapshot)
+                    : PredictNoise(s[0], timestepSnapshotSingle);
+            }
+            Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
+            {
+                var diff = Engine.TensorSubtract(pred, s[1]);
+                var sq = Engine.TensorMultiply(diff, diff);
+                var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+                return Engine.ReduceMean(sq, axes, keepDims: false);
+            }
+            if (trainableForFused.Length > 0
+                && multiSlotStep.TryStep(
+                    parameters: trainableForFused,
+                    zeroGradAction: null,
+                    freshSlotData: slots,
+                    forward: ForwardFromSlots,
+                    computeLoss: ComputeLossFromSlots,
+                    optimizerType: mfsOptType,
+                    learningRate: mfsLr,
+                    beta1: mfsB1,
+                    beta2: mfsB2,
+                    epsilon: mfsEps,
+                    weightDecay: mfsWd,
+                    out T _))
+            {
+                if (qatShadows is not null && qatParams is not null)
+                {
+                    for (int i = 0; i < qatParams.Length; i++)
+                        RestoreShadow(qatParams[i], qatShadows[i]);
+                }
+                return;
+            }
+        }
 
         using var tape = new GradientTape<T>();
 
         // Forward pass — triggers lazy layer initialization, then we walk for
         // trainable parameters. Collection must happen AFTER the forward pass so
-        // newly-initialized layers are visible to the walker.
-        var predicted = PredictNoise(noisySampleTensor, timestep);
+        // newly-initialized layers are visible to the walker. Batched inputs route
+        // through the per-element PredictNoiseBatched (Ho et al. 2020 canonical pattern);
+        // rank-1 unbatched inputs go through the scalar PredictNoise for backward compat.
+        var predicted = isBatched
+            ? PredictNoiseBatched(noisySampleTensor, timesteps)
+            : PredictNoise(noisySampleTensor, timestep);
         var paramTensors = CollectTrainableParameters();
         if (paramTensors.Length == 0)
         {
@@ -1150,7 +1332,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // clip; nothing is materialized or copied here. The forward/loss closures are only consulted by
         // optimizers that re-evaluate the objective (e.g. line search); Adam ignores them.
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        Tensor<T> RecomputeForward(Tensor<T> inp, Tensor<T> _) => PredictNoise(inp, timestep);
+        Tensor<T> RecomputeForward(Tensor<T> inp, Tensor<T> _) =>
+            isBatched
+                ? PredictNoiseBatched(inp, timesteps)
+                : PredictNoise(inp, timestep);
         Tensor<T> RecomputeLoss(Tensor<T> inp, Tensor<T> target)
         {
             using var noGrad = new NoGradScope<T>();

@@ -680,28 +680,63 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             int[] spatialShape = input._shape.Skip(2).ToArray();
 
-            // Collect every trainable parameter tensor across Layers (lift +
-            // project DenseLayers) and _fourierLayers. Cached between calls —
-            // layer structure is stable after construction and parameter
-            // tensors are updated in place by SetParameters.
+            // GPU-RESIDENT fast path — compiled fused-Adam step on the whole
+            // lift → fourier stack → project pipeline. FNO's forward is a
+            // straight tape-tracked chain, so the compiled plan captures it
+            // cleanly. Falls through to the SGD-in-place path below on any
+            // failure. Uses SGD to match this method's baseline behavior.
+            if (CanTrainOnGpu)
+            {
+                // _fourierLayers are already registered into Layers (see the
+                // InitializeArchitecture Layers.Add(fourierLayer) call at construction),
+                // so iterating Layers alone collects them exactly once — a second
+                // pass over _fourierLayers would double-register each Fourier
+                // parameter and let the fused optimizer's moment buffers apply
+                // the update twice per step.
+                var allTrainable = new List<ITrainableLayer<T>>();
+                foreach (var l in Layers) if (l is ITrainableLayer<T> t) allTrainable.Add(t);
+                if (allTrainable.Count > 0)
+                {
+                    Tensor<T> Forward(Tensor<T> inp)
+                    {
+                        var sSh = inp._shape.Skip(2).ToArray();
+                        var lf = FlattenPointwiseInput(inp, sSh);
+                        var lo = liftLayer.Forward(lf);
+                        var lifted = UnflattenPointwiseOutput(lo, inp.Shape[0], sSh);
+                        Tensor<T> y = lifted;
+                        foreach (var fl in _fourierLayers) y = fl.Forward(y);
+                        var pf = FlattenPointwiseInput(y, sSh);
+                        var po = projectLayer.Forward(pf);
+                        return UnflattenPointwiseOutput(po, inp.Shape[0], sSh);
+                    }
+                    Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt)
+                    {
+                        var d = Engine.TensorSubtract(pred, tgt);
+                        var s = Engine.TensorMultiply(d, d);
+                        var ss = Engine.ReduceSum(s, null);
+                        return Engine.TensorMultiplyScalar(ss, NumOps.Divide(NumOps.One, NumOps.FromDouble(pred.Length)));
+                    }
+                    if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+                            allTrainable, input, expectedOutput,
+                            forward: Forward, computeLoss: ComputeLoss,
+                            optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
+                            learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
+                            out T fusedLoss))
+                    {
+                        LastLoss = fusedLoss;
+                        return;
+                    }
+                }
+            }
+
+            // Collect every trainable parameter tensor. _fourierLayers are already
+            // registered into Layers (Layers.Add(fourierLayer) at construction), so
+            // iterating Layers alone covers them — a second pass over _fourierLayers
+            // would apply the SGD update twice per step to each Fourier parameter.
             var paramList = new List<Tensor<T>>();
             foreach (var layer in Layers)
             {
                 if (layer is ITrainableLayer<T> trainable)
-                {
-                    var layerParams = trainable.GetTrainableParameters();
-                    if (layerParams is not null)
-                    {
-                        foreach (var p in layerParams)
-                        {
-                            if (p is not null && p.Length > 0) paramList.Add(p);
-                        }
-                    }
-                }
-            }
-            foreach (var fl in _fourierLayers)
-            {
-                if (fl is ITrainableLayer<T> trainable)
                 {
                     var layerParams = trainable.GetTrainableParameters();
                     if (layerParams is not null)
