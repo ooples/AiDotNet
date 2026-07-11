@@ -2023,7 +2023,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // over-VisionDim contract, so they consume post-patch-embedding token tensors
             // [batch, num_tokens, VisionDim] — never raw [3, spatial, spatial] pixels. (Helix/Octo
             // are token-consuming too but listed above with their own vision dims.)
-            or "PaLME" or "RT2" or "GR00TN1" or "PiZero" or "ThreeDVLA";
+            or "PaLME" or "RT2" or "GR00TN1" or "PiZero" or "ThreeDVLA"
+            // Point-cloud 3D VLM family (AiDotNet.VisionLanguage.ThreeD.*) built from
+            // CreateDefaultPointCloudVLMLayers: a point/vision encoder whose first
+            // MultiHeadAttention is sized to VisionDim, then a projection to DecoderDim +
+            // autoregressive decoder. Like the encoders above, the stack consumes
+            // post-embedding token tensors [batch, num_tokens, VisionDim] — the generic
+            // [3, spatial, spatial] image branch makes the first attention throw
+            // "Input embedding dimension (128) does not match weight dimension (512)".
+            // (GPT4Point/Helix are the same family but excluded from generation with manual
+            // reduced-float scaffolds; see the exclusion list.)
+            or "LEOVL" or "PointLLM" or "SceneLLM" or "ThreeDLLM" or "ThreeDGraphLLM";
 
     /// <summary>
     /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
@@ -2051,6 +2061,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // constructor branch in EmitGeneratedTestClass); their [1,4,128] token InputShape
             // matches that width. Paper defaults (1408 / 1024) OOM/timeout on construction.
             "PaLME" or "RT2" or "GR00TN1" or "PiZero" or "ThreeDVLA" => 128,
+            // Point-cloud 3D VLM built at CI-smoke VisionDim=128 (see the LEOVL constructor
+            // branch in EmitGeneratedTestClass); the [1,4,128] token InputShape matches the
+            // reduced VisionDim. Paper default (1024) with DecoderDim=4096 / 24+32 layers
+            // OOMs on construction.
+            "LEOVL" or "PointLLM" or "SceneLLM" or "ThreeDLLM" or "ThreeDGraphLLM" => 128,
             _ => 768, // SigLIP2, ViLT, Florence2
         };
 
@@ -2097,6 +2112,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, " +
                     "outputSize: 4), " +
                     "numClasses: 4, embedDim: 64, numHeads: 4, numLayers: 2, numFrames: 4, patchSize: 8)";
+            }
+            else if (model.ClassName == "LayoutLM" && model.TypeParameterCount == 1)
+            {
+                // LayoutLM (Xu et al. 2020, KDD) native default is BERT-base scale — 768-wide, 12
+                // layers, vocab 30522, ~113M params. Each CPU training iteration is multiple seconds
+                // so MoreData (250 train steps) times out at 120 s. Build the IDENTICAL text + 2D-
+                // position-embedding -> transformer architecture at CI-smoke width/depth/vocab.
+                // Token-ID InputShape [16] is emitted by the token-based document branch below.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 16, outputSize: 4), " +
+                    "numClasses: 4, maxSequenceLength: 64, hiddenDim: 64, " +
+                    "numLayers: 2, numHeads: 4, vocabSize: 100)";
             }
             else if (model.ClassName == "LayoutLMv2" && model.TypeParameterCount == 1)
             {
@@ -2504,6 +2533,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumVisionLayers = 2, NumResamplerLayers = 1, NumDecoderLayers = 2, " +
                     "MaxVisualTokens = 4, NumHeads = 4, NumResamplerHeads = 4, DropoutRate = 0.0 })";
             }
+            else if ((model.ClassName is "LEOVL" or "PointLLM" or "SceneLLM" or "ThreeDLLM" or "ThreeDGraphLLM")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.ThreeD.", System.StringComparison.Ordinal))
+            {
+                // Point-cloud 3D VLM family (LEO-VL, PointLLM, SceneLLM, 3D-LLM, 3D-Graph-LLM) —
+                // all extend ThreeDVLMOptions and build CreateDefaultPointCloudVLMLayers at LLaMA-scale
+                // paper defaults (VisionDim 512-1024, DecoderDim=4096, 12+32 layers, ~7 B fp64 params)
+                // that OOM the runner on construction, before any assertion runs. Build the identical
+                // point-cloud VLM stack (VisionDim-wide encoder attention -> projection -> decoder) at
+                // CI-smoke width: all dims 128, 2 vision + 2 decoder layers, 4 heads. VisionDim=128
+                // keeps the encoder's first attention in lockstep with the [1,4,128] post-embedding
+                // token InputShape emitted for token-consuming VLMs (paper-faithful architecture, only
+                // the width/depth are reduced for CI).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    $"new AiDotNet.VisionLanguage.ThreeD.{model.ClassName}Options {{ VisionDim = 128, DecoderDim = 128, " +
+                    "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "MedFlamingo"
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -2664,6 +2714,47 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumFeatures = 8, NumAxialBlocks = 1, ScaleFactor = 2, " +
                     "NumHeads = 1, TemporalWindow = 2, LearningRate = 2e-4, " +
                     "WeightDecay = 0.01, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "DAMVSR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // DAM-VSR (SIGGRAPH 2025) — appearance/motion disentangled VSR. Its production
+                // defaults (scale x4, 64 features, 15 residual blocks) build the generic
+                // CreateDefaultVideoSuperResolutionLayers stack (~34 convs). At T=double, where the
+                // fused float-only training fast path can't engage, one Train() step costs ~2.8 s
+                // (measured), so the 100-step memorization and 50+200-step MoreData invariants blow
+                // the 180/120 s xUnit timeouts before they can assert. Same heaviness DualXVSR hit;
+                // apply the same fix — a small legal CI fixture (2 RGB frames @ 8x8, 8 features, 1
+                // residual block, 2x pixel shuffle) that runs at ~18 ms/step. Because it's that
+                // cheap, we keep the DEFAULT iteration counts and convergence thresholds (unlike
+                // DualXVSR's slower transformer, which also had to cut iterations) — only the model
+                // SCALE is reduced, so the convergence invariants keep their full strength.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, " +
+                    "outputSize: 4), " +
+                    "new AiDotNet.Video.Options.DAMVSROptions { " +
+                    "NumFeatures = 8, NumResBlocks = 1, ScaleFactor = 2, " +
+                    "NumFrames = 2, LearningRate = 2e-4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "FlashVSR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // FlashVSR (Zhuang et al. 2025) — one-step diffusion streaming VSR. Same story as
+                // DAMVSR/DualXVSR: production defaults (scale x4, 64 features, 8 LCSA blocks) drive
+                // the generic VSR conv stack at ~2.1 s per double-precision Train() step, so the
+                // 50+200-step MoreData invariant times out at 120 s. Small legal CI fixture keeps the
+                // native VSR layer family + AdamW training path but fits the timeout at ~18 ms/step;
+                // default iteration counts/thresholds retained (only model scale reduced).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, " +
+                    "outputSize: 4), " +
+                    "new AiDotNet.Video.Options.FlashVSROptions { " +
+                    "NumFeatures = 8, NumLCSABlocks = 1, ScaleFactor = 2, " +
+                    "NumInputFrames = 2, NumDecoderBlocks = 1, LearningRate = 2e-4, DropoutRate = 0.0 })";
             }
             else if (model.Domains.Contains(4)
                      && !model.Tasks.Contains(35)   // FrameInterpolation: handled by the 2-frame [6,64,64] path below
@@ -3021,6 +3112,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+        }
+        else if (model.ClassName == "DAMVSR" || model.ClassName == "FlashVSR")
+        {
+            // Matches the small CI constructor above (2 frames, 3 channels, 8x8 input,
+            // 2x pixel shuffle -> SR output [2, 3, 16, 16]). At ~18 ms/Train() step the
+            // reduced model runs the convergence invariants at their FULL default
+            // iteration counts (100 memorization / 50+200 MoreData ~= 1.8-4.6 s) well
+            // inside the xUnit timeout, so — unlike DualXVSR — we deliberately do NOT
+            // override the iteration counts or relax MemorizationTaskLossThreshold /
+            // MoreDataTolerance. Only the model scale is reduced; the invariants keep
+            // full strength.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
         }
         else if (isTemporalVideoModel)
         {
