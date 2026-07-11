@@ -285,13 +285,21 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
                 "channel count or pass an input with the expected channel dim.",
                 nameof(input));
 
-        if (_imageHeight % _patchSize != 0 || _imageWidth % _patchSize != 0)
-            throw new ArgumentException(
-                $"Image H/W ({_imageHeight}/{_imageWidth}) must be divisible by patchSize ({_patchSize}).",
-                nameof(input));
-
+        // Resolution-independent patchification: use only COMPLETE patches and drop any
+        // partial-patch remainder rows/columns (integer-floor), so the layer accepts ANY image
+        // size. A downstream resampler/pooling stage (e.g. Flamingo's Perceiver Resampler) maps
+        // the resulting variable-size patch grid to a fixed token count regardless of resolution —
+        // the resolution-independence Flamingo (Alayrac et al. 2022) builds on with its NFNet +
+        // Perceiver stack. The prior hard "H/W % patchSize == 0" requirement contradicted that: a
+        // 128×128 image with patchSize 14 (128/14 = 9 r 2) was rejected outright. Forward crops the
+        // input to _numPatchesHeight*_patchSize × _numPatchesWidth*_patchSize before patchifying.
         _numPatchesHeight = _imageHeight / _patchSize;
         _numPatchesWidth = _imageWidth / _patchSize;
+        if (_numPatchesHeight < 1 || _numPatchesWidth < 1)
+            throw new ArgumentException(
+                $"Image H/W ({_imageHeight}/{_imageWidth}) is smaller than patchSize ({_patchSize}); " +
+                "at least one full patch is required in each spatial dimension.",
+                nameof(input));
         _numPatches = _numPatchesHeight * _numPatchesWidth;
 
         // Only allocate + initialize weights if SetParameters / Deserialize
@@ -433,6 +441,18 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
             int height = input.Shape[rank - 2];
             int width = input.Shape[rank - 1];
             processInput = Engine.Reshape(input, new[] { flatBatch, channels, height, width });
+        }
+
+        // Crop to complete patches (drop any partial-patch remainder rows/columns) so the split
+        // reshape below is exact for ANY input resolution — see OnFirstForward. Tape-tracked slice;
+        // a no-op when the image is already patch-aligned (the common case).
+        int cropHeight = _numPatchesHeight * _patchSize;
+        int cropWidth = _numPatchesWidth * _patchSize;
+        if (cropHeight != processInput.Shape[2] || cropWidth != processInput.Shape[3])
+        {
+            processInput = Engine.TensorSlice(processInput,
+                new[] { 0, 0, 0, 0 },
+                new[] { batchSize, _channels, cropHeight, cropWidth });
         }
 
         _lastInput = processInput;
