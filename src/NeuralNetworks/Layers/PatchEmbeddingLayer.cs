@@ -185,7 +185,10 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <param name="patchSize">The size of each square patch.</param>
     /// <param name="embeddingDim">The dimension of the embedding vector for each patch.</param>
     /// <param name="activationFunction">The activation function to apply (defaults to identity if null).</param>
-    /// <exception cref="ArgumentException">Thrown when image dimensions are not divisible by patch size.</exception>
+    /// <remarks>Images need not be an exact multiple of the patch size: both <see cref="Forward"/>
+    /// and <see cref="ForwardGpu"/> crop any partial-patch remainder rows/columns (to
+    /// <c>floor(H/patch)·patch × floor(W/patch)·patch</c>) before patchifying, so the two paths stay
+    /// consistent for non-patch-aligned inputs.</remarks>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor sets up the patch embedding layer with your image specifications.
@@ -768,6 +771,17 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         }
 
         int patchDim = _channels * _patchSize * _patchSize;
+
+        // Crop any partial-patch remainder rows/columns to complete patches — the SAME contract as
+        // the CPU Forward (which crops to _numPatchesHeight/_numPatchesWidth * _patchSize). ForwardGpu
+        // otherwise reshaped the full tensor against the cached patch grid and would fail / mis-truncate
+        // for a non-patch-aligned image on the GPU path (keeps CPU and GPU consistent).
+        int gpuCropHeight = _numPatchesHeight * _patchSize;
+        int gpuCropWidth = _numPatchesWidth * _patchSize;
+        if (gpuCropHeight != processInput.Shape[2])
+            processInput = gpuEngine.SliceGpu(processInput, 2, 0, gpuCropHeight);
+        if (gpuCropWidth != processInput.Shape[3])
+            processInput = gpuEngine.SliceGpu(processInput, 3, 0, gpuCropWidth);
 
         // GPU-resident patchify using Reshape and Permute
         // 1. Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
