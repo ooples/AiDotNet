@@ -833,6 +833,21 @@ public class TFT<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// Tape-aware training forward. <see cref="Forecast"/> (the inference path
+    /// the base <c>ForwardNativeForTraining</c> would call) flips the network to
+    /// eval mode via <see cref="ForecastNative"/> and wraps the network in manual
+    /// per-element RevIN loops that detach the autograd graph, so gradients never
+    /// reach the layers and training leaves every parameter unchanged. Route
+    /// training through <see cref="Forward"/> directly — the genuine tape-connected
+    /// forward pass, run under training mode — exactly as the other custom-forward
+    /// finance transformers (Autoformer, FEDformer, iTransformer) do.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
+    }
+
+    /// <summary>
     /// Performs ONNX mode forecasting.
     /// </summary>
     /// <param name="input">Input historical data.</param>

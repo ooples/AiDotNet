@@ -733,6 +733,23 @@ public class Informer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// Tape-aware training forward. The base <c>ForwardNativeForTraining</c>
+    /// would call <see cref="Forecast"/>, which routes through
+    /// <see cref="ForecastNative"/> and flips the network to eval mode via
+    /// <c>SetTrainingMode(false)</c> mid-training-step — silently disabling
+    /// dropout during training (the exact seam the base-class documents:
+    /// models whose <c>Forecast</c> calls <c>SetTrainingMode(false)</c> MUST
+    /// override this). Route training through <see cref="Forward"/> directly —
+    /// the genuine tape-connected forward run under training mode — as the
+    /// other custom-forward finance transformers (TFT, Autoformer, FEDformer)
+    /// do.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
+    }
+
+    /// <summary>
     /// Performs ONNX mode forecasting.
     /// </summary>
     /// <remarks>
