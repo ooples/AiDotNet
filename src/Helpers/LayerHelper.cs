@@ -27098,6 +27098,42 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates the full default EfficientTAM layer stack — the paper-faithful plain-ViT image encoder
+    /// followed by the lightweight conv mask decoder — so the model follows the segmentation golden
+    /// pattern (a single <c>CreateDefault{ModelName}Layers</c> in <see cref="LayerHelper{T}"/>) instead
+    /// of hand-assembling the encoder inline.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Encoder (Xiong et al. 2024, "Efficient Track Anything", arXiv 2411.18933): a patch embedding
+    /// followed by <paramref name="numEncoderLayers"/> PRE-NORM RESIDUAL transformer blocks producing
+    /// patch tokens <c>[B, (H/P)·(W/P), embedDim]</c>. This plain, non-hierarchical ViT replacing SAM 2's
+    /// Hiera is EfficientTAM's core contribution. Each block is a <see cref="TransformerEncoderLayer{T}"/>
+    /// (<c>x = x + MHA(LN(x)); x = x + FFN(LN(x))</c>, Dosovitskiy et al. 2021 §3.1) with an FFN width of
+    /// <c>4·embedDim</c>. The residual skips are load-bearing: a non-residual flat ViT exploded to a
+    /// 2800× loss within a few steps (no gradient highway), and the earlier hierarchical Conv-BN-ReLU CNN
+    /// both diverged from the paper and dead-ReLU'd constant input to zero.
+    /// </para>
+    /// <para>
+    /// The first <c>numEncoderLayers + 1</c> layers are the encoder (patch-embed + blocks); the remainder
+    /// are the decoder from <see cref="CreateEfficientTAMDecoderLayers"/>. The caller reshapes the encoder
+    /// token grid back to a spatial feature map before the conv decoder, so it tracks that split index.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultEfficientTAMLayers(
+        int patchSize, int embedDim, int numEncoderLayers, int numHeads,
+        int decoderDim, int numClasses, int imageHeight, int imageWidth)
+    {
+        yield return new PatchEmbeddingLayer<T>(patchSize, embedDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderLayer<T>(numHeads, embedDim * 4, embedDim);
+
+        int featureHeight = imageHeight / patchSize, featureWidth = imageWidth / patchSize;
+        foreach (var decoderLayer in CreateEfficientTAMDecoderLayers(embedDim, decoderDim, numClasses, featureHeight, featureWidth))
+            yield return decoderLayer;
+    }
+
+    /// <summary>
     /// Creates decoder layers for the EfficientTAM model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateEfficientTAMDecoderLayers(

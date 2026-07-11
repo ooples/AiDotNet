@@ -332,26 +332,17 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
         else
         {
-            // Paper-faithful plain ViT image encoder (Xiong et al. 2024, arXiv 2411.18933):
-            // patch-embed -> N PRE-NORM RESIDUAL transformer blocks, producing patch tokens
-            // [B, (H/P)*(W/P), embedDim]. This is EfficientTAM's core contribution — a plain,
-            // non-hierarchical ViT replacing SAM 2's Hiera. Built from TransformerEncoderLayer
-            // (each block is x = x + MHA(LN(x)); x = x + FFN(LN(x)), Dosovitskiy et al. 2021 §3.1):
-            //   - the previous hierarchical Conv-BN-ReLU CNN diverged from the paper AND dead-ReLU'd
-            //     constant-input signal to zero (DifferentInputs collapse), and
-            //   - a NON-residual flat ViT (LayerHelper.CreateDefaultViTLayers) exploded to a 2800x
-            //     loss within a few steps — a deep transformer has no gradient highway without the
-            //     residual skips, so the standard residual block is both correct AND trainable.
-            var encoderLayers = new List<ILayer<T>> { new PatchEmbeddingLayer<T>(_patchSize, _embedDim) };
-            for (int i = 0; i < _numEncoderLayers; i++)
-                encoderLayers.Add(new TransformerEncoderLayer<T>(_numHeads, _embedDim * 4, _embedDim));
-            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            // Mask decoder: the encoder's token grid is reshaped back to a spatial feature map
-            // [B, embedDim, H/P, W/P] in Forward, then this lightweight conv head produces the
-            // per-pixel class logits.
-            int fH = _height / _patchSize, fW = _width / _patchSize;
-            var decoderLayers = LayerHelper<T>.CreateEfficientTAMDecoderLayers(_embedDim, _decoderDim, _numClasses, fH, fW);
-            Layers.AddRange(decoderLayers);
+            // Full default stack via the segmentation golden-pattern helper: the paper-faithful plain-ViT
+            // image encoder (Xiong et al. 2024, arXiv 2411.18933 — patch-embed + N pre-norm RESIDUAL
+            // transformer blocks, EfficientTAM's core Hiera-free contribution) followed by the lightweight
+            // conv mask decoder. The residual skips are load-bearing (a non-residual flat ViT exploded to a
+            // 2800x loss; the earlier hierarchical Conv-BN-ReLU CNN diverged and dead-ReLU'd constant input
+            // to zero). The encoder is the first _numEncoderLayers + 1 layers (patch-embed + N blocks);
+            // Forward reshapes that token grid back to a spatial [B, embedDim, H/P, W/P] map before the
+            // conv decoder emits per-pixel class logits.
+            Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientTAMLayers(
+                _patchSize, _embedDim, _numEncoderLayers, _numHeads, _decoderDim, _numClasses, _height, _width));
+            _encoderLayerEnd = _numEncoderLayers + 1;
         }
     }
 
