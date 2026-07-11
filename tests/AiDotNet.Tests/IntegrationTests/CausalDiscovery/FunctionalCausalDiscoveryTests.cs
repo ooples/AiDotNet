@@ -138,6 +138,68 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
+    // ---- RCD confounding-cutoff CALIBRATION (review [1]) --------------------------------------
+    // The confounding stop compares the SCALE-FREE confounding ratio
+    //   Σ min(0, DiffMI)² / Σ DiffMI²  (fraction of a candidate's direction-evidence pointing the
+    // WRONG way — that it is an EFFECT, not a cause) against ConfoundingEvidenceCutoff (default
+    // 0.05). These tests pin the calibration: a clean root must score WELL BELOW the cutoff (so the
+    // stop never fires on identifiable data — the old bug was the opposite, a dead stop) and a
+    // candidate that is actually an effect / latently confounded must score WELL ABOVE it.
+
+    // Uniform(-1,1): non-Gaussian, the identifiability condition DirectLiNGAM/RCD require.
+    private static double[,] BuildLingamData(int n, int seed, bool candidateIsRoot)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        double U() => rng.NextDouble() * 2.0 - 1.0;
+        var data = new double[n, 3];
+        for (int k = 0; k < n; k++)
+        {
+            if (candidateIsRoot)
+            {
+                // X0 -> X1, X0 -> X2 : variable 0 is a clean root (all direction-evidence outward).
+                double x0 = U();
+                data[k, 0] = x0;
+                data[k, 1] = 0.9 * x0 + 0.4 * U();
+                data[k, 2] = 0.7 * x0 + 0.4 * U();
+            }
+            else
+            {
+                // X1 -> X0 <- X2 : variable 0 is a pure EFFECT (sink) of two independent causes,
+                // the extreme of "no clean root" — every direction-evidence term points inward.
+                double x1 = U();
+                double x2 = U();
+                data[k, 1] = x1;
+                data[k, 2] = x2;
+                data[k, 0] = x1 + x2 + 0.2 * U();
+            }
+        }
+        return data;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RCD_ConfoundingRatio_CleanRoot_IsWellBelowCutoff()
+    {
+        await Task.Yield();
+        int n = 600;
+        var data = BuildLingamData(n, seed: 12345, candidateIsRoot: true);
+        double ratio = RCDAlgorithm<double>.ConfoundingRatio(data, n, candidate: 0, remaining: new[] { 0, 1, 2 });
+        Assert.True(ratio < 0.05,
+            $"A clean root's confounding ratio must stay well under the 0.05 cutoff so the stop does " +
+            $"not fire on identifiable data; got {ratio:F4}.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RCD_ConfoundingRatio_PureEffect_IsWellAboveCutoff()
+    {
+        await Task.Yield();
+        int n = 600;
+        var data = BuildLingamData(n, seed: 12345, candidateIsRoot: false);
+        double ratio = RCDAlgorithm<double>.ConfoundingRatio(data, n, candidate: 0, remaining: new[] { 0, 1, 2 });
+        Assert.True(ratio > 0.05,
+            $"A candidate that is actually an effect must score above the 0.05 cutoff so the " +
+            $"confounding stop fires (it was dead code before this calibration); got {ratio:F4}.");
+    }
+
     [Fact(Timeout = 120000)]
     public async Task CCDr_FindsCausalStructure()
     {

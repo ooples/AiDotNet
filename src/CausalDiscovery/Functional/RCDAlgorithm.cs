@@ -53,20 +53,24 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     private readonly double _threshold;
 
     /// <summary>
-    /// Cutoff on the confounding-evidence score used at line ~149 to trigger the
-    /// "remaining variables are confounded" stop. The score is
-    /// <c>Σᵢⱼ min(0, DiffMutualInfo(residualᵢ, residualⱼ))²</c> (sum of squared
-    /// negative diffs) — a NON-NEGATIVE quantity whose scale is bounded by
-    /// MI² per pair × candidate count, NOT a statistical p-value.
+    /// Cutoff on the SCALE-FREE confounding ratio that triggers the "remaining variables are
+    /// confounded" stop. For the selected (most-exogenous) candidate the ratio is
+    /// <c>Σⱼ min(0, DiffMI(best, j))² / Σⱼ DiffMI(best, j)²</c> — the fraction of the candidate's
+    /// squared direction-evidence (DirectLiNGAM entropy criterion) that indicates it is actually an
+    /// EFFECT of some other variable rather than a cause.
     /// <para>
-    /// We source the cutoff from <see cref="CausalDiscoveryOptions.SignificanceLevel"/>
-    /// because that option is the shared "how strict" knob across algorithms and
-    /// no dedicated RCD-scale option exists in the current API. The default of
-    /// <c>0.05</c> is a rough scale match for the DiffMI residual scale — NOT a
-    /// significance level in the α-of-a-hypothesis-test sense. Callers who need
-    /// tighter calibration can override via <c>SignificanceLevel</c>; a
-    /// dedicated <c>ConfoundingEvidenceCutoff</c> option is future work
-    /// (would need calibration tests to justify).
+    /// This replaces the previous absolute <c>Σ min(0, DiffMI)²</c> sum, whose magnitude (≈ 1e-8–1e-4
+    /// on standardized residuals) never approached the 0.05 cutoff, so the stop was dead code. A clean
+    /// root scores ≈ 0 (all direction-evidence points outward); a latently-confounded set has no clean
+    /// root, so even the best candidate carries substantial wrong-way evidence (≈ 0.5 for a symmetric
+    /// common-cause pair). Being a ratio in [0, 1] it needs no per-dataset rescaling, which is exactly
+    /// the scale mismatch the raw sum suffered.
+    /// </para>
+    /// <para>
+    /// Sourced from the dedicated <see cref="CausalDiscoveryOptions.ConfoundingEvidenceCutoff"/>
+    /// (default <c>0.05</c> = tolerate ≤ 5% wrong-way evidence before declaring confounding). See the
+    /// RCD calibration tests, which verify a clean LiNGAM DAG scores well under the cutoff while a
+    /// latent-confounder structure scores well over it.
     /// </para>
     /// </summary>
     private readonly double _confoundingScoreCutoff;
@@ -86,10 +90,10 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     public RCDAlgorithm(CausalDiscoveryOptions? options = null)
     {
         _threshold = options?.EdgeThreshold ?? 0.1;
-        // See _confoundingScoreCutoff doc: sourced from SignificanceLevel as a
-        // scale proxy, NOT a statistical α. Default 0.05 is calibrated for the
-        // sum-of-squared-negative-DiffMI scale, not a p-value threshold.
-        _confoundingScoreCutoff = options?.SignificanceLevel ?? 0.05;
+        // Scale-free confounding ratio in [0, 1] (see _confoundingScoreCutoff doc): the fraction of
+        // the best candidate's squared direction-evidence that points the wrong way. Default 0.05 =
+        // tolerate up to 5% wrong-way evidence before declaring the remaining variables confounded.
+        _confoundingScoreCutoff = options?.ConfoundingEvidenceCutoff ?? 0.05;
     }
 
     /// <inheritdoc/>
@@ -144,7 +148,7 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             // direction even for near-collinear variables (a histogram MI cannot).
             foreach (int candidate in remaining)
             {
-                double effectEvidence = 0;
+                double effectEvidence = 0;   // Σ min(0, DiffMI)²  — squared WRONG-WAY (effect) evidence
                 foreach (int other in remaining)
                 {
                     if (other == candidate) continue;
@@ -166,12 +170,14 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
                 break;
             }
 
-            // bestScore = sum of squared negative DiffMI across all (candidate, other)
-            // residual pairs — a non-negative confounding-evidence measure. When it
-            // exceeds the scale-matched cutoff, remaining variables can't be cleanly
-            // ordered under RCD and are treated as confounded. See _confoundingScoreCutoff
-            // doc for the scale rationale (NOT a statistical significance level).
-            if (bestScore > _confoundingScoreCutoff && ordering.Count > 0)
+            // Scale-free confounding ratio for the selected candidate: the fraction of its squared
+            // direction-evidence that points the WRONG way (evidence it is an EFFECT of some other
+            // variable, not a cause). ≈ 0 for a clean root (all evidence outward); elevated when no
+            // clean root exists (latent confounding), e.g. ≈ 0.5 for a symmetric common-cause pair.
+            // Normalizing by the total evidence removes the per-dataset scale drift that made the raw
+            // Σ min(0, DiffMI)² sum (≈ 1e-4) never reach the cutoff — the dead-code bug this fixes.
+            double confoundingRatio = ConfoundingRatio(residualData, n, bestVar, remaining);
+            if (confoundingRatio > _confoundingScoreCutoff && ordering.Count > 0)
             {
                 // Remaining variables are likely confounded — mark as confounded and stop.
                 // Per RCD: confounded variables cannot be cleanly ordered, so we do NOT
@@ -248,6 +254,32 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     /// [H(x_j) + H(r_{i|j})] − [H(x_i) + H(r_{j|i})] using
     /// <see cref="DifferentialEntropy(double[], int)"/>.
     /// </summary>
+    /// <summary>
+    /// Scale-free confounding ratio for <paramref name="candidate"/> against the other variables in
+    /// <paramref name="remaining"/>: <c>Σⱼ min(0, DiffMI(candidate, j))² / Σⱼ DiffMI(candidate, j)²</c>
+    /// — the fraction of the candidate's squared direction-evidence (DirectLiNGAM entropy criterion)
+    /// that indicates it is an EFFECT of some other variable rather than a cause. Returns a value in
+    /// <c>[0, 1]</c>: ≈ 0 when the candidate is a clean root (all evidence points outward), rising
+    /// toward ≈ 0.5 for a symmetric common-cause (latently-confounded) pair where direction is
+    /// unidentifiable. Degenerate all-zero evidence (perfectly collinear/deterministic residuals)
+    /// returns 0. Exposed <c>internal</c> so the RCD calibration tests can assert the clean-vs-
+    /// confounded separation directly without depending on a full discovery run.
+    /// </summary>
+    internal static double ConfoundingRatio(double[,] residualData, int n, int candidate, IReadOnlyList<int> remaining)
+    {
+        double effectEvidence = 0;   // Σ min(0, DiffMI)²  — squared WRONG-WAY (effect) evidence
+        double totalEvidence = 0;    // Σ DiffMI²          — total squared direction-evidence
+        foreach (int other in remaining)
+        {
+            if (other == candidate) continue;
+            double diffMI = DiffMutualInfo(residualData, n, candidate, other);
+            double neg = Math.Min(0.0, diffMI);
+            effectEvidence += neg * neg;
+            totalEvidence += diffMI * diffMI;
+        }
+        return totalEvidence > 1e-12 ? effectEvidence / totalEvidence : 0.0;
+    }
+
     private static double DiffMutualInfo(double[,] data, int n, int i, int j)
     {
         double meanI = 0, meanJ = 0;

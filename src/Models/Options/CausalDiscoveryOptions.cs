@@ -49,6 +49,25 @@ public class CausalDiscoveryOptions
     public double? SignificanceLevel { get; set; }
 
     /// <summary>
+    /// Fraction (0..1) of a candidate's direction-evidence that may point the "wrong" way before RCD
+    /// treats the remaining variables as latently confounded and stops. Default: null (0.05).
+    /// </summary>
+    /// <remarks>
+    /// <para>Used by <c>RCDAlgorithm</c>. RCD scores each candidate root by the DirectLiNGAM entropy
+    /// criterion (<c>DiffMutualInfo</c>): positive evidence means the candidate is a cause, negative
+    /// means it is an effect. The confounding score is the SCALE-FREE ratio
+    /// <c>Σ min(0, DiffMI)² / Σ DiffMI²</c> — the fraction of the best candidate's squared
+    /// direction-evidence that indicates it is actually an effect of some other variable. A clean root
+    /// scores ≈ 0 (all evidence points outward); a latently-confounded set has no clean root, so even
+    /// the best candidate carries substantial wrong-way evidence (≈ 0.5 for a symmetric common-cause
+    /// pair). When the score exceeds this cutoff the remaining variables are flagged confounded and
+    /// left unordered (per RCD). Because it is a ratio in [0, 1] it needs no per-dataset rescaling —
+    /// unlike a raw <c>DiffMI²</c> sum, whose magnitude drifts with sample size and non-Gaussianity.
+    /// Lower values stop more eagerly (more conservative about confounding); typical range 0.02–0.20.</para>
+    /// </remarks>
+    public double? ConfoundingEvidenceCutoff { get; set; }
+
+    /// <summary>
     /// L1 sparsity penalty (lambda1). Default: null (algorithm-specific default).
     /// </summary>
     /// <remarks>
