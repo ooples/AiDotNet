@@ -1676,12 +1676,23 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce)
         {
-            int len = Math.Min(output.Length, target.Length);
-            if (len == 0) return double.NaN;
-            var predicted = new Vector<T>(len);
-            var actual = new Vector<T>(len);
-            for (int i = 0; i < len; i++) { predicted[i] = output[i]; actual[i] = target[i]; }
-            return ConvertToDouble(ce.CalculateLoss(predicted, actual));
+            if (output.Length == 0 || target.Length == 0) return double.NaN;
+
+            // Measure the model's ACTUAL training objective — the same per-position, class-axis
+            // softmax-CE (spatially/temporally mean-reduced) that ComputeTapeLoss descends during
+            // Train — rather than flattening the whole tensor into one global softmax. The old
+            // flatten path computed a SINGLE softmax over every element ([B,C,H,W] or [B,S,V] all
+            // mixed together), so a valid dense per-pixel one-hot target (num_positions active
+            // entries) exploded to O(num_positions·log N) and DISAGREED with what the optimizer
+            // minimizes — making "more training degrades" fire on healthy per-pixel segmentation
+            // training. Align measurement with the objective so the invariant tests are meaningful.
+            var predicted = output;
+            var outShape = output.Shape.ToArray();
+            var tgtShape = target.Shape.ToArray();
+            if (!outShape.SequenceEqual(tgtShape) && output.Length == target.Length)
+                predicted = output.Reshape(tgtShape);
+            var lossTensor = ce.ComputeTapeLoss(predicted, target);
+            return ConvertToDouble(lossTensor[0]);
         }
         return ComputeMSE(output, target);
     }
@@ -1691,10 +1702,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <see cref="AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss{T}"/> (segmentation heads,
     /// classifiers) needs a valid probability distribution as its target — the softmax output
     /// sums to 1, so a raw random target (which does not) leaves an unreachable loss floor and
-    /// makes "training reduces loss" ill-posed. Replace it with a single-element one-hot over the
-    /// flattened output (sums to 1), which softmax-CE can actually descend. This mirrors the
-    /// legal-label handling the NER/CRF test bases already do for their type-constrained targets.
-    /// Non-CE models keep their (MSE-appropriate) raw target unchanged.
+    /// makes "training reduces loss" ill-posed. For a dense per-pixel segmentation head the softmax
+    /// is taken independently at <b>every spatial location</b>, so each pixel's class vector must
+    /// itself sum to 1 — a single one-hot over the whole flattened tensor leaves every other pixel
+    /// an all-zero (non-distribution) column. Instead give each pixel exactly one active class along
+    /// the class axis (a valid per-pixel one-hot distribution), which the model's per-pixel
+    /// softmax-CE objective (see <see cref="MeasureLoss"/>) can actually descend across the full
+    /// output. This mirrors the legal-label handling the NER/CRF test bases already do for their
+    /// type-constrained targets. Non-CE models keep their (MSE-appropriate) raw target unchanged.
     /// </summary>
     protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
     {
@@ -1703,12 +1718,58 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // targets via their own paths, and narrowing the guard keeps this from perturbing
         // currently-green models.
         if (target.Length > 0
-            && network is AiDotNet.Interfaces.ISegmentationModel<T>
+            && network is AiDotNet.Interfaces.ISegmentationModel<T> seg
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
         {
-            var oneHot = new Tensor<T>(target.Shape.ToArray());
-            oneHot.Data.Span[rng.Next(target.Length)] = NumOps.One;
+            var shape = target.Shape;
+            int numClasses = seg.NumClasses;
+
+            // Identify the class axis: dense segmentation logits are NCHW/CHW, so the class axis is
+            // dim 1 (batched) or dim 0 (unbatched); fall back to the first axis whose size matches
+            // NumClasses. If none matches we cannot form a per-pixel distribution, so drop back to a
+            // single whole-tensor one-hot (still a valid, descendable target).
+            int classAxis = -1;
+            if (numClasses > 1)
+            {
+                if (shape.Length >= 2 && shape[1] == numClasses) classAxis = 1;
+                else if (shape.Length >= 1 && shape[0] == numClasses) classAxis = 0;
+                else for (int i = 0; i < shape.Length; i++) if (shape[i] == numClasses) { classAxis = i; break; }
+            }
+
+            var oneHot = new Tensor<T>(shape.ToArray());
+            if (classAxis < 0)
+            {
+                oneHot.Data.Span[rng.Next(target.Length)] = NumOps.One;
+                return oneHot;
+            }
+
+            // Row-major strides so we can address (pixel, class) positions directly.
+            int rank = shape.Length;
+            var strides = new int[rank];
+            strides[rank - 1] = 1;
+            for (int i = rank - 2; i >= 0; i--) strides[i] = strides[i + 1] * shape[i + 1];
+            int classStride = strides[classAxis];
+
+            // Odometer over every non-class coordinate (i.e. every pixel); set one random class = 1.
+            var coord = new int[rank];
+            var span = oneHot.Data.Span;
+            while (true)
+            {
+                int baseOffset = 0;
+                for (int i = 0; i < rank; i++) baseOffset += coord[i] * strides[i];
+                span[baseOffset + rng.Next(numClasses) * classStride] = NumOps.One;
+
+                int axis = rank - 1;
+                while (axis >= 0)
+                {
+                    if (axis == classAxis) { axis--; continue; }
+                    if (++coord[axis] < shape[axis]) break;
+                    coord[axis] = 0;
+                    axis--;
+                }
+                if (axis < 0) break;
+            }
             return oneHot;
         }
         return target;
