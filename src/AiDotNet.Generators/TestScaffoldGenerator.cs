@@ -387,6 +387,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "Conformer", "ConformerCTC", "Branchformer", "EBranchformer", "FastConformer",
         "EfficientConformer", "StreamingConformer", "RobustConformer", "ConformerTransducer",
         "ConformerFP", "InterCTC", "SelfConditionedCTC", "FunASRNano", "FireRedASR", "FireRedASRLLM",
+        // ConvTransformer (SpeechRecognition/ConformerFamily): same deep conv+attention ASR encoder;
+        // routes to the audio branch and already gets its relaxed MoreDataTolerance there, but without
+        // this membership it missed the smoke-iteration caps and MoreData (250 iters) timed out solo.
+        "ConvTransformer",
         // NeMoCitrinet: paper-faithful Citrinet-512 (Majumdar et al., 2021) — 23 residual mega-blocks
         // of time-channel separable convs + squeeze-excitation at 512 channels. Same deep-CTC-ASR
         // footprint rationale as the Conformer/CTC family above: <float> halves the per-step
