@@ -377,6 +377,49 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Recomputes the floor patch grid (<see cref="_numPatchesHeight"/>/<see cref="_numPatchesWidth"/>/
+    /// <see cref="_numPatches"/>) from the <b>live</b> 4D input <c>[B, C, H, W]</c> on every forward,
+    /// so a resolution change after the first forward reshapes against the CURRENT tensor rather than
+    /// silently truncating to (or mis-slicing against) the cached first-forward grid. Rejects tensors
+    /// smaller than one full patch and any channel count the projection weights were not sized for.
+    /// </summary>
+    /// <remarks>
+    /// This is what makes the layer resolution-independent: <c>patchDim = channels·patchSize²</c> is
+    /// invariant to H/W, so the projection weights <c>[patchDim, embeddingDim]</c> are reused unchanged
+    /// across resolutions and only the patch COUNT N varies. Fixed-resolution models feed the same
+    /// spatial dims every call, so the recomputed grid equals the cached one (no behavior change);
+    /// only genuinely variable-resolution inputs differ — and those would otherwise fail the split
+    /// reshape below against the stale grid. The live counts thread through the crop, the patchify
+    /// reshape, and the output-shape restoration by writing them back to the shared fields.
+    /// </remarks>
+    private void RefreshLivePatchGrid(Tensor<T> input)
+    {
+        int liveChannels = input.Shape[1];
+        if (liveChannels != _channels)
+            throw new ArgumentException(
+                $"PatchEmbeddingLayer projection weights are sized for {_channels} input channels " +
+                $"but received {liveChannels}. Construct a new PatchEmbeddingLayer with the matching " +
+                "channel count or pass an input with the expected channel dim.",
+                nameof(input));
+
+        int liveHeight = input.Shape[2];
+        int liveWidth = input.Shape[3];
+        int nh = liveHeight / _patchSize;
+        int nw = liveWidth / _patchSize;
+        if (nh < 1 || nw < 1)
+            throw new ArgumentException(
+                $"Image H/W ({liveHeight}/{liveWidth}) is smaller than patchSize ({_patchSize}); " +
+                "at least one full patch is required in each spatial dimension.",
+                nameof(input));
+
+        _imageHeight = liveHeight;
+        _imageWidth = liveWidth;
+        _numPatchesHeight = nh;
+        _numPatchesWidth = nw;
+        _numPatches = nh * nw;
+    }
+
+    /// <summary>
     /// Performs the forward pass of the patch embedding layer.
     /// </summary>
     /// <param name="input">The input tensor with shape [batch, channels, height, width].</param>
@@ -445,6 +488,12 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
             int width = input.Shape[rank - 1];
             processInput = Engine.Reshape(input, new[] { flatBatch, channels, height, width });
         }
+
+        // Recompute the patch grid from THIS input's live spatial dims (not the cached first-forward
+        // grid) so a later resolution change reshapes correctly. Validates channels + rejects
+        // sub-patch tensors; writes _numPatchesHeight/_numPatchesWidth/_numPatches for the crop,
+        // reshape, and output-shape steps below.
+        RefreshLivePatchGrid(processInput);
 
         // Crop to complete patches (drop any partial-patch remainder rows/columns) so the split
         // reshape below is exact for ANY input resolution — see OnFirstForward. Tape-tracked slice;
@@ -770,12 +819,18 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
                 $"PatchEmbeddingLayer expects 3D [C,H,W] or 4D [B,C,H,W] input, got {shape.Length}D.", nameof(inputs));
         }
 
+        // Recompute the patch grid from THIS input's live spatial dims (mirrors the CPU Forward):
+        // ForwardGpu bypasses OnFirstForward, so without this it would reshape against the stale
+        // cached grid and fail / mis-truncate on a resolution change. Validates channels + rejects
+        // sub-patch tensors, and writes _numPatchesHeight/_numPatchesWidth/_numPatches for the crop,
+        // reshape, and output steps below.
+        RefreshLivePatchGrid(processInput);
+
         int patchDim = _channels * _patchSize * _patchSize;
 
         // Crop any partial-patch remainder rows/columns to complete patches — the SAME contract as
-        // the CPU Forward (which crops to _numPatchesHeight/_numPatchesWidth * _patchSize). ForwardGpu
-        // otherwise reshaped the full tensor against the cached patch grid and would fail / mis-truncate
-        // for a non-patch-aligned image on the GPU path (keeps CPU and GPU consistent).
+        // the CPU Forward (which crops to _numPatchesHeight/_numPatchesWidth * _patchSize), now using
+        // the freshly-recomputed live grid so CPU and GPU stay consistent for non-patch-aligned input.
         int gpuCropHeight = _numPatchesHeight * _patchSize;
         int gpuCropWidth = _numPatchesWidth * _patchSize;
         if (gpuCropHeight != processInput.Shape[2])
