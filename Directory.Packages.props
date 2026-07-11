@@ -235,8 +235,18 @@
          accumulating multi-consumer grad buffers) and #764 (GPU-resident-parameter fused-Adam mistrain
          fix), which together make this PR's TimeSeries GPU-resident training path train faithfully (the
          resident run now lowers the eager-forward training MSE and improves held-out MSE, so the N-BEATS
-         correctness gate accepts it). 0.112.0 is PUBLISHED to NuGet and is a superset of 0.111.2. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.112.0" />
+         correctness gate accepts it). 0.112.0 is PUBLISHED to NuGet and is a superset of 0.111.2.
+
+         Bumped 0.112.0 -> 0.114.0: brings AiDotNet.Tensors #772 — the DepthwiseConv1D engine
+         primitive (DepthwiseConv1D + DepthwiseConv1DBackwardInput/Kernel on IEngine / CpuEngine /
+         DirectGpuTensorEngine). This is the time-channel-separable temporal stage of NVIDIA Citrinet
+         (Majumdar et al., 2021), consumed by the new CitrinetBlockLayer so NeMoCitrinet is built
+         paper-faithfully (depthwise-temporal + pointwise-channel + SE + residual) instead of a plain
+         dense stack. 0.114.0 = 0.113.0 + the additive DepthwiseConv1D methods (strict superset).
+         CROSS-REPO ORDERING: this bump requires AiDotNet.Tensors 0.114.0 to be PUBLISHED to NuGet
+         (via that repo's automated-release on #772 merge — a feat: minor bump from the current
+         0.113.0) before this PR's CI restore can succeed. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.112.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.112.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.112.0" />

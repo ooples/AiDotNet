@@ -387,6 +387,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "Conformer", "ConformerCTC", "Branchformer", "EBranchformer", "FastConformer",
         "EfficientConformer", "StreamingConformer", "RobustConformer", "ConformerTransducer",
         "ConformerFP", "InterCTC", "SelfConditionedCTC", "FunASRNano", "FireRedASR", "FireRedASRLLM",
+        // NeMoCitrinet: paper-faithful Citrinet-512 (Majumdar et al., 2021) — 23 residual mega-blocks
+        // of time-channel separable convs + squeeze-excitation at 512 channels. Same deep-CTC-ASR
+        // footprint rationale as the Conformer/CTC family above: <float> halves the per-step
+        // activation/tape memory and the reduced iteration counts keep the many-block conv stack
+        // inside the 16 GB runner / per-test timeout while preserving the self-relative training
+        // invariants (loss must still decrease; sign / oscillation / first-step explosion still caught).
+        "NeMoCitrinet",
         // Embedding family
         "BGE", "ColBERT", "InstructorEmbedding", "MatryoshkaEmbedding", "SGPT",
         "SPLADE", "SimCSE", "TransformerEmbeddingNetwork", "FastText",
@@ -2212,6 +2219,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 128, outputSize: 128), " +
                     "new AiDotNet.Audio.Multimodal.PengiOptions { AudioEncoderDim = 128, LLMHiddenDim = 128, " +
                     "NumProjectionLayers = 1, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "NeMoCitrinet" && model.TypeParameterCount == 1)
+            {
+                // Citrinet-512 (Majumdar et al. 2021) production default is 512-dim with 23 residual
+                // mega-blocks of time-channel separable convs + squeeze-excitation — far too heavy per
+                // CPU training step for the invariant scaffold (a single paper-scale forward is ~60s, so
+                // even the Fp32 2-iteration training tests time out at 120-180s). Build the SAME
+                // architecture (depthwise-temporal + pointwise-channel separable convs + SE + residual)
+                // at CI-smoke width/depth (encoderDim 32, 3 mega-blocks, vocab 4, no dropout) so the
+                // per-step cost fits the timeout while every invariant stays load-bearing. Real-world
+                // defaults remain paper-faithful (512-dim, 23 blocks). Raw-mel InputShape [1,64,32] is
+                // emitted by the isAudio branch below; the prologue conv infers the 64 mel channels.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.NeMo.NeMoCitrinetOptions " +
+                    "{ SampleRate = 16000, NumMels = 64, EncoderDim = 32, NumEncoderLayers = 3, " +
+                    "VocabSize = 4, DropoutRate = 0.0, SqueezeExcitationRatio = 8 })";
             }
             else if (model.ClassName == "JambaLanguageModel" && model.TypeParameterCount == 1)
             {

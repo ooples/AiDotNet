@@ -1063,6 +1063,32 @@ public static class DeserializationHelper
             int dilation = TryGetInt(additionalParams, "Dilation") ?? 1;
             instance = new WaveNetResidualBlockLayer<T>(channels, kernelSize, dilation);
         }
+        else if (genericDef == typeof(DepthwiseConv1DLayer<>))
+        {
+            // DepthwiseConv1DLayer(channels, kernelSize, multiplier, stride, padding) — fully
+            // reconstructable from metadata; SetParameters restores the kernel/bias.
+            int channels = TryGetInt(additionalParams, "Channels")
+                ?? (outputShape.Length > 0 ? outputShape[0] : 1);
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int multiplier = TryGetInt(additionalParams, "Multiplier") ?? 1;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int padding = TryGetInt(additionalParams, "Padding") ?? ((kernelSize - 1) / 2);
+            instance = new DepthwiseConv1DLayer<T>(channels, kernelSize, multiplier, stride, padding);
+        }
+        else if (genericDef == typeof(CitrinetBlockLayer<>))
+        {
+            // CitrinetBlockLayer(channels, kernelSize, numSubBlocks, seReductionRatio, dropoutRate,
+            // stride) — fully reconstructable from metadata; SetParameters restores the inner
+            // depthwise/pointwise convs, BNs, and SE in TrainableSubLayers order.
+            int channels = TryGetInt(additionalParams, "Channels")
+                ?? (outputShape.Length > 0 ? outputShape[0] : 1);
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int numSubBlocks = TryGetInt(additionalParams, "NumSubBlocks") ?? 5;
+            int seReductionRatio = TryGetInt(additionalParams, "SeReductionRatio") ?? 8;
+            double dropoutRate = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            instance = new CitrinetBlockLayer<T>(channels, kernelSize, numSubBlocks, seReductionRatio, dropoutRate, stride);
+        }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
             // ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)

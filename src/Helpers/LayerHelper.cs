@@ -22749,6 +22749,84 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 
+    /// <summary>
+    /// Builds a paper-faithful NVIDIA Citrinet encoder (Majumdar et al., 2021,
+    /// https://arxiv.org/abs/2104.01721): a 1-D time-channel separable convolutional CTC model with
+    /// squeeze-and-excitation and residual mega-blocks, operating on channels-first <c>[B, C, T]</c>
+    /// mel features.
+    /// </summary>
+    /// <remarks>
+    /// <para>Structure:</para>
+    /// <list type="number">
+    /// <item><b>Prologue</b>: a channel-projecting 1-D conv (lazily infers the mel-channel count) + BN
+    /// that lifts the input to the encoder width <c>C</c>.</item>
+    /// <item><b>Body</b>: <paramref name="numMegaBlocks"/> <see cref="CitrinetBlockLayer{T}"/> residual
+    /// mega-blocks at constant width <c>C</c>, each with <paramref name="subBlocksPerBlock"/>
+    /// time-channel separable sub-blocks (depthwise-temporal + pointwise-channel + BN) plus a
+    /// squeeze-and-excitation block and a residual skip. Kernel sizes grow across the stack (5, 7, 9,
+    /// … capped at 39, per the paper), and stride-2 subsampling is applied at two group boundaries
+    /// (~8× total temporal downsampling as in the paper).</item>
+    /// <item><b>Epilogue</b>: a 1×1 pointwise conv + BN + ReLU.</item>
+    /// <item><b>CTC head</b>: a 1×1 pointwise conv projecting to <paramref name="vocabSize"/> per-frame
+    /// sub-word logits.</item>
+    /// </list>
+    /// <para>
+    /// The time-channel separable convolutions, squeeze-and-excitation, and residual connections are
+    /// Citrinet's three defining features. This builder is Citrinet-specific and does NOT replace the
+    /// generic <see cref="CreateDefaultDeepCNNCTCLayers"/> (still used by ContextNet).
+    /// </para>
+    /// </remarks>
+    /// <param name="encoderDim">Encoder channel width <c>C</c> (e.g. 512 for Citrinet-512).</param>
+    /// <param name="numMegaBlocks">Number of residual mega-blocks (Citrinet-512 uses 23).</param>
+    /// <param name="subBlocksPerBlock">Time-channel separable sub-blocks per mega-block <c>R</c> (paper uses 5).</param>
+    /// <param name="numMels">Input mel-channel count (documentation only — the prologue infers it lazily).</param>
+    /// <param name="vocabSize">Sub-word vocabulary size for the CTC head.</param>
+    /// <param name="dropoutRate">Dropout applied inside each mega-block.</param>
+    /// <param name="seReductionRatio">Squeeze-and-excitation reduction ratio.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultCitrinetLayers(
+        int encoderDim = 512,
+        int numMegaBlocks = 23,
+        int subBlocksPerBlock = 5,
+        int numMels = 80,
+        int vocabSize = 1024,
+        double dropoutRate = 0.1,
+        int seReductionRatio = 8)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Prologue: lazy-input 1-D conv projecting the mel channels up to the encoder width, + BN.
+        // Conv1DLayer's (outputChannels, kernelSize, …) overload infers input channels on first
+        // forward, so the actual mel-channel count is bound at runtime (it need not equal numMels).
+        yield return new Conv1DLayer<T>(encoderDim, kernelSize: 5, dilation: 1, stride: 1, padding: 2, activation: identityActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+
+        // Body: residual mega-blocks. Kernel grows across the stack; two stride-2 subsampling points
+        // (~1/3 and ~2/3 through) give ~8× temporal downsampling as in the paper.
+        int subsample1 = System.Math.Max(1, numMegaBlocks / 3);
+        int subsample2 = System.Math.Max(subsample1 + 1, (2 * numMegaBlocks) / 3);
+        for (int b = 0; b < numMegaBlocks; b++)
+        {
+            int kernelSize = System.Math.Min(5 + 2 * b, 39);
+            int stride = (b == subsample1 || b == subsample2) ? 2 : 1;
+            yield return new CitrinetBlockLayer<T>(
+                channels: encoderDim,
+                kernelSize: kernelSize,
+                numSubBlocks: subBlocksPerBlock,
+                seReductionRatio: seReductionRatio,
+                dropoutRate: dropoutRate,
+                stride: stride,
+                seed: 1009 + b * 131);
+        }
+
+        // Epilogue: 1×1 pointwise conv + BN + ReLU.
+        yield return new Conv1DLayer<T>(encoderDim, encoderDim, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+
+        // CTC head: 1×1 pointwise conv to per-frame sub-word logits [B, vocabSize, T'].
+        yield return new Conv1DLayer<T>(encoderDim, vocabSize, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: identityActivation);
+    }
+
     #endregion
 
     #region Vision-Language Encoders
