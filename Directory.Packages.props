@@ -235,11 +235,24 @@
          accumulating multi-consumer grad buffers) and #764 (GPU-resident-parameter fused-Adam mistrain
          fix), which together make this PR's TimeSeries GPU-resident training path train faithfully (the
          resident run now lowers the eager-forward training MSE and improves held-out MSE, so the N-BEATS
-         correctness gate accepts it). 0.112.0 is PUBLISHED to NuGet and is a superset of 0.111.2. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.112.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.112.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.112.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.112.0" />
+         correctness gate accepts it). 0.112.0 is PUBLISHED to NuGet and is a superset of 0.111.2.
+
+         Bumped 0.112.0 -> 0.113.0: brings AiDotNet.Tensors #763 — this branch's GATING dependency and
+         the engine half of the non-time-series GPU-residency sweep. #763's key fix (4C): the
+         compiled/persistent backward now honors createGraph=true (GradientTape.ComputeGradients
+         previously gated the compiled path on !createGraph), so the WGAN-GP gradient penalty's inner
+         backward differentiates into the disc weights through the fused compiled plan instead of
+         silently returning zeros (issue #1844). Against 0.112.0 the fused GPU-resident WGAN-GP path
+         (WganGpFusedStep / GpuResidentFusedStep) would have silently degraded to plain WGAN. #763 also
+         publishes Engines.Training.{DpSgdStep, DpSgdFusedStep, MultiSlotFusedStep, WganGpFusedStep,
+         PersistentInputRegistry}; the src/Training mirror classes stay as the consumer-side primitives
+         (the fused-primitive centralization in #1847/#1848 wires every consumer through them) and now
+         run against the fixed engine. 0.113.0 is PUBLISHED to NuGet and is a superset of 0.112.0 (also
+         carries #765 compiled-ReduceMax axis fill), so all rationale above is retained. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.113.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.113.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.113.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.113.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />

@@ -755,6 +755,74 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     private void TrainVAEBatch(Matrix<T> transformedData, int startRow, int endRow, T scaledLr)
     {
+        // Build the VAE sub-network's layer list once — same set used per row.
+        var vaeLayers = new List<ILayer<T>>(Layers);
+        if (_meanLayer is not null) vaeLayers.Add(_meanLayer);
+        if (_logVarLayer is not null) vaeLayers.Add(_logVarLayer);
+        vaeLayers.AddRange(_decoderLayers);
+
+        // GPU-RESIDENT fast path — the ELBO closure is identical per row, so
+        // the fused plan compiles on the first row and replays across the batch
+        // with refreshed input per iteration.
+        var trainableVaeLayers = vaeLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableVaeLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        {
+            // Closure-captured (mean, logVar) from Fwd's single encoder pass —
+            // reused by Loss so the encoder doesn't run twice per row. Since input
+            // and target are the same tensor for VAE ELBO training, the encoder
+            // output is genuinely the same value in both closures. Fwd/Loss ordering
+            // is guaranteed by the fused-step contract.
+            Tensor<T>? capturedMean = null;
+            Tensor<T>? capturedLogVar = null;
+            Tensor<T> Fwd(Tensor<T> inp)
+            {
+                var enc = EncoderForwardOnTape(inp);
+                var (m, lv) = SplitEncoderOutput(enc);
+                capturedMean = m;
+                capturedLogVar = lv;
+                var zz = Reparameterize(m, lv);
+                return DecoderForward(zz);
+            }
+            Tensor<T> Loss(Tensor<T> rawOutput, Tensor<T> target)
+            {
+                var m = capturedMean;
+                var lv = capturedLogVar;
+                if (m is null || lv is null)
+                    throw new InvalidOperationException(
+                        "TabSyn VAE fused step: encoder outputs were not captured by Fwd. " +
+                        "This indicates the fused-step framework called the loss closure before " +
+                        "the forward closure, violating its documented Fwd-then-Loss ordering.");
+                return ComputeElboLossTape(rawOutput, target, m, lv);
+            }
+            // On a mid-batch fused failure after fusedEngaged, drop out of the
+            // fused loop and let the eager path below reprocess the remaining
+            // rows — no row is silently skipped.
+            bool fusedEngaged = false;
+            int nextEagerRow = startRow;
+            for (int row = startRow; row < endRow; row++)
+            {
+                var inputTensor = VectorToTensor(GetRow(transformedData, row));
+                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableVaeLayers, inputTensor, inputTensor,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _optimizer,
+                    out T _);
+                if (!ran)
+                {
+                    if (!fusedEngaged) break;
+                    // Fused engaged then failed mid-batch. Resume this row and the
+                    // remainder on the eager path so no gradient is lost.
+                    nextEagerRow = row;
+                    break;
+                }
+                fusedEngaged = true;
+                nextEagerRow = row + 1;
+            }
+            if (fusedEngaged && nextEagerRow >= endRow) return;
+            // Adjust the eager loop's start so it picks up where fused stopped.
+            startRow = nextEagerRow;
+        }
+
         for (int row = startRow; row < endRow; row++)
         {
             var inputTensor = VectorToTensor(GetRow(transformedData, row));
@@ -766,11 +834,6 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var rawOutput = DecoderForward(z);
             var loss = ComputeElboLossTape(rawOutput, inputTensor, mean, logVar);
 
-            // Step only the VAE sub-network (encoder + heads + decoder).
-            var vaeLayers = new List<ILayer<T>>(Layers);
-            if (_meanLayer is not null) vaeLayers.Add(_meanLayer);
-            if (_logVarLayer is not null) vaeLayers.Add(_logVarLayer);
-            vaeLayers.AddRange(_decoderLayers);
             TapeStepOver(tape, loss, vaeLayers);
         }
     }
@@ -878,19 +941,88 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         if (_latentDiffusion is null) return;
 
-        for (int row = startRow; row < endRow; row++)
+        // MultiSlotFusedStep cache: reused across rows so the compiled plan is
+        // built once (on the first row) and replayed per subsequent row by
+        // refreshing slot data. See ooples/AiDotNet#1846.
+        AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
+        try
         {
-            int t = _latentDiffusion.SampleTimestep();
-            var clean = GetRow(latentCodes, row);
-            var (noisy, actualNoise) = _latentDiffusion.AddNoise(clean, t);
-            var timeEmbed = CreateTimestepEmbedding(t);
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(_diffMLPLayers).ToArray();
+            AiDotNet.Tensors.Engines.Compilation.OptimizerType mfsOptType = default;
+            float mfsLr = 0f, mfsB1 = 0f, mfsB2 = 0f, mfsEps = 0f, mfsWd = 0f;
+            bool fusedEligible = false;
+            if (trainableParams.Length > 0)
+            {
+                fusedEligible = NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                    _optimizer,
+                    out mfsOptType, out mfsLr, out mfsB1, out mfsB2,
+                    out mfsEps, out mfsWd, out _, out _);
+            }
 
-            using var tape = new GradientTape<T>();
-            var predictedNoise = DiffusionMLPForwardOnTape(noisy, timeEmbed);
-            // ε-prediction MSE (Ho et al. 2020) on the VAE latent codes (Zhang et al. 2024 TabSyn).
-            var diff = Engine.TensorSubtract(predictedNoise, VectorToTensor(actualNoise));
-            var loss = ReduceToScalar(Engine.TensorSquare(diff));
-            TapeStepOver(tape, loss, _diffMLPLayers);
+            for (int row = startRow; row < endRow; row++)
+            {
+                int t = _latentDiffusion.SampleTimestep();
+                var clean = GetRow(latentCodes, row);
+                var (noisy, actualNoise) = _latentDiffusion.AddNoise(clean, t);
+                var timeEmbed = CreateTimestepEmbedding(t);
+
+                if (fusedEligible)
+                {
+                    // Slots: [noisyLatent, actualNoise, projectedTimeEmbed].
+                    // _timestepProjection is NOT in _diffMLPLayers (parity with the
+                    // eager path — it's detached there too), so we precompute the
+                    // projected embedding host-side and pass it as slot data.
+                    var slots = new[]
+                    {
+                        VectorToTensor(noisy),
+                        VectorToTensor(actualNoise),
+                        VectorToTensor(timeEmbed),
+                    };
+                    multiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                    Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
+                    {
+                        // s[0] noisyLatent, s[1] actualNoise (unused here — read
+                        // in Loss), s[2] projectedTimeEmbed. Concat + MLP forward.
+                        int totalLen = s[0].Length + s[2].Length;
+                        var input = Engine.TensorConcatenate(new[] { s[0], s[2] }, axis: 0);
+                        var current = input;
+                        foreach (var layer in _diffMLPLayers) current = layer.Forward(current);
+                        return current.Rank == 1 ? current : Engine.Reshape(current, new[] { current.Length });
+                    }
+                    Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
+                    {
+                        var diff = Engine.TensorSubtract(pred, s[1]);
+                        return ReduceToScalar(Engine.TensorSquare(diff));
+                    }
+                    if (multiSlotStep.TryStep(
+                            parameters: trainableParams,
+                            zeroGradAction: null,
+                            freshSlotData: slots,
+                            forward: ForwardFromSlots,
+                            computeLoss: ComputeLossFromSlots,
+                            optimizerType: mfsOptType,
+                            learningRate: mfsLr,
+                            beta1: mfsB1,
+                            beta2: mfsB2,
+                            epsilon: mfsEps,
+                            weightDecay: mfsWd,
+                            out T _))
+                    {
+                        continue;
+                    }
+                }
+
+                using var tape = new GradientTape<T>();
+                var predictedNoise = DiffusionMLPForwardOnTape(noisy, timeEmbed);
+                // ε-prediction MSE (Ho et al. 2020) on the VAE latent codes (Zhang et al. 2024 TabSyn).
+                var diff2 = Engine.TensorSubtract(predictedNoise, VectorToTensor(actualNoise));
+                var loss = ReduceToScalar(Engine.TensorSquare(diff2));
+                TapeStepOver(tape, loss, _diffMLPLayers);
+            }
+        }
+        finally
+        {
+            multiSlotStep?.Dispose();
         }
     }
 

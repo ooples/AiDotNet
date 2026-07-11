@@ -95,8 +95,15 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     // TFC normalizes each input series before the time/frequency encoders and
     // restores the level on the output so distinct input scales produce distinct
     // forecasts.
-    private Vector<T> _revinMean = new Vector<T>(0);
-    private Vector<T> _revinStd = new Vector<T>(0);
+    /// <summary>Per-instance mean captured by <see cref="ApplyInstanceNormalization"/>,
+    /// consumed by <see cref="DenormalizeForecast"/>. Tensor-shaped [B, 1] so it broadcasts
+    /// against the forecast. NULL when no forward has run yet.</summary>
+    private Tensor<T>? _revinMeanTensor;
+
+    /// <summary>Per-instance standard deviation captured by <see cref="ApplyInstanceNormalization"/>,
+    /// consumed by <see cref="DenormalizeForecast"/>. Tensor-shaped [B, 1]. NULL when no forward
+    /// has run yet.</summary>
+    private Tensor<T>? _revinStdTensor;
 
     #endregion
 
@@ -273,6 +280,55 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
                 "LossFunction must derive from LossFunctionBase<T> for TFC tape-based training.");
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
+
+        // GPU-RESIDENT fast path — compiled fused SGD on the combined supervised +
+        // contrastive objective. Safe now that ApplyInstanceNormalization and
+        // ComputeFrequencyRepresentation both use traceable Engine ops (ReduceMean /
+        // ReduceVariance / TensorSqrt / broadcast for RevIN, Engine.RFFT + magnitude
+        // + concat/flip mirror for the DFT) — both re-execute on every replay from
+        // the current-step persistent slot data instead of freezing at trace time.
+        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableLayers.Count > 0)
+        {
+            // Closure-captured contrastive loss: ComputeContrastiveLossTape runs
+            // INSIDE the forward closure so it consumes the CURRENT-step persistent
+            // input (`inp`), not the outer `input` which would freeze at compile
+            // time. Fwd/Loss ordering is guaranteed by the fused-step contract.
+            Tensor<T>? capturedContrastive = null;
+            Tensor<T> ForwardCombined(Tensor<T> inp)
+            {
+                capturedContrastive = ComputeContrastiveLossTape(inp);
+                return ForwardForTraining(inp);
+            }
+            Tensor<T> ComputeLossCombined(Tensor<T> pred, Tensor<T> tgt)
+            {
+                var alignedT = tgt;
+                if (pred.Rank > tgt.Rank && pred.Shape[0] == 1 && pred.Length == tgt.Length)
+                    pred = Engine.Reshape(pred, tgt._shape);
+                else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
+                    alignedT = Engine.Reshape(tgt, pred._shape);
+                var supervised = loss.ComputeTapeLoss(pred, alignedT);
+                var contrastive = capturedContrastive
+                    ?? throw new InvalidOperationException(
+                        "TFC fused step: contrastive loss was not captured by ForwardCombined. " +
+                        "This indicates the fused-step framework called the loss closure before " +
+                        "the forward closure, which violates its documented Fwd-then-Loss ordering.");
+                if (!supervised._shape.SequenceEqual(contrastive._shape)
+                    && supervised.Length == contrastive.Length)
+                    contrastive = Engine.Reshape(contrastive, supervised._shape);
+                return Engine.TensorAdd(supervised, contrastive);
+            }
+            if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+                    trainableLayers, input, target,
+                    forward: ForwardCombined, computeLoss: ComputeLossCombined,
+                    optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
+                    learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
+                    out T fusedLoss))
+            {
+                LastLoss = fusedLoss;
+                return;
+            }
+        }
 
         // Custom tape step: TFC's loss is supervised forecast + weighted
         // contrastive alignment between the time-domain and frequency-
@@ -622,71 +678,89 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Traceable RevIN forward (Kim et al. 2022). Uses <see cref="IEngine.ReduceMean{T}"/>,
+    /// <see cref="IEngine.ReduceVariance{T}"/>, <see cref="IEngine.TensorSqrt{T}"/>, and
+    /// <see cref="IEngine.TensorBroadcastDivide{T}"/> so every op records on the tape and
+    /// re-executes under the compiled fused plan. The per-instance mean/std are captured
+    /// in tensor fields (not <see cref="Vector{T}"/> scalars) so <see cref="DenormalizeForecast"/>
+    /// stays on-tape too — an inference call refreshes the tensors and a compiled-plan
+    /// replay recomputes both on-device from the current slot data.
+    /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        // RevIN forward (Kim et al. 2022). Stats are taken over every non-batch
-        // element of each row (a rank-1 input is a single instance, not one per
-        // element), and stored so DenormalizeForecast can restore the scale.
+        var (normalized, mean, std) = NormalizeWithStats(input);
+        _revinMeanTensor = mean;
+        _revinStdTensor = std;
+        return normalized;
+    }
+
+    /// <summary>
+    /// Stateless RevIN forward. Returns (normalized, mean, std) with mean/std as tensors
+    /// shaped [B, 1] so downstream ops can broadcast them back. All ops go through
+    /// <see cref="Engine"/> — no <c>.Data.Span</c> host loops — so the whole computation
+    /// records on the autodiff tape and re-executes on every replay under a compiled plan.
+    /// </summary>
+    private (Tensor<T> Normalized, Tensor<T> Mean, Tensor<T> Std) NormalizeWithStats(Tensor<T> input)
+    {
         int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
         int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
         if (instanceSize <= 0)
-            return input;
-
-        var result = new Tensor<T>(input._shape);
-        _revinMean = new Vector<T>(batchSize);
-        _revinStd = new Vector<T>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
         {
-            int start = b * instanceSize;
-
-            T mean = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-                mean = NumOps.Add(mean, input[start + t]);
-            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < instanceSize; t++)
-            {
-                var diff = NumOps.Subtract(input[start + t], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            _revinMean[b] = mean;
-            _revinStd[b] = std;
-
-            for (int t = 0; t < instanceSize; t++)
-                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
+            // Degenerate input — return input unchanged with identity mean/std.
+            var meanIdentity = new Tensor<T>(new[] { 1, 1 });
+            var stdIdentity = new Tensor<T>(new[] { 1, 1 });
+            Engine.TensorFill(meanIdentity, NumOps.Zero);
+            Engine.TensorFill(stdIdentity, NumOps.One);
+            return (input, meanIdentity, stdIdentity);
         }
 
-        return result;
+        bool reshaped = input.Rank != 2;
+        var flat = reshaped ? Engine.Reshape(input, new[] { batchSize, instanceSize }) : input;
+
+        // mean over the instance axis, keepDims so shape stays [B, 1] for broadcast.
+        var mean = Engine.ReduceMean(flat, new[] { 1 }, keepDims: true);
+        var variance = Engine.ReduceVariance(flat, new[] { 1 }, keepDims: true);
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5)));
+
+        // (x - mean) / std via BroadcastSubtract + BroadcastDivide.
+        var centered = Engine.TensorBroadcastSubtract(flat, mean);
+        var normalized = Engine.TensorBroadcastDivide(centered, std);
+
+        if (reshaped)
+            normalized = Engine.Reshape(normalized, input._shape);
+        return (normalized, mean, std);
     }
 
     /// <summary>
     /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the
-    /// forecast so it is expressed on the input's original scale. The multiply/add go
-    /// through the Engine so the forecast stays on the autodiff tape.
+    /// forecast so it is expressed on the input's original scale. All ops go through
+    /// <see cref="Engine"/> so the forecast stays on the autodiff tape AND the compiled-plan
+    /// replay uses the CURRENT input's stats (via <see cref="_revinMeanTensor"/> /
+    /// <see cref="_revinStdTensor"/>, both refreshed by <see cref="ApplyInstanceNormalization"/>
+    /// or <see cref="NormalizeWithStats"/> earlier in the same forward).
     /// </summary>
     private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
     {
-        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
-        if (_revinMean.Length != batch || forecast.Length % batch != 0)
-            return forecast;
+        return DenormalizeForecastWithStats(forecast, _revinMeanTensor, _revinStdTensor);
+    }
 
-        var meanT = new Tensor<T>(new[] { batch, 1 });
-        var stdT = new Tensor<T>(new[] { batch, 1 });
-        for (int b = 0; b < batch; b++)
-        {
-            meanT.Data.Span[b] = _revinMean[b];
-            stdT.Data.Span[b] = _revinStd[b];
-        }
+    /// <summary>
+    /// Stateless RevIN inverse. Takes explicit mean/std tensors so the compiled-plan
+    /// path can thread the CURRENT-step stats through without touching class fields.
+    /// </summary>
+    private Tensor<T> DenormalizeForecastWithStats(Tensor<T> forecast, Tensor<T>? mean, Tensor<T>? std)
+    {
+        if (mean is null || std is null) return forecast;
+
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (mean.Length != batch || std.Length != batch || forecast.Length % batch != 0)
+            return forecast;
 
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
-        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
-        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        var scaled = Engine.TensorBroadcastMultiply(work, std);
+        var shifted = Engine.TensorBroadcastAdd(scaled, mean);
         return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
@@ -712,7 +786,13 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
+        // Thread mean/std as tensors through the same forward — under the compiled
+        // fused plan, class-field capture at trace time would freeze the trace-batch
+        // stats; tensor-threaded stats re-execute on every replay. The abstract
+        // override caches them for external ApplyInstanceNormalization callers.
+        var (normalized, mean, std) = NormalizeWithStats(input);
+        _revinMeanTensor = mean;
+        _revinStdTensor = std;
         var current = normalized;
 
         bool addedBatchDim = false;
@@ -762,8 +842,9 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
 
         // RevIN reverse: restore the input's per-instance level/scale so distinct
         // input levels yield distinct forecasts (the encoders see only the
-        // mean/std-normalized series).
-        current = DenormalizeForecast(current);
+        // mean/std-normalized series). Pass mean/std as tensor locals so the
+        // compiled-plan replay picks up the CURRENT-step stats, not the trace pass.
+        current = DenormalizeForecastWithStats(current, mean, std);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = Engine.Reshape(current, new[] { current.Shape[1] });
@@ -823,47 +904,58 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     #region Frequency Transform
 
     /// <summary>
-    /// Computes the DFT magnitude spectrum of the input time series.
-    /// For rank-1 input, computes DFT directly. For batched input (rank > 1),
-    /// computes DFT per sample along the last dimension.
-    /// Returns |X[k]| for k = 0..N/2 (one-sided spectrum), same shape as input via mirroring.
+    /// Traceable DFT magnitude spectrum. Uses <see cref="IEngine.RFFT{T}"/> for the batched
+    /// real-to-complex FFT, then computes per-bin magnitude via elementwise square +
+    /// axis-reduction + sqrt, and mirrors the one-sided spectrum to full length via
+    /// <see cref="IEngine.TensorConcatenate{T}"/> + <see cref="IEngine.TensorFlip{T}"/>.
+    /// All ops record on the autodiff tape and re-execute on every compiled-plan replay —
+    /// the previous <c>.Data.Span</c> DFT loop froze the trace-batch spectrum into the plan.
     /// </summary>
+    /// <remarks>
+    /// Output layout matches the previous scalar impl: <c>[..., n]</c> with the first
+    /// <c>halfN = n/2 + 1</c> bins holding <c>|X[k]| / n</c> and the tail mirroring bins
+    /// <c>1 .. n-halfN</c> so downstream freq encoders that expect the full-<c>n</c> layout
+    /// see identical shapes.
+    /// </remarks>
     private Tensor<T> ComputeFrequencyRepresentation(Tensor<T> input)
     {
-        // For rank-1 (unbatched), n = sequence length. For batched, n = last dimension.
         int n = input.Rank > 1 ? input.Shape[^1] : input.Length;
         int numSamples = input.Rank > 1 ? input.Length / n : 1;
         int halfN = n / 2 + 1;
-        var result = new Tensor<T>(input._shape);
-        T invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
 
-        for (int s = 0; s < numSamples; s++)
+        // Normalize to [B, n] for the batched RFFT contract.
+        bool reshaped = input.Rank != 2;
+        var flat = reshaped ? Engine.Reshape(input, new[] { numSamples, n }) : input;
+
+        // RFFT returns interleaved [re0, im0, re1, im1, ..., re(halfN-1), im(halfN-1)],
+        // shape [B, halfN * 2] = [B, n + 2].
+        var rfft = Engine.RFFT(flat);
+        var complexPairs = Engine.Reshape(rfft, new[] { numSamples, halfN, 2 });
+
+        // magSquared[b, k] = re[b, k]^2 + im[b, k]^2 via TensorMultiply + ReduceSum on the
+        // last (re/im) axis. Axis 2 reduces the pair into a scalar → shape [B, halfN].
+        var squares = Engine.TensorMultiply(complexPairs, complexPairs);
+        var magSquared = Engine.ReduceSum(squares, new[] { 2 }, keepDims: false);
+        var mag = Engine.TensorSqrt(magSquared);
+        // Normalize by 1/n to match the previous impl (which multiplied by invN post-sqrt).
+        var oneSided = Engine.TensorMultiplyScalar(mag, NumOps.Divide(NumOps.One, NumOps.FromDouble(n)));
+
+        Tensor<T> full;
+        int mirrorLen = n - halfN;
+        if (mirrorLen > 0)
         {
-            int offset = s * n;
-
-            // DFT: X[k] = sum_{t=0}^{N-1} x[t] * exp(-2*pi*i*k*t/N)
-            for (int k = 0; k < halfN; k++)
-            {
-                T realPart = NumOps.Zero;
-                T imagPart = NumOps.Zero;
-                for (int t = 0; t < n; t++)
-                {
-                    double angle = -2.0 * Math.PI * k * t / n;
-                    T cosT = NumOps.FromDouble(Math.Cos(angle));
-                    T sinT = NumOps.FromDouble(Math.Sin(angle));
-                    realPart = NumOps.Add(realPart, NumOps.Multiply(input[offset + t], cosT));
-                    imagPart = NumOps.Add(imagPart, NumOps.Multiply(input[offset + t], sinT));
-                }
-                T magSquared = NumOps.Add(NumOps.Multiply(realPart, realPart), NumOps.Multiply(imagPart, imagPart));
-                result.Data.Span[offset + k] = NumOps.Multiply(NumOps.Sqrt(magSquared), invN);
-            }
-
-            // Mirror the one-sided spectrum for symmetric representation
-            for (int k = halfN; k < n; k++)
-                result.Data.Span[offset + k] = result[offset + (n - k)];
+            // Mirror indices [1 .. n-halfN] reversed → tail of the full spectrum.
+            // Slice: start=[0, 1], length=[B, mirrorLen] gives bins 1..mirrorLen inclusive.
+            var mirrorSource = Engine.TensorSlice(oneSided, new[] { 0, 1 }, new[] { numSamples, mirrorLen });
+            var mirrorReversed = Engine.TensorFlip(mirrorSource, new[] { 1 });
+            full = Engine.TensorConcatenate(new[] { oneSided, mirrorReversed }, axis: 1);
+        }
+        else
+        {
+            full = oneSided;
         }
 
-        return result;
+        return reshaped ? Engine.Reshape(full, input._shape) : full;
     }
 
     #endregion

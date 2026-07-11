@@ -279,6 +279,70 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
         return AlphasCumulativeProduct[timestep];
     }
 
+    /// <summary>
+    /// Batched forward-diffusion (industry-standard batching, HuggingFace diffusers /
+    /// DDPM reference): applies a distinct timestep to each batch element instead of
+    /// a single timestep to the whole batch. Default implementation delegates to the
+    /// scalar <see cref="AddNoise"/> per element for backward compatibility;
+    /// concrete schedulers should override with a fused batched implementation for
+    /// on-device efficiency.
+    /// </summary>
+    /// <param name="cleanBatch">Clean samples, shape <c>[B, ...]</c>.</param>
+    /// <param name="noiseBatch">Per-element noise, shape <c>[B, ...]</c>.</param>
+    /// <param name="timesteps">Per-batch-element timesteps, shape <c>[B]</c>.</param>
+    /// <returns>Noised batch, shape matches <paramref name="cleanBatch"/>.</returns>
+    public virtual Tensor<T> AddNoiseBatched(Tensor<T> cleanBatch, Tensor<T> noiseBatch, int[] timesteps)
+    {
+        if (cleanBatch == null) throw new ArgumentNullException(nameof(cleanBatch));
+        if (noiseBatch == null) throw new ArgumentNullException(nameof(noiseBatch));
+        if (timesteps == null) throw new ArgumentNullException(nameof(timesteps));
+
+        if (cleanBatch.Rank == 0 || cleanBatch.Shape[0] <= 0)
+            throw new ArgumentException(
+                "cleanBatch must have a non-empty batch dimension.",
+                nameof(cleanBatch));
+        int batchSize = cleanBatch.Shape[0];
+
+        // Validate full shape parity, not only the batch dim. Without this a
+        // noiseBatch of shape [B, smaller...] would pass the leading-dim check
+        // and then index beyond its span in the per-element copy loop below.
+        if (noiseBatch.Rank != cleanBatch.Rank)
+            throw new ArgumentException(
+                $"noiseBatch rank {noiseBatch.Rank} does not match cleanBatch rank {cleanBatch.Rank}.",
+                nameof(noiseBatch));
+        for (int dim = 0; dim < cleanBatch.Rank; dim++)
+        {
+            if (noiseBatch.Shape[dim] != cleanBatch.Shape[dim])
+                throw new ArgumentException(
+                    $"noiseBatch shape[{dim}] = {noiseBatch.Shape[dim]} does not match cleanBatch shape[{dim}] = {cleanBatch.Shape[dim]}.",
+                    nameof(noiseBatch));
+        }
+        if (timesteps.Length != batchSize)
+            throw new ArgumentException(
+                $"timesteps length {timesteps.Length} does not match batch size {batchSize}.",
+                nameof(timesteps));
+
+        int perElement = cleanBatch.Length / batchSize;
+        var result = new Tensor<T>(cleanBatch._shape);
+        var cleanSpan = cleanBatch.AsSpan();
+        var noiseSpan = noiseBatch.AsSpan();
+        var resultSpan = result.AsWritableSpan();
+        for (int b = 0; b < batchSize; b++)
+        {
+            var cleanVec = new Vector<T>(perElement);
+            var noiseVec = new Vector<T>(perElement);
+            for (int j = 0; j < perElement; j++)
+            {
+                cleanVec[j] = cleanSpan[b * perElement + j];
+                noiseVec[j] = noiseSpan[b * perElement + j];
+            }
+            var noised = AddNoise(cleanVec, noiseVec, timesteps[b]);
+            for (int j = 0; j < perElement; j++)
+                resultSpan[b * perElement + j] = noised[j];
+        }
+        return result;
+    }
+
     /// <inheritdoc />
     public virtual Vector<T> AddNoise(Vector<T> originalSample, Vector<T> noise, int timestep)
     {

@@ -433,7 +433,8 @@ public static class CompiledTapeTrainingStep<T>
         double maxGradNorm = 0.0,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null,
-        bool useBf16Moments = false)
+        bool useBf16Moments = false,
+        IReadOnlyList<Tensor<T>>? extraTensors = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
@@ -577,7 +578,7 @@ public static class CompiledTapeTrainingStep<T>
             // would otherwise drive the fused kernel's m/v buffers to update
             // the same parameter twice per step, breaking Adam's moment math.
             bool firstCollectThisLifecycle = _cachedParameters is null;
-            var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
+            var parameters = _cachedParameters ??= CollectDeduplicatedParametersWithExtras(layers, extraTensors);
             if (firstCollectThisLifecycle) RememberLayerSet(layers);
 
             // GPU-RESIDENCY (campaign M1): on the DirectGpu engine, make the parameters GPU-resident ONCE so
@@ -907,6 +908,39 @@ public static class CompiledTapeTrainingStep<T>
         {
             foreach (var p in layer.GetTrainableParameters())
             {
+                if (p is not null && seen.Add(p))
+                    result.Add(p);
+            }
+        }
+        return result.ToArray();
+    }
+
+    /// <summary>
+    /// Layer-carried parameters plus any extra raw trainable tensors the caller
+    /// wants tracked by the fused optimizer (e.g. GOGGLE's soft adjacency, CLAP's
+    /// learned temperature — trainable state that isn't naturally an ILayer).
+    /// Dedup is by <c>Tensor&lt;T&gt;</c> reference across BOTH sources, so an
+    /// extra tensor that also happens to be layer-carried is only registered once.
+    /// </summary>
+    private static Tensor<T>[] CollectDeduplicatedParametersWithExtras(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        IReadOnlyList<Tensor<T>>? extras)
+    {
+        var seen = new HashSet<Tensor<T>>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        var result = new List<Tensor<T>>();
+        foreach (var layer in layers)
+        {
+            foreach (var p in layer.GetTrainableParameters())
+            {
+                if (p is not null && seen.Add(p))
+                    result.Add(p);
+            }
+        }
+        if (extras is not null)
+        {
+            for (int i = 0; i < extras.Count; i++)
+            {
+                var p = extras[i];
                 if (p is not null && seen.Add(p))
                     result.Add(p);
             }

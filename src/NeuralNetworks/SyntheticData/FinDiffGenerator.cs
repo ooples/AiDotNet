@@ -420,40 +420,101 @@ public class FinDiffGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     private void TrainBatch(Matrix<T> data, int startRow, int endRow)
     {
-        for (int row = startRow; row < endRow; row++)
+        // Cache MultiSlotFusedStep across rows so the compiled plan is built
+        // once and replayed via slot-data refresh for subsequent rows. See
+        // ooples/AiDotNet#1846.
+        AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
+        try
         {
-            int t = _random.Next(_options.NumTimesteps);
-            var x0 = GetRow(data, row);
-            var noise = CreateStandardNormalVector(_dataWidth);
-
-            double sqrtAlphaBar = Math.Sqrt(_alphasCumprod[t]);
-            double sqrtOneMinusAlphaBar = Math.Sqrt(1.0 - _alphasCumprod[t]);
-
-            // Build noisy input: xt = sqrt(alpha_bar) * x0 + sqrt(1-alpha_bar) * noise
-            var xt = new Vector<T>(_dataWidth);
-            for (int j = 0; j < _dataWidth; j++)
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
+            AiDotNet.Tensors.Engines.Compilation.OptimizerType mfsOptType = default;
+            float mfsLr = 0f, mfsB1 = 0f, mfsB2 = 0f, mfsEps = 0f, mfsWd = 0f;
+            bool fusedEligible = false;
+            if (trainableParams.Length > 0)
             {
-                xt[j] = NumOps.FromDouble(
-                    sqrtAlphaBar * NumOps.ToDouble(x0[j]) +
-                    sqrtOneMinusAlphaBar * NumOps.ToDouble(noise[j]));
+                fusedEligible = NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                    _optimizer,
+                    out mfsOptType, out mfsLr, out mfsB1, out mfsB2,
+                    out mfsEps, out mfsWd, out _, out _);
             }
 
-            // Build target noise tensor
-            var targetNoise = new Tensor<T>([_dataWidth]);
-            for (int j = 0; j < _dataWidth; j++)
+            for (int row = startRow; row < endRow; row++)
             {
-                targetNoise[j] = noise[j];
+                int t = _random.Next(_options.NumTimesteps);
+                var x0 = GetRow(data, row);
+                var noise = CreateStandardNormalVector(_dataWidth);
+
+                double sqrtAlphaBar = Math.Sqrt(_alphasCumprod[t]);
+                double sqrtOneMinusAlphaBar = Math.Sqrt(1.0 - _alphasCumprod[t]);
+
+                // Build noisy input: xt = sqrt(alpha_bar) * x0 + sqrt(1-alpha_bar) * noise
+                var xt = new Vector<T>(_dataWidth);
+                for (int j = 0; j < _dataWidth; j++)
+                {
+                    xt[j] = NumOps.FromDouble(
+                        sqrtAlphaBar * NumOps.ToDouble(x0[j]) +
+                        sqrtOneMinusAlphaBar * NumOps.ToDouble(noise[j]));
+                }
+
+                // Build target noise tensor
+                var targetNoise = new Tensor<T>([_dataWidth]);
+                for (int j = 0; j < _dataWidth; j++)
+                {
+                    targetNoise[j] = noise[j];
+                }
+
+                // Create timestep embedding and build input tensor
+                var timeEmbed = CreateTimestepEmbedding(t);
+                int totalLen = xt.Length + timeEmbed.Length;
+                var input = new Tensor<T>([totalLen]);
+                for (int j = 0; j < xt.Length; j++) input[j] = xt[j];
+                for (int j = 0; j < timeEmbed.Length; j++) input[xt.Length + j] = timeEmbed[j];
+
+                // Preferred fused path: MultiSlotFusedStep with (packedInput, targetNoise)
+                // as persistent slots. Layers stay unchanged; the compiled plan replays
+                // the Layers forward per row with fresh slot data.
+                if (fusedEligible)
+                {
+                    multiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                    var slots = new[] { input, targetNoise };
+                    Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
+                    {
+                        var current = s[0];
+                        foreach (var layer in Layers) current = layer.Forward(current);
+                        return current;
+                    }
+                    Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
+                    {
+                        var diff = Engine.TensorSubtract(pred, s[1]);
+                        var sq = Engine.TensorMultiply(diff, diff);
+                        var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+                        return Engine.ReduceMean(sq, axes, keepDims: false);
+                    }
+                    if (multiSlotStep.TryStep(
+                            parameters: trainableParams,
+                            zeroGradAction: null,
+                            freshSlotData: slots,
+                            forward: ForwardFromSlots,
+                            computeLoss: ComputeLossFromSlots,
+                            optimizerType: mfsOptType,
+                            learningRate: mfsLr,
+                            beta1: mfsB1,
+                            beta2: mfsB2,
+                            epsilon: mfsEps,
+                            weightDecay: mfsWd,
+                            out T _))
+                    {
+                        continue;
+                    }
+                }
+
+                // Eager fallback: GANDALF pattern (forward -> loss -> backward -> update).
+                Train(input, targetNoise);
             }
-
-            // Create timestep embedding and build input tensor
-            var timeEmbed = CreateTimestepEmbedding(t);
-            int totalLen = xt.Length + timeEmbed.Length;
-            var input = new Tensor<T>([totalLen]);
-            for (int j = 0; j < xt.Length; j++) input[j] = xt[j];
-            for (int j = 0; j < timeEmbed.Length; j++) input[xt.Length + j] = timeEmbed[j];
-
-            // Use Train() method (GANDALF pattern: forward -> loss -> backward -> update)
-            Train(input, targetNoise);
+        }
+        finally
+        {
+            multiSlotStep?.Dispose();
         }
     }
 

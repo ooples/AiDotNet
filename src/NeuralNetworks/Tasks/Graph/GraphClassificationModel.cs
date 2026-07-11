@@ -733,6 +733,29 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
                 $"GraphClassificationModel tape-based training requires a LossFunctionBase<T> (one that "
                 + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
                 + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as CrossEntropyWithLogitsLoss.");
+
+        // GPU-RESIDENT fast path (float + DirectGpuTensorEngine + compilation + Adam-family
+        // optimizer). Routes forward + backward + optimizer step through the compiled fused plan
+        // so weights / activations / moments stay resident on the device — no per-op host<->device
+        // round-trip. Falls through to the eager tape+optimizer path on any failure (unsupported
+        // optimizer, non-compilable graph, etc). Mirrors NeuralNetworkBase.TrainWithFusedStep and
+        // TimeSeriesModelBase.TryFusedResidentStep — same seam, applied per Train() call because
+        // GraphClassificationModel.Train is a single-batch entry (not a training loop).
+        var trainableLayers = Layers
+            .Where(l => l is ITrainableLayer<T>).Cast<ITrainableLayer<T>>()
+            .ToList();
+        if (CanTrainOnGpu
+            && AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                trainableLayers, input, expectedOutput,
+                forward: Forward,
+                computeLoss: tapeLoss.ComputeTapeLoss,
+                optimizer: _optimizer,
+                out T fusedLoss))
+        {
+            LastLoss = fusedLoss;
+            return;
+        }
+
         using (var tape = new GradientTape<T>())
         {
             var logits = Forward(input);
@@ -750,6 +773,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
             LastLoss = lossValue;
         }
     }
+
 
     /// <summary>
     /// Gets metadata about this model for serialization and identification.

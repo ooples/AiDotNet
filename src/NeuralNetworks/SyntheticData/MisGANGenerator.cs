@@ -612,6 +612,43 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         // G_x is optimized against D_x using a mask drawn from G_m, so the data and
         // mask generators are trained jointly against the masked-data critic.
+        // GPU-RESIDENT: pack (dataNoise, maskNoise) into a single input; splitting
+        // inside the closure keeps both noise sources refreshed per replay.
+        var dataGenLayers = BuildDataGenLayerList();
+        var trainableDataGen = dataGenLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableDataGen.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        {
+            int embed = _options.EmbeddingDimension;
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> packed)
+            {
+                var dn = Engine.TensorSlice(packed, [0], [embed]);
+                var mn = Engine.TensorSlice(packed, [embed], [embed]);
+                var fakeRow = DataGeneratorForward(dn);
+                var fakeMask = MaskGeneratorForward(mn);
+                return DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, fakeMask), isTraining: true);
+            }
+            Tensor<T> Loss(Tensor<T> score, Tensor<T> _) => Engine.TensorNegate(ReduceToScalar(score));
+            bool fusedEngaged = false;
+            for (int i = batchStart; i < batchEnd; i++)
+            {
+                var dn = CreateStandardNormalVector(embed);
+                var mn = CreateStandardNormalVector(embed);
+                var packed = new Vector<T>(2 * embed);
+                for (int k = 0; k < embed; k++) packed[k] = dn[k];
+                for (int k = 0; k < embed; k++) packed[embed + k] = mn[k];
+                var packedTensor = new Tensor<T>(new[] { 2 * embed }, packed);
+                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableDataGen, packedTensor, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _dataGenOptimizer,
+                    out T _);
+                if (!ran) { if (!fusedEngaged) break; continue; }
+                fusedEngaged = true;
+            }
+            if (fusedEngaged) return;
+        }
+
         for (int i = batchStart; i < batchEnd; i++)
         {
             var dataNoise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
@@ -628,6 +665,29 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private void TrainMaskGeneratorStep(int batchStart, int batchEnd)
     {
+        // GPU-RESIDENT: per-sample loop; fused plan replays with fresh noise.
+        var maskGenLayers = BuildMaskGenLayerList();
+        var trainableMaskGen = maskGenLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableMaskGen.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        {
+            var target = new Tensor<T>(new[] { 1 });
+            Tensor<T> Fwd(Tensor<T> noise) => MaskDiscriminatorForward(MaskGeneratorForward(noise), isTraining: true);
+            Tensor<T> Loss(Tensor<T> score, Tensor<T> _) => Engine.TensorNegate(ReduceToScalar(score));
+            bool fusedEngaged = false;
+            for (int i = batchStart; i < batchEnd; i++)
+            {
+                var noiseTensor = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableMaskGen, noiseTensor, target,
+                    forward: Fwd, computeLoss: Loss,
+                    optimizer: _maskGenOptimizer,
+                    out T _);
+                if (!ran) { if (!fusedEngaged) break; continue; }
+                fusedEngaged = true;
+            }
+            if (fusedEngaged) return;
+        }
+
         for (int i = batchStart; i < batchEnd; i++)
         {
             var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));

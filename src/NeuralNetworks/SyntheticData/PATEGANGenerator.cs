@@ -593,6 +593,53 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     private void TrainGeneratorStep(int batchSize)
     {
+        // GPU-RESIDENT fast path — every iteration runs the same forward graph
+        // (noise → generator → student → BCE-to-1), so the fused plan compiles
+        // once on the first call and replays across the remaining iterations
+        // with refreshed noise per step (see CompiledTapeTrainingStep's persistent-
+        // input mechanism). Falls through to the per-sample eager loop on any
+        // failure. Student's params aren't in the trainable set so its forward
+        // stays frozen — only the generator's layers get moment updates.
+        var generatorLayers = BuildGeneratorLayerList();
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        {
+            // The target tensor is unused (BceLoss takes a fixed scalar target=1.0)
+            // but TryStepWithFusedOptimizer requires one; pass a 1-element scalar
+            // that the loss closure ignores.
+            var targetPlaceholder = new Tensor<T>(new[] { 1 });
+            targetPlaceholder[0] = NumOps.One;
+
+            Tensor<T> ForwardG(Tensor<T> noiseInput)
+            {
+                var noiseVec = noiseInput.ToVector();
+                var fake = GeneratorForward(noiseVec);
+                return StudentForward(fake, isTraining: true);
+            }
+            Tensor<T> ComputeGenLoss(Tensor<T> studentScore, Tensor<T> _) => BceLoss(studentScore, 1.0);
+
+            bool fusedEngaged = false;
+            for (int i = 0; i < batchSize; i++)
+            {
+                var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
+                var noiseTensor = new Tensor<T>(new[] { noise.Length }, noise);
+                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                    trainableGenLayers, noiseTensor, targetPlaceholder,
+                    forward: ForwardG, computeLoss: ComputeGenLoss,
+                    optimizer: _generatorOptimizer,
+                    out T _);
+                if (!ran)
+                {
+                    // First-step compile failure → abandon and fall back to eager for the rest of the batch.
+                    if (!fusedEngaged) break;
+                    // Compiled earlier but this step couldn't — skip.
+                    continue;
+                }
+                fusedEngaged = true;
+            }
+            if (fusedEngaged) return;
+        }
+
         for (int i = 0; i < batchSize; i++)
         {
             var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
