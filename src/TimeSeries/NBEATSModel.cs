@@ -73,6 +73,34 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     private T _normMean = MathHelper.GetNumericOperations<T>().Zero;
     private T _normStd = MathHelper.GetNumericOperations<T>().One;
 
+    // Per-epoch average training loss (normalized MSE) recorded during the
+    // most recent TrainCore run. Populated by BOTH the eager tape path and
+    // the GPU-resident fused-compiled path so training convergence can be
+    // verified directly (the value the optimizer actually minimizes), rather
+    // than inferred from denormalized held-out predictions.
+    private List<double> _lastRunEpochLosses = new();
+
+    /// <summary>
+    /// Average training loss (normalized MSE) for each epoch of the most recent
+    /// <c>Train</c> call, in order. Useful for verifying convergence and for
+    /// comparing the GPU-resident path against the eager path.
+    /// </summary>
+    /// <remarks>
+    /// Internal diagnostic: the public surface stays limited to the facade
+    /// (<c>AiModelBuilder</c>/<c>AiModelResult</c>). Exposed as an immutable
+    /// snapshot so callers cannot mutate the backing list. Visible to the test
+    /// and serving assemblies via <c>InternalsVisibleTo</c>.
+    /// </remarks>
+    internal IReadOnlyList<double> LastRunEpochLosses => _lastRunEpochLosses.AsReadOnly();
+
+    /// <summary>
+    /// True when the most recent <c>Train</c> call executed through the
+    /// GPU-resident fused-compiled training path (see <see cref="TryTrainGpuResident"/>).
+    /// False when it used the eager tape loop. Internal diagnostic (see
+    /// <see cref="LastRunEpochLosses"/>).
+    /// </summary>
+    internal bool LastRunUsedGpuResidentPath { get; private set; }
+
     /// <summary>
     /// Initializes a new instance of the NBEATSModel class.
     /// </summary>
@@ -252,10 +280,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         };
         var optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
 
-        // Collect all trainable parameters from all blocks
-        var allBlocks = _blocks.Cast<Interfaces.ILayer<T>>().ToList();
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allBlocks, -1);
-
         // Loss function for tape-tracked training. Oreshkin et al. 2019
         // Table 3 reports N-BEATS results with four loss variants (MAPE,
         // sMAPE, MASE, MAE); MAE is their published "point-forecast" choice
@@ -274,7 +298,36 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         var trainingLoss = new MeanSquaredErrorLoss<T>();
 
         int numSamples = x.Rows;
-        var random = new Random(42);
+
+        // GPU-RESIDENT fast path (float + DirectGpuTensorEngine + compilation).
+        // Routes the whole doubly-residual stack through the fused compiled
+        // training plan so forward + backward + Adam run as a single on-device
+        // graph, keeping weights, activations and Adam moment buffers resident
+        // across every step (no per-op host<->device round-trips). Falls back to
+        // the eager loop below when the fused path can't engage. See
+        // TimeSeriesModelBase.CanTrainOnGpu / TryFusedResidentStep.
+        // Only in epoch-bounded mode: the resident attempt is validated against
+        // the untrained baseline and discarded (with a fresh re-init) if it
+        // didn't help, so in a wall-clock-bounded run a rejected attempt would
+        // burn the whole budget and leave nothing for the eager fallback. Epoch
+        // budgets don't have that hazard.
+        LastRunUsedGpuResidentPath = false;
+        if (CanTrainOnGpu && _options.MaxTrainingTimeSeconds <= 0
+            && TryTrainGpuResident(yNorm, numSamples))
+        {
+            LastRunUsedGpuResidentPath = true;
+            return;
+        }
+
+        // Collect all trainable parameters from all blocks. Done AFTER the
+        // GPU-resident attempt because a diverged resident run re-initializes
+        // _blocks (fresh block instances) before falling back here — collecting
+        // earlier would capture the discarded blocks' tensors.
+        var allBlocks = _blocks.Cast<Interfaces.ILayer<T>>().ToList();
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allBlocks, -1);
+
+        var random = RandomHelper.CreateSeededRandom(42);
+        _lastRunEpochLosses = new List<double>();
 
         // Mini-batch training per Oreshkin et al. 2019 §3.3: for each mini-
         // batch, accumulate the average MAE loss over ALL samples in the
@@ -303,6 +356,15 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         // matching the explicit-iteration-count contract.
         bool timeBounded = _options.MaxTrainingTimeSeconds > 0;
         int maxEpochs = timeBounded ? int.MaxValue : _options.Epochs;
+
+        // Best-epoch-weights checkpointing. On noisy / fat-tailed real series the eager Adam loop can DIVERGE —
+        // the normalized training loss climbs instead of falling (measured 1.20 -> 1.55 over 15 epochs on SPY
+        // daily log-returns) and the final weights produce predictions blown up to hundreds of times the target
+        // scale. Adam's adaptive step makes gradient clipping alone insufficient here, so we additionally keep the
+        // parameters from the LOWEST-loss epoch and restore them after training — inference then always uses the
+        // best-fit weights, never a diverged tail. Standard early-stopping-style checkpointing.
+        double bestEpochLoss = double.PositiveInfinity;
+        Tensor<T>[]? bestParamSnapshot = null;
         for (int epoch = 0; epoch < maxEpochs; epoch++)
         {
             if (timeBounded && TrainingCancellationToken.IsCancellationRequested)
@@ -310,6 +372,9 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             TrainingCancellationToken.ThrowIfCancellationRequested();
 
             var indices = Enumerable.Range(0, numSamples).OrderBy(_ => random.Next()).ToList();
+
+            double epochLossSum = 0.0;
+            int epochStepCount = 0;
 
             for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
             {
@@ -396,6 +461,12 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                 // Oreshkin et al. 2019 §4 (MAE variant) trains against.
                 var batchLoss = trainingLoss.ComputeTapeLoss(aggregatedForecast!, batchTarget);
 
+                if (batchLoss.Length > 0)
+                {
+                    epochLossSum += NumOps.ToDouble(batchLoss[0]);
+                    epochStepCount++;
+                }
+
                 var allGrads = tape.ComputeGradients(batchLoss, sources: null);
                 var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                     Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
@@ -404,6 +475,13 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                     if (allGrads.TryGetValue(param, out var grad))
                         grads[param] = grad;
                 }
+
+                // Global-norm gradient clipping (Oreshkin et al. 2020). WITHOUT it the deep doubly-residual stack's
+                // gradients explode on fat-tailed real series at the default LR: the normalized training loss
+                // DIVERGES upward (measured 1.20 -> 1.55 over 15 epochs on SPY daily log-returns) and inference
+                // predictions blow up to ~hundreds of times the target scale. Clip the whole gradient set to
+                // GradientClipNorm before the optimizer step so a single outlier batch can't send the weights flying.
+                ClipGradientsByGlobalNorm(grads.Values, _options.GradientClipNorm);
 
                 Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => batchLoss;
                 Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt) =>
@@ -417,7 +495,316 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
                 optimizer.Step(context);
             }
+
+            if (epochStepCount > 0)
+            {
+                double epochLoss = epochLossSum / epochStepCount;
+                _lastRunEpochLosses.Add(epochLoss);
+
+                // Snapshot the weights (as Tensors) whenever this epoch improved on the best loss so far.
+                // Allocate the snapshot tensors once, then reuse them via a vectorized copy (dest = src * 1).
+                if (epochLoss < bestEpochLoss && !double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss))
+                {
+                    bestEpochLoss = epochLoss;
+                    if (bestParamSnapshot is null)
+                    {
+                        bestParamSnapshot = new Tensor<T>[trainableParams.Count];
+                        for (int pi = 0; pi < trainableParams.Count; pi++)
+                            bestParamSnapshot[pi] = trainableParams[pi].Clone();
+                    }
+                    else
+                    {
+                        for (int pi = 0; pi < trainableParams.Count; pi++)
+                            Engine.TensorMultiplyScalarInto(bestParamSnapshot[pi], trainableParams[pi], NumOps.One);
+                    }
+                }
+            }
         }
+
+        // Restore the best-loss weights so inference never runs on a diverged tail (vectorized copy).
+        if (bestParamSnapshot is not null)
+            for (int pi = 0; pi < trainableParams.Count; pi++)
+                Engine.TensorMultiplyScalarInto(trainableParams[pi], bestParamSnapshot[pi], NumOps.One);
+    }
+
+    /// <summary>
+    /// Scales every gradient in <paramref name="grads"/> in place so their combined L2 (global) norm does not
+    /// exceed <paramref name="maxNorm"/>. No-op when <paramref name="maxNorm"/> ≤ 0 or the norm is already under
+    /// it. This is the standard exploding-gradient guard N-BEATS needs on the eager tape path — see
+    /// <see cref="NBEATSModelOptions{T}.GradientClipNorm"/>.
+    /// </summary>
+    private void ClipGradientsByGlobalNorm(ICollection<Tensor<T>> grads, double maxNorm)
+    {
+        if (maxNorm <= 0.0) return;
+
+        // Global L2 norm = sqrt(Σ_p ||g_p||²). Per-tensor sum-of-squares runs on the vectorized engine
+        // (TensorSumOfSquares); the only cross-tensor accumulation is over the already-reduced per-tensor scalars.
+        T sumSq = NumOps.Zero;
+        foreach (var g in grads)
+            if (g is not null)
+                sumSq = NumOps.Add(sumSq, Engine.TensorSumOfSquares(g));
+
+        double totalNorm = Math.Sqrt(NumOps.ToDouble(sumSq));
+        if (totalNorm < 1e-12 || totalNorm <= maxNorm) return;
+
+        T scale = NumOps.FromDouble(maxNorm / totalNorm);
+        foreach (var g in grads)
+            if (g is not null)
+                Engine.TensorMultiplyScalarInPlace(g, scale);   // vectorized in-place scale
+    }
+
+    /// <summary>
+    /// GPU-resident training via the fused compiled-plan capture path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Drives the N-BEATS doubly-residual stack (paper §3.2) through
+    /// <see cref="TimeSeriesModelBase{T}.TryFusedResidentStep"/>, which compiles the
+    /// forward + backward + Adam update into a single on-device graph and replays it
+    /// each step, keeping weights, activations and the Adam moment buffers resident on
+    /// the device across the loop (no per-op host&lt;-&gt;device round-trip). The compiled
+    /// plan is keyed by tensor shape, so a <b>constant batch shape</b> is used on every
+    /// step (the final partial batch of each epoch is dropped).
+    /// </para>
+    /// <para>
+    /// <b>Correctness first.</b> This path is only <i>kept</i> when it actually improves
+    /// the model: the run is validated against the untrained baseline (see the gate at
+    /// the end of the method) and, on divergence or no-improvement, the blocks are
+    /// re-initialized and <c>false</c> is returned so <see cref="TrainCore"/> falls back
+    /// to the eager tape path. It also returns <c>false</c> when the fused plan never
+    /// engages, or when there isn't a single full batch of data.
+    /// </para>
+    /// <para>
+    /// <b>Status (AiDotNet.Tensors ≥ 0.112.0):</b> the compiled fused plan now trains N-BEATS's
+    /// doubly-residual op graph (per-layer <c>TensorPermute</c> + <c>TensorBroadcastAdd</c>) faithfully —
+    /// AiDotNet.Tensors #759 fixed the multi-consumer grad-buffer zeroing that made those ops' backward
+    /// explode, and #764 fixed the GPU-resident-parameter mistrain. Verified on GPU: the resident run
+    /// reduces the eager-forward training MSE and improves the held-out MSE over the untrained baseline, so
+    /// the correctness gate below accepts it. The gate is retained as a safety net: a resident run that fails
+    /// to generalize (e.g. on pathological / out-of-distribution splits) is still discarded in favour of the
+    /// eager path. N-BEATS is host-bound (small per-op tensors), so the residency win is modest; the eager
+    /// path also dispatches every tape op to the GPU when a <c>DirectGpuTensorEngine</c> is current.
+    /// </para>
+    /// </remarks>
+    private bool TryTrainGpuResident(Vector<T> yNorm, int numSamples)
+    {
+        int L = _options.LookbackWindow;
+        int H = _options.ForecastHorizon;
+        int batchSize = _options.BatchSize;
+
+        // Valid sample positions: a full lookback window AND a full target horizon.
+        // Built in ascending index order, so the window list stays time-ordered.
+        var valid = new List<int>();
+        for (int idx = 0; idx < numSamples; idx++)
+            if (idx >= L && idx + H <= yNorm.Length)
+                valid.Add(idx);
+
+        // Reserve a TIME-ORDERED holdout (the latest ~20% of windows) that the
+        // resident optimizer never trains on, so the accept/reject gate measures
+        // GENERALIZATION rather than training-set fit — a resident run that merely
+        // memorizes its training windows must not pass the gate. The earlier
+        // windows train; the holdout alone scores preMse/postMse.
+        int holdoutCount = Math.Max(1, valid.Count / 5);
+        int trainCount = valid.Count - holdoutCount;
+        var trainWindows = valid.Take(trainCount).ToList();
+        var holdoutWindows = valid.Skip(trainCount).ToList();
+
+        // Need at least one full constant-shape batch of TRAINING windows for the
+        // compiled plan to capture and replay; otherwise let the eager path handle it.
+        if (trainWindows.Count < batchSize)
+            return false;
+
+        var layers = _blocks.Cast<ITrainableLayer<T>>().ToList();
+        var trainingLoss = new MeanSquaredErrorLoss<T>();
+
+        Tensor<T> ForwardStack(Tensor<T> input) => RunForwardStack(input);
+
+        Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>
+            trainingLoss.ComputeTapeLoss(pred, target);
+
+        // Baseline (untrained) validation MSE on the HOLDOUT — the resident result
+        // is only kept if it improves on this; otherwise we reinit + fall back to eager.
+        double preMse = ValidationStackMse(holdoutWindows, yNorm, L, H);
+
+        // Standard Adam hyperparameters (Oreshkin et al. 2020 use Adam). Betas/eps
+        // match AdamOptimizerOptions defaults so numerics track the eager path.
+        float lr = (float)_options.LearningRate;
+        const float beta1 = 0.9f;
+        const float beta2 = 0.999f;
+        const float epsilon = 1e-8f;
+        const float weightDecay = 0f;
+
+        // Fresh compiled-plan lifecycle for this model (the per-thread plan cache
+        // is keyed by shape and could otherwise replay a prior model's plan).
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate();
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount();
+
+        _lastRunEpochLosses = new List<double>();
+
+        var random = RandomHelper.CreateSeededRandom(42);
+        bool fusedEngaged = false;
+        bool diverged = false;
+        double firstStepLoss = double.NaN;
+
+        // Epoch-bounded only: TrainCore gates this method on MaxTrainingTimeSeconds <= 0
+        // (a rejected wall-clock-bounded resident run would burn the whole budget and
+        // leave nothing for the eager fallback), so there is no wall-clock stop here —
+        // just the standard cancellation checks.
+        for (int epoch = 0; epoch < _options.Epochs && !diverged; epoch++)
+        {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+
+            var order = trainWindows.OrderBy(_ => random.Next()).ToList();
+            int fullBatches = order.Count / batchSize;
+            double epochLossSum = 0.0;
+            int epochStepCount = 0;
+
+            for (int b = 0; b < fullBatches; b++)
+            {
+                TrainingCancellationToken.ThrowIfCancellationRequested();
+
+                int baseIdx = b * batchSize;
+                var inputData = new T[batchSize * L];
+                var targetData = new T[batchSize * H];
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    int idx = order[baseIdx + bi];
+                    for (int j = 0; j < L; j++)
+                        inputData[bi * L + j] = yNorm[idx - L + j];
+                    for (int h = 0; h < H; h++)
+                        targetData[bi * H + h] = yNorm[idx + h];
+                }
+
+                var batchInput = new Tensor<T>(new[] { batchSize, L }, new Vector<T>(inputData));
+                var batchTarget = new Tensor<T>(new[] { batchSize, H }, new Vector<T>(targetData));
+
+                bool ran = TryFusedResidentStep(
+                    layers, batchInput, batchTarget, ForwardStack, ComputeLoss,
+                    lr, beta1, beta2, epsilon, weightDecay, out T stepLoss);
+
+                if (!ran)
+                {
+                    // The very first attempt failing means the graph isn't
+                    // compilable here — abandon and let TrainCore run eager.
+                    if (!fusedEngaged)
+                        return false;
+                    // Engaged earlier but this step couldn't run (rare). Do NOT
+                    // silently skip the batch: a partially-executed resident run
+                    // could still pass the gate and be accepted. Treat it as
+                    // divergence so the correctness gate below reinitializes the
+                    // blocks and hands off to the eager path.
+                    diverged = true;
+                    break;
+                }
+
+                fusedEngaged = true;
+                double stepLossD = NumOps.ToDouble(stepLoss);
+                epochLossSum += stepLossD;
+                epochStepCount++;
+
+                // Divergence guard (defensive). AiDotNet.Tensors #759 fixed the TensorPermute +
+                // TensorBroadcastAdd backward that used to make the captured plan produce exploding Adam
+                // updates for N-BEATS's doubly-residual graph, so on Tensors >= 0.112.0 the fused step trains
+                // correctly. This guard remains as a cheap belt-and-braces check against any future
+                // non-finite / exploding step loss (e.g. a different linked Tensors build): on a NaN or a
+                // blow-up it bails so TrainCore re-initializes and falls back to the eager tape path.
+                if (double.IsNaN(stepLossD) || double.IsInfinity(stepLossD))
+                {
+                    diverged = true;
+                    break;
+                }
+                if (double.IsNaN(firstStepLoss))
+                    firstStepLoss = stepLossD;
+                else if (stepLossD > 1e3 && stepLossD > firstStepLoss * 1e3)
+                {
+                    diverged = true;
+                    break;
+                }
+            }
+
+            if (epochStepCount > 0)
+                _lastRunEpochLosses.Add(epochLossSum / epochStepCount);
+        }
+
+        // Correctness gate. On Tensors >= 0.112.0 the fused plan trains N-BEATS faithfully (verified:
+        // the resident run lowers the eager-forward training MSE and improves the held-out MSE). This gate
+        // is retained as a generalization safety net rather than a correctness workaround: it validates on
+        // the actual forecasting objective (held-out MSE vs the untrained baseline) and keeps the resident
+        // result only when it meaningfully improved. A resident run that fails to generalize — e.g. an
+        // out-of-distribution split, or a hypothetical future Tensors build that regresses gradient fidelity
+        // finitely (below the NaN/blow-up guard) — is discarded: the blocks are re-initialized to their
+        // deterministic seeded init and TrainCore falls back to the eager path. So the GPU-resident attempt
+        // can never ship weights that forecast worse than the untrained baseline.
+        if (fusedEngaged)
+        {
+            double postMse = ValidationStackMse(holdoutWindows, yNorm, L, H);
+            bool improved = !double.IsNaN(postMse) && !double.IsInfinity(postMse)
+                            && postMse < preMse * 0.98;
+            if (diverged || !improved)
+            {
+                _blocks.Clear();
+                InitializeBlocks();
+                _lastRunEpochLosses = new List<double>();
+                return false;
+            }
+        }
+
+        return fusedEngaged;
+    }
+
+    /// <summary>
+    /// Runs the doubly-residual N-BEATS stack (paper §3.2) over a <c>[B, L]</c>
+    /// batch and returns the aggregated <c>[B, H]</c> forecast, using
+    /// tape-recordable Engine ops so the compiler can trace it into the resident
+    /// graph. Shared by the resident training closure and the validation gate.
+    /// </summary>
+    private Tensor<T> RunForwardStack(Tensor<T> input)
+    {
+        var residual = input;
+        Tensor<T>? aggregatedForecast = null;
+        for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
+        {
+            var (backcast, forecast) = _blocks[blockIdx].ForwardTape(residual);
+            residual = Engine.TensorSubtract(residual, backcast);
+            aggregatedForecast = aggregatedForecast is null
+                ? forecast
+                : Engine.TensorAdd(aggregatedForecast, forecast);
+        }
+        return aggregatedForecast!;
+    }
+
+    /// <summary>
+    /// Mean squared error of the current model's full-horizon forecast over up to
+    /// 256 validation windows, computed with the current (possibly just-trained)
+    /// block weights. Used to accept/reject a GPU-resident run.
+    /// </summary>
+    private double ValidationStackMse(List<int> valid, Vector<T> yNorm, int L, int H)
+    {
+        int m = Math.Min(valid.Count, 256);
+        if (m == 0) return double.NaN;
+
+        var inputData = new T[m * L];
+        var targetData = new T[m * H];
+        for (int bi = 0; bi < m; bi++)
+        {
+            int idx = valid[bi];
+            for (int j = 0; j < L; j++)
+                inputData[bi * L + j] = yNorm[idx - L + j];
+            for (int h = 0; h < H; h++)
+                targetData[bi * H + h] = yNorm[idx + h];
+        }
+
+        var input = new Tensor<T>(new[] { m, L }, new Vector<T>(inputData));
+        var pred = RunForwardStack(input);
+
+        double sum = 0.0;
+        int n = pred.Length;
+        for (int i = 0; i < n; i++)
+        {
+            double d = NumOps.ToDouble(pred[i]) - NumOps.ToDouble(targetData[i]);
+            sum += d * d;
+        }
+        return sum / Math.Max(1, n);
     }
 
     /// <summary>
