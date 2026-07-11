@@ -216,6 +216,15 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Validate the total length BEFORE slicing so a short vector throws the informative
+        // ArgumentException below instead of a generic ArgumentOutOfRangeException from Slice()
+        // mid-loop (mirrors DepthwiseConv1DLayer.SetParameters + SetExtraParameters).
+        long expected = ParameterCount;
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters for CitrinetBlockLayer, but got {parameters.Length}.");
+        }
         int offset = 0;
         foreach (var l in TrainableSubLayers())
         {
@@ -223,11 +232,6 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
             var slice = new Vector<T>(parameters.AsSpan().Slice(offset, len).ToArray());
             l.SetParameters(slice);
             offset += len;
-        }
-        if (offset != parameters.Length)
-        {
-            throw new ArgumentException(
-                $"Expected {offset} parameters for CitrinetBlockLayer, but got {parameters.Length}.");
         }
     }
 

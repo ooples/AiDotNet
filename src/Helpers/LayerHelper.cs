@@ -22764,8 +22764,8 @@ public static class LayerHelper<T>
     /// mega-blocks at constant width <c>C</c>, each with <paramref name="subBlocksPerBlock"/>
     /// time-channel separable sub-blocks (depthwise-temporal + pointwise-channel + BN) plus a
     /// squeeze-and-excitation block and a residual skip. Kernel sizes grow across the stack (5, 7, 9,
-    /// … capped at 39, per the paper), and stride-2 subsampling is applied at two group boundaries
-    /// (~8× total temporal downsampling as in the paper).</item>
+    /// … capped at 39, per the paper), and stride-2 subsampling is applied at three group boundaries
+    /// (8× total temporal downsampling as in the paper).</item>
     /// <item><b>Epilogue</b>: a 1×1 pointwise conv + BN + ReLU.</item>
     /// <item><b>CTC head</b>: a 1×1 pointwise conv projecting to <paramref name="vocabSize"/> per-frame
     /// sub-word logits.</item>
@@ -22775,6 +22775,12 @@ public static class LayerHelper<T>
     /// Citrinet's three defining features. This builder is Citrinet-specific and does NOT replace the
     /// generic <see cref="CreateDefaultDeepCNNCTCLayers"/> (still used by ContextNet).
     /// </para>
+    /// <para><b>For Beginners:</b> This assembles the layer stack for a Citrinet speech-recognition
+    /// encoder — the part that turns an audio spectrogram into per-frame character/sub-word scores.
+    /// It stacks many small "separable" 1-D convolution blocks (cheap convolutions that process time
+    /// and channels in two steps) with skip connections, gradually shrinking the time axis by 8×, then
+    /// projects to a vocabulary of output tokens. You normally never call this directly — the
+    /// <c>NeMoCitrinet</c> model builds itself from it.</para>
     /// </remarks>
     /// <param name="encoderDim">Encoder channel width <c>C</c> (e.g. 512 for Citrinet-512).</param>
     /// <param name="numMegaBlocks">Number of residual mega-blocks (Citrinet-512 uses 23).</param>
@@ -22783,6 +22789,8 @@ public static class LayerHelper<T>
     /// <param name="vocabSize">Sub-word vocabulary size for the CTC head.</param>
     /// <param name="dropoutRate">Dropout applied inside each mega-block.</param>
     /// <param name="seReductionRatio">Squeeze-and-excitation reduction ratio.</param>
+    /// <returns>The ordered Citrinet encoder layer sequence (prologue → mega-block body → epilogue →
+    /// CTC head), ready to feed into a <see cref="NeuralNetworks.NeuralNetworkBase{T}"/> model.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultCitrinetLayers(
         int encoderDim = 512,
         int numMegaBlocks = 23,
@@ -22801,14 +22809,16 @@ public static class LayerHelper<T>
         yield return new Conv1DLayer<T>(encoderDim, kernelSize: 5, dilation: 1, stride: 1, padding: 2, activation: identityActivation);
         yield return new BatchNormalizationLayer<T>(encoderDim);
 
-        // Body: residual mega-blocks. Kernel grows across the stack; two stride-2 subsampling points
-        // (~1/3 and ~2/3 through) give ~8× temporal downsampling as in the paper.
-        int subsample1 = System.Math.Max(1, numMegaBlocks / 3);
-        int subsample2 = System.Math.Max(subsample1 + 1, (2 * numMegaBlocks) / 3);
+        // Body: residual mega-blocks. Kernel grows across the stack; THREE stride-2 subsampling points
+        // (~1/4, ~1/2, ~3/4 through) give the paper's 8× (2³) temporal downsampling (Majumdar et al.
+        // 2021) — two stride-2 points would only yield 4×.
+        int subsample1 = System.Math.Max(1, numMegaBlocks / 4);
+        int subsample2 = System.Math.Max(subsample1 + 1, numMegaBlocks / 2);
+        int subsample3 = System.Math.Max(subsample2 + 1, (3 * numMegaBlocks) / 4);
         for (int b = 0; b < numMegaBlocks; b++)
         {
             int kernelSize = System.Math.Min(5 + 2 * b, 39);
-            int stride = (b == subsample1 || b == subsample2) ? 2 : 1;
+            int stride = (b == subsample1 || b == subsample2 || b == subsample3) ? 2 : 1;
             yield return new CitrinetBlockLayer<T>(
                 channels: encoderDim,
                 kernelSize: kernelSize,
@@ -22819,9 +22829,13 @@ public static class LayerHelper<T>
                 seed: 1009 + b * 131);
         }
 
-        // Epilogue: 1×1 pointwise conv + BN + ReLU.
-        yield return new Conv1DLayer<T>(encoderDim, encoderDim, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: reluActivation);
+        // Epilogue: 1×1 pointwise conv + BN + ReLU. Keep the conv/BN linear (identity activation) and
+        // apply ReLU AFTER BatchNorm via a dedicated ActivationLayer — baking ReLU into the conv would
+        // make BN normalize already-clipped (non-negative) activations, the non-standard Conv->ReLU->BN
+        // order (the rest of this file does Conv(identity)->BN->ActivationLayer for Conv->BN->ReLU).
+        yield return new Conv1DLayer<T>(encoderDim, encoderDim, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: identityActivation);
         yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new ActivationLayer<T>(reluActivation);
 
         // CTC head: 1×1 pointwise conv to per-frame sub-word logits [B, vocabSize, T'].
         yield return new Conv1DLayer<T>(encoderDim, vocabSize, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: identityActivation);

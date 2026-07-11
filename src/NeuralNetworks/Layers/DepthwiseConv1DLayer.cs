@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">Numeric type (float / double).</typeparam>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 3")]
+[LayerProperty(NormalizesInput = false, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 3")]
 public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
 {
     private readonly int _channels;
