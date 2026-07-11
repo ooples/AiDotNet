@@ -466,7 +466,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+        var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(EffectiveOutputShape, rng), rng);
 
         // Measure initial loss (model's objective — MSE for most families, the model's own loss for
         // raw-logit cross-entropy LMs where MSE is meaningless; see MeasureLoss).
@@ -1106,13 +1106,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (TrainingInvariantsNotApplicable(network1)) return;
 
         var input = CreateRandomTensor(InputShape, rng1);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng1);
+        var target = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(EffectiveOutputShape, rng1), rng1);
         var input2 = CreateRandomTensor(InputShape, rng2);
         // Use the CreateRandomTargetTensor hook so type-constrained
         // target families (NER + CRF) get legal labels — matches the
         // sibling assignment two lines above and the rationale at
-        // line 466/696.
-        var target2 = CreateRandomTargetTensor(EffectiveOutputShape, rng2);
+        // line 466/696. Softmax-CE models additionally get a well-posed
+        // (one-hot, sums-to-1) target so "more training doesn't degrade"
+        // is measured against a reachable objective.
+        var target2 = MakeTargetWellPosedForLoss(network1, CreateRandomTargetTensor(EffectiveOutputShape, rng2), rng2);
 
         // Run a probe Predict on network1 BEFORE cloning so any lazy
         // layers (PyTorch-style LazyConv2d / FullyConnectedLayer's lazy
@@ -1682,6 +1684,34 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return ConvertToDouble(ce.CalculateLoss(predicted, actual));
         }
         return ComputeMSE(output, target);
+    }
+
+    /// <summary>
+    /// Returns a target that is well-posed for the model's loss. A model whose loss is softmax
+    /// <see cref="AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss{T}"/> (segmentation heads,
+    /// classifiers) needs a valid probability distribution as its target — the softmax output
+    /// sums to 1, so a raw random target (which does not) leaves an unreachable loss floor and
+    /// makes "training reduces loss" ill-posed. Replace it with a single-element one-hot over the
+    /// flattened output (sums to 1), which softmax-CE can actually descend. This mirrors the
+    /// legal-label handling the NER/CRF test bases already do for their type-constrained targets.
+    /// Non-CE models keep their (MSE-appropriate) raw target unchanged.
+    /// </summary>
+    protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
+    {
+        // Scoped to softmax-CE SEGMENTATION heads (dense per-pixel class logits). Other
+        // CrossEntropyWithLogitsLoss families (LMs/classifiers) already receive appropriate
+        // targets via their own paths, and narrowing the guard keeps this from perturbing
+        // currently-green models.
+        if (target.Length > 0
+            && network is AiDotNet.Interfaces.ISegmentationModel<T>
+            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+        {
+            var oneHot = new Tensor<T>(target.Shape.ToArray());
+            oneHot.Data.Span[rng.Next(target.Length)] = NumOps.One;
+            return oneHot;
+        }
+        return target;
     }
 
     /// <summary>
