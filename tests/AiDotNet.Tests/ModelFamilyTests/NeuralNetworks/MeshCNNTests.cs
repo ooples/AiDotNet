@@ -25,9 +25,13 @@ public class MeshCNNTests : NeuralNetworkModelTestBase<float>
     // short (50-iter) run, after which the long (200-iter) run oscillates within the
     // Dropout + Adam-past-convergence noise band (~4e-4 drift observed) rather than
     // strictly decreasing — not divergence (LossStrictlyDecreases confirms it decreases).
-    // Widen the non-degradation tolerance past that stochastic band; the default 1e-4 is
-    // calibrated for deterministic (dropout-free) heads.
-    protected override double MoreDataTolerance => 5e-3;
+    //
+    // Tolerance calibrated at 1e-3: ~2.5× the observed ~4e-4 stochastic drift band,
+    // enough headroom to swallow Dropout-mask/Adam-past-convergence noise without also
+    // swallowing genuine regressions. Was 5e-3 (12.5× headroom), which could let a real
+    // training regression pass. LossStrictlyDecreases still catches divergence from the
+    // other direction, so this is the "no significant increase" complement.
+    protected override double MoreDataTolerance => 1e-3;
 
     /// <summary>
     /// Creates a simple circular edge adjacency matrix for testing.

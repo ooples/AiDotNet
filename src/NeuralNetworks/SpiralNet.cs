@@ -484,7 +484,10 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     public int PredictClass(Tensor<T> meshFeatures, int[,] meshSpiralIndices)
     {
         SetSpiralIndices(meshSpiralIndices);
-        var output = Forward(meshFeatures);
+        // Route through Predict so BatchNorm/Dropout run in evaluation mode.
+        // Forward() would leave them in training mode, producing input-independent
+        // outputs at inference time (same bug the Predict override already fixes).
+        var output = Predict(meshFeatures);
 
         var outputArray = output.ToArray();
         int predictedClass = 0;
@@ -712,7 +715,8 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     public Vector<T> PredictProbabilities(Tensor<T> meshFeatures, int[,] meshSpiralIndices)
     {
         SetSpiralIndices(meshSpiralIndices);
-        var output = Forward(meshFeatures);
+        // Route through Predict so BatchNorm/Dropout run in evaluation mode.
+        var output = Predict(meshFeatures);
 
         var softmax = new SoftmaxActivation<T>();
         return softmax.Activate(output.ToVector());

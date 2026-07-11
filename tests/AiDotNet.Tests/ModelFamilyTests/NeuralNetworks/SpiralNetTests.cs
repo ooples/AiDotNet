@@ -36,10 +36,14 @@ public class SpiralNetTests : NeuralNetworkModelTestBase<float>
     // to a ~0.35 plateau by the short (50-iter) run, after which the long (200-iter)
     // run oscillates within the dropout + Adam-past-convergence noise band rather than
     // strictly decreasing — an observed drift of ~1.5e-3, not divergence
-    // (LossStrictlyDecreasesOnMemorizationTask confirms the loss does decrease). Widen
-    // the non-degradation tolerance to cover that stochastic band; the default 1e-4 is
-    // calibrated for deterministic (dropout-free) heads.
-    protected override double MoreDataTolerance => 5e-3;
+    // (LossStrictlyDecreasesOnMemorizationTask confirms the loss does decrease).
+    //
+    // Tolerance calibrated at 2e-3: ~1.3× the observed ~1.5e-3 stochastic drift band —
+    // enough headroom to swallow Dropout(0.5)-mask/Adam-past-convergence noise without
+    // also swallowing genuine regressions. Was 5e-3 (~3.3× headroom), which could let
+    // a real training regression pass. LossStrictlyDecreases still catches divergence
+    // from the other direction, so this is the "no significant increase" complement.
+    protected override double MoreDataTolerance => 2e-3;
 
     /// <summary>
     /// SpiralConvLayer is lazy — its weight tensor is constructed at [0, 0] in

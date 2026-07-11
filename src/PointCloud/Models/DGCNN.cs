@@ -139,13 +139,17 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
         // without bound (training loss climbed instead of falling).
         : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
-        _options = modelOptions ?? new DGCNNOptions();
-        Options = _options;
-
         if (options == null)
         {
             throw new ArgumentNullException(nameof(options));
         }
+        // When modelOptions is null (the common case) fall back to the primary
+        // `options` argument rather than creating a fresh default — otherwise
+        // the caller's DGCNNOptions is silently discarded and _options / Options
+        // reflect default settings, causing GetOptions/GetModelMetadata to
+        // report defaults even after the caller configured NumClasses etc.
+        _options = modelOptions ?? options;
+        Options = _options;
         if (options.NumClasses <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options.NumClasses), "Number of classes must be positive.");

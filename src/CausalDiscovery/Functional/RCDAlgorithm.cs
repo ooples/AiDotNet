@@ -51,7 +51,25 @@ namespace AiDotNet.CausalDiscovery.Functional;
 public class RCDAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold;
-    private readonly double _independenceCutoff;
+
+    /// <summary>
+    /// Cutoff on the confounding-evidence score used at line ~149 to trigger the
+    /// "remaining variables are confounded" stop. The score is
+    /// <c>Σᵢⱼ min(0, DiffMutualInfo(residualᵢ, residualⱼ))²</c> (sum of squared
+    /// negative diffs) — a NON-NEGATIVE quantity whose scale is bounded by
+    /// MI² per pair × candidate count, NOT a statistical p-value.
+    /// <para>
+    /// We source the cutoff from <see cref="CausalDiscoveryOptions.SignificanceLevel"/>
+    /// because that option is the shared "how strict" knob across algorithms and
+    /// no dedicated RCD-scale option exists in the current API. The default of
+    /// <c>0.05</c> is a rough scale match for the DiffMI residual scale — NOT a
+    /// significance level in the α-of-a-hypothesis-test sense. Callers who need
+    /// tighter calibration can override via <c>SignificanceLevel</c>; a
+    /// dedicated <c>ConfoundingEvidenceCutoff</c> option is future work
+    /// (would need calibration tests to justify).
+    /// </para>
+    /// </summary>
+    private readonly double _confoundingScoreCutoff;
 
     /// <inheritdoc/>
     public override string Name => "RCD";
@@ -68,8 +86,10 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     public RCDAlgorithm(CausalDiscoveryOptions? options = null)
     {
         _threshold = options?.EdgeThreshold ?? 0.1;
-        // Dedicated independence cutoff for MI-based test (decoupled from EdgeThreshold)
-        _independenceCutoff = options?.SignificanceLevel ?? 0.05;
+        // See _confoundingScoreCutoff doc: sourced from SignificanceLevel as a
+        // scale proxy, NOT a statistical α. Default 0.05 is calibrated for the
+        // sum-of-squared-negative-DiffMI scale, not a p-value threshold.
+        _confoundingScoreCutoff = options?.SignificanceLevel ?? 0.05;
     }
 
     /// <inheritdoc/>
@@ -146,7 +166,12 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
                 break;
             }
 
-            if (bestScore > _independenceCutoff && ordering.Count > 0)
+            // bestScore = sum of squared negative DiffMI across all (candidate, other)
+            // residual pairs — a non-negative confounding-evidence measure. When it
+            // exceeds the scale-matched cutoff, remaining variables can't be cleanly
+            // ordered under RCD and are treated as confounded. See _confoundingScoreCutoff
+            // doc for the scale rationale (NOT a statistical significance level).
+            if (bestScore > _confoundingScoreCutoff && ordering.Count > 0)
             {
                 // Remaining variables are likely confounded — mark as confounded and stop.
                 // Per RCD: confounded variables cannot be cleanly ordered, so we do NOT

@@ -420,16 +420,8 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             throw new ArgumentException("target must contain at least one element.", nameof(target));
 
         // argmax over target selects the preferred action; its value serves as the reward.
-        int bestIndex = 0;
-        T bestValue = target[0];
-        for (int i = 1; i < target.Length; i++)
-        {
-            if (NumOps.GreaterThan(target[i], bestValue))
-            {
-                bestValue = target[i];
-                bestIndex = i;
-            }
-        }
+        int bestIndex = ArgMax(target);
+        T bestValue = target[bestIndex];
 
         // Encode as a one-hot of length ActionSize (the paper's action representation). Clamp the
         // decoded index so a target wider than the action space still yields a legal action.
