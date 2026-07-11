@@ -1770,6 +1770,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 }
                 if (axis < 0) break;
             }
+
+            // Unconditionally verify the invariant the loss depends on: every pixel is a valid
+            // one-hot distribution (its class column sums to exactly 1). Guards the construction
+            // odometer against regression so the "well-posed target" contract stays honest.
+            var vcoord = new int[rank];
+            int pixelsChecked = 0;
+            while (true)
+            {
+                int baseOffset = 0;
+                for (int i = 0; i < rank; i++) baseOffset += vcoord[i] * strides[i];
+                double pixelSum = 0.0;
+                for (int c = 0; c < numClasses; c++) pixelSum += ConvertToDouble(span[baseOffset + c * classStride]);
+                Assert.Equal(1.0, pixelSum, 6);
+                pixelsChecked++;
+
+                int axis = rank - 1;
+                while (axis >= 0)
+                {
+                    if (axis == classAxis) { axis--; continue; }
+                    if (++vcoord[axis] < shape[axis]) break;
+                    vcoord[axis] = 0;
+                    axis--;
+                }
+                if (axis < 0) break;
+            }
+            Assert.Equal(target.Length / numClasses, pixelsChecked);
             return oneHot;
         }
         return target;
