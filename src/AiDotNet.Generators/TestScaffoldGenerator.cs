@@ -436,6 +436,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Segmentation foundation models (Swin/ViT encoder + transformer mask decoder) — 250-iter
         // MoreData / 100-iter memorization overrun 120 s on CPU (verified: solo timeout).
         "Mask2Former", "EfficientSAM", "U2Seg",
+        // XDecoder: unified segmentation foundation model whose MoreData passes SOLO (~1m34s) but is
+        // heavy enough to flake under a loaded parallel shard (Gen T-Z). Smoke-iteration counts make
+        // it fast + deterministic — same paper-scale-preserving trim as the other seg foundations.
+        "XDecoder",
         // Table transformer — deep attention stack at paper width. (ConvTransformer is an
         // ASR/Conformer-family model whose own family branch already emits iteration overrides, so it
         // is handled there, not here — adding it would double-emit. VisionTransformer has a MANUAL
