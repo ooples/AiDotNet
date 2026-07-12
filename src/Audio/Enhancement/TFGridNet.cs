@@ -244,9 +244,38 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input;
+
+        // Utterance-level scale normalization (Wang et al. 2023, "TF-GridNet"). The grid stack is
+        // LayerNorm-heavy and therefore scale-INVARIANT: without re-applying the input's overall
+        // magnitude the model erases it and returns an identical result for a quiet signal and the
+        // same signal 10x louder (ScaledInput_ShouldChangeOutput). Normalize the input by its RMS so
+        // the stack sees a stable scale, run the layers, then multiply the output by that same scale —
+        // making the enhancement front-end scale-EQUIVARIANT (louder in -> louder out), which a
+        // separation/enhancement model must be. TensorMultiplyScalar is a tape op, so the scale
+        // in/out threads gradients through for training; the RMS itself is a detached constant
+        // derived from the (supervision-free) input, so it does not disturb the backward graph.
+        double sumSq = 0.0;
+        int n = input.Length;
+        for (int i = 0; i < n; i++)
+        {
+            double v = NumOps.ToDouble(input[i]);
+            sumSq += v * v;
+        }
+        double rms = n > 0 ? Math.Sqrt(sumSq / n) : 0.0;
+
+        // Silent/zero input: skip scaling to avoid div-by-zero; the stack still runs deterministically.
+        if (rms <= 1e-12)
+        {
+            var c0 = input;
+            foreach (var l in Layers) c0 = l.Forward(c0);
+            return c0;
+        }
+
+        T scale = NumOps.FromDouble(rms);
+        T invScale = NumOps.FromDouble(1.0 / rms);
+        var c = Engine.TensorMultiplyScalar(input, invScale);
         foreach (var l in Layers) c = l.Forward(c);
-        return c;
+        return Engine.TensorMultiplyScalar(c, scale);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
