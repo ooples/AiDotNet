@@ -28,8 +28,18 @@ public class SpiralNetTests : NeuralNetworkModelTestBase<float>
     // Default output: ModelNet40 classification (NumClasses = 40 per Gong et al.).
     protected override int[] OutputShape => [1, 40];
 
+    // Pin per-layer weight init (and the Dropout RNG derived from it) to a fixed thread-local seed so
+    // construction is reproducible. SpiralNet's architecture carries no explicit RandomSeed, so its
+    // init + Dropout(0.5) otherwise derive from the process-shared, order-dependent
+    // RandomHelper.ThreadSafeRandom; under xUnit's PARALLEL execution that makes MoreData_ShouldNotDegrade
+    // nondeterministic (flakes under a loaded shard, passes in isolation) against its tight 2e-3
+    // tolerance. AmbientFallbackSeed is [ThreadStatic] → parallel-safe (each worker independent).
     protected override INeuralNetworkModel<float> CreateNetwork()
-        => new SpiralNet<float>();
+    {
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
+        try { return new SpiralNet<float>(); }
+        finally { AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = null; }
+    }
 
     // SpiralNet's default architecture carries Dropout (rate 0.5, paper-faithful per
     // Gong et al. 2019). On the tiny fixed-sample memorization task the loss converges

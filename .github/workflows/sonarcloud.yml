@@ -797,7 +797,7 @@ jobs:
             # smoke tests for models now owned by ModelFamily.NeuralNetworks.
             # Keep its integration-only models in this shard, but do not run
             # duplicate model-family invariants a second time under Integration.
-            filter: 'Category!=GPU&Category!=Stress&Category!=ModelFamilyDuplicate&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.N|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.O)'
+            filter: 'Category!=GPU&Category!=Stress&Category!=ModelFamilyDuplicate&Category!=SerialPerf&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.N|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.O)'
           - name: Integration P-Q
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -814,6 +814,15 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.T|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.U|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.V|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.W|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.X|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Y|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.Z)'
+          # Dedicated SERIAL lane for single-process perf/memory guards (CpuToWallRatio,
+          # MemoryBudget). Tagged Category=SerialPerf and excluded from Integration N-O above,
+          # they run ALONE here so no sibling collection contends for CPU/memory and invalidates
+          # the measurement — keeps the assertions at full strength (no bound relaxation). Tiny
+          # (2 classes), so a whole shard is cheap.
+          - name: Integration - Serial Perf
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category=SerialPerf&Category!=GPU'
           # =====================================================================
           # TOP-LEVEL TEST NAMESPACES that no shard covered (distinct from the
           # UnitTests.* and IntegrationTests.* trees).
@@ -1004,6 +1013,7 @@ jobs:
             'Integration R',
             'Integration S',
             'Integration T-Z',
+            'Integration - Serial Perf',
             'TopLevel - FederatedLearning',
             'TopLevel - Audio/Onnx/Tokenization'
           )
