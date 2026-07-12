@@ -378,39 +378,36 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Recomputes the floor patch grid (<see cref="_numPatchesHeight"/>/<see cref="_numPatchesWidth"/>/
-    /// <see cref="_numPatches"/>) from the <b>live</b> 4D input <c>[B, C, H, W]</c> on every forward,
-    /// so a resolution change after the first forward reshapes against the CURRENT tensor rather than
-    /// silently truncating to (or mis-slicing against) the cached first-forward grid. Rejects tensors
-    /// smaller than one full patch and any channel count the projection weights were not sized for.
+    /// <see cref="_numPatches"/>) from the <b>live</b> 4D input <c>[B, C, H, W]</c> when — and only
+    /// when — that input safely describes an image of the layer's resolved configuration (same channel
+    /// count the projection weights were sized for, and at least one full patch per spatial dim). This
+    /// gives resolution-independence: <c>patchDim = channels·patchSize²</c> is invariant to H/W, so the
+    /// projection weights are reused unchanged across resolutions and only the patch COUNT N varies.
     /// </summary>
     /// <remarks>
-    /// This is what makes the layer resolution-independent: <c>patchDim = channels·patchSize²</c> is
-    /// invariant to H/W, so the projection weights <c>[patchDim, embeddingDim]</c> are reused unchanged
-    /// across resolutions and only the patch COUNT N varies. Fixed-resolution models feed the same
-    /// spatial dims every call, so the recomputed grid equals the cached one (no behavior change);
-    /// only genuinely variable-resolution inputs differ — and those would otherwise fail the split
-    /// reshape below against the stale grid. The live counts thread through the crop, the patchify
-    /// reshape, and the output-shape restoration by writing them back to the shared fields.
+    /// If the live input does NOT describe a valid image of this config — wrong channel count, or a
+    /// spatial dim smaller than one patch — this returns WITHOUT touching the cached grid instead of
+    /// throwing. A multimodal model may route a non-image probe/token tensor (e.g. a <c>[1, N, D]</c>
+    /// sequence, normalized to <c>[1, 1, N, D]</c>) through the same PatchEmbedding after it resolved
+    /// on a real image; recomputing from — or hard-throwing on — that would break the cached config and
+    /// regress those models (Flamingo / LLaVA / ImageBind / GPT-4-Vision). Falling back to the grid
+    /// resolved at <see cref="OnFirstForward"/> keeps this path byte-identical to the pre-live-dim
+    /// behavior for such callers, while still recomputing for genuine variable-resolution images. The
+    /// resolve-time contract (reject sub-patch, crop non-divisible) is enforced once in
+    /// <see cref="OnFirstForward"/> / <c>ResolveFromShape</c> and is covered by the layer unit tests.
     /// </remarks>
     private void RefreshLivePatchGrid(Tensor<T> input)
     {
+        if (input.Shape.Length < 4) return;
+
         int liveChannels = input.Shape[1];
-        if (liveChannels != _channels)
-            throw new ArgumentException(
-                $"PatchEmbeddingLayer projection weights are sized for {_channels} input channels " +
-                $"but received {liveChannels}. Construct a new PatchEmbeddingLayer with the matching " +
-                "channel count or pass an input with the expected channel dim.",
-                nameof(input));
+        if (liveChannels != _channels) return;
 
         int liveHeight = input.Shape[2];
         int liveWidth = input.Shape[3];
         int nh = liveHeight / _patchSize;
         int nw = liveWidth / _patchSize;
-        if (nh < 1 || nw < 1)
-            throw new ArgumentException(
-                $"Image H/W ({liveHeight}/{liveWidth}) is smaller than patchSize ({_patchSize}); " +
-                "at least one full patch is required in each spatial dimension.",
-                nameof(input));
+        if (nh < 1 || nw < 1) return;
 
         _imageHeight = liveHeight;
         _imageWidth = liveWidth;
