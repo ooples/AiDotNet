@@ -331,7 +331,12 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
         try
         {
             var preprocessedInput = PreprocessTokens(input);
-            TrainWithTape(preprocessedInput, expected);
+            // Pass the model's configured optimizer (AdamW at the transformer-appropriate 5e-5, built
+            // in the ctor) — the 2-arg TrainWithTape resolves optimizer: null and falls back to the
+            // base DEFAULT Adam (~1e-3), ~20x too high for a pre-trained-scale transformer, so a single
+            // step overshot and training diverged (loss 2.84 -> 9.40 in one iteration). The ctor already
+            // requires _optimizer non-null, so this always uses the intended AdamW/LearningRate.
+            TrainWithTape(preprocessedInput, expected, _optimizer);
         }
         finally { SetTrainingMode(false); }
     }
