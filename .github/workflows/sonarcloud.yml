@@ -694,23 +694,41 @@ jobs:
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
               (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F)
-          - name: ModelFamily - Generated Layers G-M
+          # G-M was a single serial shard that ran the full 45-min job timeout and got
+          # CANCELLED before finishing (dense with heavy segmentation/foundation models,
+          # e.g. Mask2Former). Split G-M → G-I + J-M so each serial half finishes under the
+          # timeout. Gap-free + non-overlapping: union == G-M.
+          - name: ModelFamily - Generated Layers G-I
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
+              (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I)
+          - name: ModelFamily - Generated Layers J-M
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
           # N-Z was a single serial $heavyShard whose ~835 default-gate scaffold
           # methods ran the full 45-min job timeout and got CANCELLED before
           # finishing — perpetually red, like Integration C / NeuralNetworks A-L
-          # before their splits. Split N-Z → N-S + T-Z so each serial half
-          # finishes under the timeout. Gap-free + non-overlapping: union == N-Z.
-          - name: ModelFamily - Generated Layers N-S
+          # before their splits. Split N-Z → N-S + T-Z; N-S itself was STILL a
+          # 55-min timeout (dense with the SAM / segmentation family: ODISE, OMGSeg,
+          # OneFormer, SAM/SAM21/SAMHQ, SegFormer, SegMamba, SwinUNETR, ...), so split
+          # N-S again → N-P + Q-S. Gap-free + non-overlapping: union == N-S.
+          - name: ModelFamily - Generated Layers N-P
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O|FullyQualifiedName~Generated.P|FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.R|FullyQualifiedName~Generated.S)
+              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O|FullyQualifiedName~Generated.P)
+          - name: ModelFamily - Generated Layers Q-S
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.R|FullyQualifiedName~Generated.S)
           - name: ModelFamily - Generated Layers T-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -932,8 +950,10 @@ jobs:
             'ModelFamily - Diffusion Step-Sync',
             'ModelFamily - Diffusion T-Z',
             'ModelFamily - Generated Layers A-F',
-            'ModelFamily - Generated Layers G-M',
-            'ModelFamily - Generated Layers N-S',
+            'ModelFamily - Generated Layers G-I',
+            'ModelFamily - Generated Layers J-M',
+            'ModelFamily - Generated Layers N-P',
+            'ModelFamily - Generated Layers Q-S',
             'ModelFamily - Generated Layers T-Z',
             'ModelFamily - NeuralNetworks A-F',
             'ModelFamily - NeuralNetworks G-L',
