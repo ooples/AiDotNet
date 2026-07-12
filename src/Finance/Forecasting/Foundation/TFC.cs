@@ -929,7 +929,14 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
 
         // RFFT returns interleaved [re0, im0, re1, im1, ..., re(halfN-1), im(halfN-1)],
         // shape [B, halfN * 2] = [B, n + 2].
-        var rfft = Engine.RFFT(flat);
+        //
+        // Detach the spectrum from the tape: the DFT is a FIXED linear transform with no learnable
+        // parameters, so the frequency branch legitimately treats |X[k]| as an input feature (the
+        // downstream frequency encoder still trains fully on it). This also avoids the RFFT backward,
+        // whose adjoint path (Engine.IRFFT) currently throws an out-of-range in the parallel partition
+        // for these sizes — a Tensors-library bug (tracked separately); the forward RFFT is correct.
+        // Gradients still flow to the raw input through the TIME branch, so training is unaffected.
+        var rfft = Engine.StopGradient(Engine.RFFT(flat));
         var complexPairs = Engine.Reshape(rfft, new[] { numSamples, halfN, 2 });
 
         // magSquared[b, k] = re[b, k]^2 + im[b, k]^2 via TensorMultiply + ReduceSum on the
