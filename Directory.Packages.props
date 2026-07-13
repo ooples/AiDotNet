@@ -261,8 +261,15 @@
          guard against a degenerate length-1 transform (nFft = 0 -> empty inverse -> ArgumentOutOfRange
          from the RFFT autodiff backward at TFC's n=1 frequency axis). 0.114.1 = 0.114.0 + the additive
          IRFFT nFft clamp (strict superset). With it published, TFC's StopGradient workaround around the
-         DFT is removed (below) so the frequency branch trains end-to-end. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.114.1" />
+         DFT is removed (below) so the frequency branch trains end-to-end.
+
+         Bumped 0.114.1 -> 0.114.2: brings AiDotNet.Tensors #780 (this repo's #1789) — DeformableConv2D-
+         Grouped now supports groups < deformGroups by keying the deform group on the INPUT CHANNEL
+         (ic/(inChannels/deformGroups)) instead of the output group, and validates inChannels %
+         deformGroups == 0 instead of groups % deformGroups. 0.114.2 = 0.114.1 + that additive fix
+         (strict superset). It unblocks BasicVSR++'s flow-guided deformable alignment (groups=1,
+         deformGroups=8), which previously threw "deformGroups 8 must divide groups 1". -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.114.2" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.114.0" />
