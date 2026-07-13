@@ -439,6 +439,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // doubles throughput; paired with the HeavyTrainingTimeoutClassNames smoke cap (below) this
         // brings the deep dual-stream train path inside the gate while keeping the model paper-scale.
         "ViLBERT",
+        // GLaMM (Rasheed et al. 2024): grounding VLM at paper scale — VisionDim=1024 with 24 vision
+        // layers + cross-modal fusion + detection decoder (~200M+ params), the same 1024-wide class as
+        // ViLBERT/LLaVA. Once the token-consistent architecture fix lets it construct (was throwing the
+        // 128-vs-1024 gamma mismatch), its multi-iteration training invariants overrun the 120 s gate at
+        // <double>. <float> halves the per-step footprint; paired with the HeavyTrainingTimeoutClassNames
+        // smoke cap (below) this brings the deep grounding train path inside the gate at paper scale.
+        "GLaMM",
         // NOTE: EmotiVoice, TinyBERTNER, UNet3D from the #1624 inventory have MANUAL
         // scaffolds (ModelFamilyTests/NeuralNetworks/*Tests.cs), so they are not
         // auto-generated and the float-list does not apply — UNet3DTests is already
@@ -541,6 +548,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // multi-iteration training invariants that overran the 120/180 s gate even after the
         // input-polymorphic lazy-shape fix, while single-forward tests stay full-fidelity.
         "ViLBERT",
+        // GLaMM (Rasheed et al. 2024): grounding VLM at paper scale (VisionDim=1024, 24 vision layers +
+        // fusion + detection decoder). Also in Fp32TestClassNames (<float>); the VisionLanguage family
+        // branch emits no iteration overrides, so this smoke cap fires exactly once — trimming the
+        // multi-iteration training invariants (Memorization / GradientFlow / MoreData) that overran the
+        // 120 s gate at paper scale even after the token-consistent architecture fix, while the
+        // single-forward invariants stay full-fidelity.
+        "GLaMM",
         // NOTE: PANNs / PANNsModel / MPSENet are NOT listed here — they are in Fp32TestClassNames, and
         // the audio-family branch already emits the smoke-iteration overrides for every Fp32 member.
         // Listing them here as well would double-define TrainingIterations / MemorizationTaskIterations.
