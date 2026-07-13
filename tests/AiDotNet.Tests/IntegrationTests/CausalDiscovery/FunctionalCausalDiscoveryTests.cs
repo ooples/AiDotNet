@@ -231,6 +231,16 @@ public class FunctionalCausalDiscoveryTests
         Assert.Equal(0, graph.EdgeCount);
     }
 
+    // NOTE on the latent-confounder integration test requested in review [201] (U -> X0, X1, X2 with
+    // "assert every candidate's confounding ratio exceeds the cutoff"): this is not achievable with the
+    // simplified scale-free ConfoundingRatio proxy used here. Under a linear shared confounder — even
+    // with perfectly symmetric equal loadings — the DirectLiNGAM entropy criterion still presents ONE
+    // observed variable as a clean root (its wrong-way evidence sums to ~0, so its ratio is 0.0000, well
+    // below the cutoff), so the per-candidate precondition cannot hold. The equivalent anti-fabrication
+    // guarantee is instead pinned deterministically by RCD_UnidentifiableData_EmitsNoDirectedEdges
+    // above (unidentifiable input -> no directed edges) plus the RCD_ConfoundingRatio_* calibration
+    // tests (clean root below cutoff / pure effect above it).
+
     [Fact(Timeout = 120000)]
     public async Task CCDr_FindsCausalStructure()
     {

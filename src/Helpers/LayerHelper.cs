@@ -9790,16 +9790,17 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(innerChannels / 4, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
 
-        // Output map head. In the DB formulation every map is kept in [0,1]: the probability
-        // map P and the adaptive-threshold map T are sigmoid-activated, and the differentiable
-        // binary map is B = 1 / (1 + exp(-k*(P - T))) (Liao et al. 2020, Sec. 3.2). The head is
-        // therefore SIGMOID-activated, NOT the ConvolutionalLayer default ReLU. This is both
-        // paper-faithful (matches the ComputerVision DBNet's sigmoid prob/threshold heads) and
-        // required for correctness: DBNet trains under BinaryCrossEntropyLoss, which is only
-        // defined for predictions in (0,1) — feeding it an unbounded ReLU output (p can exceed 1
-        // or be exactly 0) produces log-of-nonpositive NaN/huge gradients that blow the weights
-        // up and diverge the loss (#1854).
-        yield return new ConvolutionalLayer<T>(1, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
+        // Output head — TWO channels: channel 0 is the probability map P, channel 1 is the LEARNED
+        // adaptive-threshold map T. The DB formulation keeps both maps in [0,1] and forms the
+        // differentiable binary map B = 1 / (1 + exp(-k*(P - T))) (Liao et al. 2020, Sec. 3.2), so the
+        // head is SIGMOID-activated, NOT the ConvolutionalLayer default ReLU. Emitting both channels
+        // (rather than only P) makes DBNet.ExtractThresholdMap use the learned T map instead of falling
+        // back to a fixed 0.3 threshold, matching the paper and the sibling ComputerVision DBNet's
+        // prob/threshold heads. Sigmoid is also required for correctness: DBNet trains under
+        // BinaryCrossEntropyLoss, only defined for predictions in (0,1) — an unbounded ReLU output
+        // (p > 1 or p == 0) feeds log() a non-positive argument, giving NaN/huge gradients that blow
+        // the weights up and diverge the loss (#1854).
+        yield return new ConvolutionalLayer<T>(2, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     #endregion

@@ -64,7 +64,17 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public string Name => "NeuralFP";
 
     /// <inheritdoc />
-    public int FingerprintLength => _options.EmbeddingDim;
+    public int FingerprintLength => EffectiveEmbeddingDim;
+
+    /// <summary>
+    /// The single effective embedding width used CONSISTENTLY across the model — the projection-head
+    /// layers, the reported <see cref="FingerprintLength"/>, the <c>FrameCount</c>, and the metadata.
+    /// The architecture's <c>OutputSize</c> wins when the caller specified one (the head is built to
+    /// that width, see InitializeLayers); otherwise the option default. Reading it everywhere prevents
+    /// the model from EMITTING an OutputSize-wide embedding while REPORTING <c>_options.EmbeddingDim</c>,
+    /// which corrupted FrameCount and the fingerprint length whenever the two disagreed.
+    /// </summary>
+    private int EffectiveEmbeddingDim => Architecture.OutputSize > 0 ? Architecture.OutputSize : _options.EmbeddingDim;
 
     #endregion
 
@@ -150,7 +160,7 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             Duration = audio.Length / (double)_options.SampleRate,
             SampleRate = _options.SampleRate,
             Algorithm = "NeuralFP",
-            FrameCount = Math.Max(1, data.Length / Math.Max(1, _options.EmbeddingDim))
+            FrameCount = Math.Max(1, data.Length / Math.Max(1, EffectiveEmbeddingDim))
         };
     }
 
@@ -224,7 +234,7 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         else Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralFPLayers(
             numMels: _options.NumMels, baseFilters: _options.BaseFilters,
             numConvBlocks: _options.NumConvBlocks,
-            embeddingDim: Architecture.OutputSize > 0 ? Architecture.OutputSize : _options.EmbeddingDim,
+            embeddingDim: EffectiveEmbeddingDim,
             dropoutRate: _options.DropoutRate));
     }
 
@@ -285,7 +295,7 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             Description = "Neural Audio Fingerprint for learned audio identification (Chang et al., 2021)",
             Complexity = _options.NumConvBlocks
         };
-        m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();
+        m.AdditionalInfo["EmbeddingDim"] = EffectiveEmbeddingDim.ToString();
         m.AdditionalInfo["BaseFilters"] = _options.BaseFilters.ToString();
         return m;
     }

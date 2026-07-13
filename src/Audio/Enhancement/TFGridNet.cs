@@ -254,14 +254,7 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         // separation/enhancement model must be. TensorMultiplyScalar is a tape op, so the scale
         // in/out threads gradients through for training; the RMS itself is a detached constant
         // derived from the (supervision-free) input, so it does not disturb the backward graph.
-        double sumSq = 0.0;
-        int n = input.Length;
-        for (int i = 0; i < n; i++)
-        {
-            double v = NumOps.ToDouble(input[i]);
-            sumSq += v * v;
-        }
-        double rms = n > 0 ? Math.Sqrt(sumSq / n) : 0.0;
+        double rms = ComputeRms(input);
 
         // Silent/zero input: skip scaling to avoid div-by-zero; the stack still runs deterministically.
         if (rms <= 1e-12)
@@ -289,14 +282,7 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        double sumSq = 0.0;
-        int len = input.Length;
-        for (int i = 0; i < len; i++)
-        {
-            double v = NumOps.ToDouble(input[i]);
-            sumSq += v * v;
-        }
-        double rms = len > 0 ? Math.Sqrt(sumSq / len) : 0.0;
+        double rms = ComputeRms(input);
         if (rms <= 1e-12)
             return base.ForwardForTraining(input);
 
@@ -304,6 +290,24 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var normalized = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(1.0 / rms));
         var output = base.ForwardForTraining(normalized);
         return Engine.TensorMultiplyScalar(output, scale);
+    }
+
+    /// <summary>
+    /// Root-mean-square magnitude of the input, used by both the inference (<see cref="PredictCore"/>)
+    /// and training (<see cref="ForwardForTraining"/>) paths for the shared utterance-level scale
+    /// normalization. Kept in one place so a future threshold/formula tweak can't drift between the two
+    /// paths and silently reintroduce train/serve skew.
+    /// </summary>
+    private double ComputeRms(Tensor<T> input)
+    {
+        double sumSq = 0.0;
+        int n = input.Length;
+        for (int i = 0; i < n; i++)
+        {
+            double v = NumOps.ToDouble(input[i]);
+            sumSq += v * v;
+        }
+        return n > 0 ? Math.Sqrt(sumSq / n) : 0.0;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
