@@ -840,9 +840,25 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 $"timesteps length {timesteps.Length} does not match batch size {batchSize}.",
                 nameof(timesteps));
 
+        // Batch of 1 (the overwhelmingly common training/eval case): the "per element" slice IS
+        // the whole tensor, so call PredictNoise directly on the full batched tensor. This is the
+        // exact pre-#1843 contract (Train fed the full [1, C, H, W] tensor straight to PredictNoise)
+        // and it keeps the forward on the gradient tape. The per-element loop below instead rebuilds
+        // each element via host-side AsSpan copies, which (a) dropped the leading batch dim so the
+        // scalar PredictNoise saw a rank-3 [C, H, W] — breaking the UNet noise predictors (DreamFusion
+        // "Tensor shapes must match. Got [1, 64, 32, 32] and [64, 32, 32]" in the ResBlock residual
+        // add; DDPM's Rank==4 gate falling back to a zero prediction so its lazy layers never
+        // initialized -> "no trainable parameters") — and (b) detached the prediction from the tape.
+        // #1843 regression fix.
+        if (batchSize == 1)
+            return PredictNoise(noisyBatch, timesteps[0]);
+
         int perElement = noisyBatch.Length / batchSize;
-        var elemShape = new int[noisyBatch.Rank - 1];
-        for (int i = 1; i < noisyBatch.Rank; i++) elemShape[i - 1] = noisyBatch.Shape[i];
+        // batch > 1: keep each per-element slice at the SAME rank as noisyBatch by preserving a
+        // leading batch dim of 1 ([B, C, H, W] -> [1, C, H, W]), NOT dropping it to [C, H, W].
+        var elemShape = new int[noisyBatch.Rank];
+        elemShape[0] = 1;
+        for (int i = 1; i < noisyBatch.Rank; i++) elemShape[i] = noisyBatch.Shape[i];
         var result = new Tensor<T>(noisyBatch._shape);
         var nbSpan = noisyBatch.AsSpan();
         var resSpan = result.AsWritableSpan();
