@@ -449,6 +449,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "DistilWhisper", "FasterWhisper", "KotobaWhisper", "WhisperLargeV3",
         "WhisperLargeV3Turbo", "WhisperLive", "WhisperX", "Moonshine", "WhisperCPP",
         "CanaryFlash", "NeMoMultitask",
+        // AST (Gong et al. 2021): a 12-layer ViT-style residual transformer (CreateDefaultASTLayers,
+        // AudioClassifier family — AudioClassifierTestBase<T> is generic). Restoring the paper's residual
+        // TransformerEncoderLayer blocks (commit 297f65351) fixed its flat-loss training failures, but the
+        // <double> 12-layer residual encoder's per-step forward+backward overran the 120 s gate
+        // (Training_ShouldReduceLoss + the 60-iter DifferentInputs_AfterTraining timed out). <float>
+        // halves the footprint and roughly doubles throughput; the audio branch's Fp32-gated block then
+        // also trims the many-iteration convergence tests to smoke level for it — no separate cap needed.
+        // (WavLMSER shares the residual fix but its lighter test config trains fast enough at <double>.)
+        "AST",
         // --- PANNs CNN14 (Kong et al., 2020): paper-scale 6-stage conv tower at 64→2048
         // channels. The <double> per-step forward+backward over the full tower overran the
         // 120/180 s xUnit budget on CPU (Training / MoreData / memorization all timed out solo).
