@@ -431,6 +431,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (HeavyTimeoutTestClassNames) like its foundation-TTS peers FireRedTTS / MegaTTS3, where
         // <float> halves the footprint for the full-fidelity run.
         "TortoiseTTS",
+        // ViLBERT (Lu et al. 2019): paper-scale dual-stream co-attention VLM — VisionDim=1024 with
+        // 12 vision + 12 text + 6 co-attention transformer blocks. After the input-polymorphic
+        // lazy-shape fix its forward/clone/embedding invariants pass, but the multi-iteration training
+        // invariants (Training_ShouldReduceLoss / MoreData / LossStrictlyDecreases / TrainingError)
+        // overran the 120/180 s gate at <double>. <float> halves the per-step footprint and roughly
+        // doubles throughput; paired with the HeavyTrainingTimeoutClassNames smoke cap (below) this
+        // brings the deep dual-stream train path inside the gate while keeping the model paper-scale.
+        "ViLBERT",
         // NOTE: EmotiVoice, TinyBERTNER, UNet3D from the #1624 inventory have MANUAL
         // scaffolds (ModelFamilyTests/NeuralNetworks/*Tests.cs), so they are not
         // auto-generated and the float-list does not apply — UNet3DTests is already
@@ -457,6 +465,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // overran the 120 s gate at <double>; float halves the footprint and the Fp32-gated audio
         // branch trims the many-iteration convergence tests.
         "MPSENet",
+        // WavLMSER (WavLM speech-emotion recognition): WavLM transformer encoder + emotion head.
+        // Its LossStrictlyDecreasesOnMemorizationTask (and the other multi-iteration training
+        // invariants) overran the 180 s gate at <double> (Generated Layers T-Z). <float> halves the
+        // per-step footprint and the audio-family branch above already trims the many-iteration
+        // convergence tests to smoke level for every Fp32 member, keeping the encoder paper-scale
+        // while the train path stays covered.
+        "WavLMSER",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -511,6 +526,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 120 s gate (GOTOCR2 timed out solo), so the universal smoke-cap trims it — the DocumentNN /
         // VisionLanguage family branches emit no iteration overrides, so this fires exactly once.
         "GOTOCR2", "Surya", "MPLUGDocOwl", "MPLUGDocOwl15", "MPLUGDocOwl2", "TextMonkey", "UReader", "DocPedia", "Nougat",
+        // ViLBERT (Lu et al. 2019): paper-scale dual-stream co-attention VLM (VisionDim=1024, 12+12+6
+        // transformer blocks). Also in Fp32TestClassNames (<float>); the VisionLanguage family branch
+        // emits no iteration overrides, so this universal smoke-cap fires exactly once — trimming the
+        // multi-iteration training invariants that overran the 120/180 s gate even after the
+        // input-polymorphic lazy-shape fix, while single-forward tests stay full-fidelity.
+        "ViLBERT",
         // NOTE: PANNs / PANNsModel / MPSENet are NOT listed here — they are in Fp32TestClassNames, and
         // the audio-family branch already emits the smoke-iteration overrides for every Fp32 member.
         // Listing them here as well would double-define TrainingIterations / MemorizationTaskIterations.
