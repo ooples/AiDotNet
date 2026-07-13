@@ -11355,30 +11355,38 @@ public static class LayerHelper<T>
         int numKernels = 7)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
 
-        // ResNet backbone
-        int currentSize = imageSize;
+        // --- ResNet backbone (He et al., 2016) — the PSENet paper (Wang et al., 2019) uses a
+        // RESIDUAL backbone. The previous factory was a plain Conv→BN→ReLU→MaxPool tower with NO
+        // skip connections: both non-paper-faithful and degenerate. After training grows the
+        // BatchNorm running variance, a spatially-uniform input is normalized to a channel-constant
+        // (x-runningMean)/sqrt(largeVar) ≈ β, so two distinct constant pages collapse to a
+        // bit-identical output (DifferentInputs_AfterTraining L2 = 0). A true residual block adds the
+        // shortcut x back — output = ReLU(F(x) + shortcut(x)) — so the input signal bypasses the BN
+        // normalization and distinct inputs stay distinct. BasicBlock inserts a 1×1-conv+BN
+        // projection shortcut automatically when the stride or channel count changes. (The
+        // DocumentNeuralNetworkBase inference Forward now treats BasicBlock/activation as spatial, so
+        // its CNN→sequence auto-reshape no longer misfires on this all-spatial backbone.)
+
+        // Stem: 7×7 stride-2 conv → BN → ReLU → 3×3 stride-2 max-pool (canonical ResNet stem).
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
-        currentSize /= 2;
-
+        yield return new ActivationLayer<T>(reluActivation);
         yield return new MaxPoolingLayer<T>(3, 2);
-        currentSize /= 2;
 
-        int[] resnetChannels = [64, 128, backboneChannels, backboneChannels];
-        int inputChannels = 64;
-        foreach (int outChannels in resnetChannels)
-        {
-            yield return new ConvolutionalLayer<T>(outChannels, 3, 1, 1);
-            yield return new BatchNormalizationLayer<T>();
-            inputChannels = outChannels;
-            if (outChannels != resnetChannels[^1])
-            {
-                yield return new MaxPoolingLayer<T>(2, 2);
-                currentSize /= 2;
-            }
-        }
+        // Residual stages: the first block of each downsampling stage strides by 2 (and projects the
+        // shortcut); channels grow 64 → 128 → backbone. One block per stage keeps the test-scale
+        // backbone light while preserving every residual/skip invariant.
+        // zeroInitResidual: false — the ImageNet "residual branch starts at 0" trick (BN-γ=0 in the
+        // block's last BN) is a stability aid for MANY-block, MANY-epoch ImageNet training; on this
+        // shallow (1-block-per-stage) backbone under the smoke-iteration memorization probe it leaves
+        // the residual branch's γ pinned near 0 with an ill-conditioned from-zero gradient, so the
+        // few-step loss diverged (0.32 → 1.28). Standard init gives the block full capacity from
+        // step 1 so the memorization loss descends within the budget.
+        yield return new BasicBlock<T>(64, stride: 1, zeroInitResidual: false);
+        yield return new BasicBlock<T>(128, stride: 2, zeroInitResidual: false);
+        yield return new BasicBlock<T>(backboneChannels, stride: 2, zeroInitResidual: false);
+        yield return new BasicBlock<T>(backboneChannels, stride: 1, zeroInitResidual: false);
 
         // FPN-style feature fusion
         yield return new ConvolutionalLayer<T>(featureChannels, 1, 1, 0);
@@ -19783,12 +19791,25 @@ public static class LayerHelper<T>
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
+        // Collapse the [batch, frames, mels] spectrogram patch to one fixed-length vector per clip
+        // BEFORE the projection stack, so the model emits a SINGLE [batch, embeddingDim] fingerprint
+        // (the paper's clip-level embedding) rather than a per-frame [batch, frames, embeddingDim]
+        // stack. Without this the temporal axis is carried through untouched, so the output length is
+        // frames·embeddingDim (fails OutputDimensionality, which expects exactly embeddingDim) and the
+        // per-frame structure makes the embedding needlessly sensitive to local input perturbations.
+        yield return new FlattenLayer<T>();
+
         int prevDim = numMels;
         for (int i = 0; i < numConvBlocks; i++)
         {
             int filters = baseFilters * (1 << i); // 32, 64, 128, 256
             yield return new DenseLayer<T>(filters, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
+            // NO batch/layer normalization in the fingerprint encoder: the NeuralFP head is
+            // queried one clip at a time (batch=1) and must be LOCALLY CONTINUOUS for retrieval
+            // (SimilarInputs_ProduceSimilarEmbeddings). BatchNorm's batch stats are degenerate at
+            // batch=1, and LayerNorm divides by a near-zero std on the near-constant probe inputs
+            // — both amplify epsilon input differences into large embedding changes. A plain
+            // Dense+ReLU stack is Lipschitz-continuous, so epsilon-close inputs stay epsilon-close.
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             prevDim = filters;
         }
@@ -23266,8 +23287,6 @@ public static class LayerHelper<T>
         // Lazy layers infer image height/width/channels from input.Shape on first
         // forward, so callers no longer need to pass those dims.
 
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int ffnDim = embeddingDim * 4;
 
         // === Patch Embedding (paper-faithful ViT front end) ===
@@ -23280,20 +23299,27 @@ public static class LayerHelper<T>
         // forward — affecting SAM, MobileSAM, etc. that share this helper.
         yield return new PatchEmbeddingLayer<T>(patchSize, embeddingDim);
 
-        // Initial layer norm (pre-norm architecture)
-        yield return new LayerNormalizationLayer<T>();
-
+        // === Transformer encoder (Dosovitskiy et al. 2021, Eq 2-3) ===
+        // Each block is a RESIDUAL transformer layer: z' = MSA(LN(z)) + z ; z = MLP(LN(z')) + z'.
+        // The previous factory decomposed the block into a bare, SEQUENTIAL MultiHeadAttention →
+        // LayerNorm → Dense → Dense → LayerNorm chain with NO skip connections — the residual adds
+        // the paper mandates were missing entirely. Without the "+ z" skip the deep encoder cannot
+        // carry the input to its output (two distinct constant pages collapse to the same output
+        // post-training → DifferentInputs L2=0) and is far harder to optimise (Training/TrainingError
+        // failures across the ViT/SAM/DINO/InternViT models that share this helper). TransformerEncoderLayer
+        // applies MSA + residual add + LN and the GELU MLP + residual add + LN internally — the paper
+        // block as one trainable, serialisable unit (the same layer FT-/Tab-Transformer use). Use the
+        // (numHeads, ffnDim) overload so embeddingSize + all sublayer weights resolve LAZILY on first
+        // forward (via the recycling arena); the eager 3-arg overload allocated every FFN up-front and
+        // OOM'd the runner across a shard of 12-layer × multi-model × Clone construction.
         for (int i = 0; i < numLayers; i++)
         {
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward network
-            yield return new DenseLayer<T>(ffnDim, geluActivation);
-            yield return new DenseLayer<T>(embeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+
+        // Final layer norm on the encoder output (Eq 4).
+        yield return new LayerNormalizationLayer<T>();
     }
 
     /// <summary>

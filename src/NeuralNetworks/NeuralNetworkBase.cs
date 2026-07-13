@@ -10414,6 +10414,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
                 largeBase.InvalidateParameterCountCache();
                 largeBase.SetTrainingMode(false);
+                // The per-layer parameter copy above skips non-trainable stochastic layers
+                // (DropoutLayer carries no parameters), so their RandomSeed must be transferred
+                // explicitly — see CopyLayerRandomSeedsTo.
+                CopyLayerRandomSeedsTo(largeBase);
                 return largeCopy;
             }
         }
@@ -10429,6 +10433,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // matching guard in the large/custom-layer copy path above.
             copyBase.DisableAutoStreaming();
             copyBase.DeserializeInternalUnchecked(serialized);
+            // Base LayerBase.Serialize does NOT persist the per-layer RandomSeed, so the
+            // serialize/deserialize roundtrip drops it. Transfer it (and the wired latch) so the
+            // clone's stochastic layers (DropoutLayer) reproduce the source's dropout stream — see
+            // CopyLayerRandomSeedsTo.
+            CopyLayerRandomSeedsTo(copyBase);
         }
         else
         {
@@ -10612,7 +10621,81 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         copyBase.InvalidateParameterCountCache();
         copyBase.SetTrainingMode(false);
+
+        // Carry each layer's per-layer RandomSeed (and the one-shot wired latch) into the clone.
+        // The COW share above only re-binds TRAINABLE-layer tensors, so a non-trainable stochastic
+        // layer — chiefly DropoutLayer, whose mask derives from RandomSeed + a per-forward counter —
+        // would otherwise keep the fresh CreateNewInstance() seed and pick a divergent dropout
+        // stream, flaking clone-then-train trajectory invariants (the SpiralNet flake). No-op when
+        // the source layers are unseeded (production default).
+        CopyLayerRandomSeedsTo(copyBase);
         return true;
+    }
+
+    /// <summary>
+    /// Transfers each layer's <see cref="Layers.LayerBase{T}.RandomSeed"/> (and the one-shot
+    /// <see cref="_layerRandomSeedsWired"/> latch) from THIS network to a freshly built clone,
+    /// walking both layer graphs in lockstep including nested sub-layers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="DeepCopy"/> / <see cref="Clone"/> rebuild the clone via
+    /// <see cref="CreateNewInstance"/> (fresh, un-seeded layers) and transfer only trained
+    /// WEIGHTS — through the COW tensor share, the per-layer parameter copy, or a serialize
+    /// roundtrip. None of those carry the per-layer RandomSeed: the base
+    /// <see cref="Layers.LayerBase{T}.Serialize"/> does not write it, and the COW / parameter
+    /// walks only touch TRAINABLE layers. The layer whose RandomSeed actually matters —
+    /// <see cref="Layers.DropoutLayer{T}"/>, whose mask derives from RandomSeed + a per-forward
+    /// counter — is NON-trainable, so it is invisible to those walks. Without this copy a clone
+    /// falls back to an entropy-seeded dropout stream and its training trajectory diverges
+    /// run-to-run once unrelated tests advance the shared RNG (the SpiralNet clone-then-train
+    /// flake).
+    /// </para>
+    /// <para>
+    /// Walks the FULL <see cref="Layers"/> list (not just trainable layers) so dropout and other
+    /// stochastic non-trainable layers are covered, and copies the wired latch so the clone's
+    /// first training forward does not re-run <see cref="WireLayerRandomSeeds"/> and overwrite the
+    /// seeds just copied. No-op for layers whose RandomSeed is null (production default — never
+    /// seed-wired), so it never introduces determinism the source did not already have.
+    /// </para>
+    /// </remarks>
+    private void CopyLayerRandomSeedsTo(NeuralNetworkBase<T> destination)
+    {
+        var srcLayers = _layers;
+        var dstLayers = destination._layers;
+        int count = Math.Min(srcLayers.Count, dstLayers.Count);
+        for (int i = 0; i < count; i++)
+        {
+            CopyLayerRandomSeedRecursive(srcLayers[i], dstLayers[i]);
+        }
+
+        // Carry the one-shot wiring latch so the clone's first ForwardForTraining does not re-run
+        // WireLayerRandomSeeds and clobber the seeds copied above. When the source was not yet
+        // wired the latch stays false on both sides, so each wires identically (or not at all) from
+        // its shared Architecture.RandomSeed — preserving clone/source equivalence either way.
+        destination._layerRandomSeedsWired = _layerRandomSeedsWired;
+    }
+
+    /// <summary>
+    /// Copies <see cref="Layers.LayerBase{T}.RandomSeed"/> from <paramref name="src"/> to
+    /// <paramref name="dst"/> and recurses into their registered sub-layers in lockstep. Two
+    /// instances of the same runtime type built the same way expose matching sub-layer order, so
+    /// the walk pairs 1:1; the length guard tolerates any structural drift without throwing.
+    /// </summary>
+    private static void CopyLayerRandomSeedRecursive(ILayer<T> src, ILayer<T> dst)
+    {
+        if (src is not Layers.LayerBase<T> srcBase || dst is not Layers.LayerBase<T> dstBase)
+            return;
+
+        dstBase.RandomSeed = srcBase.RandomSeed;
+
+        var srcSubs = srcBase.GetSubLayers();
+        var dstSubs = dstBase.GetSubLayers();
+        int subCount = Math.Min(srcSubs.Count, dstSubs.Count);
+        for (int i = 0; i < subCount; i++)
+        {
+            CopyLayerRandomSeedRecursive(srcSubs[i], dstSubs[i]);
+        }
     }
 
     /// <summary>

@@ -122,15 +122,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// </summary>
     private Tensor<T>? _lastPreSoftmaxScores;
 
-    /// <summary>
-    /// Cached transformed features from forward pass for gradient computation.
-    /// </summary>
-    private Tensor<T>? _lastTransformed;
 
-    /// <summary>
-    /// Cached head outputs before averaging.
-    /// </summary>
-    private Tensor<T>? _lastHeadOutputs;
 
     /// <summary>
     /// Gradients for weight parameters.
@@ -406,10 +398,8 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             }
 
             // Store cached values for backward pass
-            _lastTransformed = null;
             _lastPreSoftmaxScores = null;
             _lastAttentionCoefficients = null;
-            _lastHeadOutputs = null;
 
             activatedOutput = ApplyActivation(output);
 
@@ -444,109 +434,85 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             return sparseReshaped;
         }
 
-        // Dense aggregation path (original implementation)
-        // #1668: these per-head buffers double as forward working scratch (written + read
-        // back below) AND manual-backward caches. They're released after their last forward
-        // use when no eager Backward will read them (see below), so an arena loop holds no
-        // reference across a Reset. (cacheBwd is computed once at the top of Forward.)
-        // Step 1: Transform input for each head using Engine operations
-        // transformed[b,h,n,f] = sum_i(input[b,n,i] * weights[h,i,f])
-        _lastTransformed = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
+        // Dense aggregation path — FULLY ON-TAPE (autodiff-differentiable). The prior
+        // implementation ran the per-head transform, attention scores, softmax and
+        // aggregation through raw Tensor.GetCpuData()/SetFlat round-trips (ExtractHeadWeight,
+        // Set3DSliceIn4DForHead, ComputeAttentionScores, Get2DSliceFrom4D). That disconnected
+        // the entire per-head computation from the autodiff tape: _weights and _attentionWeights
+        // received ZERO gradient (frozen attention that never learns) and the tape reading the
+        // raw-written leaf tensors corrupted training to NaN over many iterations
+        // (GraphAttentionNetwork MoreData / Clone). This version keeps the paper-faithful GAT
+        // mechanism (Velickovic et al. 2018: e_ij = LeakyReLU(a_self·Wh_i + a_neigh·Wh_j);
+        // softmax over neighbours; dropout on the normalized coefficients, §3.3) but expresses
+        // every step with Engine ops that reference the ACTUAL parameter tensors, so autodiff
+        // derives exact gradients for _weights, _attentionWeights and _bias.
+        var adjacency = _adjacencyMatrix!;
+        bool adjacency2D = adjacency.Shape.Length == 2;
+        T maskNegInf = NumOps.FromDouble(-1e9);
 
+        // These per-forward scratch caches are unused on the on-tape path (autodiff owns the
+        // backward). Null them so ResetState / arena recycling see no stale references.
+        _lastPreSoftmaxScores = null;
+        _lastAttentionCoefficients = null;
+
+        // Sum of the per-head aggregated outputs: [batchSize, numNodes, outputFeatures] (on-tape).
+        Tensor<T>? denseHeadSum = null;
         for (int h = 0; h < _numHeads; h++)
         {
-            // Extract weight slice for this head: [inputFeatures, outputFeatures]
-            var headWeight = ExtractHeadWeight(h);
+            // Head weight [inputFeatures, outputFeatures] sliced from the real _weights tensor
+            // ([numHeads, inputFeatures, outputFeatures]) via Engine so the tape connects to it.
+            var headWeight = Engine.Reshape(
+                Engine.TensorSlice(_weights, [h, 0, 0], [1, _inputFeatures, _outputFeatures]),
+                [_inputFeatures, _outputFeatures]);
+            // Wh for every graph in the batch: [batchSize, numNodes, outputFeatures] (on-tape).
+            var transformedHead = BatchedMatMul3Dx2D(processInput, headWeight, batchSize, numNodes, _inputFeatures, _outputFeatures);
 
-            // Compute processInput @ headWeight for all batches using batched 3D×2D matmul
-            // processInput: [batchSize, numNodes, inputFeatures] @ headWeight: [inputFeatures, outputFeatures]
-            // result: [batchSize, numNodes, outputFeatures]
-            var transformed = BatchedMatMul3Dx2D(processInput, headWeight, batchSize, numNodes, _inputFeatures, _outputFeatures);
+            // Attention-weight halves for this head, [outputFeatures, 1] (on-tape).
+            var attnSelf = Engine.Reshape(
+                Engine.TensorSlice(_attentionWeights, [h, 0], [1, _outputFeatures]), [_outputFeatures, 1]);
+            var attnNeigh = Engine.Reshape(
+                Engine.TensorSlice(_attentionWeights, [h, _outputFeatures], [1, _outputFeatures]), [_outputFeatures, 1]);
 
-            // Store in lastTransformed using efficient 4D slice helper
-            Set3DSliceIn4DForHead(_lastTransformed, h, transformed);
-        }
-
-        // Step 2: Compute attention scores using vectorized operations
-        _lastPreSoftmaxScores = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, numNodes]);
-        _lastAttentionCoefficients = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, numNodes]);
-
-        for (int h = 0; h < _numHeads; h++)
-        {
-            // Extract attention weights for this head via Engine.TensorSlice — replaces
-            // the per-feature scalar copy loop. _attentionWeights is [numHeads, 2*outputFeatures];
-            // source-half is the first outputFeatures columns of row h, target-half is
-            // the next outputFeatures columns. Reshape to [outputFeatures] for downstream use.
-            var attnA = Engine.Reshape(
-                Engine.TensorSlice(_attentionWeights, [h, 0], [1, _outputFeatures]),
-                [_outputFeatures]);
-            var attnB = Engine.Reshape(
-                Engine.TensorSlice(_attentionWeights, [h, _outputFeatures], [1, _outputFeatures]),
-                [_outputFeatures]);
-
-            // Compute attention scores for each batch
+            var perBatchOutputs = new Tensor<T>[batchSize];
             for (int b = 0; b < batchSize; b++)
             {
-                // Extract transformed features for this batch and head using helper: [numNodes, outputFeatures]
-                var transformedBatch = Get2DSliceFrom4D(_lastTransformed, b, h);
-
-                // Compute self attention scores: transformedBatch @ attnA -> [numNodes]
-                var selfScores = Engine.TensorMatMul(transformedBatch, Engine.Reshape(attnA, [_outputFeatures, 1]))
-                    .Reshape([numNodes]);
-
-                // Compute neighbor attention scores: transformedBatch @ attnB -> [numNodes]
-                var neighborScores = Engine.TensorMatMul(transformedBatch, Engine.Reshape(attnB, [_outputFeatures, 1]))
-                    .Reshape([numNodes]);
-
-                // Compute pairwise attention: selfScores[i] + neighborScores[j] with adjacency masking
-                ComputeAttentionScores(b, h, numNodes, selfScores, neighborScores);
+                // Wh for this graph: [numNodes, outputFeatures] (on-tape).
+                var wh = Engine.Reshape(
+                    Engine.TensorSlice(transformedHead, [b, 0, 0], [1, numNodes, _outputFeatures]),
+                    [numNodes, _outputFeatures]);
+                // self_i = Wh_i · a_self -> [numNodes, 1]; neigh_j = Wh_j · a_neigh -> [numNodes, 1].
+                var selfScores = Engine.TensorMatMul(wh, attnSelf);
+                var neighborScores = Engine.TensorMatMul(wh, attnNeigh);
+                var neighborRow = Engine.Reshape(neighborScores, [1, numNodes]);
+                // e_ij = LeakyReLU(self_i + neigh_j): broadcast [N,1] + [1,N] -> [N,N].
+                var scores = Engine.LeakyReLU(Engine.TensorBroadcastAdd(selfScores, neighborRow), _alpha);
+                // Additive mask: 0 where an edge exists, -1e9 where adj == 0, so masked
+                // neighbours get ~0 softmax weight (constant tensor, not a tape parameter).
+                var maskAdd = BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
+                var maskedScores = Engine.TensorAdd(scores, maskAdd);
+                // Softmax over the neighbour axis (axis 1); Engine.Softmax is max-subtracted.
+                var coeff = Engine.Softmax(maskedScores, 1);
+                // Dropout on the normalized attention coefficients (Velickovic 2018 §3.3):
+                // inverted, seeded (reproducible), training only. A constant {0, 1/(1-p)} mask
+                // multiplied on-tape keeps the aggregation differentiable.
+                if (_dropoutRate > 0.0 && IsTrainingMode)
+                {
+                    var dropMask = BuildAttentionDropoutMask(numNodes, _dropoutRate);
+                    coeff = Engine.TensorMultiply(coeff, dropMask);
+                }
+                // Aggregate neighbour features: [N,N] @ [N,F] -> [N,F] (on-tape).
+                var aggregated = Engine.TensorMatMul(coeff, wh);
+                perBatchOutputs[b] = Engine.Reshape(aggregated, [1, numNodes, _outputFeatures]);
             }
+
+            var headOutput = batchSize == 1 ? perBatchOutputs[0] : Engine.Concat(perBatchOutputs, 0);
+            denseHeadSum = denseHeadSum is null ? headOutput : Engine.TensorAdd(denseHeadSum, headOutput);
         }
 
-        // Step 3: Apply softmax over neighbors for each node (already done in ComputeAttentionScores)
-
-        // Step 4: Aggregate using attention coefficients
-        _lastHeadOutputs = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
-
-        for (int h = 0; h < _numHeads; h++)
-        {
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Extract attention coefficients using helper: [numNodes, numNodes]
-                var attnCoeffs = Get2DSliceFrom4D(_lastAttentionCoefficients, b, h);
-
-                // Extract transformed features using helper: [numNodes, outputFeatures]
-                var transformedBatch = Get2DSliceFrom4D(_lastTransformed, b, h);
-
-                // Aggregate: attnCoeffs @ transformedBatch -> [numNodes, outputFeatures]
-                var aggregated = Engine.TensorMatMul(attnCoeffs, transformedBatch);
-
-                // Store result using helper
-                Set2DSliceIn4D(_lastHeadOutputs, b, h, aggregated);
-            }
-        }
-
-        // Step 5: Average across heads and add bias using Engine operations
-        // Sum over head dimension (axis 1): [batchSize, numHeads, numNodes, outputFeatures] -> [batchSize, numNodes, outputFeatures]
-        var sumOverHeads = Engine.ReduceSum(_lastHeadOutputs, [1], keepDims: false);
-
-        // #1668: last forward use of the per-head working buffers is above. When no eager
-        // Backward will read them, drop the references so the arena can recycle them safely.
-        if (!cacheBwd)
-        {
-            _lastTransformed = null;
-            _lastPreSoftmaxScores = null;
-            _lastAttentionCoefficients = null;
-            _lastHeadOutputs = null;
-        }
-
-        // Divide by number of heads using scalar divide
-        T numHeadsT = NumOps.FromDouble(_numHeads);
-        var avgOverHeads = Engine.TensorDivideScalar(sumOverHeads, numHeadsT);
-
-        // Add bias: reshape to [1, 1, outputFeatures] and let Engine broadcast to [batchSize, numNodes, outputFeatures]
-        var biasExpanded = Engine.Reshape(_bias, [1, 1, _outputFeatures]);
-        output = Engine.TensorBroadcastAdd(avgOverHeads, biasExpanded);
+        // Average across heads, then add the output bias (on-tape).
+        var headAveraged = Engine.TensorDivideScalar(denseHeadSum!, NumOps.FromDouble(_numHeads));
+        var denseBias = Engine.Reshape(_bias, [1, 1, _outputFeatures]);
+        output = Engine.TensorBroadcastAdd(headAveraged, denseBias);
 
         activatedOutput = ApplyActivation(output);
 
@@ -616,6 +582,47 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         var result = Engine.TensorMatMul(flattened, weights2D);
         // Reshape back: [batch*rows, outputCols] -> [batch, rows, outputCols]
         return result.Reshape([batch, rows, outputCols]);
+    }
+
+    /// <summary>
+    /// Builds the additive attention mask for one graph: 0 where an edge exists in the
+    /// adjacency matrix, -1e9 (<paramref name="negInf"/>) where there is no edge, so a
+    /// subsequent softmax gives masked (non-neighbour) entries a ~0 coefficient. Constant
+    /// data (not a tape parameter). Supports 2-D [nodes, nodes] adjacency (shared across the
+    /// batch) and 3-D [batch, nodes, nodes] (per-graph).
+    /// </summary>
+    private Tensor<T> BuildAttentionMask(Tensor<T> adjacency, bool adjacency2D, int b, int numNodes, T negInf)
+    {
+        var mask = new Tensor<T>([numNodes, numNodes]);
+        T zero = NumOps.Zero;
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                T a = adjacency2D ? adjacency[i, j] : adjacency[b, i, j];
+                mask[i, j] = NumOps.Equals(a, zero) ? negInf : zero;
+            }
+        }
+        return mask;
+    }
+
+    /// <summary>
+    /// Builds an inverted-dropout mask over the [numNodes, numNodes] attention coefficients:
+    /// each entry is 0 with probability <paramref name="dropoutRate"/>, otherwise 1/(1-rate)
+    /// (Velickovic et al. 2018 §3.3 applies dropout to the normalized coefficients). Uses the
+    /// layer's seeded <see cref="_random"/> so training is reproducible. Constant data.
+    /// </summary>
+    private Tensor<T> BuildAttentionDropoutMask(int numNodes, double dropoutRate)
+    {
+        var mask = new Tensor<T>([numNodes, numNodes]);
+        T zero = NumOps.Zero;
+        T keepScale = NumOps.FromDouble(1.0 / (1.0 - dropoutRate));
+        int total = numNodes * numNodes;
+        for (int i = 0; i < total; i++)
+        {
+            mask.SetFlat(i, _random.NextDouble() < dropoutRate ? zero : keepScale);
+        }
+        return mask;
     }
 
     private void ComputeAttentionScores(int b, int h, int numNodes, Tensor<T> selfScores, Tensor<T> neighborScores)
@@ -974,8 +981,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         _lastOutput = null;
         _lastAttentionCoefficients = null;
         _lastPreSoftmaxScores = null;
-        _lastTransformed = null;
-        _lastHeadOutputs = null;
         _weightsGradient = null;
         _attentionWeightsGradient = null;
         _biasGradient = null;

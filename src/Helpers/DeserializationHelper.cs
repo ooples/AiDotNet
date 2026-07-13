@@ -4,6 +4,7 @@ namespace AiDotNet.Helpers;
 
 public static class DeserializationHelper
 {
+
     /// <summary>
     /// Structured marker exception thrown by an explicit-branch constructor
     /// lookup when the expected constructor signature is not present on the
@@ -1524,21 +1525,25 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(PoolingLayer<>))
         {
-            // PoolingLayer(int inputDepth, int inputHeight, int inputWidth, int poolSize, int stride, PoolingType type)
+            // PoolingLayer's only constructor is the lazy (int poolSize, int stride, PoolingType type)
+            // overload — the input depth/height/width are resolved on first forward, NOT ctor args.
+            // The previous lookup asked for a 6-arg (inputDepth, inputHeight, inputWidth, poolSize,
+            // stride, type) ctor that does not exist, so GetConstructor returned null, the branch
+            // threw MissingLayerCtorException, and the generic reflection fallback rebuilt the layer
+            // with the ctor's DEFAULT PoolingType.Max — silently converting every Average-pooling
+            // layer to Max pooling on Clone/serialize round-trip (#1221 class). Max ≥ Average on the
+            // non-negative post-ReLU activations, so a cloned CNN (PANNs CNN14, ResNet, VGG, …) drifts
+            // and saturates. Use the real 3-arg ctor so the persisted pooling type is honored.
             int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
             int stride = TryGetInt(additionalParams, "Stride") ?? 2;
             PoolingType poolingType = TryGetEnum<PoolingType>(additionalParams, "PoolingType") ?? PoolingType.Max;
-            // inputShape format: [batch, depth, height, width] (NCHW format)
-            int inputDepth = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
-            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
-            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(PoolingType) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(PoolingType) });
             if (ctor is null)
             {
-                throw new MissingLayerCtorException($"Cannot find PoolingLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find PoolingLayer constructor (int poolSize, int stride, PoolingType type).");
             }
-            instance = ctor.Invoke(new object[] { inputDepth, inputHeight, inputWidth, poolSize, stride, poolingType });
+            instance = ctor.Invoke(new object[] { poolSize, stride, poolingType });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.UpsamplingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.UpsamplingLayer`1")))

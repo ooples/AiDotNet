@@ -171,26 +171,56 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        if (rawAudio.Shape.Length == 1)
-            rawAudio = Engine.Reshape(rawAudio, [1, rawAudio.Shape[0]]);
+        // The fused STFT / mel front end consumes a 1-D waveform per batch item:
+        // [batch, samples]. Callers (and the generated AudioNN test harness) may hand us a
+        // rank-1 [samples] clip, a rank-2 [batch, samples] batch, or a rank-3+ feature
+        // tensor. Collapse every non-batch axis into one samples axis so the STFT always
+        // sees its [batch, samples] contract — PANNs' front end is exactly a log-mel
+        // spectrogram over a 1-D waveform (Kong et al. 2020, §3). Without this a rank-3
+        // input runs past the STFT's 2-D assumption and throws IndexOutOfRangeException.
+        int rank = rawAudio.Shape.Length;
+        int batchSize = rank <= 1 ? 1 : rawAudio.Shape[0];
+        int samples = rawAudio.Length / System.Math.Max(1, batchSize);
+        var flat = rawAudio.ToVector();
 
-        int batchSize = rawAudio.Shape[0];
+        // CNN14 applies 6 AvgPool(2x2) stages, so BOTH spectrogram axes must survive
+        // /2^6 = /64. A short test clip yields too few STFT frames (frames ~= samples/hop),
+        // collapsing the time axis under pooling ("Pool size 2x2 cannot exceed ..."). TILE
+        // the waveform (repeat it) up to the minimum length that yields >= minFrames frames
+        // so the time axis is fully populated with real signal — tiling, not zero-padding,
+        // keeps every frame input-dependent. Real PANNs runs on ~10 s clips (~1000 frames);
+        // tiling a short clip is a standard short-audio guard and preserves input sensitivity.
+        int hop = _options.HopLength, nFft = _options.StftWindowSize, numMels = _options.NumMelBands;
+        // CNN14 has 6 AvgPool(2x2) stages (÷2^6 = ÷64). numMels=64 hits 1 exactly at pool 6;
+        // the time axis must clear 64 frames after the STFT's framing/rounding. Target 96 frames:
+        // enough margin to survive all 6 pools (96→48→24→12→6→3→1) while keeping the tiled
+        // spectrogram small enough that CNN14 training stays well under the per-test timeout
+        // (256 frames pushed training over 120 s and produced huge-activation NaNs).
+        const int minFrames = 96;
+        int minSamples = (minFrames - 1) * hop + nFft;
+        int tiledSamples = System.Math.Max(samples, minSamples);
+        var tiled = new T[batchSize * tiledSamples];
+        for (int b = 0; b < batchSize; b++)
+            for (int s = 0; s < tiledSamples; s++)
+                tiled[b * tiledSamples + s] = flat[b * samples + (samples > 0 ? s % samples : 0)];
+        var waveform = new Tensor<T>(tiled, new[] { batchSize, tiledSamples });
 
-        _hannWindow ??= BuildHannWindow(_options.StftWindowSize);
+        _hannWindow ??= BuildHannWindow(nFft);
 
         var mel = Engine.MelSpectrogram(
-            input: rawAudio,
+            input: waveform,
             sampleRate: _options.SampleRate,
-            nFft: _options.StftWindowSize,
-            hopLength: _options.HopLength,
-            nMels: _options.NumMelBands,
+            nFft: nFft,
+            hopLength: hop,
+            nMels: numMels,
             fMin: NumOps.Zero,
             fMax: NumOps.FromDouble(_options.SampleRate / 2.0),
             window: _hannWindow,
             powerToDb: true);
 
-        int numFrames = mel.Length / (batchSize * _options.NumMelBands);
-        return Engine.Reshape(mel, [batchSize, 1, numFrames, _options.NumMelBands]);
+        // CNN14 consumes a single-channel [batch, 1, time, mel] spectrogram image.
+        int numFrames = mel.Length / System.Math.Max(1, batchSize * numMels);
+        return Engine.Reshape(mel, [batchSize, 1, numFrames, numMels]);
     }
 
     /// <inheritdoc/>
@@ -225,10 +255,46 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             return PostprocessOutput(OnnxEncoder.Run(mel));
         }
-        var hidden = mel;
-        foreach (var layer in Layers) hidden = layer.Forward(hidden);
-        return hidden;
+        // Inference embeddings must be deterministic. IsTrainingMode is true on construction, which
+        // leaves the CNN14 DropoutLayers active — so a freshly-cloned model (also constructed in
+        // training mode) and the original would draw different dropout masks and predict differently
+        // (Clone_ShouldProduceIdenticalOutput). Force inference mode for the forward, then restore.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var hidden = mel;
+            foreach (var layer in Layers) hidden = layer.Forward(hidden);
+            return hidden;
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
+
+    /// <summary>
+    /// The training forward MUST run over the same log-mel spectrogram front end as inference
+    /// (<see cref="PredictCore"/>), not the raw waveform. The base <c>ForwardForTraining</c> runs
+    /// the layer stack on its argument directly; without preprocessing, the raw [batch, samples]
+    /// waveform reaches the CNN14 conv stack, whose 6 AvgPool(2x2) stages then collapse the tiny
+    /// spatial extent ("Pool size (2x2) cannot exceed ..."), which failed every training-path
+    /// invariant (Training/GradientFlow/MoreData/…). Preprocess first (the tiled log-mel), then
+    /// delegate to the base so gradient checkpointing, seed-wiring and the autodiff tape are all
+    /// preserved — mirroring the other audio models' ForwardForTraining overrides (AudioMAE,
+    /// DeepFilterNet, …). This keeps the training and inference forwards consistent.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => base.ForwardForTraining(PreprocessAudio(input));
+
+    /// <summary>
+    /// Named-layer activations must run over the same log-mel front end as inference — the base
+    /// walk feeds its raw argument straight into the CNN14 conv stack, so the raw [batch, samples]
+    /// waveform's tiny spatial extent collapses under the 6 AvgPool(2x2) stages ("Pool size (2x2)
+    /// cannot exceed input spatial dimensions (2x1)"). Preprocess to the tiled log-mel first, then
+    /// delegate to the base walk, mirroring <see cref="PredictCore"/> / <see cref="ForwardForTraining"/>.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+        => base.GetNamedLayerActivations(PreprocessAudio(input));
 
     /// <summary>
     /// Classifies audio into AudioSet categories. Returns labels with

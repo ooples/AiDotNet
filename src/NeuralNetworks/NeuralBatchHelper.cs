@@ -568,6 +568,21 @@ internal static class NeuralBatchHelper
         // ~0 and the chunk becomes unbounded.
         beta = System.Math.Max(beta, perSampleRetained);
 
+        // Analytic per-sample floor from the model's own resolved layer shapes.
+        // The empirical probes above read POST-forward retained heap, but the memory
+        // that actually OOMs is the TRANSIENT arena high-water DURING a forward — the
+        // concurrently-live activation set — which the arena returns to its pool
+        // afterward, so retained heap systematically under-counts the in-flight peak.
+        // Worse, on quadratic-in-seq operators (attention scores [heads, seq, seq])
+        // the tiny B=8/B=16 probes never enter the allocation regime the full chunk
+        // hits. Derive a conservative per-sample lower bound straight from every
+        // (sub-)layer's resolved output element count so the chosen chunk honors the
+        // budget regardless of allocator pooling — the arena's live set is bounded
+        // below by the activations flowing through the layers. Shapes are already
+        // resolved by the warm-up forward the retained probe just ran.
+        long analyticPerSample = EstimateAnalyticPerSampleFloorBytes(nn);
+        beta = System.Math.Max(beta, analyticPerSample);
+
         long budgetWithMargin = (long)(memoryBudgetBytes * MemoryBudgetSafetyFactor);
         // Solve alpha + beta * chunk <= budget for chunk.
         long chunk = (budgetWithMargin - alpha) / beta;
@@ -640,5 +655,60 @@ internal static class NeuralBatchHelper
 #endif
         if (probeOutput is System.IDisposable disposable) disposable.Dispose();
         return System.Math.Max(0L, after - before);
+    }
+
+    /// <summary>
+    /// Conservative per-sample byte floor derived from the network's own resolved
+    /// layer shapes — a lower bound on the transient forward arena footprint that the
+    /// empirical retained/allocated probes cannot see (the arena returns its scratch
+    /// to the pool after each forward, so post-forward retained heap under-counts the
+    /// in-flight peak). Sums every (sub-)layer's per-sample output element count and
+    /// scales by element size and a small factor that covers non-output scratch (e.g.
+    /// attention-score <c>[heads, seq, seq]</c> tensors, which are never a layer
+    /// OUTPUT) plus the arena holding a layer's input + output + scratch concurrently.
+    /// Returns 0 when no layer shape is resolved (the caller then keeps the empirical
+    /// estimate); never negative.
+    /// </summary>
+    private static long EstimateAnalyticPerSampleFloorBytes<T>(NeuralNetworkBase<T> nn)
+    {
+        long totalElements = 0;
+        foreach (var layer in nn.Layers)
+            totalElements += SumResolvedOutputElements(layer);
+        if (totalElements <= 0) return 0;
+
+        long elementSize = typeof(T) == typeof(double) ? sizeof(double)
+            : typeof(T) == typeof(float) ? sizeof(float)
+            : sizeof(double); // conservative default for an unknown numeric T
+        // 3x: attention/scratch tensors are not layer outputs, and the arena holds a
+        // layer's input, output, and intermediate scratch live at once. Keeps the
+        // floor a genuine (modestly padded) lower bound — not a wild over-estimate —
+        // so the chosen chunk stays as large as the budget safely allows.
+        const long ScratchAndDoubleBufferFactor = 3;
+        return elementSize * totalElements * ScratchAndDoubleBufferFactor;
+    }
+
+    /// <summary>
+    /// Recursively sums the per-sample output element count of <paramref name="layer"/>
+    /// and all its registered sub-layers. Skips any layer whose output shape is
+    /// unresolved or contains a non-positive (sentinel/placeholder) dimension.
+    /// </summary>
+    private static long SumResolvedOutputElements<T>(AiDotNet.Interfaces.ILayer<T> layer)
+    {
+        long elements = 0;
+        var shape = layer.GetOutputShape();
+        if (shape is not null && shape.Length > 0)
+        {
+            long product = 1;
+            bool valid = true;
+            foreach (var dim in shape)
+            {
+                if (dim <= 0) { valid = false; break; }
+                product *= dim;
+            }
+            if (valid) elements += product;
+        }
+        foreach (var sub in layer.GetSubLayers())
+            elements += SumResolvedOutputElements(sub);
+        return elements;
     }
 }
