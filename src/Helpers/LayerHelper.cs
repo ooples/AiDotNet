@@ -24736,18 +24736,22 @@ public static class LayerHelper<T>
         int fusionFfnDim = fusionDim * 4;
         int detectionFfnDim = detectionDim * 4;
 
-        // === Vision Encoder (ViT/Swin backbone) ===
-        yield return new LayerNormalizationLayer<T>();
-
+        // === Vision Encoder (ViT/Swin backbone, Minderer et al. 2022) — paper-faithful RESIDUAL
+        // transformer blocks. The prior bare MHA→LN→Dense→Dense→LN chain had NO skip connections, so
+        // the deep encoder collapsed distinct inputs post-training (DifferentInputs L2=0) and could not
+        // fit (TrainingError). TransformerEncoderLayer carries MSA+residual+LN and GELU-MLP+residual+LN
+        // internally (2-arg lazy ctor; the 3-arg eager ctor OOMs across a shard). The leading LayerNorm
+        // moves to a trailing LayerNorm; each grounding model's ComputeEncoderDecoderBoundary is updated
+        // in lockstep (lpb 5/6 → 1/2). The generated tests construct these models with a token-consistent
+        // 1-D arch (inputSize == VisionDim) so ResolveLazyLayerShapes resolves the lazy TEL to VisionDim
+        // — an IMAGE arch (inputHeight/Width) would pin it to the raw spatial dim and mismatch the real
+        // [B, tokens, VisionDim] input.
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return CreateVisionMha(visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, visionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+        yield return new LayerNormalizationLayer<T>();
 
         // === Text Encoder Projection ===
         yield return new DenseLayer<T>(fusionDim, identityActivation);
@@ -24777,13 +24781,11 @@ public static class LayerHelper<T>
         if (fusionDim != detectionDim)
             yield return new DenseLayer<T>(detectionDim, identityActivation);
 
+        // Detection-decoder self-attention as paper-faithful RESIDUAL blocks (after the
+        // encoder/decoder boundary, so this does not affect _encoderLayerEnd).
         for (int i = 0; i < numDetectionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (detectionDim) / (numHeads > 8 ? 8 : numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(detectionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(detectionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads > 8 ? 8 : numHeads, detectionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }

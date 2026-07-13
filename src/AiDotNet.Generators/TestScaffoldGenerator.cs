@@ -414,6 +414,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // NOTE: the audio branch's Fp32-gated iteration override is audio-family-only, so these are
         // NOT double-emitted alongside their HeavyTrainingTimeoutClassNames smoke cap.
         "ViT", "InternViT", "DINOv2", "DINOv3", "PerceptionEncoder", "RADIOv25", "SigLIPSO", "SAM",
+        // Grounding-detection VLMs (residual TransformerEncoderLayer vision encoder). The heavy ones
+        // (OWLViT 768/12L, OWLv2 & GLaMM 1024/24L) overrun the 120/180 s training-test gates at
+        // <double>; <float> halves the per-step footprint. VisionLanguageTestBase is generic. The
+        // 256/6L siblings (GroundingDINO/GroundingDINO15/GroundedSAM2/DINOX) fit at <double>.
+        "GLaMM", "OWLViT", "OWLv2",
         // Diffusion family (Flux / ControlNet / video / point-cloud)
         "CogVideoModel", "ControlNetFluxModel", "ControlNetPlusPlusFluxModel",
         "FlowEditModel", "Flux2Model", "Flux2SchnellModel", "FluxInpaintingModel",
@@ -491,6 +496,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 120 s gate (GOTOCR2 timed out solo), so the universal smoke-cap trims it — the DocumentNN /
         // VisionLanguage family branches emit no iteration overrides, so this fires exactly once.
         "GOTOCR2", "Surya", "MPLUGDocOwl", "MPLUGDocOwl15", "MPLUGDocOwl2", "TextMonkey", "UReader", "DocPedia", "Nougat",
+        // Grounding-detection VLMs sharing CreateDefaultGroundingDetectionLayers' residual vision
+        // encoder. Restoring the paper's residual TransformerEncoderLayer blocks made the encoder's
+        // per-step forward+backward heavier, so the 50+200-iteration MoreData probe (and the 100+-iter
+        // memorization task on the 768/1024-d models) overruns the 120/180 s gate even for the 256/6L
+        // siblings — the smoke-iteration cap trims all of them. OWLViT (768/12L) / OWLv2 & GLaMM
+        // (1024/24L) are also in Fp32TestClassNames for the extra <float> throughput margin.
+        "GLaMM", "OWLViT", "OWLv2", "GroundingDINO", "GroundingDINO15", "GroundedSAM2", "DINOX",
         // NOTE: PANNs / PANNsModel / MPSENet are NOT listed here — they are in Fp32TestClassNames, and
         // the audio-family branch already emits the smoke-iteration overrides for every Fp32 member.
         // Listing them here as well would double-define TrainingIterations / MemorizationTaskIterations.
@@ -2547,6 +2559,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 128, outputSize: 4), " +
                     $"new {vlmOptionsType} {{ VisionDim = 128, DecoderDim = 128, " +
                     "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "DINOX" or "GLaMM" or "GroundedSAM2" or "GroundingDINO"
+                          or "GroundingDINO15" or "OWLv2" or "OWLViT")
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Grounding.", System.StringComparison.Ordinal))
+            {
+                // Grounding-detection VLMs (OWLViT/OWLv2 Minderer 2022, GroundingDINO Liu 2023,
+                // DINOX / GLaMM / GroundedSAM2 / GroundingDINO15) share CreateDefaultGroundingDetectionLayers,
+                // whose vision encoder is now paper-faithful residual TransformerEncoderLayer blocks. These
+                // models consume POST-PATCH-EMBEDDING tokens [batch, num_tokens, VisionDim] — NOT raw
+                // pixels — matching the [1, 4, VisionDim] InputShape the grounding branch below emits.
+                // Construct with a token-consistent 1-D architecture (inputSize == VisionDim). This is
+                // LOAD-BEARING: ResolveLazyLayerShapes walks from the architecture input shape, and the
+                // generic image arch (inputHeight/Width 112) would pin the lazy vision TEL's embedding
+                // size to the raw spatial dim 112 instead of VisionDim, so the real [1,4,VisionDim] token
+                // input then mismatches ("embedding dim 256 does not match weight dim 112"). The old bare
+                // MHA was eager-sized to VisionDim so it masked the arch/input inconsistency; the residual
+                // TEL resolves lazily and needs the arch to be honest. VisionDim per paper: GroundingDINO /
+                // GroundingDINO15 / GroundedSAM2 / DINOX 256, OWLViT 768 (ViT-B/16), OWLv2 / GLaMM 1024.
+                int gVisionDim = model.ClassName switch
+                {
+                    "GroundingDINO" or "GroundingDINO15" or "GroundedSAM2" or "DINOX" => 256,
+                    "OWLViT" => 768,
+                    _ => 1024,
+                };
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    $"inputSize: {gVisionDim}, outputSize: 4))";
             }
             else if ((model.ClassName is "InternViT" or "DINOv2" or "DINOv3" or "RADIOv25" or "SigLIPSO" or "PerceptionEncoder")
                      && typeName.StartsWith(
