@@ -46,7 +46,7 @@ jobs:
     steps:
       - name: Run release-please
         id: rp
-        uses: googleapis/release-please-action@a02a34c4d625f9be7cb89156071d8567266a2445 # v4.1.3
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v4.1.3
         with:
           # A PAT (not GITHUB_TOKEN) so the Release PR and the release/tag it creates can trigger the
           # normal CI checks; GITHUB_TOKEN-authored events don't re-trigger workflows. Falls back to
