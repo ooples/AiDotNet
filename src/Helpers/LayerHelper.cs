@@ -10049,13 +10049,24 @@ public static class LayerHelper<T>
         int numHeads = 12,
         int vocabSize = 30522,
         int maxSequenceLength = 512,
-        int numClasses = 7)
+        int numClasses = 7,
+        int patchSize = 16)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
 
-        // Word embeddings projection
+        // Document-image patch embedding. LayoutLM (Xu et al. 2020) enriches its text+2D-layout
+        // stream with image REGION features from an external detector; for the self-contained
+        // [B, 3, H, W] document-image input the tests feed, a linear patch embedding tokenizes the
+        // image into a [B, numPatches, hiddenDim] sequence — the same visual-front role LayoutLMv2/v3
+        // give their conv backbone (PatchEmbeddingLayer does the spatial->sequence flatten tape-safely,
+        // so the DocumentNeuralNetworkBase inference reshape never re-mangles it). Without a visual
+        // front the raw pixels hit the first attention as 3-channel features and throw
+        // "Input embedding dimension (3) does not match weight dimension (768)".
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
+
+        // Word/patch embedding projection (runs in continuous mode on the patch-token sequence).
         yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
 
         // Position embeddings
