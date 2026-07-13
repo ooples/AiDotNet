@@ -1,9 +1,11 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
@@ -176,21 +178,31 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         : base(CreateMinimalArchitecture(options))
     {
         _options = options ?? new SceneClassifierOptions();
-        _useNativeMode = false;
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;
         ClassLabels = _options.CustomScenes ?? StandardScenes;
 
-        // Initialize ONNX if path provided
-        if (_options.ModelPath is string modelPath && !string.IsNullOrEmpty(modelPath))
-        {
-            OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        }
-
         // Initialize feature extractors
         _melSpectrogram = CreateMelSpectrogram();
         _mfccExtractor = CreateMfccExtractor();
+
+        if (_options.ModelPath is string modelPath && !string.IsNullOrEmpty(modelPath))
+        {
+            // An ONNX model file was supplied → ONNX inference mode.
+            _useNativeMode = false;
+            OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        }
+        else
+        {
+            // No ONNX model supplied → NATIVE trainable mode. Previously this ctor left the model in a
+            // broken ONNX state (no encoder AND no trainable layers), so Train() threw "not supported in
+            // ONNX inference mode" and the model could neither train nor infer. Build the trainable stack
+            // (matching the native architecture ctor) so a from-options SceneClassifier can be trained.
+            _useNativeMode = true;
+            _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            InitializeLayers();
+        }
     }
 
     private static NeuralNetworkArchitecture<T> CreateMinimalArchitecture(SceneClassifierOptions? options)
@@ -314,6 +326,13 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         {
             Layers.Add(layer);
         }
+
+        // Acoustic scene classification is single-label: normalize the head's linear logits to a
+        // probability distribution with a SOFTMAX activation INSIDE the forward graph, so it runs during
+        // both training and inference. This keeps class scores non-negative (a valid scene-score vector)
+        // and keeps the trained objective consistent with the predicted output. Vector activation →
+        // normalization runs across the class axis. Skipped when the caller supplied explicit layers.
+        Layers.Add(new ActivationLayer<T>(new SoftmaxActivation<T>() as IVectorActivationFunction<T>));
     }
 
     #endregion

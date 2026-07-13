@@ -2198,6 +2198,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         };
 
     /// <summary>
+    /// The post-patch-embedding vision_dim for a VisionLanguage.Grounding model — the value the
+    /// generated [1, 4, vision_dim] InputShape override AND the architecture inputSize must agree on
+    /// (per-paper *Options.VisionDim). Single source of truth for both the grounding InputShape branch
+    /// and the token-consistent constructor-architecture branch so they never drift.
+    /// </summary>
+    private static int GetGroundingVisionDim(string className)
+        => className switch
+        {
+            // Liu 2023 — DETR-style transformer decoder dim.
+            "GroundingDINO" or "GroundingDINO15" or "GroundedSAM2" or "DINOX" => 256,
+            "OWLViT" => 768, // Minderer 2022 — ViT-B/16 hidden dim.
+            // OWLv2 / Ferret / FerretV2 / GLaMM / Groma / Shikra — ViT-L/14 hidden dim.
+            _ => 1024,
+        };
+
+    /// <summary>
     /// Emits a generated test class for a model that has no manual test
     /// coverage. The caller (autogen loop) must have already verified the
     /// model has a usable parameterless / architecture-only constructor —
@@ -3007,9 +3023,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // lazy fusion LayerNorm resolves gamma to 128 during the architecture-driven
                 // warm-up, so the real vision_dim forward throws a gamma/weight shape mismatch.
                 bool isTokenConsumingVlm = IsTokenConsumingVisionLanguageModel(model.ClassName);
+                // Grounding VLMs (VisionLanguage.Grounding.*: GLaMM, OWLv2/OWLViT, GroundingDINO,
+                // DINOX, GroundedSAM2, Ferret, Groma, Shikra) are token-consuming too — their layer
+                // chain begins with LayerNormalization + vision MultiHeadAttention(VisionDim) and their
+                // InputShape override feeds [1, 4, VisionDim] (see the grounding InputShape branch).
+                // Like the token-consuming VLMs above they must NOT be built as raw-image 3D inputs, or
+                // the lazy fusion LayerNorm resolves gamma to GetVisionSpatialSize (128) during the
+                // architecture-driven warm-up and the real VisionDim forward throws a gamma/weight
+                // shape mismatch ("Gamma shape (128) does not match ... input shape (1, 4, 1024)").
+                bool isGrounding = model.FullyQualifiedName.Contains("VisionLanguage.Grounding");
                 bool isVision = (model.Domains.Contains(1) || model.Domains.Contains(11)) // Vision=1, ThreeD=11
                     && !model.ExtendsForecastingModelBase
-                    && !isTokenConsumingVlm;
+                    && !isTokenConsumingVlm
+                    && !isGrounding;
                 bool isAudio = model.Domains.Contains(3); // Audio=3 (enum ordinal, not Video=4)
                 // Use the shared two-frame helpers so the constructor /
                 // factory-body emission and the architecture-shape emission
@@ -3110,6 +3136,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     if (IsTokenConsumingVisionLanguageModel(model.ClassName))
                     {
                         inputSize1D = GetTokenConsumingVlmVisionDim(model.ClassName);
+                    }
+
+                    // Grounding VLMs: match the architecture inputSize to the [1, 4, VisionDim]
+                    // InputShape (same VisionDim the grounding InputShape branch emits), so the
+                    // lazy leading LayerNorm resolves gamma to VisionDim rather than 128.
+                    if (isGrounding)
+                    {
+                        inputSize1D = GetGroundingVisionDim(model.ClassName);
                     }
 
                     inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
@@ -3469,23 +3503,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             //
             // num_tokens kept small (4) so attention intermediate tensors
             // stay bounded; batch=1 since these are per-image detection models.
-            int groundingVisionDim;
-            switch (model.ClassName)
-            {
-                case "GroundingDINO":
-                case "GroundingDINO15":
-                case "GroundedSAM2":
-                case "DINOX":
-                    groundingVisionDim = 256;
-                    break;
-                case "OWLViT":
-                    groundingVisionDim = 768;
-                    break;
-                default:
-                    // OWLv2, Ferret, FerretV2, GLaMM, Groma, Shikra
-                    groundingVisionDim = 1024;
-                    break;
-            }
+            // Single source of truth (shared with the token-consistent constructor-architecture branch)
+            // so the InputShape vision_dim and the architecture inputSize can never drift apart.
+            int groundingVisionDim = GetGroundingVisionDim(model.ClassName);
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 4, {groundingVisionDim} }};");
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, 4, {groundingVisionDim} }};");
         }

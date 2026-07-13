@@ -7,6 +7,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Audio.Classification;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Emotion;
@@ -80,7 +82,29 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         _options = options ?? new WavLMSEROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // WavLM fine-tunes its deep (12-layer, 768-d) transformer with LR WARMUP (Chen et al. 2022,
+        // following wav2vec2 / the Noam schedule): the LR ramps from ~0 over the first steps instead of
+        // hitting full magnitude on step 1. Without it, AdamW's first updates overshoot the sharp
+        // post-LN encoder landscape and the loss SPIKES before recovering (memorization over 100 steps
+        // still converges, but the shorter Training_ShouldReduceLoss window catches the transient rise).
+        // Restore the paper's warmup so the loss descends monotonically from the first step. Peak LR is
+        // the conservative SER fine-tuning value (5e-4). base(...) defaults maxGradNorm to 1.0, so the
+        // eager TrainWithTape path also clips the gradient norm before each step.
+        // Conservative fine-tuning LR with warmup. WavLM SER fine-tunes at a small peak LR (~1e-4;
+        // the sibling grounding-VLM GLaMM uses 5e-5) — the framework AdamW default (1e-3) is 1-2 orders
+        // of magnitude too aggressive for this deep (12-layer, 768-d) post-LN encoder and the loss
+        // steadily RISES over the first ~30 steps before it would recover. Ramp the LR 1e-5 -> 1e-4 over
+        // the first 10 steps and hold at 1e-4 (WarmupThenEpoch stops per-batch stepping once warmup
+        // completes; there are no epochs here). InitialLearningRate matches the warmup floor so the very
+        // first optimizer step is gentle whether the eager path syncs the schedule before or after it.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-5,
+                LearningRateScheduler = new LinearWarmupScheduler(
+                    baseLearningRate: 1e-4, warmupSteps: 10, warmupInitLr: 1e-5),
+                SchedulerStepMode = SchedulerStepMode.WarmupThenEpoch,
+            });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
@@ -270,7 +294,9 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass WavLMSER's own warmup-scheduled optimizer (see ctor) instead of the shared base
+            // optimizer, so the eager tape path advances the linear-warmup LR schedule each step.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -290,24 +316,11 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         return rawAudio;
     }
 
-    // Single-label emotion classifier: convert the head's raw logits to a probability distribution
-    // (numerically-stable softmax — subtract the max before exp). Non-negative and sums to 1, so the
-    // public prediction is a valid class-score vector (ClassOutput_ShouldBeNonNegative) rather than
-    // unbounded logits. Rank-preserving over the flat output.
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o)
-    {
-        int n = o.Length;
-        if (n == 0) return o;
-        double max = double.NegativeInfinity;
-        for (int i = 0; i < n; i++) { double v = NumOps.ToDouble(o[i]); if (v > max) max = v; }
-        double sum = 0.0;
-        var exps = new double[n];
-        for (int i = 0; i < n; i++) { double e = Math.Exp(NumOps.ToDouble(o[i]) - max); exps[i] = e; sum += e; }
-        if (sum <= 0.0) sum = 1.0;
-        var result = new Tensor<T>(o._shape);
-        for (int i = 0; i < n; i++) result[i] = NumOps.FromDouble(exps[i] / sum);
-        return result;
-    }
+    // The softmax that turns the head's logits into a single-label emotion probability distribution
+    // (Chen et al. 2022) now lives in the final head layer (see CreateDefaultWavLMSERLayers), so it runs
+    // in BOTH the training and inference forward passes — keeping the trained objective consistent with
+    // the predicted output. PredictCore therefore just returns the already-normalized distribution.
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
     public override ModelMetadata<T> GetModelMetadata()
     {

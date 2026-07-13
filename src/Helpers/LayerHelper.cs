@@ -20593,9 +20593,15 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Emotion classification head
+        // Emotion classification head. The final layer applies SOFTMAX as its activation so the emotion
+        // probability distribution (single-label; Chen et al. 2022) is produced INSIDE the forward graph —
+        // i.e. the SAME nonlinearity runs during training and inference. Applying softmax only at inference
+        // (PostprocessOutput) instead makes the trained objective (on raw logits) inconsistent with the
+        // predicted output: a normalized distribution can't match an arbitrary target, so the measured
+        // Predict-space loss floors and "training reduced loss" reads false even while the model learns.
+        // Vector activation → normalization is across the class axis.
         yield return new DenseLayer<T>(hiddenDim, geluActivation);
-        yield return new DenseLayer<T>(numClasses, identityActivation);
+        yield return new DenseLayer<T>(numClasses, new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
     }
 
     #endregion
