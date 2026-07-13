@@ -76,6 +76,25 @@ internal static class NeuralBatchHelper
     /// </summary>
     public const double MemoryBudgetSafetyFactor = 0.7;
 
+    /// <summary>
+    /// Correction applied to the empirical per-sample slope in
+    /// <see cref="EstimateChunkSize{T}"/> to account for the batched execution
+    /// path holding SEVERAL of a single forward's footprint concurrently.
+    /// </summary>
+    /// <remarks>
+    /// The probes measure the retained/allocated bytes of ONE forward, but the
+    /// budgeted path (<see cref="NeuralNetworkBase{T}.PredictInBatches"/>) runs each
+    /// chunk while concurrently holding the growing concatenated output, the tensor
+    /// arena's retained high-water buffer, AND the next chunk's inputs — so the
+    /// process-retained heap is a MULTIPLE of a lone forward's delta. Measured on the
+    /// MemoryBudget guard (50 000 samples, 1 GB budget): the uncorrected estimate chose
+    /// a chunk whose actual retained heap was 1506 MB — 2.1× the 0.7×-budget (717 MB)
+    /// target, i.e. 1.47× the budget itself. Scaling the per-sample slope by 2.5×
+    /// (covering the observed 2.1× with margin) sizes the chunk so the ACTUAL retained
+    /// footprint honors the budget with headroom instead of overshooting it.
+    /// </remarks>
+    public const double BatchedRetentionFactor = 2.5;
+
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, AdaptiveState> _adaptiveStates
         = new();
 
@@ -582,6 +601,11 @@ internal static class NeuralBatchHelper
         // resolved by the warm-up forward the retained probe just ran.
         long analyticPerSample = EstimateAnalyticPerSampleFloorBytes(nn);
         beta = System.Math.Max(beta, analyticPerSample);
+
+        // Correct the single-forward slope for the batched path's concurrent-buffer
+        // overhead (see BatchedRetentionFactor). Without this the chosen chunk's actual
+        // retained heap overshoots the budget by ~2.1× (measured 1506 MB at a 1 GB budget).
+        beta = System.Math.Max(1L, (long)(beta * BatchedRetentionFactor));
 
         long budgetWithMargin = (long)(memoryBudgetBytes * MemoryBudgetSafetyFactor);
         // Solve alpha + beta * chunk <= budget for chunk.
