@@ -132,8 +132,16 @@ public class FunctionalCausalDiscoveryTests
     [Fact(Timeout = 120000)]
     public async Task RCD_FindsCausalStructure()
     {
+        await Task.Yield();
         var algo = new RCDAlgorithm<double>();
-        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        // RCD (like every LiNGAM-family method) requires NON-GAUSSIAN NOISE for identifiability. The
+        // shared CreateSyntheticData() is a noiseless, perfectly-collinear ramp (X0, X1, X2 are all
+        // exact linear functions of i), so the causal direction is genuinely UNIDENTIFIABLE — RCD now
+        // correctly reports no edges on it (ConfoundingRatio returns NaN for degenerate evidence rather
+        // than fabricating edges). Use a proper LiNGAM-identifiable fixture (Uniform(-1,1) noise,
+        // X0 -> X1, X0 -> X2) so RCD can actually recover a structure to assert on.
+        var graph = algo.DiscoverStructure(
+            new Matrix<double>(BuildLingamData(200, seed: 12345, candidateIsRoot: true)), FeatureNames);
         CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
@@ -198,6 +206,29 @@ public class FunctionalCausalDiscoveryTests
         Assert.True(ratio > 0.05,
             $"A candidate that is actually an effect must score above the 0.05 cutoff so the " +
             $"confounding stop fires (it was dead code before this calibration); got {ratio:F4}.");
+    }
+
+    // Unidentifiable-structure integration test (review [201]): when the observed variables carry no
+    // identifiable directional evidence, RCD must NOT fabricate directed edges — it must report the
+    // configuration as confounded/indeterminate and emit an empty ordering. The noiseless,
+    // perfectly-collinear CreateSyntheticData() (X0, X1, X2 are exact linear functions of a common
+    // ramp) is the canonical unidentifiable case: LiNGAM/RCD require NON-GAUSSIAN NOISE, which this
+    // fixture has none of. ConfoundingRatio returns NaN (indeterminate) for the best candidate's
+    // degenerate evidence, so the confounding stop fires in the FIRST round (previously suppressed by
+    // the `ordering.Count > 0` guard) and no edges are written. Before these fixes ConfoundingRatio
+    // returned 0 (indistinguishable from a clean root) and RCD fabricated spurious edges from the
+    // perfect correlation.
+    [Fact(Timeout = 120000)]
+    public async Task RCD_UnidentifiableData_EmitsNoDirectedEdges()
+    {
+        await Task.Yield();
+        // Behaviour under an unidentifiable configuration: RCD emits NO directed edges rather than
+        // fabricating structure from the correlation. (The per-candidate ratio thresholds — clean root
+        // well below the cutoff, pure effect well above — are pinned by the RCD_ConfoundingRatio_*
+        // calibration tests above; here we assert the end-to-end anti-fabrication behaviour.)
+        var algo = new RCDAlgorithm<double>();
+        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        Assert.Equal(0, graph.EdgeCount);
     }
 
     [Fact(Timeout = 120000)]

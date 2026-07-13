@@ -93,7 +93,17 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
         // Scale-free confounding ratio in [0, 1] (see _confoundingScoreCutoff doc): the fraction of
         // the best candidate's squared direction-evidence that points the wrong way. Default 0.05 =
         // tolerate up to 5% wrong-way evidence before declaring the remaining variables confounded.
-        _confoundingScoreCutoff = options?.ConfoundingEvidenceCutoff ?? 0.05;
+        double confoundingCutoff = options?.ConfoundingEvidenceCutoff ?? 0.05;
+        // The cutoff is compared against a ratio in [0, 1]; NaN would make the stop condition
+        // (ratio > cutoff) always false (silently disabling confounding detection), and a value < 0
+        // or > 1 would make it always/never trigger. Reject anything outside the valid range at the
+        // options boundary rather than letting it distort discovery.
+        if (double.IsNaN(confoundingCutoff) || confoundingCutoff < 0.0 || confoundingCutoff > 1.0)
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                $"{nameof(CausalDiscoveryOptions.ConfoundingEvidenceCutoff)} must be a finite value in " +
+                $"[0, 1]; got {confoundingCutoff}.");
+        _confoundingScoreCutoff = confoundingCutoff;
     }
 
     /// <inheritdoc/>
@@ -177,14 +187,22 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             // Normalizing by the total evidence removes the per-dataset scale drift that made the raw
             // Σ min(0, DiffMI)² sum (≈ 1e-4) never reach the cutoff — the dead-code bug this fixes.
             double confoundingRatio = ConfoundingRatio(residualData, n, bestVar, remaining);
-            if (confoundingRatio > _confoundingScoreCutoff && ordering.Count > 0)
+            // Stop when the best candidate carries too much wrong-way evidence (latent confounding),
+            // OR when its direction evidence is degenerate/indeterminate (ConfoundingRatio returns NaN
+            // for ~zero or non-finite total evidence — perfectly collinear/deterministic residuals). In
+            // BOTH cases the remaining variables cannot be cleanly ordered. Detect this in the FIRST
+            // round too (no `ordering.Count > 0` guard): when every observed variable is already
+            // confounded there is no clean root to seed the ordering, and picking an arbitrary bestVar
+            // and writing directed coefficients would fabricate causal structure that RCD explicitly
+            // must NOT assert.
+            if (double.IsNaN(confoundingRatio) || confoundingRatio > _confoundingScoreCutoff)
             {
-                // Remaining variables are likely confounded — mark as confounded and stop.
-                // Per RCD: confounded variables cannot be cleanly ordered, so we do NOT
-                // assign edges among them. The zero entries in W for these variables
-                // indicate "unidentified due to latent confounding", which is the correct
-                // RCD behavior. Callers can check: if W[i,j]==0 AND W[j,i]==0 for
-                // remaining variables, those relationships are confounded.
+                // Remaining variables are likely confounded (or unidentifiable) — mark as confounded
+                // and stop. Per RCD: confounded variables cannot be cleanly ordered, so we do NOT
+                // assign edges among them. The zero entries in W for these variables indicate
+                // "unidentified due to latent confounding", which is the correct RCD behavior. Callers
+                // can check: if W[i,j]==0 AND W[j,i]==0 for remaining variables, those relationships
+                // are confounded.
                 break;
             }
 
@@ -261,8 +279,10 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     /// that indicates it is an EFFECT of some other variable rather than a cause. Returns a value in
     /// <c>[0, 1]</c>: ≈ 0 when the candidate is a clean root (all evidence points outward), rising
     /// toward ≈ 0.5 for a symmetric common-cause (latently-confounded) pair where direction is
-    /// unidentifiable. Degenerate all-zero evidence (perfectly collinear/deterministic residuals)
-    /// returns 0. Exposed <c>internal</c> so the RCD calibration tests can assert the clean-vs-
+    /// unidentifiable. Degenerate direction evidence (perfectly collinear/deterministic residuals →
+    /// ~zero or non-finite total evidence) returns <see cref="double.NaN"/> (INDETERMINATE — not a
+    /// clean root); the discovery loop treats NaN as a stop, not as an exogenous cause. Exposed
+    /// <c>internal</c> so the RCD calibration tests can assert the clean-vs-
     /// confounded separation directly without depending on a full discovery run.
     /// </summary>
     internal static double ConfoundingRatio(double[,] residualData, int n, int candidate, IReadOnlyList<int> remaining)
@@ -277,7 +297,11 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             effectEvidence += neg * neg;
             totalEvidence += diffMI * diffMI;
         }
-        return totalEvidence > 1e-12 ? effectEvidence / totalEvidence : 0.0;
+        // Degenerate direction evidence (perfectly collinear/deterministic residuals → ~zero or
+        // non-finite total evidence): the direction is UNIDENTIFIABLE, which is NOT the same as a clean
+        // root (ratio ≈ 0). Return NaN so the caller stops without fabricating edges, rather than
+        // treating a variable with no directional evidence as a clean exogenous cause.
+        return totalEvidence > 1e-12 ? effectEvidence / totalEvidence : double.NaN;
     }
 
     private static double DiffMutualInfo(double[,] data, int n, int i, int j)

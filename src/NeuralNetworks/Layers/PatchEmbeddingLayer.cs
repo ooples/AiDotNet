@@ -407,7 +407,11 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         int liveWidth = input.Shape[3];
         int nh = liveHeight / _patchSize;
         int nw = liveWidth / _patchSize;
-        if (nh < 1 || nw < 1) return;
+        if (nh < 1 || nw < 1)
+            throw new ArgumentException(
+                $"Image H/W ({liveHeight}/{liveWidth}) is smaller than patchSize ({_patchSize}); " +
+                "at least one full patch is required in each spatial dimension.",
+                nameof(input));
 
         _imageHeight = liveHeight;
         _imageWidth = liveWidth;
