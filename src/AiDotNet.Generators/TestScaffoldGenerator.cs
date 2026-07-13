@@ -420,6 +420,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "FluxSchnellModel", "PointEModel", "SenseFlowModel", "TransfusionModel",
         // VisionLanguage family
         "SmolVLM",
+        // Transfusion (Zhou et al. 2024) — unified VL transformer (VisionLanguageModelBase) whose
+        // <double> training OOMs the runner on the 24-invariant NN T-Z shard. <float> halves the
+        // per-step footprint and keeps the training invariants intact.
+        "Transfusion",
+        // TTS: TorToise (Betker 2023) codec-LM decoder — LLMDim 1024 x 12 layers with an
+        // 8x1024 codebook head is ~150M params; <double> training OOMs / times out. <float> halves
+        // the footprint (paired with the smoke-scale ctor below if float alone is insufficient).
+        "TortoiseTTS",
         // NOTE: EmotiVoice, TinyBERTNER, UNet3D from the #1624 inventory have MANUAL
         // scaffolds (ModelFamilyTests/NeuralNetworks/*Tests.cs), so they are not
         // auto-generated and the float-list does not apply — UNet3DTests is already
