@@ -190,6 +190,27 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         return CosineSimilarity(imageEmb, textEmb);
     }
 
+    /// <summary>
+    /// ViLBERT accepts THREE input contracts (Faster-RCNN region features
+    /// <c>[N, VisionDim]</c>, raw image <c>[C, H, W]</c>, and text token ids
+    /// <c>[seq]</c>) and routes each to a different stream by
+    /// <see cref="RunStreamForInput"/>. No single architecture-declared input shape
+    /// represents all three, so the base <see cref="NeuralNetworkBase{T}.ResolveLazyLayerShapes"/>
+    /// walk — which seeds from one architecture input shape and propagates it through the
+    /// layer list — mis-resolves the first stream layer's lazy shape (e.g. it pins the
+    /// vision stream's leading LayerNorm gamma to the architecture's hidden dim while a
+    /// region-feature forward feeds VisionDim, throwing
+    /// "Gamma shape (H) does not match ... input shape (N, VisionDim)"). Skip the eager
+    /// walk: every lazy layer resolves correctly from its REAL input on the first Forward
+    /// (the pre-#1688 behaviour). ParameterCount likewise resolves on first forward — the
+    /// model-family tests warm up with a Predict before reading it.
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+        // Intentionally a no-op — see remarks. ViLBERT's input-polymorphic streams cannot
+        // be shape-walked from a single architecture input; lazy layers self-resolve on Forward.
+    }
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
