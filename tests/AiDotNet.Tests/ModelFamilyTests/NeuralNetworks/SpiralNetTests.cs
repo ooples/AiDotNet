@@ -42,25 +42,23 @@ public class SpiralNetTests : NeuralNetworkModelTestBase<float>
         finally { AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousSeed; }
     }
 
-    // SpiralNet's default architecture carries Dropout (rate 0.5, paper-faithful per
-    // Gong et al. 2019). MoreData compares the loss of a 50-iter run on ONE random
-    // sample against a 200-iter run on a DIFFERENT random sample (absolute bound:
-    // lossLong <= lossShort + tolerance). Both nets share the seeded init, but the
-    // Dropout(0.5) mask sampled DURING training is drawn from the process-shared,
-    // order-dependent ThreadSafeRandom — AmbientFallbackSeed pins only per-layer INIT,
-    // not the per-Forward dropout RNG — so under xUnit's parallel execution the mask
-    // stream (and thus the ~0.35 plateau each net settles into) is genuinely stochastic
-    // per run, and Linux-CI BLAS/FP ordering differs from the local calibration.
+    // MoreData compares a 50-iter run on ONE random sample against a 200-iter run on a
+    // DIFFERENT random sample (absolute bound: lossLong <= lossShort + tolerance). This
+    // is NOT a dropout-nondeterminism flake: init is seeded (AmbientFallbackSeed) and the
+    // Dropout(0.5) mask is per-instance seeded (DropoutLayer derives its mask from the
+    // layer RandomSeed + an instance call-counter, closing #1383), so the result is
+    // effectively deterministic — two back-to-back local runs measured 0.353176/0.351734
+    // and 0.353176/0.351731 (run-to-run delta ~3e-6, negligible).
     //
-    // The old 2e-3 tolerance was calibrated to a local ~1.5e-3 drift, but Linux CI
-    // measured a 2.675e-3 gap (0.353377 vs 0.350702) and failed. At 0.5 dropout on a
-    // ~0.35 loss this few-e-3 band is inherent mask/convergence noise, not divergence
-    // (LossStrictlyDecreasesOnMemorizationTask confirms the loss does decrease). Set the
-    // tolerance to 1e-2 (~3.7× the observed CI drift) so cross-platform mask noise can't
-    // flake it, while a genuinely diverging optimizer — which would push lossLong up by
-    // O(0.05–0.5) or to NaN — still fails hard (the NaN guard above and the strict-
-    // decrease invariant remain load-bearing).
-    protected override double MoreDataTolerance => 1e-2;
+    // The real drift is intrinsic to comparing the ~0.35 plateau of two DIFFERENT
+    // samples, and it is platform-dependent through BLAS/FP ordering: ~1.44e-3 locally
+    // (Windows) vs 2.675e-3 on Linux CI (0.353377 vs 0.350702 there) — where the old
+    // 2e-3 tolerance failed. It is inherent sample-difficulty noise, not divergence
+    // (LossStrictlyDecreasesOnMemorizationTask confirms the loss decreases). Set the
+    // tolerance to 5e-3 — ~1.9x the observed Linux drift, enough headroom for other CI
+    // runners' FP ordering while a genuinely diverging optimizer (lossLong up O(0.05-0.5)
+    // or NaN) still fails hard (the NaN guard above + strict-decrease stay load-bearing).
+    protected override double MoreDataTolerance => 5e-3;
 
     /// <summary>
     /// SpiralConvLayer is lazy — its weight tensor is constructed at [0, 0] in
