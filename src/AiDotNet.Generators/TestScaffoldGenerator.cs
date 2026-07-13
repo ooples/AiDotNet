@@ -334,6 +334,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // CPU (verified: Training_ShouldChangeParameters times out). Genuine foundation-scale compute,
         // not a correctness bug — same heavy lane.
         "MegaTTS3",
+        // TortoiseTTS (Betker 2023): foundation-scale codec-LM TTS — a 1024-dim / 12-layer decoder with
+        // an 8x1024-token codebook head (~150M params). Its <double> training invariants OOM the runner
+        // (verified: System.OutOfMemoryException in the train step) and even <float> can't fit the
+        // ~150M-param forward+backward + AdamW moments in the 120s gate. Genuine foundation-scale
+        // compute, not a correctness bug — deferred to the nightly heavy lane like FireRedTTS/MegaTTS3.
+        "TortoiseTTS",
         // MaskDINO: foundation-scale unified DETR detection+segmentation transformer (Li 2023, in the
         // Segmentation/Foundation namespace). The training invariants exceed the 120s per-test timeout
         // on CPU (verified: MoreData_ShouldNotDegrade times out). Genuine foundation-scale compute —
@@ -420,13 +426,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "FluxSchnellModel", "PointEModel", "SenseFlowModel", "TransfusionModel",
         // VisionLanguage family
         "SmolVLM",
-        // Transfusion (Zhou et al. 2024) — unified VL transformer (VisionLanguageModelBase) whose
-        // <double> training OOMs the runner on the 24-invariant NN T-Z shard. <float> halves the
-        // per-step footprint and keeps the training invariants intact.
-        "Transfusion",
-        // TTS: TorToise (Betker 2023) codec-LM decoder — LLMDim 1024 x 12 layers with an
-        // 8x1024 codebook head is ~150M params; <double> training OOMs / times out. <float> halves
-        // the footprint (paired with the smoke-scale ctor below if float alone is insufficient).
+        // TTS: TorToise (Betker 2023) codec-LM decoder — LLMDim 1024 x 12 layers with an 8x1024
+        // codebook head is ~150M params; <double> training OOMs. Deferred to the nightly heavy lane
+        // (HeavyTimeoutTestClassNames) like its foundation-TTS peers FireRedTTS / MegaTTS3, where
+        // <float> halves the footprint for the full-fidelity run.
         "TortoiseTTS",
         // NOTE: EmotiVoice, TinyBERTNER, UNet3D from the #1624 inventory have MANUAL
         // scaffolds (ModelFamilyTests/NeuralNetworks/*Tests.cs), so they are not
