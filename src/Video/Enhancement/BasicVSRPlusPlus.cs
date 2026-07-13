@@ -21,10 +21,23 @@ namespace AiDotNet.Video.Enhancement;
 /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
 /// <remarks>
 /// <para>
-/// BasicVSR++ improves upon BasicVSR with:
+/// BasicVSR++ (Chan et al. 2022) improves upon BasicVSR with:
 /// - Second-order grid propagation for better temporal modeling
 /// - Flow-guided deformable alignment for accurate feature alignment
 /// - Bidirectional propagation for utilizing both past and future frames
+/// </para>
+/// <para>
+/// <b>Implementation fidelity note:</b> This native implementation realizes flow-guided
+/// deformable alignment and bidirectional propagation faithfully and trains them
+/// end-to-end through the autodiff tape (see <see cref="Train"/>). Two simplifications
+/// depart from the paper: (1) propagation is <i>first-order</i> — each step aggregates
+/// only the immediately adjacent frame (i±1), not the paper's second-order grid that
+/// also warps from i±2 (the propagation-conv channel counts are fixed by the layer
+/// factory, so widening them to second-order is a separate change); and (2) the SPyNet
+/// flow estimator acts as a fixed sampling guide — its warp keeps the sampled features
+/// on the tape (gradients reach the reconstruction network) but SPyNet's own weights are
+/// not fine-tuned here, matching the common "pre-trained flow" setup rather than the
+/// paper's fully joint training.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> BasicVSR++ is a video super-resolution model that upscales
