@@ -53,8 +53,9 @@ public class SpikingNeuralNetworkTests : NeuralNetworkModelTestBase<float>
     // [ThreadStatic] -> parallel-safe. Same pattern as SpiralNetTests.
     protected override INeuralNetworkModel<float> CreateNetwork()
     {
+        var previousSeed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
         try { return new SpikingNeuralNetwork<float>(); }
-        finally { AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = null; }
+        finally { AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousSeed; }
     }
 }

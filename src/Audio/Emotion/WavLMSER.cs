@@ -124,7 +124,11 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
-        Tensor<T> logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
+        // PredictCore now applies the softmax head (PostprocessOutput) for BOTH native and ONNX modes,
+        // so Predict already returns a normalized probability distribution. Route both modes through it
+        // and read the probabilities directly — re-running softmax here (as the old native path did on
+        // Predict's already-softmax'd output) would double-softmax and flatten the distribution.
+        var probsTensor = Predict(features);
 
         if (_options.NumClasses <= 0)
             throw new InvalidOperationException("NumClasses must be positive.");
@@ -132,22 +136,9 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
             throw new InvalidOperationException("EmotionLabels must be non-empty.");
 
         var probs = new Dictionary<string, T>();
-        int numClasses = Math.Min(_options.NumClasses, Math.Min(_options.EmotionLabels.Length, logits.Length));
-        double maxLogit = double.NegativeInfinity;
+        int numClasses = Math.Min(_options.NumClasses, Math.Min(_options.EmotionLabels.Length, probsTensor.Length));
         for (int i = 0; i < numClasses; i++)
-        {
-            double val = NumOps.ToDouble(logits[i]);
-            if (val > maxLogit) maxLogit = val;
-        }
-        double sumExp = 0;
-        var expValues = new double[numClasses];
-        for (int i = 0; i < numClasses; i++)
-        {
-            expValues[i] = Math.Exp(NumOps.ToDouble(logits[i]) - maxLogit);
-            sumExp += expValues[i];
-        }
-        for (int i = 0; i < numClasses; i++)
-            probs[_options.EmotionLabels[i]] = NumOps.FromDouble(sumExp > 0 ? expValues[i] / sumExp : 1.0 / numClasses);
+            probs[_options.EmotionLabels[i]] = probsTensor[i];
 
         return probs;
     }
