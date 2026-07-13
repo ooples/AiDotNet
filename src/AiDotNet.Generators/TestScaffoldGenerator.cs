@@ -2576,18 +2576,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // size to the raw spatial dim 112 instead of VisionDim, so the real [1,4,VisionDim] token
                 // input then mismatches ("embedding dim 256 does not match weight dim 112"). The old bare
                 // MHA was eager-sized to VisionDim so it masked the arch/input inconsistency; the residual
-                // TEL resolves lazily and needs the arch to be honest. VisionDim per paper: GroundingDINO /
-                // GroundingDINO15 / GroundedSAM2 / DINOX 256, OWLViT 768 (ViT-B/16), OWLv2 / GLaMM 1024.
-                int gVisionDim = model.ClassName switch
-                {
-                    "GroundingDINO" or "GroundingDINO15" or "GroundedSAM2" or "DINOX" => 256,
-                    "OWLViT" => 768,
-                    _ => 1024,
-                };
+                // TEL resolves lazily and needs the arch to be honest. Construct at CI-smoke reduced scale
+                // (VisionDim 256, 4 vision layers, 8 heads, dropout 0): the paper-scale 12-24-layer /
+                // 768-1024-dim residual encoders (OWLViT/OWLv2/GLaMM) otherwise overrun the 120 s
+                // training-test gate even in <float> (verified: OWLv2 TrainingError times out solo). The
+                // architecture PATTERN is preserved — only width/depth reduced, the same trick the robotics
+                // VLA constructorExpr uses. inputSize 256 matches the [1, 4, 256] InputShape the grounding
+                // branch emits, so the lazy vision TEL resolves to 256.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    $"inputSize: {gVisionDim}, outputSize: 4))";
+                    "inputSize: 256, outputSize: 4), " +
+                    $"new {typeName}Options {{ VisionDim = 256, NumVisionLayers = 4, NumHeads = 8, DropoutRate = 0.0 }})";
             }
             else if ((model.ClassName is "InternViT" or "DINOv2" or "DINOv3" or "RADIOv25" or "SigLIPSO" or "PerceptionEncoder")
                      && typeName.StartsWith(
@@ -3393,17 +3393,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             int groundingVisionDim;
             switch (model.ClassName)
             {
+                // The 7 models whose residual CreateDefaultGroundingDetectionLayers is built at CI-smoke
+                // reduced scale (VisionDim 256) by the constructorExpr above — their InputShape must match
+                // the reduced VisionDim so the token input width == the residual TEL's resolved width.
                 case "GroundingDINO":
                 case "GroundingDINO15":
                 case "GroundedSAM2":
                 case "DINOX":
+                case "OWLViT":
+                case "OWLv2":
+                case "GLaMM":
                     groundingVisionDim = 256;
                     break;
-                case "OWLViT":
-                    groundingVisionDim = 768;
-                    break;
                 default:
-                    // OWLv2, Ferret, FerretV2, GLaMM, Groma, Shikra
+                    // Ferret / FerretV2 / Groma / Shikra use the LLaVA-MLP-projector factory (eager MHA),
+                    // constructed at their paper ViT-L/14 hidden dim; leave those unchanged.
                     groundingVisionDim = 1024;
                     break;
             }
