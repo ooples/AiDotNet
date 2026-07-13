@@ -10392,24 +10392,22 @@ public static class LayerHelper<T>
     private static IEnumerable<ILayer<T>> CreateNougatEncoderLayers(
         int hiddenDim, int numLayers, int numHeads, int imageSize, int patchSize)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
-
-        // Swin-style patch embedding
+        // Swin-style patch embedding (the auto CNN->sequence reshape in DocumentNeuralNetworkBase
+        // fires at the first transformer block below, so the [B,hiddenDim,H',W'] conv map becomes a
+        // [patches, hiddenDim] sequence for attention).
         yield return new ConvolutionalLayer<T>(hiddenDim, patchSize, patchSize, 0);
         yield return new LayerNormalizationLayer<T>();
 
-        // Transformer encoder
+        // Transformer encoder — paper-faithful RESIDUAL blocks (Blecher et al. 2023; Nougat's encoder
+        // is a Swin/ViT). The prior bare MHA->LN->Dense->Dense->LN chain had NO skip connections, so
+        // the deep encoder collapsed distinct inputs post-training and was hard to optimise.
+        // TransformerEncoderLayer applies MSA + residual add + LN and the MLP + residual add + LN
+        // internally (2-arg lazy ctor; the 3-arg eager ctor OOMs). Final LN on the encoder output.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
-                activationFunction: identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(hiddenDim * 4, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDim * 4);
         }
+        yield return new LayerNormalizationLayer<T>();
     }
 
     private static IEnumerable<ILayer<T>> CreateNougatDecoderLayers(
@@ -24820,18 +24818,18 @@ public static class LayerHelper<T>
         const int patchSize = 16;
         yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
 
-        // === Vision Encoder (Swin/ViT for document images) ===
-        yield return new LayerNormalizationLayer<T>();
-
+        // === Vision Encoder (Swin/ViT for document images, Kim et al. 2022) ===
+        // Paper-faithful RESIDUAL transformer blocks (z' = MSA(LN(z)) + z ; z = MLP(LN(z')) + z').
+        // The previous bare MHA→LN→Dense→Dense→LN decomposition had NO skip connections, so the deep
+        // encoder collapsed distinct inputs post-training (DifferentInputs L2=0) and was hard to train.
+        // TransformerEncoderLayer carries the residual adds internally (2-arg lazy ctor; the 3-arg
+        // eager ctor OOMs across a shard). Final LN on the encoder output.
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, visionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+        yield return new LayerNormalizationLayer<T>();
 
         // === Projection to decoder dim ===
         if (visionDim != decoderDim)

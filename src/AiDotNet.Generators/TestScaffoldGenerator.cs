@@ -486,6 +486,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 10-train / 100-memorization / 50+200-MoreData counts overrun the 120 s gate. Smoke-iteration
         // counts keep the encoder paper-scale while the train path stays covered.
         "ViT", "InternViT", "DINOv2", "DINOv3", "PerceptionEncoder", "RADIOv25", "SigLIPSO", "SAM",
+        // Document-OCR models sharing CreateDefaultDocumentOCRLayers (residual ViT/Swin encoder +
+        // decoder). Even at CI-smoke reduced scale the 50+200-iteration MoreData probe grazes the
+        // 120 s gate (GOTOCR2 timed out solo), so the universal smoke-cap trims it — the DocumentNN /
+        // VisionLanguage family branches emit no iteration overrides, so this fires exactly once.
+        "GOTOCR2", "Surya", "MPLUGDocOwl", "MPLUGDocOwl15", "MPLUGDocOwl2", "TextMonkey", "UReader", "DocPedia", "Nougat",
         // NOTE: PANNs / PANNsModel / MPSENet are NOT listed here — they are in Fp32TestClassNames, and
         // the audio-family branch already emits the smoke-iteration overrides for every Fp32 member.
         // Listing them here as well would double-define TrainingIterations / MemorizationTaskIterations.
@@ -2543,23 +2548,47 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new {vlmOptionsType} {{ VisionDim = 128, DecoderDim = 128, " +
                     "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
             }
-            else if ((model.ClassName is "InternViT" or "DINOv3" or "RADIOv25" or "SigLIPSO" or "PerceptionEncoder")
+            else if ((model.ClassName is "InternViT" or "DINOv2" or "DINOv3" or "RADIOv25" or "SigLIPSO" or "PerceptionEncoder")
                      && typeName.StartsWith(
                          "AiDotNet.VisionLanguage.Encoders.", System.StringComparison.Ordinal))
             {
-                // Deep ViT encoders (InternViT 48L, DINOv3 40L, RADIOv25 32L, SigLIPSO 27L,
-                // PerceptionEncoder 24L) sharing CreateDefaultViTLayers. After restoring the paper's
-                // residual transformer blocks they are CORRECT, but paper-scale DEPTH overruns the
-                // 120 s gate even in <float> with the smoke-iteration cap (a 48-layer residual encoder's
-                // forward+backward is multi-second/step). Construct at CI-smoke DEPTH (NumLayers = 4) —
-                // the same architecture-preserving reduced-scale trick the robotics / perceiver VLAs
-                // above use — so every residual / attention / gradient / clone invariant still runs, in
-                // seconds. The 12-layer siblings (ViT / DINOv2 / SAM) already fit and keep paper depth.
+                // Deep ViT encoders (InternViT 48L/3200-d, DINOv3 40L/1536-d, RADIOv25 32L/1280-d,
+                // SigLIPSO 27L/1152-d, PerceptionEncoder 24L/1024-d) sharing CreateDefaultViTLayers.
+                // After restoring the paper's residual transformer blocks they are CORRECT, but
+                // paper-scale DEPTH AND WIDTH overrun the 120 s gate even in <float> with the smoke
+                // cap, and a wide (3200-d) residual encoder trained for a handful of steps also blows
+                // up to NaN (ForwardPass-not-finite). Construct at CI-smoke scale — NumLayers = 4,
+                // EmbeddingDim = 128, NumHeads = 4 (32-d head) — the same architecture-preserving
+                // reduced-scale trick the robotics / perceiver VLAs above use, so every residual /
+                // attention / gradient / clone invariant runs, stably, in seconds. DINOv2 is only 12L
+                // but its paper default is ImageSize 518 / PatchSize 14 = 1369-token sequence (its
+                // native mode rebinds ImageSize = architecture.InputHeight, so the 112-px reduced
+                // input below shrinks it to a 64-token sequence); the wide siblings ViT / SAM (12L,
+                // 224-px) already fit and keep their paper defaults.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4), " +
-                    $"new AiDotNet.VisionLanguage.Encoders.{model.ClassName}Options {{ NumLayers = 4 }})";
+                    $"new AiDotNet.VisionLanguage.Encoders.{model.ClassName}Options {{ NumLayers = 4, EmbeddingDim = 128, NumHeads = 4 }})";
+            }
+            else if ((model.ClassName is "GOTOCR2" or "Surya" or "MPLUGDocOwl" or "MPLUGDocOwl15"
+                          or "MPLUGDocOwl2" or "TextMonkey" or "UReader" or "DocPedia" or "Nougat")
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Document.", System.StringComparison.Ordinal))
+            {
+                // Document OCR models (GOT-OCR2, Surya, mPLUG-DocOwl family, TextMonkey, UReader,
+                // DocPedia) built from CreateDefaultDocumentOCRLayers: a ViT/Swin vision encoder ->
+                // projection -> decoder. After restoring the paper's RESIDUAL transformer encoder
+                // blocks they are correct, but the paper-scale 12+(6/12)-layer / 768-dim stack overruns
+                // the 120 s gate. Construct at CI-smoke scale (VisionDim = DecoderDim = 128, 2 vision +
+                // 2 decoder layers, 4 heads -> 32-d head, dropout 0) — the same architecture-preserving
+                // reduced-scale trick the robotics / perceiver / deep-ViT models use — so every residual
+                // / attention / gradient / clone invariant runs, stably, in seconds.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    $"new AiDotNet.VisionLanguage.Document.{model.ClassName}Options {{ VisionDim = 128, DecoderDim = 128, NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 }})";
             }
             else if ((model.ClassName is "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3")
                      && model.TypeParameterCount == 1
