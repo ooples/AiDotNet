@@ -6912,17 +6912,17 @@ public static class LayerHelper<T>
         // 3. Positional Encoding (includes [CLS] token position)
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
 
-        // 4. Transformer Encoder Stack
+        // 4. Transformer Encoder Stack — each block is a pre-norm RESIDUAL transformer layer
+        // (z' = z + MHA(LN(z)); z = z' + FFN(LN(z')), Vaswani 2017 / Gong et al. 2021 §3). The residual
+        // skips are LOAD-BEARING: a bare MHA->LN->FFN->LN block with no skip-add cannot carry its input
+        // through the 12-layer stack, so the deep LayerNorm-heavy encoder erases the signal — training
+        // barely moves the loss (Training_ShouldReduceLoss / LossStrictlyDecreasesOnMemorizationTask)
+        // and distinct inputs collapse to an identical output. TransformerEncoderLayer applies
+        // MHA + residual + LN and the GELU FFN + residual + LN internally; use the 2-arg LAZY ctor so
+        // embeddingSize is deferred (the 3-arg ctor allocates every FFN eagerly and OOMs across a shard).
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
-
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(feedForwardDim, reluActivation);
-            yield return new DenseLayer<T>(embeddingDim, identityActivation);
-
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, feedForwardDim);
 
             if (dropoutRate > 0)
             {
@@ -20581,14 +20581,15 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // WavLM Transformer encoder layers
+        // WavLM Transformer encoder (Chen et al. 2022): each block is a pre-norm RESIDUAL transformer
+        // layer (z' = z + MHA(LN(z)); z = z' + FFN(LN(z'))). The residual skips are LOAD-BEARING —
+        // without them the deep LayerNorm-heavy stack erases its input, so training barely moves the
+        // memorization loss (LossStrictlyDecreasesOnMemorizationTask) and distinct inputs collapse.
+        // TransformerEncoderLayer applies MHA + residual + LN and the GELU FFN + residual + LN
+        // internally; use the 2-arg LAZY ctor so embeddingSize is deferred (the 3-arg ctor OOMs).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, feedForwardDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
