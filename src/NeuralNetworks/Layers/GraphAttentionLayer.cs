@@ -455,6 +455,14 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         _lastPreSoftmaxScores = null;
         _lastAttentionCoefficients = null;
 
+        // The additive attention mask depends only on the batch element (adjacency[b]), not the
+        // head, so build it once per batch element instead of recomputing the identical O(numNodes^2)
+        // mask _numHeads times per element inside the (h, b) nest. It is a constant tensor (not a
+        // tape parameter), so the same instance can be reused across heads.
+        var perBatchMasks = new Tensor<T>[batchSize];
+        for (int b = 0; b < batchSize; b++)
+            perBatchMasks[b] = BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
+
         // Sum of the per-head aggregated outputs: [batchSize, numNodes, outputFeatures] (on-tape).
         Tensor<T>? denseHeadSum = null;
         for (int h = 0; h < _numHeads; h++)
@@ -488,7 +496,8 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 var scores = Engine.LeakyReLU(Engine.TensorBroadcastAdd(selfScores, neighborRow), _alpha);
                 // Additive mask: 0 where an edge exists, -1e9 where adj == 0, so masked
                 // neighbours get ~0 softmax weight (constant tensor, not a tape parameter).
-                var maskAdd = BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
+                // Precomputed once per batch element above (head-independent).
+                var maskAdd = perBatchMasks[b];
                 var maskedScores = Engine.TensorAdd(scores, maskAdd);
                 // Softmax over the neighbour axis (axis 1); Engine.Softmax is max-subtracted.
                 var coeff = Engine.Softmax(maskedScores, 1);

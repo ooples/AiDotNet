@@ -72,8 +72,6 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
     // Dropout between sub-blocks and after the residual add (null when dropoutRate == 0).
     private readonly DropoutLayer<T>? _dropout;
 
-    private readonly ReLUActivation<T> _relu = new();
-
     /// <summary>Constructs a Citrinet residual mega-block.</summary>
     /// <param name="channels">Constant channel width <c>C</c> (input and output).</param>
     /// <param name="kernelSize">Depthwise temporal kernel width <c>K</c> (Citrinet grows this per block, e.g. 5..39).</param>

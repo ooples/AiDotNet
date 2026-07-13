@@ -11390,7 +11390,11 @@ public static class LayerHelper<T>
         // its CNN→sequence auto-reshape no longer misfires on this all-spatial backbone.)
 
         // Stem: 7×7 stride-2 conv → BN → ReLU → 3×3 stride-2 max-pool (canonical ResNet stem).
-        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
+        // The conv is IDENTITY-activated so BatchNorm normalizes the raw (unactivated) convolution
+        // response and the single explicit ReLU is applied post-BN — ConvolutionalLayer defaults to
+        // ReLU, which would otherwise clamp the features before BN (Conv→ReLU→BN→ReLU) and break the
+        // canonical Conv→BN→ReLU ordering.
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, new IdentityActivation<T>() as IActivationFunction<T>);
         yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(reluActivation);
         yield return new MaxPoolingLayer<T>(3, 2);
@@ -27150,7 +27154,21 @@ public static class LayerHelper<T>
     /// pattern (a single <c>CreateDefault{ModelName}Layers</c> in <see cref="LayerHelper{T}"/>) instead
     /// of hand-assembling the encoder inline.
     /// </summary>
+    /// <param name="patchSize">Patch size for the ViT patch embedding (also the encoder's spatial downsample factor).</param>
+    /// <param name="embedDim">Transformer encoder embedding dimension (patch-token width).</param>
+    /// <param name="numEncoderLayers">Number of pre-norm residual transformer encoder blocks.</param>
+    /// <param name="numHeads">Number of multi-head self-attention heads per encoder block.</param>
+    /// <param name="decoderDim">Channel width of the conv mask decoder.</param>
+    /// <param name="numClasses">Number of output segmentation classes.</param>
+    /// <param name="imageHeight">Input image height (used to derive the feature-map height passed to the decoder).</param>
+    /// <param name="imageWidth">Input image width (used to derive the feature-map width passed to the decoder).</param>
+    /// <returns>The ordered EfficientTAM layer sequence: patch embedding, <paramref name="numEncoderLayers"/> transformer encoder blocks, then the conv mask-decoder layers.</returns>
     /// <remarks>
+    /// <para><b>For Beginners:</b> This assembles the EfficientTAM segmentation stack — the part that
+    /// turns an image into per-pixel class scores. It first slices the image into patches and embeds
+    /// them, runs several transformer blocks so every patch can "see" every other patch, then a small
+    /// convolutional decoder upsamples those features into a segmentation map. You normally don't call
+    /// this directly — the EfficientTAM model wires it up for you.</para>
     /// <para>
     /// Encoder (Xiong et al. 2024, "Efficient Track Anything", arXiv 2411.18933): a patch embedding
     /// followed by <paramref name="numEncoderLayers"/> PRE-NORM RESIDUAL transformer blocks producing
@@ -27171,6 +27189,7 @@ public static class LayerHelper<T>
         int patchSize, int embedDim, int numEncoderLayers, int numHeads,
         int decoderDim, int numClasses, int imageHeight, int imageWidth)
     {
+        ValidatePatchSize(patchSize);
         yield return new PatchEmbeddingLayer<T>(patchSize, embedDim);
         for (int i = 0; i < numEncoderLayers; i++)
             yield return new TransformerEncoderLayer<T>(numHeads, embedDim * 4, embedDim);

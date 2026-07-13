@@ -181,6 +181,9 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         int rank = rawAudio.Shape.Length;
         int batchSize = rank <= 1 ? 1 : rawAudio.Shape[0];
         int samples = rawAudio.Length / System.Math.Max(1, batchSize);
+        if (samples <= 0)
+            throw new ArgumentException(
+                "PANNsModel audio preprocessing requires non-empty audio input.", nameof(rawAudio));
         var flat = rawAudio.ToVector();
 
         // CNN14 applies 6 AvgPool(2x2) stages, so BOTH spectrogram axes must survive

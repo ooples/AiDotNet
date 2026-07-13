@@ -242,10 +242,14 @@ public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
             patchFeatures = newFeatures;
         }
 
-        // Step 3: Project patch tokens to LLM embedding space
-        int llmDim = _options.DecoderDim;
-        var pointTokens = new Tensor<T>([llmDim]);
-        for (int d = 0; d < llmDim; d++)
+        // Step 3: Project patch tokens to the encoder's vision-token space. The tokens must match the
+        // encoder input width (_options.VisionDim, wired in InitializeLayers); the configured
+        // encoder-to-decoder projection inside CreateDefaultPointCloudVLMLayers then maps them to the
+        // decoder/LLM width. (Building at DecoderDim threw at the first encoder attention layer whenever
+        // DecoderDim != VisionDim.)
+        int visionDim = _options.VisionDim;
+        var pointTokens = new Tensor<T>([visionDim]);
+        for (int d = 0; d < visionDim; d++)
         {
             double sum = 0;
             for (int p = 0; p < numPatches; p++)
@@ -259,7 +263,7 @@ public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
         // Step 4: Fuse with text prompt tokens
         var promptTokens = TokenizeText(prompt);
         int promptLen = promptTokens.Length;
-        for (int d = 0; d < llmDim; d++)
+        for (int d = 0; d < visionDim; d++)
         {
             if (promptLen > 0)
             {

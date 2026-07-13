@@ -52,7 +52,19 @@ public class CausalDiscoveryOptions
     /// Fraction (0..1) of a candidate's direction-evidence that may point the "wrong" way before RCD
     /// treats the remaining variables as latently confounded and stops. Default: null (0.05).
     /// </summary>
+    /// <value>
+    /// A finite value in <c>[0, 1]</c>, or <see langword="null"/> to use the calibrated default of
+    /// <c>0.05</c>.
+    /// </value>
     /// <remarks>
+    /// <para><b>For Beginners:</b> This knob controls how eagerly RCD declares "these variables share
+    /// a hidden common cause, stop here." Lower values stop sooner (more cautious about hidden
+    /// confounders); higher values demand stronger wrong-way evidence before stopping.</para>
+    /// <para><b>Reference:</b> Maeda &amp; Shimizu, "RCD: Repetitive Causal Discovery of Linear
+    /// Non-Gaussian Acyclic Models with Latent Confounders" (AISTATS 2020). The <c>0.05</c> default is
+    /// a conservative operating point on the scale-free confounding-ratio described below (a clean
+    /// root scores ≈ 0; a symmetric latently-confounded pair ≈ 0.5), leaving wide margin above the
+    /// clean-root floor while still flagging genuine common-cause structure.</para>
     /// <para>Used by <c>RCDAlgorithm</c>. RCD scores each candidate root by the DirectLiNGAM entropy
     /// criterion (<c>DiffMutualInfo</c>): positive evidence means the candidate is a cause, negative
     /// means it is an effect. The confounding score is the SCALE-FREE ratio

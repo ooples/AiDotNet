@@ -26,6 +26,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         [Fact(Timeout = 120000)]
         public async Task ResolveFromShape_WithNonDivisibleHeight_CropsToFloorPatchGrid()
         {
+            await Task.Yield();
             // Resolution-independent patchification (Flamingo/NFNet + Perceiver): a non-divisible
             // image is NOT rejected — the partial-patch remainder rows are cropped (integer floor),
             // matching a PyTorch Conv2d(stride=patch). height=33 with patchSize 8 -> floor(33/8)=4
@@ -45,6 +46,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         [Fact(Timeout = 120000)]
         public async Task ResolveFromShape_WithNonDivisibleWidth_CropsToFloorPatchGrid()
         {
+            await Task.Yield();
             var layer = new PatchEmbeddingLayer<double>(patchSize: 8, embeddingDim: 64);
             layer.ResolveFromShape(new[] { 3, 32, 33 }); // width 33 not divisible by 8; must not throw
 
@@ -59,6 +61,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         [Fact(Timeout = 120000)]
         public async Task ResolveFromShape_WithSubPatchInput_ThrowsArgumentException()
         {
+            await Task.Yield();
             // An image smaller than a single patch in either spatial dim has NO complete patch and
             // IS rejected (floor(H/patch) < 1) — the one case the resolution-independent path still
             // guards, per the reviewer's "reject tensors smaller than one full patch".

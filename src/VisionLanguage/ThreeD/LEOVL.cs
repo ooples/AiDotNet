@@ -271,8 +271,13 @@ public class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T
             }
         }
 
-        // Step 3: Aggregate object tokens into scene representation
-        var sceneTokens = new Tensor<T>([encoderDim]);
+        // Step 3: Aggregate object tokens into scene representation. The scene tokens must match the
+        // encoder input width (_options.VisionDim, wired in InitializeLayers), not the point-encoder
+        // width — so tile the aggregated PointEncoderDim object features into VisionDim (identity when
+        // the two dims match). Forwarding PointEncoderDim-wide tokens into the VisionDim encoder threw
+        // "embedding dimension does not match weight dimension" whenever the dims differed.
+        int visionDim = _options.VisionDim;
+        var sceneTokens = new Tensor<T>([visionDim]);
         double totalWeight = 0;
         for (int obj = 0; obj < maxObjects; obj++)
         {
@@ -280,13 +285,13 @@ public class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T
                 continue;
             double weight = objectCounts[obj]; // Larger objects = more important
             totalWeight += weight;
-            for (int d = 0; d < encoderDim; d++)
+            for (int d = 0; d < visionDim; d++)
                 sceneTokens[d] = NumOps.FromDouble(
-                    NumOps.ToDouble(sceneTokens[d]) + objectFeatures[obj][d] * weight
+                    NumOps.ToDouble(sceneTokens[d]) + objectFeatures[obj][d % encoderDim] * weight
                 );
         }
         if (totalWeight > 1e-8)
-            for (int d = 0; d < encoderDim; d++)
+            for (int d = 0; d < visionDim; d++)
                 sceneTokens[d] = NumOps.FromDouble(NumOps.ToDouble(sceneTokens[d]) / totalWeight);
 
         // Step 4: Process through encoder and fuse with prompt

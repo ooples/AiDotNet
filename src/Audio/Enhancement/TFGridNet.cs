@@ -278,6 +278,34 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return Engine.TensorMultiplyScalar(c, scale);
     }
 
+    /// <summary>
+    /// Mirrors <see cref="PredictCore"/>'s utterance-level RMS scale normalization on the TRAINING
+    /// forward path so training and inference see the same preprocessing. Without this, TrainWithTape
+    /// walks the (LayerNorm-heavy, scale-invariant) grid stack on the raw tensor while inference feeds
+    /// it an RMS-normalized tensor — a train/serve skew. Delegates the actual layer walk to
+    /// <c>base.ForwardForTraining</c> so the base's dropout seed-wiring is preserved; the RMS scale is
+    /// applied via tape ops (<see cref="Engine"/>.TensorMultiplyScalar), so it threads gradients, while
+    /// the RMS value itself is a detached constant derived from the (supervision-free) input.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        double sumSq = 0.0;
+        int len = input.Length;
+        for (int i = 0; i < len; i++)
+        {
+            double v = NumOps.ToDouble(input[i]);
+            sumSq += v * v;
+        }
+        double rms = len > 0 ? Math.Sqrt(sumSq / len) : 0.0;
+        if (rms <= 1e-12)
+            return base.ForwardForTraining(input);
+
+        T scale = NumOps.FromDouble(rms);
+        var normalized = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(1.0 / rms));
+        var output = base.ForwardForTraining(normalized);
+        return Engine.TensorMultiplyScalar(output, scale);
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
