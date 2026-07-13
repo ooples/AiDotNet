@@ -41,6 +41,20 @@ public class SpikingNeuralNetworkTests : NeuralNetworkModelTestBase<float>
     // still fires on real divergence (NaN / loss → O(0.1+)).
     protected override bool TrainingErrorInvariantApplicable => false;
 
+    // Pin per-layer weight init to a fixed thread-local seed so construction is reproducible.
+    // SpikingNeuralNetwork's readout weights otherwise derive from the process-shared,
+    // order-dependent RandomHelper.CreateSecureRandom (the architecture carries no explicit
+    // RandomSeed). Combined with the hard-spike loss noise floor, that makes
+    // MoreData_ShouldNotDegrade (50-iter vs 200-iter loss on the same seeded sample)
+    // nondeterministic: it passes locally but on CI landed at long=0.039 vs short=0.012,
+    // a 0.027 floor-vs-floor swing over the 0.02 band. Seeding the init makes the outcome
+    // deterministic across machines (the tests' single-threaded determinism BLAS then fixes
+    // the math), so the invariant is stable rather than flaky. AmbientFallbackSeed is
+    // [ThreadStatic] -> parallel-safe. Same pattern as SpiralNetTests.
     protected override INeuralNetworkModel<float> CreateNetwork()
-        => new SpikingNeuralNetwork<float>();
+    {
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
+        try { return new SpikingNeuralNetwork<float>(); }
+        finally { AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = null; }
+    }
 }
