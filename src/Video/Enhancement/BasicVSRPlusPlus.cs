@@ -502,6 +502,18 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// BasicVSR++ is recurrent, so the generic sequential <see cref="NeuralNetworkBase{T}.ForwardForTraining"/>
+    /// (which would feed SPyNet a single frame and throw) does not model it. Route the tape forward
+    /// through the real recurrent <see cref="EnhanceVideo"/> so that <see cref="NeuralNetworkBase{T}.ComputeGradients"/>
+    /// — and the finite-difference gradient check built on it (#1872) — trace the true computation graph.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return _useNativeMode ? EnhanceVideo(input) : base.ForwardForTraining(input);
+    }
+
     #endregion
 
     #region Native Implementation

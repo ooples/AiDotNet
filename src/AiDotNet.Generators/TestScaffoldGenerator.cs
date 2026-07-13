@@ -3328,6 +3328,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // staying inside the single-step L2/finite explosion bounds.
             sb.AppendLine("    protected override int MemorizationTaskIterations => 5;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+            // Deterministic finite-difference gradcheck (#1872): proves the tape-differentiable
+            // recurrent forward's backward is CORRECT (not just that loss wiggles down). BasicVSR++
+            // overrides ForwardForTraining -> EnhanceVideo, so ComputeGradients traces the real graph.
+            sb.AppendLine("    protected override bool GradientCheckApplicable => true;");
         }
         else if (model.ClassName == "DualXVSR")
         {
