@@ -255,8 +255,14 @@
          DirectGpuTensorEngine), the time-channel-separable temporal stage of NVIDIA Citrinet consumed
          by CitrinetBlockLayer. 0.114.0 = 0.113.0 + the additive DepthwiseConv1D methods (strict
          superset), so it retains master's #763/#765 fixes. All AiDotNet.Native packages coreleased in
-         lockstep at 0.114.0. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.114.0" />
+         lockstep at 0.114.0.
+
+         Bumped 0.114.0 -> 0.114.1: brings AiDotNet.Tensors #779 (this repo's #1856) — the Engine.IRFFT
+         guard against a degenerate length-1 transform (nFft = 0 -> empty inverse -> ArgumentOutOfRange
+         from the RFFT autodiff backward at TFC's n=1 frequency axis). 0.114.1 = 0.114.0 + the additive
+         IRFFT nFft clamp (strict superset). With it published, TFC's StopGradient workaround around the
+         DFT is removed (below) so the frequency branch trains end-to-end. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.114.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.114.0" />

@@ -928,15 +928,11 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         var flat = reshaped ? Engine.Reshape(input, new[] { numSamples, n }) : input;
 
         // RFFT returns interleaved [re0, im0, re1, im1, ..., re(halfN-1), im(halfN-1)],
-        // shape [B, halfN * 2] = [B, n + 2].
-        //
-        // Detach the spectrum from the tape: the DFT is a FIXED linear transform with no learnable
-        // parameters, so the frequency branch legitimately treats |X[k]| as an input feature (the
-        // downstream frequency encoder still trains fully on it). This also avoids the RFFT backward,
-        // whose adjoint path (Engine.IRFFT) currently throws an out-of-range in the parallel partition
-        // for these sizes — a Tensors-library bug (tracked separately); the forward RFFT is correct.
-        // Gradients still flow to the raw input through the TIME branch, so training is unaffected.
-        var rfft = Engine.StopGradient(Engine.RFFT(flat));
+        // shape [B, halfN * 2] = [B, n + 2]. Tape-tracked: gradients flow back through the DFT to the
+        // raw input, so the frequency branch trains end-to-end alongside the time branch. (The earlier
+        // StopGradient detour that dodged the Engine.IRFFT length-1 adjoint crash — AiDotNet.Tensors#779
+        // / #1856 — is removed now that 0.114.1 fixes it.)
+        var rfft = Engine.RFFT(flat);
         var complexPairs = Engine.Reshape(rfft, new[] { numSamples, halfN, 2 });
 
         // magSquared[b, k] = re[b, k]^2 + im[b, k]^2 via TensorMultiply + ReduceSum on the
