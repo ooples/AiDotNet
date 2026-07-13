@@ -1900,12 +1900,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     // Phased rollout tracked in issue #1872.
 
     /// <summary>
-    /// When true, <see cref="Gradients_MatchFiniteDifference"/> runs for this model.
-    /// Default false during the Phase 1 rollout (#1872) — models/families opt in until the
-    /// supporting infra (custom-forward routing through ComputeGradients, grad/param order
-    /// unification) is proven, after which the default flips to true.
+    /// When true, <see cref="Gradients_MatchFiniteDifference"/> runs for this model. Default TRUE
+    /// (#1872): the harness self-skips the cases it can't validate (frozen/non-backprop params,
+    /// inconsistent GetParameters/UpdateParameters round-trips, and forwards too slow to fit the
+    /// budget), so broad enablement emits only real backward-bug failures. Override to false ONLY
+    /// for a model the harness can't skip on its own — e.g. a VLM whose single forward already
+    /// exceeds the xUnit timeout at fixture scale (GrokVision, Phi3Vision).
     /// </summary>
-    protected virtual bool GradientCheckApplicable => false;
+    protected virtual bool GradientCheckApplicable => true;
 
     /// <summary>Maximum number of parameters finite-differenced; each costs two forward passes.</summary>
     protected virtual int GradientCheckSampleCount => 12;
