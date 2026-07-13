@@ -327,8 +327,8 @@ public class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 2 : 1;  // residual TransformerEncoderLayer = 1 layer/block (2 with dropout)
-        _encoderLayerEnd = _options.NumVisionLayers * lpb + 1;  // blocks + trailing LayerNorm
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb;
     }
 
     private Tensor<T> TokenizeText(string text)
