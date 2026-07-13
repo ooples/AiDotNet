@@ -490,6 +490,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 50+200-iteration MoreData probe overran it on CPU. DocumentNN family branch emits no
         // iteration overrides, so this universal smoke-cap fires exactly once (runs at <double>).
         "PSENet",
+        // DBNet (Liao et al. 2020): the direct sibling of PSENet — a ResNet + FPN text-detection backbone
+        // at 128x128 (DocumentNN family). Its correctness failures (loss diverging 0.21 -> ~8e5) were the
+        // ReLU-headed output fed to BinaryCrossEntropyLoss + batch-1 BatchNorm made near-degenerate by 5x
+        // downsampling to 4x4; fixed by the paper-faithful sigmoid DB head (P,T in [0,1]) and capping the
+        // backbone at 4 stride-2 stages (8x8, stable batch-1 BN). With training now stable, its 10-iter
+        // Training and 100-iter memorization pass at <double>, but — exactly like PSENet — the 50+200-iter
+        // MoreData probe overran the 120 s gate, so the universal smoke-cap trims it (float is not an
+        // option: DocumentNNModelTestBase is non-generic <double>).
+        "DBNet",
         // ViT-family encoders (Dosovitskiy et al. 2021) sharing CreateDefaultViTLayers. Restoring the
         // paper's residual transformer blocks (TransformerEncoderLayer) fixed their correctness
         // failures (DifferentInputs collapse / GradientFlow / Clone) but the 12-layer residual

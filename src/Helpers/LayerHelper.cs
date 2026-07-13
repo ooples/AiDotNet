@@ -9764,30 +9764,42 @@ public static class LayerHelper<T>
         int backboneChannels = 256,
         int innerChannels = 256)
     {
-        // ResNet-18 style backbone (simplified)
-        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
+        // ResNet-style feature backbone. The AAAI-2020 paper uses a residual ResNet-18/50;
+        // this native default approximates it with a plain BatchNorm+ReLU conv stack.
+        // Downsampling is capped at 4 stride-2 stages (128->8 for a 128px input) rather than
+        // the previous 5 stride-2 + max-pool (which collapsed 128->4). At the unit-test batch
+        // size of 1, BatchNormalization estimates its statistics over the spatial samples of a
+        // single image; a 4x4 map gives only 16 samples per channel, so an unlucky near-constant
+        // channel had ~zero variance and BN divided by sqrt(eps), amplifying the activations
+        // without bound (a root cause of the #1854 training divergence). 8x8 (64 samples) keeps
+        // the batch-1 variance well-posed.
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);                 // /2
         yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>(3, 2);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);               // /4
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1);               // /8
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);  // /16
+        yield return new BatchNormalizationLayer<T>();
 
-        // ResNet blocks (simplified to conv layers for demonstration)
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(256, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>();
-
-        // FPN neck - lateral connections
+        // FPN neck - 1x1 lateral projection to the inner (neck) channel width.
         yield return new ConvolutionalLayer<T>(innerChannels, 1, 1, 0);
+        yield return new BatchNormalizationLayer<T>();
 
-        // Probability map head (outputs text probability at each pixel)
+        // Probability-map head (per-pixel text probability).
         yield return new ConvolutionalLayer<T>(innerChannels / 4, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
 
-        // Threshold map head (outputs adaptive threshold at each pixel)
-        yield return new ConvolutionalLayer<T>(1, 1, 1, 0);
+        // Output map head. In the DB formulation every map is kept in [0,1]: the probability
+        // map P and the adaptive-threshold map T are sigmoid-activated, and the differentiable
+        // binary map is B = 1 / (1 + exp(-k*(P - T))) (Liao et al. 2020, Sec. 3.2). The head is
+        // therefore SIGMOID-activated, NOT the ConvolutionalLayer default ReLU. This is both
+        // paper-faithful (matches the ComputerVision DBNet's sigmoid prob/threshold heads) and
+        // required for correctness: DBNet trains under BinaryCrossEntropyLoss, which is only
+        // defined for predictions in (0,1) — feeding it an unbounded ReLU output (p can exceed 1
+        // or be exactly 0) produces log-of-nonpositive NaN/huge gradients that blow the weights
+        // up and diverge the loss (#1854).
+        yield return new ConvolutionalLayer<T>(1, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     #endregion
