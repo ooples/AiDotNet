@@ -831,21 +831,23 @@ public class SpyNetLayer<T> : LayerBase<T>
             }
         }
 
-        // Ensure image is in 4D format for GridSample
-        var image4D = image;
-        if (!hasBatch)
-        {
-            image4D = image.Reshape(new[] { 1, channels, height, width });
-        }
+        // Engine.GridSample is NHWC: it reads its input as [batch, H, W, C] and its grid as
+        // [batch, outH, outW, 2] (every other caller — RIFE / FILM / UPRNet / SpatialTransformer —
+        // passes NHWC). SpyNet works in channels-first [C, H, W], so convert to NHWC for the sample
+        // and convert the warped result back. Passing the raw NCHW [1, C, H, W] made GridSample
+        // interpret it as [batch=1, H=C, W=H, channels=W], silently relabelling channels — e.g. a
+        // 3-channel frame warped into a 2-"channel" tensor at the coarse 2×2 pyramid level, so
+        // ConcatenateForModule (which copies `channels` planes from `warped2` using img1's channel
+        // count) read past its end → IndexOutOfRange. (#1789 BasicVSR++ / SpyNet; the grid is already
+        // in GridSample's [B, outH, outW, 2] layout so only the image layout was wrong.)
+        var image4D = hasBatch ? image : image.Reshape(new[] { 1, channels, height, width });
+        var imageNHWC = _engine.TensorPermute(image4D, new[] { 0, 2, 3, 1 });     // [B, H, W, C]
+        var warpedNHWC = _engine.GridSample(imageNHWC, grid);                     // [B, H, W, C]
+        var warped = _engine.TensorPermute(warpedNHWC, new[] { 0, 3, 1, 2 });     // [B, C, H, W]
 
-        // Use IEngine.GridSample for hardware-accelerated bilinear sampling
-        var warped = _engine.GridSample(image4D, grid);
-
-        // Remove batch dimension if input didn't have it
+        // Remove batch dimension if input didn't have it.
         if (!hasBatch && warped.Rank == 4)
         {
-            // Use actual warped dimensions, not original image dimensions
-            // (GridSample output may differ from input at different pyramid levels)
             warped = warped.Reshape(new[] { warped.Shape[1], warped.Shape[2], warped.Shape[3] });
         }
 
