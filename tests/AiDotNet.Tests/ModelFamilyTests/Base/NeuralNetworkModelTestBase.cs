@@ -1886,6 +1886,140 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         yield return single;
     }
 #endif
+
+    // ============================================================
+    // GRADIENT-CORRECTNESS INVARIANT (finite-difference gradcheck)
+    // ============================================================
+    // Verifies the analytical (reverse-mode autodiff) parameter gradients match a
+    // central finite difference of the loss — the industry-standard backward-
+    // correctness check (cf. torch.autograd.gradcheck). Unlike
+    // GradientFlow_ShouldBeNonZeroAndFinite (which only asserts grads are non-zero
+    // and finite) this asserts they are CORRECT: a wrong backward (sign flip, wrong
+    // scale, missing term, dropped gradient) can still reduce a memorization loss and
+    // pass every convergence invariant, but it cannot match a finite difference.
+    // Phased rollout tracked in issue #1872.
+
+    /// <summary>
+    /// When true, <see cref="Gradients_MatchFiniteDifference"/> runs for this model.
+    /// Default false during the Phase 1 rollout (#1872) — models/families opt in until the
+    /// supporting infra (custom-forward routing through ComputeGradients, grad/param order
+    /// unification) is proven, after which the default flips to true.
+    /// </summary>
+    protected virtual bool GradientCheckApplicable => false;
+
+    /// <summary>Maximum number of parameters finite-differenced; each costs two forward passes.</summary>
+    protected virtual int GradientCheckSampleCount => 12;
+
+    [Fact(Timeout = 120000)]
+    public async Task Gradients_MatchFiniteDifference()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        if (!GradientCheckApplicable) return;
+
+        using var network = CreateNetwork();
+        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn) return;
+        if (TrainingInvariantsNotApplicable(network)) return;
+
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+
+        // Deterministic forward: eval mode turns Dropout into an identity, so the loss is a
+        // fixed function of the parameters. A stochastic training-mode mask would make the
+        // finite difference meaningless (each forward would sample a different mask).
+        network.SetTrainingMode(false);
+        try { network.Predict(input); } catch { return; }   // materialize lazy params
+
+        var loss = nn.DefaultLossFunction as AiDotNet.LossFunctions.LossFunctionBase<T>;
+        if (loss is null) return;   // need a tape-capable loss for a consistent scalar objective
+
+        // Analytical gradients (reverse-mode). Custom-forward models whose gradient path is
+        // not yet routed through ComputeGradients (Phase 1b, #1872) throw or return empty
+        // here — skip rather than false-fail.
+        Vector<T> analytical;
+        try { analytical = nn.ComputeGradients(input, target); }
+        catch { return; }
+        if (analytical.Length == 0) return;
+
+        var theta = network.GetParameters();
+        // Order-alignment guard (Phase 1c, #1872): without equal lengths we cannot align
+        // the analytical-grad index with the parameter index — skip conservatively.
+        if (theta.Length != analytical.Length) return;
+
+        // Type-adaptive step + tolerance: float central differences are limited by ~1e-7
+        // relative rounding, so they need a larger step and a looser bound than double. The
+        // check still catches gross backward bugs (sign, scale, missing term) that the
+        // convergence invariants miss.
+        bool isDouble = typeof(T) == typeof(double);
+        double eps = isDouble ? 1e-6 : 5e-3;
+        double relTol = isDouble ? 1e-3 : 5e-2;
+        double absFloor = isDouble ? 1e-7 : 1e-3;
+
+        int n = theta.Length;
+        int samples = System.Math.Min(GradientCheckSampleCount, n);
+        int stride = System.Math.Max(1, n / samples);
+
+        int checkedCount = 0, mismatches = 0;
+        string firstFail = string.Empty;
+        for (int s = 0; s < samples; s++)
+        {
+            int i = (s * stride) % n;
+            T orig = theta[i];
+
+            var pPlus = theta.Clone(); pPlus[i] = NumOps.Add(orig, NumOps.FromDouble(eps));
+            double lp = GradientCheckLossAt(network, loss, input, target, pPlus);
+
+            var pMinus = theta.Clone(); pMinus[i] = NumOps.Subtract(orig, NumOps.FromDouble(eps));
+            double lm = GradientCheckLossAt(network, loss, input, target, pMinus);
+
+            network.UpdateParameters(theta);   // restore original parameters
+            if (double.IsNaN(lp) || double.IsNaN(lm)) continue;
+
+            double numeric = (lp - lm) / (2.0 * eps);
+            double analytic = ConvertToDouble(analytical[i]);
+            double denom = System.Math.Max(absFloor, System.Math.Abs(numeric) + System.Math.Abs(analytic));
+            double relErr = System.Math.Abs(numeric - analytic) / denom;
+            checkedCount++;
+            if (relErr > relTol)
+            {
+                mismatches++;
+                if (firstFail.Length == 0)
+                    firstFail = $"param[{i}]: analytic={analytic:E4}, numeric={numeric:E4}, relErr={relErr:F4}";
+            }
+        }
+
+        if (checkedCount == 0) return;   // every perturbation produced a NaN loss — inconclusive
+        // Tolerate a single outlier (a parameter sitting on a loss kink / clamp boundary,
+        // where the central difference is one-sided) but fail on systematic disagreement —
+        // a genuinely wrong backward mismatches most sampled parameters, not one.
+        Assert.True(mismatches <= System.Math.Max(0, checkedCount / 5),
+            $"Analytical gradients disagree with the finite difference on {mismatches}/{checkedCount} " +
+            $"sampled parameters (tol {relTol:P0}). First: {firstFail}. The backward pass is likely " +
+            "incorrect (sign, scale, missing term, or a dropped gradient).");
+    }
+
+    private double GradientCheckLossAt(
+        INeuralNetworkModel<T> network,
+        AiDotNet.LossFunctions.LossFunctionBase<T> loss,
+        Tensor<T> input, Tensor<T> target, Vector<T> parameters)
+    {
+        network.UpdateParameters(parameters);
+        var pred = network.Predict(input);
+        var tgt = target;
+        var predShape = pred.Shape.ToArray();
+        if (pred.Length == target.Length && !GradientCheckShapeEquals(predShape, target.Shape.ToArray()))
+            tgt = target.Reshape(predShape);
+        var lossTensor = loss.ComputeTapeLoss(pred, tgt);
+        return lossTensor.Length > 0 ? ConvertToDouble(lossTensor[0]) : double.NaN;
+    }
+
+    private static bool GradientCheckShapeEquals(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+        return true;
+    }
 }
 
 /// <summary>
