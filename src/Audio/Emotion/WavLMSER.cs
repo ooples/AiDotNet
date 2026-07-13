@@ -256,8 +256,21 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        if (IsOnnxMode && OnnxEncoder is not null) return PostprocessOutput(OnnxEncoder.Run(input));
+        // Force inference mode (dropout off) and run the softmax head via PostprocessOutput: WavLM-SER
+        // (Chen et al. 2022) is a single-label emotion classifier, so its public output is a probability
+        // distribution over the emotion classes (non-negative, sums to 1). Without this the head returned
+        // raw logits, so Predict produced negative "class scores" (ClassOutput_ShouldBeNonNegative).
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var c = input; foreach (var l in Layers) c = l.Forward(c); return PostprocessOutput(c);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -286,7 +299,24 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         return rawAudio;
     }
 
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    // Single-label emotion classifier: convert the head's raw logits to a probability distribution
+    // (numerically-stable softmax — subtract the max before exp). Non-negative and sums to 1, so the
+    // public prediction is a valid class-score vector (ClassOutput_ShouldBeNonNegative) rather than
+    // unbounded logits. Rank-preserving over the flat output.
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o)
+    {
+        int n = o.Length;
+        if (n == 0) return o;
+        double max = double.NegativeInfinity;
+        for (int i = 0; i < n; i++) { double v = NumOps.ToDouble(o[i]); if (v > max) max = v; }
+        double sum = 0.0;
+        var exps = new double[n];
+        for (int i = 0; i < n; i++) { double e = Math.Exp(NumOps.ToDouble(o[i]) - max); exps[i] = e; sum += e; }
+        if (sum <= 0.0) sum = 1.0;
+        var result = new Tensor<T>(o._shape);
+        for (int i = 0; i < n; i++) result[i] = NumOps.FromDouble(exps[i] / sum);
+        return result;
+    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {
