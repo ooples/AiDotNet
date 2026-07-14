@@ -422,6 +422,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // routes to the audio branch and already gets its relaxed MoreDataTolerance there, but without
         // this membership it missed the smoke-iteration caps and MoreData (250 iters) timed out solo.
         "ConvTransformer",
+        // KyutaiMoshi (SpeechRecognition/Streaming) + GraFPrint (Audio/Fingerprinting): audio-branch
+        // models whose <double> per-step forward+backward is multi-second (KyutaiMoshi's own
+        // Training_ShouldReduceLoss / DifferentInputs_AfterTraining run 28-40 s each), so the 250-iter
+        // MoreData and multi-step memorization invariants overran the 120 s / 180 s gates solo (both
+        // reported "Test execution timed out"). Same remedy as ConvTransformer above: <float> plus the
+        // audio branch's auto-emitted smoke-iteration caps fit them to budget while preserving the
+        // self-relative training invariants (loss-decrease, sign/oscillation/first-step-explosion).
+        "KyutaiMoshi", "GraFPrint",
         // NeMoCitrinet: paper-faithful Citrinet-512 (Majumdar et al., 2021) — 23 residual mega-blocks
         // of time-channel separable convs + squeeze-excitation at 512 channels. Same deep-CTC-ASR
         // footprint rationale as the Conformer/CTC family above: <float> halves the per-step
