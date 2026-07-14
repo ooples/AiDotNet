@@ -360,6 +360,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // on CPU (verified: MoreData_ShouldNotDegrade times out). Genuine foundation-scale compute —
         // same heavy lane as the other foundation models.
         "MaskDINO",
+        // OMGSeg: OMG-Seg unified segmentation foundation model (Li 2024) — same Segmentation/Foundation
+        // class as MaskDINO. Its smallest configuration is OMGSegModelSize.Base (~70M params); there is no
+        // sub-Base variant to smoke-scale the backbone down to, and reducing numClasses/numQueries/spatial
+        // leaves the heavy backbone (the actual bottleneck), so MoreData_ShouldNotDegrade times out at
+        // 120s on CPU (verified from the Generated N-P shard). Genuine foundation-scale compute — nightly
+        // heavy lane, matching its MaskDINO sibling.
+        "OMGSeg",
         // KOSMOS2: foundation-scale vision-language model (Peng 2023) — paper-scale CLIP-ViT-L vision
         // encoder (VisionDim=1024, 24 layers, 32 heads) + a 2048-dim/24-layer text decoder (~300M params).
         // Each test must construct that full stack; the construction footprint alone makes the 25-test
