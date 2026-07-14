@@ -28,16 +28,16 @@ namespace AiDotNet.Video.Enhancement;
 /// </para>
 /// <para>
 /// <b>Implementation fidelity note:</b> This native implementation realizes flow-guided
-/// deformable alignment and bidirectional propagation faithfully and trains them
-/// end-to-end through the autodiff tape (see <see cref="Train"/>). Two simplifications
-/// depart from the paper: (1) propagation is <i>first-order</i> — each step aggregates
-/// only the immediately adjacent frame (i±1), not the paper's second-order grid that
-/// also warps from i±2 (the propagation-conv channel counts are fixed by the layer
-/// factory, so widening them to second-order is a separate change); and (2) the SPyNet
-/// flow estimator acts as a fixed sampling guide — its warp keeps the sampled features
-/// on the tape (gradients reach the reconstruction network) but SPyNet's own weights are
-/// not fine-tuned here, matching the common "pre-trained flow" setup rather than the
-/// paper's fully joint training.
+/// deformable alignment and SECOND-ORDER bidirectional grid propagation faithfully and
+/// trains them end-to-end through the autodiff tape (see <see cref="Train"/>). Each
+/// propagation step aggregates BOTH the immediately adjacent frame (i±1) and the second
+/// neighbour (i±2), with the i→i±2 flow formed by COMPOSING the two adjacent flows
+/// (Chan et al. 2022, Sec. 3.1); the deformable-alignment layer resolves its widened
+/// (current + i±1 + i±2) input-channel count lazily on the first forward. One
+/// simplification remains: the SPyNet flow estimator acts as a fixed sampling guide — its
+/// warp keeps the sampled features on the tape (gradients reach the reconstruction
+/// network) but SPyNet's own weights are not fine-tuned here, matching the common
+/// "pre-trained flow" setup rather than the paper's fully joint training.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> BasicVSR++ is a video super-resolution model that upscales
@@ -585,6 +585,47 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         return Engine.TensorConcatenate(new[] { feat1, feat2 }, channelAxis);
     }
 
+    /// <summary>
+    /// Three-input channel-axis concatenation on the tape — used by second-order propagation to fuse the
+    /// current feature with its first-order (i±1) and second-order (i±2) warped neighbours.
+    /// </summary>
+    private Tensor<T> ConcatenateFeaturesTape(Tensor<T> feat1, Tensor<T> feat2, Tensor<T> feat3)
+    {
+        int channelAxis = feat1.Rank == 4 ? 1 : 0;
+        return Engine.TensorConcatenate(new[] { feat1, feat2, feat3 }, channelAxis);
+    }
+
+    /// <summary>
+    /// Composes two optical-flow fields into the two-hop flow used by second-order propagation (Chan et
+    /// al. 2022): the flow from frame i to frame i±2 is <paramref name="baseFlow"/> (i→i±1) followed by
+    /// <paramref name="nextFlow"/> (i±1→i±2). At pixel p the composed displacement is
+    /// baseFlow(p) + nextFlow(p + baseFlow(p)) — sample the second hop at the location the first hop lands
+    /// on, then add the two hops. Flows are FIXED sampling guides (their values are not differentiated,
+    /// exactly like the single-hop flows), so composition runs on the materialized data — matching how
+    /// <see cref="BuildFlowGrid"/> already reads <c>flow.Data.Span</c> directly.
+    /// </summary>
+    private Tensor<T> ComposeFlow(Tensor<T> baseFlow, Tensor<T> nextFlow)
+    {
+        // Warp the second-hop flow into the first frame's grid (bilinear grid-sample), then add the
+        // first-hop flow. WarpFeatureTape treats the [2, H, W] flow field exactly like a 2-channel
+        // feature map, so p+baseFlow(p) sampling is reused verbatim.
+        var warpedNext = WarpFeatureTape(nextFlow, baseFlow);
+        var composed = new Tensor<T>(baseFlow._shape);
+        var b = baseFlow.Data.Span;
+        var w = warpedNext.Data.Span;
+        var c = composed.Data.Span;
+        int len = c.Length;
+        for (int i = 0; i < len; i++)
+            c[i] = NumOps.Add(b[i], w[i]);
+        return composed;
+    }
+
+    /// <summary>
+    /// A zero feature map matching <paramref name="template"/>'s shape — the second-order slot for an edge
+    /// frame that has no i±2 neighbour, so the alignment input keeps a constant channel count.
+    /// </summary>
+    private static Tensor<T> ZerosLike(Tensor<T> template) => new Tensor<T>(template._shape);
+
     private List<(Tensor<T> forward, Tensor<T> backward)> ComputeFlows(Tensor<T> frames, int numFrames)
     {
         var flows = new List<(Tensor<T> forward, Tensor<T> backward)>();
@@ -622,29 +663,39 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
         for (int iter = 0; iter < _numPropagations; iter++)
         {
-            // Backward propagation (last -> first): each frame borrows from its successor i+1.
-            // GridSample maps a target pixel p to source p + flow[p], so aligning frame i+1's
-            // feature onto frame i's grid samples i+1 at the location pixel p MOVED TO going i -> i+1,
-            // i.e. the forward flow i -> i+1 (flows[i].forward), not i+1 -> i.
+            // Backward propagation (last -> first): SECOND-ORDER grid propagation (Chan et al. 2022,
+            // Sec. 3.1). Each frame aggregates BOTH its immediate successor (i+1) and its second successor
+            // (i+2). GridSample maps a target pixel p to source p + flow[p], so aligning frame i+1 onto
+            // frame i uses the forward flow i -> i+1 (flows[i].forward); the second-order warp of i+2 uses
+            // the paper's COMPOSITION of the two adjacent forward flows (i -> i+1 then i+1 -> i+2). At the
+            // tail edge (no i+2) the second-order slot is zero-filled so the alignment layer always sees
+            // the same channel count (current + first-order + second-order = 3 * numFeatures, resolved
+            // lazily on the deformable-alignment layer's first forward).
             var backwardFeats = new List<Tensor<T>>(propagatedFeatures);
             for (int i = numFrames - 2; i >= 0; i--)
             {
-                var warped = WarpFeatureTape(backwardFeats[i + 1], flows[i].forward);
-                var alignInput = ConcatenateFeaturesTape(propagatedFeatures[i], warped);
+                var warp1 = WarpFeatureTape(backwardFeats[i + 1], flows[i].forward);
+                var warp2 = (i + 2 < numFrames)
+                    ? WarpFeatureTape(backwardFeats[i + 2], ComposeFlow(flows[i].forward, flows[i + 1].forward))
+                    : ZerosLike(warp1);
+                var alignInput = ConcatenateFeaturesTape(propagatedFeatures[i], warp1, warp2);
                 var aligned = _backwardAlignments[iter].Forward(alignInput);
                 var fuseInput = ConcatenateFeaturesTape(propagatedFeatures[i], aligned);
                 backwardFeats[i] = _backwardConvs[iter].Forward(fuseInput);
             }
 
-            // Forward propagation (first -> last): each frame borrows from its predecessor i-1.
-            // Symmetrically, aligning frame i-1's feature onto frame i's grid samples i-1 at the
-            // location pixel p moved to going i -> i-1, i.e. the backward flow i -> i-1
-            // (flows[i-1].backward, since flows[i-1] = (i-1 -> i, i -> i-1)).
+            // Forward propagation (first -> last): mirror the second-order pass over predecessors i-1 and
+            // i-2. Aligning frame i-1 onto frame i uses the backward flow i -> i-1 (flows[i-1].backward,
+            // since flows[i-1] = (i-1 -> i, i -> i-1)); the i -> i-2 flow composes flows[i-1].backward with
+            // flows[i-2].backward. The head edge (no i-2) zero-fills the second-order slot.
             var forwardFeats = new List<Tensor<T>>(backwardFeats);
             for (int i = 1; i < numFrames; i++)
             {
-                var warped = WarpFeatureTape(forwardFeats[i - 1], flows[i - 1].backward);
-                var alignInput = ConcatenateFeaturesTape(backwardFeats[i], warped);
+                var warp1 = WarpFeatureTape(forwardFeats[i - 1], flows[i - 1].backward);
+                var warp2 = (i - 2 >= 0)
+                    ? WarpFeatureTape(forwardFeats[i - 2], ComposeFlow(flows[i - 1].backward, flows[i - 2].backward))
+                    : ZerosLike(warp1);
+                var alignInput = ConcatenateFeaturesTape(backwardFeats[i], warp1, warp2);
                 var aligned = _forwardAlignments[iter].Forward(alignInput);
                 var fuseInput = ConcatenateFeaturesTape(backwardFeats[i], aligned);
                 forwardFeats[i] = _forwardConvs[iter].Forward(fuseInput);
@@ -859,14 +910,24 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
 
+        // Validate the flat vector length UP FRONT against the total trainable parameter count (the exact
+        // set this loop consumes). A mismatched vector must RAISE rather than silently applying a partial
+        // (corrupt) update via an early break — mirrors the sibling VideoCLIP / SelfOrganizingMap
+        // UpdateParameters overrides (#1789 review).
+        long expected = 0;
+        foreach (var layer in Layers)
+            if (layer.SupportsTraining) expected += layer.ParameterCount;
+        if (parameters.Length != expected)
+            throw new ArgumentException(
+                $"Expected {expected} parameters (sum over trainable layers), got {parameters.Length}.",
+                nameof(parameters));
+
         int offset = 0;
         foreach (var layer in Layers)
         {
             if (!layer.SupportsTraining || layer.ParameterCount == 0)
                 continue;
             int count = checked((int)layer.ParameterCount);
-            if (offset + count > parameters.Length)
-                break;
             var slice = new Vector<T>(count);
             for (int i = 0; i < count; i++)
                 slice[i] = parameters[offset + i];

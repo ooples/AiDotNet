@@ -9781,22 +9781,36 @@ public static class LayerHelper<T>
         // channel had ~zero variance and BN divided by sqrt(eps), amplifying the activations
         // without bound (a root cause of the #1854 training divergence). 8x8 (64 samples) keeps
         // the batch-1 variance well-posed.
-        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);                 // /2
+        // Each conv is IDENTITY-activated so BatchNorm normalizes the raw convolution response, with a
+        // single explicit ReLU applied AFTER BN — the canonical Conv→BN→ReLU order. ConvolutionalLayer
+        // defaults to ReLU when no activation is passed, which would otherwise clamp the features before
+        // BN (Conv(ReLU)→BN) so BN normalized already-nonnegative activations instead of the raw response
+        // (#1789 review; identical fix already applied to the PSENet stem + Citrinet epilogue in this file).
+        var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
+        var reluActivation = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, identityActivation);                 // /2
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);               // /4
+        yield return new ActivationLayer<T>(reluActivation);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, identityActivation);               // /4
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(256, 3, 2, 1);               // /8
+        yield return new ActivationLayer<T>(reluActivation);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1, identityActivation);               // /8
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);  // /16
+        yield return new ActivationLayer<T>(reluActivation);
+        yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1, identityActivation);  // /16
         yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(reluActivation);
 
         // FPN neck - 1x1 lateral projection to the inner (neck) channel width.
-        yield return new ConvolutionalLayer<T>(innerChannels, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(innerChannels, 1, 1, 0, identityActivation);
         yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(reluActivation);
 
         // Probability-map head (per-pixel text probability).
-        yield return new ConvolutionalLayer<T>(innerChannels / 4, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(innerChannels / 4, 3, 1, 1, identityActivation);
         yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(reluActivation);
 
         // Output head — TWO channels: channel 0 is the probability map P, channel 1 is the LEARNED
         // adaptive-threshold map T. The DB formulation keeps both maps in [0,1] and forms the

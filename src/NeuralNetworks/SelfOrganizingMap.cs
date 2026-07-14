@@ -25,6 +25,8 @@ namespace AiDotNet.NeuralNetworks;
 /// [numNeurons, inputDimension] and all hot-path math (BMU distances, neighbourhood updates) runs
 /// through <see cref="NeuralNetworkBase{T}.Engine"/> tensor operations rather than scalar loops.
 /// </para>
+/// <para><b>Reference:</b> Kohonen, T. (1982). Self-organized formation of topologically correct
+/// feature maps. Biological Cybernetics, 43, 59–69.</para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -41,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Self-Organized Formation of Topologically Correct Feature Maps", "https://doi.org/10.1007/BF00337288")]
+[ResearchPaper("Self-Organized Formation of Topologically Correct Feature Maps", "https://doi.org/10.1007/BF00337288", Year = 1982, Authors = "Teuvo Kohonen")]
 public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
 {
     private readonly SelfOrganizingMapNNOptions _options;
@@ -54,6 +56,14 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// neuron i (row-major over the [mapHeight, mapWidth] grid, i = y * mapWidth + x).
     /// </summary>
     private Tensor<T> _weights;
+
+    // Cached fixed-shape ones tensors reused by ComputeSquaredDistances / UpdateWeights. Their shapes
+    // depend only on the neuron count (_mapWidth*_mapHeight) and _inputDimension, which are fixed after
+    // construction, so the hot train/predict path reuses them instead of rebuilding a fresh tensor with a
+    // scalar fill loop on every call (#1789 review). Rebuilt lazily if the shape ever changes (e.g. after
+    // deserialization resets the dimensions).
+    private Tensor<T>? _onesColumn;   // [numNeurons, 1]
+    private Tensor<T>? _onesRow;      // [1, inputDimension]
 
     private int _mapWidth;
     private int _mapHeight;
@@ -92,20 +102,29 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
         if (mapSize <= 0)
             throw new ArgumentException("Map size (output size) must be greater than zero for SOM.");
 
-        // Grid dimensions near a golden-ratio aspect for balanced 2-D visualisation.
+        // Choose the factor pair (width x height) of totalNeurons whose aspect ratio is closest to the
+        // golden-ratio target, so the grid holds EXACTLY totalNeurons neurons (== architecture.OutputSize)
+        // with the most balanced 2-D layout available. The previous grow-then-shrink heuristic could
+        // overshoot the target in a single step with no corrective re-check — e.g. the default
+        // outputSize=64 settled on a 10x6=60 grid, silently allocating fewer neurons than requested and
+        // shrinking _weights, ParameterCount, and PredictCore's one-hot output below OutputSize (#1789
+        // review). Every positive integer has at least the 1xN factorization, so an exact pair exists.
         int totalNeurons = mapSize;
         double aspectRatio = 1.6;
-        _mapWidth = (int)Math.Round(Math.Sqrt(totalNeurons * aspectRatio));
-        _mapHeight = (int)Math.Round(totalNeurons / (double)_mapWidth);
-        while (_mapWidth * _mapHeight < totalNeurons)
+        _mapWidth = totalNeurons;
+        _mapHeight = 1;
+        double bestRatioError = double.MaxValue;
+        for (int h = 1; h <= (int)Math.Sqrt(totalNeurons); h++)
         {
-            if (_mapWidth / (double)_mapHeight < aspectRatio) _mapWidth++;
-            else _mapHeight++;
-        }
-        while (_mapWidth * _mapHeight > totalNeurons)
-        {
-            if (_mapWidth / (double)_mapHeight > aspectRatio) _mapWidth--;
-            else _mapHeight--;
+            if (totalNeurons % h != 0) continue;
+            int w = totalNeurons / h;
+            double ratioError = Math.Abs((w / (double)h) - aspectRatio);
+            if (ratioError < bestRatioError)
+            {
+                bestRatioError = ratioError;
+                _mapWidth = w;
+                _mapHeight = h;
+            }
         }
 
         // Deterministic per-configuration init seed so a fresh (untrained) map is REPRODUCIBLE — the
@@ -179,14 +198,38 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// returned as a [numNeurons] tensor. Broadcasts the input across neurons via a ones-column matmul
     /// (the codebase's standard row-broadcast), then reduces the squared difference over the feature axis.
     /// </summary>
-    private Tensor<T> ComputeSquaredDistances(Tensor<T> input)
+    /// <summary>A cached [numNeurons, 1] all-ones column (built once, reused across calls).</summary>
+    private Tensor<T> OnesColumn()
     {
         int n = _mapWidth * _mapHeight;
+        if (_onesColumn is null || _onesColumn.Shape[0] != n)
+        {
+            var t = new Tensor<T>(new[] { n, 1 });
+            for (int i = 0; i < n; i++) t[i, 0] = NumOps.One;
+            _onesColumn = t;
+        }
+        return _onesColumn;
+    }
+
+    /// <summary>A cached [1, inputDimension] all-ones row (built once, reused across calls).</summary>
+    private Tensor<T> OnesRow()
+    {
+        int d = _inputDimension;
+        if (_onesRow is null || _onesRow.Shape[1] != d)
+        {
+            var t = new Tensor<T>(new[] { 1, d });
+            for (int j = 0; j < d; j++) t[0, j] = NumOps.One;
+            _onesRow = t;
+        }
+        return _onesRow;
+    }
+
+    private Tensor<T> ComputeSquaredDistances(Tensor<T> input)
+    {
         int d = _inputDimension;
 
         var inputRow = input.Reshape(new[] { 1, d });                 // [1, D]
-        var onesColumn = new Tensor<T>(new[] { n, 1 });
-        for (int i = 0; i < n; i++) onesColumn[i, 0] = NumOps.One;
+        var onesColumn = OnesColumn();                                 // [N, 1] (cached)
 
         var tiledInput = Engine.TensorMatMul(onesColumn, inputRow);    // [N, D]
         var diff = Engine.TensorSubtract(_weights, tiledInput);        // [N, D]
@@ -225,12 +268,10 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
         }
 
         // delta[n,:] = factor[n] * (x - W[n,:]), then W += delta — all engine ops.
-        var onesRow = new Tensor<T>(new[] { 1, d });
-        for (int j = 0; j < d; j++) onesRow[0, j] = NumOps.One;
+        var onesRow = OnesRow();                                      // [1, D] (cached)
 
         var inputRow = input.Reshape(new[] { 1, d });
-        var onesColumn = new Tensor<T>(new[] { n, 1 });
-        for (int i = 0; i < n; i++) onesColumn[i, 0] = NumOps.One;
+        var onesColumn = OnesColumn();                                // [N, 1] (cached)
 
         var tiledInput = Engine.TensorMatMul(onesColumn, inputRow);   // [N, D]
         var inputMinusW = Engine.TensorSubtract(tiledInput, _weights); // [N, D]

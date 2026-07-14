@@ -608,8 +608,23 @@ internal static class NeuralBatchHelper
         beta = System.Math.Max(1L, (long)(beta * BatchedRetentionFactor));
 
         long budgetWithMargin = (long)(memoryBudgetBytes * MemoryBudgetSafetyFactor);
-        // Solve alpha + beta * chunk <= budget for chunk.
-        long chunk = (budgetWithMargin - alpha) / beta;
+        // Reserve memory for the COMPLETE concatenated output FIRST. PredictInBatches retains an output
+        // proportional to the ENTIRE axis0 regardless of chunk size, so a budget that fits the per-chunk
+        // activations but not the full result would still OOM at concat time — scaling beta (the
+        // chunk-dependent term) alone cannot bound it. Subtract the full-output retention, then solve for
+        // the chunk from what remains, and reject a budget too small to even hold the result.
+        long outputRetention = EstimateFinalOutputBytes(nn, axis0);
+        long availableForChunk = budgetWithMargin - alpha - outputRetention;
+        if (availableForChunk <= 0)
+        {
+            throw new InvalidOperationException(
+                $"The memory budget ({memoryBudgetBytes} bytes, {budgetWithMargin} after the " +
+                $"{MemoryBudgetSafetyFactor:P0} safety margin) cannot hold the complete prediction " +
+                $"output (~{outputRetention} bytes) plus the per-call fixed overhead (~{alpha} bytes). " +
+                "Increase the memory budget or reduce the output size.");
+        }
+        // Solve alpha + outputRetention + beta * chunk <= budget for chunk.
+        long chunk = availableForChunk / beta;
         if (chunk < 1) return 1;
         if (chunk > axis0) return axis0;
         return (int)chunk;
@@ -709,6 +724,60 @@ internal static class NeuralBatchHelper
         // so the chosen chunk stays as large as the budget safely allows.
         const long ScratchAndDoubleBufferFactor = 3;
         return elementSize * totalElements * ScratchAndDoubleBufferFactor;
+    }
+
+    /// <summary>
+    /// Estimates the bytes retained by the COMPLETE concatenated prediction output over all
+    /// <paramref name="axis0"/> samples — the memory <c>PredictInBatches</c> holds for the full result
+    /// regardless of chunk size. Uses the final layer's resolved per-sample output shape × element size
+    /// × <paramref name="axis0"/> with checked arithmetic (saturating to <see cref="long.MaxValue"/> on
+    /// overflow so an impossibly large output is rejected, not silently wrapped). Returns 0 when no
+    /// output shape is resolved (caller then reserves nothing extra — prior behavior). Never negative.
+    /// </summary>
+    private static long EstimateFinalOutputBytes<T>(NeuralNetworkBase<T> nn, int axis0)
+    {
+        if (axis0 <= 0) return 0;
+
+        // Per-sample output element count = the LAST layer with a resolved output shape (the network
+        // output). Walk forward keeping the most recent resolved value so no reverse indexer is needed.
+        long perSampleElements = 0;
+        foreach (var layer in nn.Layers)
+        {
+            long p = OwnResolvedOutputElements(layer);
+            if (p > 0) perSampleElements = p;
+        }
+        if (perSampleElements <= 0) return 0;
+
+        long elementSize = typeof(T) == typeof(double) ? sizeof(double)
+            : typeof(T) == typeof(float) ? sizeof(float)
+            : sizeof(double); // conservative default for an unknown numeric T
+        try
+        {
+            return checked(elementSize * perSampleElements * axis0);
+        }
+        catch (OverflowException)
+        {
+            return long.MaxValue; // an output this large trivially exceeds any real budget
+        }
+    }
+
+    /// <summary>
+    /// The product of <paramref name="layer"/>'s OWN resolved per-sample output shape, or 0 if the shape
+    /// is unresolved or has a non-positive (sentinel/placeholder) dimension. Unlike
+    /// <see cref="SumResolvedOutputElements"/> this does NOT recurse into sub-layers — the network output
+    /// is the last top-level layer's own output, not a sum over its internals.
+    /// </summary>
+    private static long OwnResolvedOutputElements<T>(AiDotNet.Interfaces.ILayer<T> layer)
+    {
+        var shape = layer.GetOutputShape();
+        if (shape is null || shape.Length == 0) return 0;
+        long product = 1;
+        foreach (var dim in shape)
+        {
+            if (dim <= 0) return 0;
+            product *= dim;
+        }
+        return product;
     }
 
     /// <summary>

@@ -238,8 +238,61 @@ public class FunctionalCausalDiscoveryTests
     // observed variable as a clean root (its wrong-way evidence sums to ~0, so its ratio is 0.0000, well
     // below the cutoff), so the per-candidate precondition cannot hold. The equivalent anti-fabrication
     // guarantee is instead pinned deterministically by RCD_UnidentifiableData_EmitsNoDirectedEdges
-    // above (unidentifiable input -> no directed edges) plus the RCD_ConfoundingRatio_* calibration
-    // tests (clean root below cutoff / pure effect above it).
+    // above (unidentifiable input -> no directed edges), by RCD_LatentConfounder_DetectsConfoundingOnEffectCandidates
+    // below (an EXPLICIT shared-latent-cause fixture where the effect-like candidates are flagged), and by
+    // the RCD_ConfoundingRatio_* calibration tests (clean root below cutoff / pure effect above it).
+
+    // Explicit shared-latent-cause fixture: an unobserved U drives all three observed variables with
+    // equal loading plus independent Uniform noise (U -> X0, U -> X1, U -> X2, with NO direct edge among
+    // the observed). Uniform(-1,1) keeps the non-Gaussianity DirectLiNGAM/RCD require; the moderate noise
+    // keeps the per-candidate direction evidence well-defined (not degenerate). X0/X1/X2 are pure
+    // siblings under U — none causes another — so the confounding evidence must FIRE for the effect-like
+    // candidates rather than the algorithm treating them as a clean causal chain.
+    private static double[,] BuildLatentConfounderData(int n, int seed)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        double U() => rng.NextDouble() * 2.0 - 1.0;
+        var data = new double[n, 3];
+        for (int k = 0; k < n; k++)
+        {
+            double u = U();
+            data[k, 0] = u + 0.4 * U();
+            data[k, 1] = u + 0.4 * U();
+            data[k, 2] = u + 0.4 * U();
+        }
+        return data;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RCD_LatentConfounder_DetectsConfoundingOnEffectCandidates()
+    {
+        await Task.Yield();
+        // Integration counterpart to the per-candidate calibration tests (review [201]): on a genuine
+        // shared-latent-cause fixture the confounding signal must fire — at least one observed variable is
+        // flagged as confounded (ratio above the cutoff) rather than every variable passing as a clean
+        // root. The review's original "EVERY candidate exceeds the cutoff" is NOT achievable with the
+        // scale-free ConfoundingRatio proxy: under a symmetric linear shared confounder the proxy still
+        // presents MORE THAN ONE observed variable as an apparent clean root (their wrong-way evidence
+        // sums to ~0 — measured here: only one of the three candidates clears the cutoff; see the NOTE
+        // above). Asserting the confounding evidence is present for at least one candidate guards against
+        // the detection regressing to "no confounding ever seen" (all ratios 0), the failure mode the
+        // calibration tests exist to prevent, while staying honest about the proxy's resolution limit.
+        const double cutoff = 0.05;
+        int n = 600;
+        var data = BuildLatentConfounderData(n, seed: 2024);
+        int aboveCutoff = 0;
+        double maxRatio = 0.0;
+        for (int c = 0; c < 3; c++)
+        {
+            double ratio = RCDAlgorithm<double>.ConfoundingRatio(data, n, candidate: c, remaining: new[] { 0, 1, 2 });
+            if (ratio > cutoff) aboveCutoff++;
+            if (ratio > maxRatio) maxRatio = ratio;
+        }
+        Assert.True(aboveCutoff >= 1,
+            $"Expected the confounding ratio to exceed the {cutoff} cutoff for at least one of the three " +
+            $"latently-confounded candidates (the confounding evidence must be detected under a hidden " +
+            $"common cause, not silently ignored); got {aboveCutoff} (max ratio {maxRatio:F4}).");
+    }
 
     [Fact(Timeout = 120000)]
     public async Task CCDr_FindsCausalStructure()

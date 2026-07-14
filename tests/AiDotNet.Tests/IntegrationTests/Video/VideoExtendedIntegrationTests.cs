@@ -1,5 +1,7 @@
+using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Video.ActionRecognition;
 using AiDotNet.Video.Denoising;
 using AiDotNet.Video.Depth;
@@ -355,6 +357,74 @@ public class VideoExtendedIntegrationTests
         var arch = CreateArch();
         var model = new BasicVSRPlusPlus<double>(arch);
         Assert.True(model.SupportsTraining);
+    }
+
+    // ── BasicVSR++ SECOND-ORDER grid propagation (Chan et al. 2022; #1789 review) ─────────────────────
+    private const int SecondOrderFeatures = 8;
+    private const int SecondOrderHW = 32;   // >= 2^(numLevels-1) so SPyNet's 5-level pyramid stays valid.
+
+    private static BasicVSRPlusPlus<double> CreateSecondOrderModel() =>
+        new(new NeuralNetworkArchitecture<double>(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputHeight: SecondOrderHW, inputWidth: SecondOrderHW, inputDepth: 3, outputSize: 2),
+            scaleFactor: 2, numFeatures: SecondOrderFeatures, numResidualBlocks: 1, numPropagations: 1);
+
+    private static Tensor<double> MakeClip(int numFrames, int seed)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        var clip = new Tensor<double>([numFrames, 3, SecondOrderHW, SecondOrderHW]);
+        var s = clip.Data.Span;
+        for (int i = 0; i < s.Length; i++) s[i] = rng.NextDouble();
+        return clip;
+    }
+
+    // Second-order propagation feeds the deformable-alignment layer THREE feature maps — the current
+    // feature plus the first-order (i±1) and second-order (i±2) warped neighbours — so its lazily
+    // resolved input width is 3 × numFeatures. A first-order-only implementation would concat only two
+    // maps (2×). This is the structural proof that the second-order path is wired into alignment.
+    [Fact(Timeout = 120000)]
+    public async Task BasicVSRPlusPlus_SecondOrder_AlignmentConsumesThreeFeatureMaps()
+    {
+        await Task.Yield();
+        var model = CreateSecondOrderModel();
+        _ = model.EnhanceVideo(MakeClip(numFrames: 3, seed: 1)); // resolves lazy alignment channels
+
+        var alignments = model.Layers.OfType<DeformableConvolutionalLayer<double>>().ToList();
+        Assert.NotEmpty(alignments);
+        foreach (var align in alignments)
+            Assert.Equal(3 * SecondOrderFeatures, align.GetInputShape()[0]);
+    }
+
+    // The second-order path carries temporal information end-to-end: perturbing a frame two steps away
+    // from a target frame changes that frame's reconstruction. With numFrames = 3 the backward pass warps
+    // frame 2 directly onto frame 0 through the composed i+2 flow, so frame 0's output must respond.
+    [Fact(Timeout = 120000)]
+    public async Task BasicVSRPlusPlus_SecondOrder_TwoStepNeighbourInfluencesOutput()
+    {
+        await Task.Yield();
+        var model = CreateSecondOrderModel();
+        var clip = MakeClip(numFrames: 3, seed: 2);
+        var baseline = model.EnhanceVideo(clip);
+
+        // Perturb ONLY frame 2.
+        var perturbed = new Tensor<double>([3, 3, SecondOrderHW, SecondOrderHW]);
+        clip.Data.Span.CopyTo(perturbed.Data.Span);
+        int frameStride = 3 * SecondOrderHW * SecondOrderHW;
+        var ps = perturbed.Data.Span;
+        for (int i = 2 * frameStride; i < 3 * frameStride; i++) ps[i] += 0.5;
+        var changed = model.EnhanceVideo(perturbed);
+
+        // Frame 0's reconstruction must differ (output is [3, C, H*scale, W*scale]).
+        int outFrameStride = changed.Length / 3;
+        double maxDelta = 0.0;
+        var a = baseline.Data.Span;
+        var b = changed.Data.Span;
+        for (int i = 0; i < outFrameStride; i++)
+            maxDelta = System.Math.Max(maxDelta, System.Math.Abs(a[i] - b[i]));
+        Assert.True(maxDelta > 1e-9,
+            $"Perturbing frame 2 left frame 0's reconstruction unchanged (Δ={maxDelta:E3}); the " +
+            "second-order backward propagation path is not carrying information to frame 0.");
     }
 
     [Fact(Timeout = 120000)]

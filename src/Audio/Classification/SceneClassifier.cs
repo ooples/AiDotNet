@@ -327,12 +327,13 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
             Layers.Add(layer);
         }
 
-        // Acoustic scene classification is single-label: normalize the head's linear logits to a
-        // probability distribution with a SOFTMAX activation INSIDE the forward graph, so it runs during
-        // both training and inference. This keeps class scores non-negative (a valid scene-score vector)
-        // and keeps the trained objective consistent with the predicted output. Vector activation →
-        // normalization runs across the class axis. Skipped when the caller supplied explicit layers.
-        Layers.Add(new ActivationLayer<T>(new SoftmaxActivation<T>() as IVectorActivationFunction<T>));
+        // NOTE: no in-graph softmax layer is appended. The classification head emits LINEAR logits and
+        // every probability path (Classify / GetSceneProbabilities / PostprocessOutput) applies softmax
+        // exactly once, so PredictCore returns a consistent logits tensor in BOTH native and ONNX modes
+        // (the ONNX graph likewise has no trailing softmax). A prior revision added a SoftmaxActivation
+        // layer here, which double-softmaxed the native path — softmax(softmax(x)) flattens the
+        // distribution toward uniform and can shift the top scene (#1789 review). This mirrors the
+        // sibling GenreClassifier, which keeps the single softmax in the consumer paths.
     }
 
     #endregion
@@ -557,6 +558,10 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
             return ClassifyWithRulesAsTensor(input);
         }
 
+        // Forward pass to per-scene LOGITS. Do NOT softmax here — the head is a linear projection and
+        // each probability path (Classify / GetSceneProbabilities / PostprocessOutput) softmaxes exactly
+        // once. ONNX mode above likewise returns raw logits, so both modes hand callers a consistent
+        // logits tensor.
         var current = input;
         foreach (var layer in Layers)
         {

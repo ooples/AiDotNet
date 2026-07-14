@@ -1911,6 +1911,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <summary>Maximum number of parameters finite-differenced; each costs two forward passes.</summary>
     protected virtual int GradientCheckSampleCount => 12;
 
+    /// <summary>
+    /// Exception types that represent a documented, EXPECTED gradcheck skip: lazy parameters not yet
+    /// materialized, a custom-forward model whose gradient path is not yet routed through
+    /// <c>ComputeGradients</c>, or a model whose flat <c>GetParameters</c>/<c>UpdateParameters</c>
+    /// round-trip is internally inconsistent (e.g. ExtremeLearningMachine). Anything else — a real
+    /// backward bug, a NullReferenceException, an OOM — must PROPAGATE and fail the test rather than be
+    /// silently swallowed, so the gradcheck stays a genuine canary (#1789 review). Mirrors the narrowing
+    /// used by <see cref="GradientFlow_ShouldBeNonZeroAndFinite"/> and the shape-inference catch above.
+    /// </summary>
+    private static bool IsExpectedGradcheckSkip(Exception ex)
+        => ex is ArgumentException or InvalidOperationException
+            or NotSupportedException or NotImplementedException
+            or AiDotNet.Exceptions.TensorShapeMismatchException;
+
     [Fact(Timeout = 120000)]
     public async Task Gradients_MatchFiniteDifference()
     {
@@ -1932,7 +1946,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         network.SetTrainingMode(false);
         var gradCheckClock = System.Diagnostics.Stopwatch.StartNew();
         var forwardTimer = System.Diagnostics.Stopwatch.StartNew();
-        try { network.Predict(input); } catch { return; }   // materialize lazy params
+        try { network.Predict(input); }
+        catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }   // materialize lazy params
         double forwardSeconds = System.Math.Max(1e-3, forwardTimer.Elapsed.TotalSeconds);
 
         // Forward-cost gate: a single forward this slow means ComputeGradients (one backward,
@@ -1951,7 +1966,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // timeout thread that would otherwise orphan CPU into the next serial test).
         Vector<T> analytical;
         try { analytical = nn.ComputeGradients(input, target); }
-        catch { return; }
+        catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }
         if (analytical.Length == 0) return;
 
         var theta = network.GetParameters();
@@ -1968,7 +1983,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // ("Expected N, got M"). Their training correctness is covered by their own paradigm's
         // invariants, not by a backprop gradcheck.
         try { network.UpdateParameters(theta); }
-        catch { return; }
+        catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }
 
         // Type-adaptive step + tolerance: float central differences are limited by ~1e-7
         // relative rounding, so they need a larger step and a looser bound than double. The
@@ -2018,7 +2033,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
                 network.UpdateParameters(theta);   // restore original parameters
             }
-            catch
+            catch (Exception ex) when (IsExpectedGradcheckSkip(ex))
             {
                 try { network.UpdateParameters(theta); } catch { /* best-effort restore */ }
                 return;

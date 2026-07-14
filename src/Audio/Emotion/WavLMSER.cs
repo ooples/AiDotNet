@@ -249,7 +249,13 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
-        Tensor<T> output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
+        // Route BOTH modes through Predict so the returned vector has one consistent contract: the
+        // emotion-class distribution PredictCore/PostprocessOutput produce (native runs the softmax head;
+        // the ONNX branch applies PostprocessOutput to OnnxEncoder.Run). The old code special-cased ONNX
+        // to return OnnxEncoder.Run directly — bypassing PostprocessOutput — so this method silently
+        // returned probabilities for native models but raw ONNX logits for ONNX models. Mirrors the
+        // sibling GetEmotionProbabilities, which likewise reads Predict(features) for both modes.
+        Tensor<T> output = Predict(features);
         return output.ToVector();
     }
 
