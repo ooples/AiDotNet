@@ -2235,7 +2235,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             "GPT4Point" => 512,
             "Helix" => 1024,
-            "Octo" => 384,
+            // Octo built at CI-smoke VisionDim=16 (see the Octo constructor branch in
+            // EmitGeneratedTestClass): its paper default is Octo-Base scale (VisionDim 384, DecoderDim
+            // 768, 12+12 transformer layers, ~93M params) whose per-step CPU cost times out MoreData.
+            // The [1,4,16] token InputShape stays in lockstep with that smoke OctoOptions width.
+            "Octo" => 16,
             "KOSMOS1" or "KOSMOS2" => 1024, // KOSMOS1Options / KOSMOS2Options VisionDim
             // Encoder-decoder VLMs (PaLI/PaLI-X/PaLI-3/CoCa/GIT) are built at CI-smoke width
             // VisionDim=128 (their paper defaults are 768-4096, PaLI-X = 55B params, OOM on
@@ -2352,6 +2356,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 16, outputSize: 4), " +
                     "numEntityTypes: 4, imageSize: 32, maxSequenceLength: 32, hiddenDim: 32, " +
                     "numGcnLayers: 1, numHeads: 2, vocabSize: 100)";
+            }
+            else if (model.ClassName == "Octo" && model.TypeParameterCount == 1)
+            {
+                // Octo (Octo Model Team 2024) generalist robot policy: a transformer backbone (paper
+                // Octo-Small = 12 layers / 384 dim / 6 heads / 27M; Octo-Base = 768 dim / 93M) that
+                // tokenizes image+language observations, runs readout tokens through the backbone, and
+                // decodes actions. The native OctoOptions defaults are Octo-Base scale (VisionDim 384,
+                // DecoderDim 768, 12 vision + 12 decoder layers, vocab 32000), so a CPU training step is
+                // seconds and MoreData_ShouldNotDegrade times out at 120 s. Build the SAME tokenize ->
+                // transformer-backbone -> action-head architecture at CI-smoke width/depth (VisionDim 16,
+                // 1+1 layers, vocab 100) so it fits the budget; the [1,4,16] token InputShape (via
+                // GetTokenConsumingVlmVisionDim) stays in lockstep. Only width/depth shrink.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 16), " +
+                    "new AiDotNet.VisionLanguage.Robotics.OctoOptions { " +
+                    "VisionDim = 16, DecoderDim = 16, NumVisionLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 2, ImageSize = 32, VocabSize = 100, MaxSequenceLength = 16 })";
             }
             else if (model.ClassName == "LayoutLM" && model.TypeParameterCount == 1)
             {
