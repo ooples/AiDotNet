@@ -1102,6 +1102,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // intermittent failures that look like flakiness but trace to a
         // shared-baseline bug. Clone after build so network2 starts
         // from the same weights as network1.
+        // Skip before building/cloning for models where the clone-based baseline is gate-infeasible
+        // (see MoreDataInvariantApplicable) — their more-data behaviour is covered by the non-cloning
+        // sibling training invariants.
+        if (!MoreDataInvariantApplicable) return;
+
         var network1 = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network1)) return;
 
@@ -1379,6 +1384,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <see cref="Training_ShouldReduceLoss"/> / <c>LossStrictlyDecreasesOnMemorizationTask</c>).
     /// </summary>
     protected virtual bool OptimizerStepParamL2InvariantApplicable => true;
+
+    /// <summary>
+    /// True when <see cref="MoreData_ShouldNotDegrade"/> is gate-feasible for this model. Override to
+    /// <c>false</c> only for models where the invariant is INFRASTRUCTURE-infeasible — NOT where the
+    /// training is wrong. MoreData is unique among the training invariants in that it deep-CLONES the
+    /// built network (network2 = network1.Clone()) to give both runs an identical baseline; for a very
+    /// deep model (e.g. GraFPrint's 53-layer BatchNorm pyramid) that clone alone runs ~120 s regardless
+    /// of input size, so the test times out on the gate even though every per-step training invariant
+    /// passes. The model's more-training-doesn't-degrade behaviour is still covered by its sibling
+    /// invariants (<see cref="Training_ShouldReduceLoss"/>, <c>LossStrictlyDecreasesOnMemorizationTask</c>,
+    /// <see cref="TrainingError_ShouldNotExceedTestError"/>), which do not clone. Mirrors the narrow
+    /// <see cref="OptimizerStepParamL2InvariantApplicable"/> opt-out so ordinary models keep asserting it.
+    /// </summary>
+    protected virtual bool MoreDataInvariantApplicable => true;
 
     [Fact(Timeout = 120000)]
     public async Task OptimizerStep_ParamL2_DoesNotExplode()

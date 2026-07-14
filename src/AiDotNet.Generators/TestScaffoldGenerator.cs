@@ -383,6 +383,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // lane. (A separate fidelity follow-up tracks wiring the paper's masked inter/intra-frame
         // attention, which the default factory does not yet build.)
         "MIAVSR",
+        // DOVE (Video/Enhancement, VideoSuperResolutionBase): the same heavy VSR class as MIAVSR /
+        // MGLDVSR — a deep residual conv super-resolution stack run over a multi-frame clip, so its
+        // Training_ShouldReduceLoss / LossStrictlyDecreases / MoreData all time out at 120/180s on CPU
+        // (verified from the Generated A-F shard). Genuine heavy conv compute, not a fixable pathology,
+        // so the whole DOVETests class runs in the nightly heavy lane at full scale like its VSR
+        // siblings (MIAVSR / MGLDVSR), keeping it off the default per-test-timeout gate.
+        "DOVE",
         // ParaformerLarge: foundation-scale CIF ASR (Alibaba 2023). Its default
         // ParaformerLargeOptions build a genuinely huge stack — a warm-up forward reports
         // ~661M trainable parameters (GetParameters().Length = 661,219,029; ~2.6 GB as float),
@@ -431,13 +438,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // training invariants. (GraFPrint hits the same timeout but is categorized GraphNetwork/
         // EmbeddingModel, not audio, so its caps come from HeavyTrainingTimeoutClassNames instead.)
         "KyutaiMoshi",
-        // GraFPrint (Audio/Fingerprinting, GraphNetwork/EmbeddingModel): graph-attention fingerprint
-        // whose single training step is multi-second at paper width — even the smoke-capped 1+2 MoreData
-        // iterations overran the 120 s gate in <double>. <float> halves the per-step footprint and ~2x
-        // throughput; paired with the iteration caps emitted for it after the family chain below, that
-        // fits it to budget. (Its caps live in the post-chain per-model block, not the audio Fp32 branch,
-        // because it routes through the embedding family — which already emits its MoreDataTolerance.)
-        "GraFPrint",
         // NeMoCitrinet: paper-faithful Citrinet-512 (Majumdar et al., 2021) — 23 residual mega-blocks
         // of time-channel separable convs + squeeze-excitation at 512 channels. Same deep-CTC-ASR
         // footprint rationale as the Conformer/CTC family above: <float> halves the per-step
