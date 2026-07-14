@@ -62,7 +62,7 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null, UNetNoisePredictor<T>? predictor = null,
         StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
-        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
+        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear, Seed = 42 },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
     {
         _conditioner = conditioner;
