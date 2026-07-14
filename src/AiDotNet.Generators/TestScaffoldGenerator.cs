@@ -2336,6 +2336,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
                     "inputChannels: 3, numLayers: 1, numFrames: 2)";
             }
+            else if (model.ClassName == "PICK" && model.TypeParameterCount == 1)
+            {
+                // PICK (Yu et al. 2020) key-information extraction: a Transformer text encoder (paper
+                // d_model=512) + ResNet50 image branch over a 512x512 page + graph-learning/GCN +
+                // BiLSTM-CRF. The native defaults (imageSize 512 ResNet50, hiddenDim 256, vocab 30522,
+                // maxSeq 512) make each CPU train step multiple seconds so MoreData_ShouldNotDegrade
+                // times out at 120 s. Build the IDENTICAL text-encoder + image + GCN + CRF architecture
+                // at CI-smoke scale (32px image, 32-wide, 1 GCN layer, vocab 100 so the [16] token-ID
+                // input stays in range). Token-ID InputShape [16] / OutputShape [4] come from the
+                // document branch below. Only the width/depth/resolution shrink; the pattern is unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 16, outputSize: 4), " +
+                    "numEntityTypes: 4, imageSize: 32, maxSequenceLength: 32, hiddenDim: 32, " +
+                    "numGcnLayers: 1, numHeads: 2, vocabSize: 100)";
+            }
             else if (model.ClassName == "LayoutLM" && model.TypeParameterCount == 1)
             {
                 // LayoutLM (Xu et al. 2020, KDD) native default is BERT-base scale — 768-wide, 12
