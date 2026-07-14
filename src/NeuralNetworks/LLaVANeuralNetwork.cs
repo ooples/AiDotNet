@@ -1030,25 +1030,19 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
     private Tensor<T> PrependClsToken(Tensor<T> sequence, Matrix<T> clsToken)
     {
-        int seqLen = sequence.Shape[0];
         int hiddenDim = sequence.Shape[1];
 
-        var result = Tensor<T>.CreateDefault([seqLen + 1, hiddenDim], NumOps.Zero);
-
+        // Build the CLS row as a constant tensor, then concatenate along the sequence axis with a
+        // TAPE-AWARE op so the gradient still flows back into the patch embedding. A scalar indexer
+        // copy (the previous body) produced a detached tensor and severed the tape, freezing the
+        // patch-embedding layer during training.
+        var cls = Tensor<T>.CreateDefault([1, hiddenDim], NumOps.Zero);
         for (int j = 0; j < hiddenDim && j < clsToken.Columns; j++)
         {
-            result[0, j] = clsToken[0, j];
+            cls[0, j] = clsToken[0, j];
         }
 
-        for (int i = 0; i < seqLen; i++)
-        {
-            for (int j = 0; j < hiddenDim; j++)
-            {
-                result[i + 1, j] = sequence[i, j];
-            }
-        }
-
-        return result;
+        return Engine.TensorConcatenate(new[] { cls, sequence }, axis: 0);
     }
 
     private Tensor<T> AddPositionalEmbeddings(Tensor<T> sequence, Matrix<T> posEmbeddings)
@@ -1056,17 +1050,19 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         int seqLen = sequence.Shape[0];
         int hiddenDim = sequence.Shape[1];
 
-        var result = Tensor<T>.CreateDefault([seqLen, hiddenDim], NumOps.Zero);
-
+        // Materialize the positional table as a constant tensor and add it with a TAPE-AWARE op so
+        // the gradient keeps flowing back through the sequence (patch embedding / CLS). The previous
+        // scalar indexer body produced a detached tensor and severed the tape.
+        var pos = Tensor<T>.CreateDefault([seqLen, hiddenDim], NumOps.Zero);
         for (int i = 0; i < seqLen && i < posEmbeddings.Rows; i++)
         {
             for (int j = 0; j < hiddenDim && j < posEmbeddings.Columns; j++)
             {
-                result[i, j] = NumOps.Add(sequence[i, j], posEmbeddings[i, j]);
+                pos[i, j] = posEmbeddings[i, j];
             }
         }
 
-        return result;
+        return Engine.TensorAdd(sequence, pos);
     }
 
     private Vector<T> MeanPool(Tensor<T> tensor)
@@ -1190,6 +1186,30 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             var features = ExtractVisualFeatures(input);
             return ProjectToLanguageSpace(features);
         });
+    }
+
+    /// <summary>
+    /// Training forward pass. Routes through the SAME path as <see cref="PredictCore"/>
+    /// (vision encoder -> visual projection), NOT the base sequential walk of <c>Layers</c>.
+    /// </summary>
+    /// <remarks>
+    /// The base <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> pushes the input through
+    /// every layer in <c>Layers</c> in series. For LLaVA that list is
+    /// [patch-embedding, vision encoder..., visual projection..., text-token-embedding,
+    /// language-model..., output-projection, grounding-head], so the base walk would feed the
+    /// projected visual features straight into the text token embedding and the language model —
+    /// layers that expect token ids, not dense features. That mismatched path produces non-finite
+    /// activations and an exploding parameter norm under training, and it disagrees with what
+    /// <see cref="PredictCore"/> computes at inference. Mirroring the inference forward keeps the
+    /// tape-tracked training graph consistent with Predict and numerically stable.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Wire per-layer random seeds once (dropout reproducibility / determinism), matching the
+        // base implementation, then run the real vision -> projection forward under the tape.
+        EnsureLayerRandomSeedsWired();
+        var features = ExtractVisualFeatures(input);
+        return ProjectToLanguageSpace(features);
     }
 
     /// <inheritdoc/>
