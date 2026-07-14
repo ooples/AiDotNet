@@ -268,8 +268,16 @@
          (ic/(inChannels/deformGroups)) instead of the output group, and validates inChannels %
          deformGroups == 0 instead of groups % deformGroups. 0.114.2 = 0.114.1 + that additive fix
          (strict superset). It unblocks BasicVSR++'s flow-guided deformable alignment (groups=1,
-         deformGroups=8), which previously threw "deformGroups 8 must divide groups 1". -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.114.2" />
+         deformGroups=8), which previously threw "deformGroups 8 must divide groups 1".
+
+         Bumped Tensors 0.114.2 -> 0.114.3: brings AiDotNet.Tensors #782 — the compiled-replay autotune
+         hot-path fixes (stat-validated in-memory memo over AutotuneCache.Lookup, FrozenWeightRegistry
+         pre-packed matmul B in CompiledInferencePlan, and an in-memory _blockMemo for
+         AutotuneDispatcher.Decide's block-size lookup). These remove the per-GEMM filesystem touches that
+         regressed the Integration "Serial Perf" shard (compiled Transformer replay 2.82 -> 1.50 ms/step).
+         0.114.3 = 0.114.2 + those additive internal-only perf changes (strict superset). Native packages
+         are left at 0.114.0 (unchanged binaries; only the managed Tensors package carries the fix). -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.114.3" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.114.0" />
