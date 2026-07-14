@@ -58,4 +58,12 @@ public class SpikingNeuralNetworkTests : NeuralNetworkModelTestBase<float>
         try { return new SpikingNeuralNetwork<float>(); }
         finally { AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousSeed; }
     }
+
+    // Opt out of the finite-difference gradcheck (#1872): an SNN trains by SURROGATE gradients
+    // (Neftci et al. 2019). The hidden Heaviside spike has a zero/undefined true derivative, so the
+    // analytical backward deliberately substitutes a smooth surrogate — which by construction does
+    // NOT equal the finite difference of the actual hard-spike loss (perturbing a weight flips a
+    // spike, stepping the loss discontinuously). A gradcheck is therefore inapplicable to surrogate-
+    // gradient training; the SNN's learning is exercised by its convergence invariants instead.
+    protected override bool GradientCheckApplicable => false;
 }
