@@ -6965,6 +6965,7 @@ public static class LayerHelper<T>
         numLayersPerStage ??= [2, 2, 6, 2];
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
 
         // 1. Initial Patch Embedding
         yield return new DenseLayer<T>(embeddingDim, identityActivation);
@@ -6980,11 +6981,15 @@ public static class LayerHelper<T>
 
             for (int layer = 0; layer < numLayersPerStage[stage]; layer++)
             {
-                yield return new MultiHeadAttentionLayer<T>(numHeads, (currentDim) / (numHeads));
-                yield return new LayerNormalizationLayer<T>();
-                yield return new DenseLayer<T>(ffDim, reluActivation);
-                yield return new DenseLayer<T>(currentDim, identityActivation);
-                yield return new LayerNormalizationLayer<T>();
+                // Residual Swin/Transformer block: the built-in skip connections around
+                // attention and FFN prevent the uniform-collapse the bare
+                // MHA->LN->FFN->Dense->LN stack produced (distinct inputs mapped to identical
+                // outputs after training). Embedding size is pinned to the current stage dim.
+                yield return new TransformerEncoderLayer<T>(numHeads, ffDim, currentDim);
+                if (dropoutRate > 0)
+                {
+                    yield return new DropoutLayer<T>(dropoutRate);
+                }
             }
 
             // Patch merging: double channels, halve sequence at stage boundary (except last stage)
@@ -7005,7 +7010,10 @@ public static class LayerHelper<T>
         {
             yield return new DropoutLayer<T>(dropoutRate);
         }
-        yield return new DenseLayer<T>(numClasses, identityActivation);
+        // Multi-label AudioSet head: per-class sigmoid event probabilities (HTS-AT Chen et al.
+        // 2022, §3.3). Sigmoid scores are non-negative by construction, matching the audio
+        // classifier contract.
+        yield return new DenseLayer<T>(numClasses, sigmoidActivation);
     }
 
     /// <summary>
