@@ -2312,6 +2312,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "outputSize: 4), " +
                     "numClasses: 4, embedDim: 64, numHeads: 4, numLayers: 2, numFrames: 4, patchSize: 8)";
             }
+            else if (model.ClassName == "AnimateDiff" && model.TypeParameterCount == 1)
+            {
+                // AnimateDiff is a motion MODULE inserted into a pre-trained image-diffusion UNet — a
+                // feature->feature transform (its default is 320 SD-UNet feature channels), NOT a
+                // frames->class temporal-video classifier. The temporal-video InputShape branch would
+                // feed it a 3-channel image while its parameterless ctor locks the first conv at 320
+                // input channels ("Expected input depth 320, but got 3"). Build the SAME motion-module
+                // architecture (input-projection conv -> temporal 1x1 attention + FFN blocks ->
+                // multi-scale down/up) at CI-smoke channel width (3) and spatial size (8x8) so it accepts
+                // the harness's [B, 3, 8, 8] input and returns the same-shaped feature map. Only the
+                // width/depth are scaled down; the architecture pattern is unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
+                    "inputChannels: 3, numLayers: 1, numFrames: 2)";
+            }
             else if (model.ClassName == "LayoutLM" && model.TypeParameterCount == 1)
             {
                 // LayoutLM (Xu et al. 2020, KDD) native default is BERT-base scale — 768-wide, 12
@@ -3456,6 +3473,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // full strength.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+        }
+        else if (model.ClassName == "AnimateDiff")
+        {
+            // AnimateDiff is a feature->feature motion module (see the CI-smoke constructor above:
+            // inputChannels=3, 8x8 spatial). It returns a same-shaped feature map, so InputShape and
+            // OutputShape are identical [B, C, H, W]. This overrides the temporal-video [4,3,32,32]/[4]
+            // default, which mis-modelled it as a frames->class classifier and fed 3 channels into a
+            // 320-channel-locked conv.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 8, 8 };");
         }
         else if (isTemporalVideoModel)
         {
