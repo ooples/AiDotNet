@@ -4131,6 +4131,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // (AudioEncoderDim == LLMHiddenDim == 128) it maps [1, 4, 128] audio tokens -> [1, 4, 128].
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 4, 128 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 128 };");
+                // [1, tokens, embedDim] layout: the variable-length axis is the audio-token
+                // count (axis 1), NOT the final embedding dim (fixed by the attention weights).
+                // DifferentInputLengths_ShouldNotCrash must halve the tokens, not the embedding.
+                sb.AppendLine("    protected override int VariableLengthAxis => 1;");
             }
             else
             {
