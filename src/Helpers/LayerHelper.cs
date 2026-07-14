@@ -22623,15 +22623,19 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Transformer encoder
+        // Transformer encoder — each block is a pre-norm RESIDUAL transformer layer
+        // (z' = z + MHA(LN(z)); z = z' + FFN(LN(z')), Vaswani 2017). The residual skips are
+        // LOAD-BEARING: the previous bare LN -> MHA -> LN -> FFN -> Dense block had NO skip-add, so
+        // across the deep (12-layer) LayerNorm-heavy stack the input was erased and training
+        // collapsed to a uniform output — every Foundation-ASR model on this helper (HuBERTASR,
+        // Wav2Vec2ASR, WavLMASR, Data2VecASR, BESTRQ, MMS, XLSR, USM, ... 15 in all) failed
+        // DifferentInputs_AfterTraining (L2 ~= 1e-12) / LossStrictlyDecreases / MoreData. Use the
+        // residual TransformerEncoderLayer 2-arg lazy ctor (embedding dim inferred from input),
+        // the same fix already applied to AST / WavLMSER.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, geluActivation);
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, feedForwardDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
         }
         yield return new LayerNormalizationLayer<T>();
 
