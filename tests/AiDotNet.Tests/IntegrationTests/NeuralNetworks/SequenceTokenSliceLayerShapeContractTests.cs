@@ -1,4 +1,5 @@
 using AiDotNet;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -46,6 +47,7 @@ public sealed class SequenceTokenSliceLayerShapeContractTests
             new InputLayer<float>([SequenceLength, FeatureCount]),
             new SequenceTokenSliceLayer<float>(),
             new DenseLayer<float>(ClassCount),
+            new ActivationLayer<float>((IVectorActivationFunction<float>)new SoftmaxActivation<float>()),
         };
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.TwoDimensional,
@@ -64,6 +66,8 @@ public sealed class SequenceTokenSliceLayerShapeContractTests
         Assert.NotSame(network, copy);
         Assert.Equal([SequenceLength, FeatureCount], network.Layers[1].GetInputShape());
         Assert.Equal([FeatureCount], network.Layers[1].GetOutputShape());
+        Assert.Equal([ClassCount], network.Layers[3].GetInputShape());
+        Assert.Equal([ClassCount], network.Layers[3].GetOutputShape());
         Assert.Equal(network.Layers.Select(layer => layer.GetType()),
             copy.Layers.Select(layer => layer.GetType()));
     }
@@ -84,6 +88,7 @@ public sealed class SequenceTokenSliceLayerShapeContractTests
             new InputLayer<float>([SequenceLength, FeatureCount]),
             new SequenceTokenSliceLayer<float>(),
             new DenseLayer<float>(ClassCount),
+            new ActivationLayer<float>((IVectorActivationFunction<float>)new SoftmaxActivation<float>()),
         };
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.TwoDimensional,
@@ -120,5 +125,7 @@ public sealed class SequenceTokenSliceLayerShapeContractTests
         Assert.NotNull(result);
         Assert.Equal([SequenceLength, FeatureCount], network.Layers[1].GetInputShape());
         Assert.Equal([FeatureCount], network.Layers[1].GetOutputShape());
+        Assert.Equal([ClassCount], network.Layers[3].GetInputShape());
+        Assert.Equal([ClassCount], network.Layers[3].GetOutputShape());
     }
 }
