@@ -1423,8 +1423,16 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         // Sum all elements to get ||x||^2
         var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
         var sumSquared = Engine.ReduceSum(squared, allAxes, keepDims: true);
-        // Add epsilon for numerical stability, then sqrt to get ||x||
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-12)));
+        // Add epsilon for numerical stability, then sqrt to get ||x||. The epsilon is 1e-6, NOT a
+        // token 1e-12: ||x||^2 is a sum of squares that is mathematically >= 0, but a parallel-BLAS
+        // reduction can return a slightly NEGATIVE value from summation-order rounding (~float32
+        // machine-eps x num_terms). With a 1e-12 floor that negative survives into sqrt -> NaN, which
+        // then poisons the whole embedding (VideoCLIP DifferentInputs_AfterTraining saw L2 distance =
+        // NaN on the parallel CI runner while passing locally). A 1e-6 floor keeps the radicand
+        // positive under that drift and bounds the 1/||x|| normalize backward as the single-pair
+        // contrastive objective drives the embedding norm toward zero, while staying negligible for a
+        // well-formed unit embedding (||x||^2 ~ dim).
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-6)));
         // Divide element-wise: x / ||x||
         return Engine.TensorBroadcastDivide(tensor, norm);
     }
