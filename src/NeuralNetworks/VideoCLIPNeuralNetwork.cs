@@ -99,8 +99,6 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     // Gradient checkpointing: cached frames from the last forward pass for backward recomputation
     private List<Tensor<T>>? _cachedTrainingFrames;
 
-    // Cached pre-normalized embedding for L2 normalization backward
-    private Vector<T>? _cachedPreNormEmbedding;
 
     #endregion
 
@@ -1098,16 +1096,21 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             pooled = Engine.Reshape(projected, [projected.Shape[^1]]);
         }
 
-        // Cache pre-normalized embedding for backward L2 norm Jacobian
+        // Paper-faithful contrastive training (Xu et al. 2021, §3.2): VideoCLIP average-pools the
+        // token sequence and contrasts the RAW pooled features with InfoNCE at temperature 1.0 — it
+        // does NOT L2-normalize the embeddings. We only normalize on the INFERENCE path (so the public
+        // similarity API returns cosine similarities). Normalizing on the TRAINING path additionally
+        // routes every gradient through the L2-norm Jacobian (I - yyᵀ)/‖x‖, whose 1/‖x‖ term produces a
+        // NaN gradient that drives the parameters to NaN on the first optimizer step (the batch's pooled
+        // embedding can sit near the origin for the random-init/random-target smoke fixture). Returning
+        // the un-normalized pooled features in training matches the paper and removes that NaN source;
+        // the encoder's LayerNorms keep the pooled features O(1) so the contrastive softmax stays stable.
         if (IsTrainingMode)
         {
-            int dim = pooled.Shape[0];
-            var preNorm = new Vector<T>(dim);
-            for (int i = 0; i < dim; i++) preNorm[i] = pooled[i];
-            _cachedPreNormEmbedding = preNorm;
+            return pooled;
         }
 
-        // L2 normalize via Engine ops
+        // L2 normalize via Engine ops (inference / similarity path only).
         return NormalizeTensor(pooled);
     }
 
