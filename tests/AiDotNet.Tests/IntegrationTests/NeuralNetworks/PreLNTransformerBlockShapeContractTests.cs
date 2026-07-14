@@ -40,7 +40,7 @@ public sealed class PreLNTransformerBlockShapeContractTests
 
         Tensor<float> output = network.Predict(new Tensor<float>([2, SequenceLength, HiddenSize]));
 
-        Assert.Equal([2, 2], output.Shape);
+        Assert.Equal([2, 2], output.Shape.ToArray());
         Assert.Equal([-1, HiddenSize], network.Layers[1].GetInputShape());
         Assert.Equal([-1, HiddenSize], network.Layers[1].GetOutputShape());
     }

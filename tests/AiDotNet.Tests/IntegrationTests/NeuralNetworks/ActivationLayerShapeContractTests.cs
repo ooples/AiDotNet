@@ -17,7 +17,7 @@ public sealed class ActivationLayerShapeContractTests
 
         Tensor<float> output = layer.Forward(input);
 
-        Assert.Equal([38, 2], output.Shape);
+        Assert.Equal([38, 2], output.Shape.ToArray());
         Assert.Equal([2], layer.GetInputShape());
         Assert.Equal([2], layer.GetOutputShape());
     }

@@ -34,7 +34,7 @@ public sealed class SequenceTokenSliceLayerShapeContractTests
 
         Tensor<float> output = layer.Forward(input);
 
-        Assert.Equal([BatchSize, FeatureCount], output.Shape);
+        Assert.Equal([BatchSize, FeatureCount], output.Shape.ToArray());
         Assert.Equal([SequenceLength, FeatureCount], layer.GetInputShape());
         Assert.Equal([FeatureCount], layer.GetOutputShape());
     }
@@ -62,7 +62,7 @@ public sealed class SequenceTokenSliceLayerShapeContractTests
         Tensor<float> prediction = network.Predict(input);
         var copy = (FeedForwardNeuralNetwork<float>)network.DeepCopy();
 
-        Assert.Equal([BatchSize, ClassCount], prediction.Shape);
+        Assert.Equal([BatchSize, ClassCount], prediction.Shape.ToArray());
         Assert.NotSame(network, copy);
         Assert.Equal([SequenceLength, FeatureCount], network.Layers[1].GetInputShape());
         Assert.Equal([FeatureCount], network.Layers[1].GetOutputShape());
