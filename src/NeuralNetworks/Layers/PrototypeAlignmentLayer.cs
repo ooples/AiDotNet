@@ -199,6 +199,27 @@ public class PrototypeAlignmentLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Mirrors <see cref="GetParameters"/> by writing the flat vector straight back into the prototype
+    /// codebook. Both accessors must operate on the SAME backing store — a prior revision overrode only
+    /// GetParameters (reading <c>_prototypes</c>) and left SetParameters as an inherited no-op for this
+    /// custom parameter layout, so a GetParameters/SetParameters round-trip silently discarded the
+    /// update (#1789 review: Parameters_SetGet_Roundtrip).
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null)
+            throw new ArgumentNullException(nameof(parameters));
+        int expected = _numPrototypes * _embedDim;
+        if (parameters.Length != expected)
+            throw new ArgumentException(
+                $"Expected {expected} parameters ({_numPrototypes} prototypes x {_embedDim} dims), got {parameters.Length}.",
+                nameof(parameters));
+        for (int i = 0; i < expected; i++)
+            _prototypes.Data.Span[i] = parameters[i];
+    }
+
+    /// <inheritdoc/>
     public override void ResetState()
     {
         // No cached forward state.
