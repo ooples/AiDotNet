@@ -622,24 +622,28 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
         for (int iter = 0; iter < _numPropagations; iter++)
         {
-            // Backward propagation (last -> first): each frame borrows from its
-            // successor, warped into place along the backward flow.
+            // Backward propagation (last -> first): each frame borrows from its successor i+1.
+            // GridSample maps a target pixel p to source p + flow[p], so aligning frame i+1's
+            // feature onto frame i's grid samples i+1 at the location pixel p MOVED TO going i -> i+1,
+            // i.e. the forward flow i -> i+1 (flows[i].forward), not i+1 -> i.
             var backwardFeats = new List<Tensor<T>>(propagatedFeatures);
             for (int i = numFrames - 2; i >= 0; i--)
             {
-                var warped = WarpFeatureTape(backwardFeats[i + 1], flows[i].backward);
+                var warped = WarpFeatureTape(backwardFeats[i + 1], flows[i].forward);
                 var alignInput = ConcatenateFeaturesTape(propagatedFeatures[i], warped);
                 var aligned = _backwardAlignments[iter].Forward(alignInput);
                 var fuseInput = ConcatenateFeaturesTape(propagatedFeatures[i], aligned);
                 backwardFeats[i] = _backwardConvs[iter].Forward(fuseInput);
             }
 
-            // Forward propagation (first -> last): each frame borrows from its
-            // predecessor, warped along the forward flow.
+            // Forward propagation (first -> last): each frame borrows from its predecessor i-1.
+            // Symmetrically, aligning frame i-1's feature onto frame i's grid samples i-1 at the
+            // location pixel p moved to going i -> i-1, i.e. the backward flow i -> i-1
+            // (flows[i-1].backward, since flows[i-1] = (i-1 -> i, i -> i-1)).
             var forwardFeats = new List<Tensor<T>>(backwardFeats);
             for (int i = 1; i < numFrames; i++)
             {
-                var warped = WarpFeatureTape(forwardFeats[i - 1], flows[i - 1].forward);
+                var warped = WarpFeatureTape(forwardFeats[i - 1], flows[i - 1].backward);
                 var alignInput = ConcatenateFeaturesTape(backwardFeats[i], warped);
                 var aligned = _forwardAlignments[iter].Forward(alignInput);
                 var fuseInput = ConcatenateFeaturesTape(backwardFeats[i], aligned);
@@ -842,144 +846,32 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     #region Serialization
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Distributes the flat parameter vector across the trainable layers in the SAME order the base
+    /// <see cref="NeuralNetworkBase{T}.GetParameters"/> collects them — the canonical <c>Layers</c>
+    /// order (flow estimator -> feature extraction -> residual blocks -> per-iteration [backward align,
+    /// forward align, backward conv, forward conv] -> upsampling -> output conv). The previous override
+    /// used a different feature -> residuals -> flow ordering, so a GetParameters/UpdateParameters
+    /// round-trip wrote each slice into the wrong layer.
+    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
 
         int offset = 0;
-
-        // Update feature extraction
-        if (_featExtract != null)
+        foreach (var layer in Layers)
         {
-            var featParams = _featExtract.GetParameters();
-            if (offset + featParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(featParams.Length);
-                for (int i = 0; i < featParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _featExtract.SetParameters(newParams);
-                offset += featParams.Length;
-            }
-        }
-
-        // Update residual blocks
-        foreach (var block in _residualBlocks)
-        {
-            var blockParams = block.GetParameters();
-            if (offset + blockParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(blockParams.Length);
-                for (int i = 0; i < blockParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                block.SetParameters(newParams);
-                offset += blockParams.Length;
-            }
-        }
-
-        // Update flow estimator
-        if (_flowEstimator != null)
-        {
-            var flowParams = _flowEstimator.GetParameters();
-            if (offset + flowParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(flowParams.Length);
-                for (int i = 0; i < flowParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _flowEstimator.SetParameters(newParams);
-                offset += flowParams.Length;
-            }
-        }
-
-        // Update propagation layers
-        for (int propIdx = 0; propIdx < _numPropagations; propIdx++)
-        {
-            if (propIdx < _backwardAlignments.Count)
-            {
-                var layerParams = _backwardAlignments[propIdx].GetParameters();
-                if (offset + layerParams.Length <= parameters.Length)
-                {
-                    var newParams = new Vector<T>(layerParams.Length);
-                    for (int i = 0; i < layerParams.Length; i++)
-                        newParams[i] = parameters[offset + i];
-                    _backwardAlignments[propIdx].SetParameters(newParams);
-                    offset += layerParams.Length;
-                }
-            }
-            if (propIdx < _forwardAlignments.Count)
-            {
-                var layerParams = _forwardAlignments[propIdx].GetParameters();
-                if (offset + layerParams.Length <= parameters.Length)
-                {
-                    var newParams = new Vector<T>(layerParams.Length);
-                    for (int i = 0; i < layerParams.Length; i++)
-                        newParams[i] = parameters[offset + i];
-                    _forwardAlignments[propIdx].SetParameters(newParams);
-                    offset += layerParams.Length;
-                }
-            }
-            if (propIdx < _backwardConvs.Count)
-            {
-                var layerParams = _backwardConvs[propIdx].GetParameters();
-                if (offset + layerParams.Length <= parameters.Length)
-                {
-                    var newParams = new Vector<T>(layerParams.Length);
-                    for (int i = 0; i < layerParams.Length; i++)
-                        newParams[i] = parameters[offset + i];
-                    _backwardConvs[propIdx].SetParameters(newParams);
-                    offset += layerParams.Length;
-                }
-            }
-            if (propIdx < _forwardConvs.Count)
-            {
-                var layerParams = _forwardConvs[propIdx].GetParameters();
-                if (offset + layerParams.Length <= parameters.Length)
-                {
-                    var newParams = new Vector<T>(layerParams.Length);
-                    for (int i = 0; i < layerParams.Length; i++)
-                        newParams[i] = parameters[offset + i];
-                    _forwardConvs[propIdx].SetParameters(newParams);
-                    offset += layerParams.Length;
-                }
-            }
-        }
-
-        // Update upsampling layers
-        foreach (var layer in _upsampleLayers)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update output convolution
-        if (_outputConv != null)
-        {
-            var outParams = _outputConv.GetParameters();
-            if (offset + outParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(outParams.Length);
-                for (int i = 0; i < outParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _outputConv.SetParameters(newParams);
-                offset += outParams.Length;
-            }
+            if (!layer.SupportsTraining || layer.ParameterCount == 0)
+                continue;
+            int count = checked((int)layer.ParameterCount);
+            if (offset + count > parameters.Length)
+                break;
+            var slice = new Vector<T>(count);
+            for (int i = 0; i < count; i++)
+                slice[i] = parameters[offset + i];
+            layer.UpdateParameters(slice);
+            offset += count;
         }
     }
 
