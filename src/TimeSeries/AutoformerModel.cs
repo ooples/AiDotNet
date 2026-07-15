@@ -87,8 +87,15 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting", "https://arxiv.org/abs/2106.13008", Year = 2021, Authors = "Haixu Wu, Jiehui Xu, Jianmin Wang, Mingsheng Long")]
-public class AutoformerModel<T> : TimeSeriesModelBase<T>
+public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Autoformer is a point forecaster: its head emits a single value per horizon step, so any
+    /// pointwise loss is meaningful. Defaults to mean squared error when none is configured.
+    /// </remarks>
+    public void SetLossFunction(ILossFunction<T> lossFunction) => ApplyLossFunction(lossFunction);
+
     private readonly AutoformerOptions<T> _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly Random _random;
@@ -312,7 +319,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
         var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
-        var mseLoss = new MeanSquaredErrorLoss<T>();
+        var mseLoss = TrainingLoss;
         var allParams = CollectTrainableParameters();
 
         int batchSize = Math.Max(1, _options.BatchSize);

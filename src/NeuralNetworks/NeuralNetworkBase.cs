@@ -39,7 +39,8 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IModelShape, IDisposable,
-    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>,
+    ISupportsLossFunction<T>
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -11494,6 +11495,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </para>
     /// </remarks>
     public virtual ILossFunction<T> DefaultLossFunction => LossFunction;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The tape-based training paths require the loss to derive from
+    /// <see cref="LossFunctions.LossFunctionBase{T}"/> (they call its <c>ComputeTapeLoss</c>, which
+    /// is not on <see cref="ILossFunction{T}"/>). Rejecting a non-conforming loss here turns what
+    /// would otherwise be a failure deep inside the first backward pass into an immediate, legible
+    /// error at configuration time.
+    /// </remarks>
+    public virtual void SetLossFunction(ILossFunction<T> lossFunction)
+    {
+        if (lossFunction is null)
+        {
+            throw new ArgumentNullException(nameof(lossFunction));
+        }
+
+        if (lossFunction is not LossFunctions.LossFunctionBase<T>)
+        {
+            throw new ArgumentException(
+                $"Loss function '{lossFunction.GetType().Name}' must derive from LossFunctionBase<T> " +
+                "to be used for tape-based training. Implementing ILossFunction<T> alone is not " +
+                "sufficient: the tape path needs ComputeTapeLoss, which the interface does not declare.",
+                nameof(lossFunction));
+        }
+
+        LossFunction = lossFunction;
+    }
 
     /// <summary>
     /// Computes a flattened gradient vector for all trainable parameters in the network.

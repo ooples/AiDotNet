@@ -72,8 +72,15 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting", "https://arxiv.org/abs/2201.12886", Year = 2023, Authors = "Cristian Challu, Kin G. Olivares, Boris N. Oreshkin, Federico Garza, Max Mergenthaler-Canseco, Armin Dubrawski")]
-public class NHiTSModel<T> : TimeSeriesModelBase<T>
+public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// N-HiTS is a point forecaster: its head emits a single value per horizon step, so any
+    /// pointwise loss is meaningful. Defaults to mean squared error when none is configured.
+    /// </remarks>
+    public void SetLossFunction(ILossFunction<T> lossFunction) => ApplyLossFunction(lossFunction);
+
     private readonly NHiTSOptions<T> _options;
     private Vector<T> _trainingSeries = Vector<T>.Empty();
     private readonly List<NHiTSStackTensor<T>> _stacks;
@@ -262,7 +269,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         var allStacks = _stacks.Cast<Interfaces.ILayer<T>>().ToList();
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allStacks, -1);
 
-        var trainingLoss = new MeanSquaredErrorLoss<T>();
+        var trainingLoss = TrainingLoss;
 
         int lookback = _options.LookbackWindow;
         int horizon = _options.ForecastHorizon;
@@ -521,7 +528,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         if (trainWindows.Count < batchSize) return false;
 
         var layers = _stacks.Cast<ITrainableLayer<T>>().ToList();
-        var trainingLoss = new MeanSquaredErrorLoss<T>();
+        var trainingLoss = TrainingLoss;
 
         Tensor<T> ForwardStack(Tensor<T> input) => RunForwardBatched(input)!;
         Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>

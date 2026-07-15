@@ -93,6 +93,159 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Pushes a loss supplied to <c>ConfigureLossFunction</c> into the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The loss is set on the MODEL rather than kept in the facade, because the facade's own loss
+    /// variable is only used to report an epoch metric — gradients come from the model's loss. Once
+    /// the model's <c>DefaultLossFunction</c> reflects the caller's choice,
+    /// <c>GradientBasedOptimizerBase.OnModelChanged</c> adopts it into the optimizer too, so the
+    /// loss that is optimized and the loss that is reported are the same object.
+    /// </para>
+    /// <para>
+    /// A model whose loss is intrinsic to its architecture throws from <c>SetLossFunction</c>; a
+    /// model that does not implement <see cref="ISupportsLossFunction{T}"/> at all is reported here.
+    /// Both are preferable to accepting the call and ignoring it.
+    /// </para>
+    /// </remarks>
+    private void ApplyConfiguredLossFunction()
+    {
+        if (_configuredLossFunction is null || _model is null)
+        {
+            return;
+        }
+
+        if (_model is not ISupportsLossFunction<T> supportsLoss)
+        {
+            throw new NotSupportedException(
+                $"ConfigureLossFunction was called, but model '{_model.GetType().Name}' does not support " +
+                "replacing its loss function, so the configured loss would have been ignored. Remove the " +
+                "call, or supply the loss through the model's own constructor/options.");
+        }
+
+        supportsLoss.SetLossFunction(_configuredLossFunction);
+    }
+
+    /// <summary>
+    /// Pushes a scheduler supplied to <c>ConfigureLearningRateScheduler</c> into the optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Gradient optimizers already own scheduler support — they read
+    /// <c>GradientBasedOptimizerOptions.LearningRateScheduler</c> on construction and tick it from
+    /// <c>OnEpochEnd</c>/<c>OnBatchEnd</c>. So the scheduler is handed to the optimizer's options
+    /// rather than stepped from here. The facade deliberately does not touch the learning rate
+    /// itself: an earlier version decayed a facade-local rate per epoch alongside the optimizer's
+    /// own schedule and bypassed <c>Step()</c>, which is the duplicate-decay bug documented above
+    /// the streaming loop.
+    /// </para>
+    /// <para>
+    /// <c>UseAdaptiveLearningRate</c> writes the same <c>CurrentLearningRate</c> a scheduler sets,
+    /// multiplying/dividing it by <c>LearningRateDecay</c> per step, so the two together mean the
+    /// adaptive rule silently overwrites the schedule. Configuring both is rejected rather than
+    /// resolved arbitrarily.
+    /// </para>
+    /// </remarks>
+    private void ApplyConfiguredLearningRateScheduler()
+    {
+        if (_configuredLearningRateScheduler is null)
+        {
+            return;
+        }
+
+        if (_optimizer is null)
+        {
+            throw new InvalidOperationException(
+                "ConfigureLearningRateScheduler requires an optimizer; call ConfigureOptimizer with a " +
+                "gradient-based optimizer, otherwise the scheduler would have no learning rate to drive.");
+        }
+
+        if (_optimizer.GetOptions() is not GradientBasedOptimizerOptions<T, TInput, TOutput> gradientOptions)
+        {
+            throw new NotSupportedException(
+                $"ConfigureLearningRateScheduler requires a gradient-based optimizer; " +
+                $"'{_optimizer.GetType().Name}' has no learning rate to schedule.");
+        }
+
+        if (gradientOptions.UseAdaptiveLearningRate)
+        {
+            throw new InvalidOperationException(
+                "ConfigureLearningRateScheduler cannot be combined with UseAdaptiveLearningRate: both " +
+                "write the optimizer's CurrentLearningRate, so the adaptive rule would overwrite the " +
+                "schedule every step. Disable UseAdaptiveLearningRate to use an explicit scheduler.");
+        }
+
+        gradientOptions.LearningRateScheduler = _configuredLearningRateScheduler;
+    }
+
+    /// <summary>
+    /// Splits the data with the splitter supplied to <c>ConfigureDataSplitter</c>, if there is one.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> when a configured splitter produced the partitions; <c>false</c> when no splitter
+    /// is configured or the data is not in a shape it accepts, in which case the caller falls back
+    /// to the built-in ratio split.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <see cref="IDataSplitter{T}"/> is defined over <c>Matrix&lt;T&gt;</c>/<c>Vector&lt;T&gt;</c>,
+    /// while the pipeline is generic over TInput/TOutput, so this only applies when the data is
+    /// actually matrix/vector shaped. Tensor and multi-output runs keep the built-in split rather
+    /// than silently ignoring a configured splitter under a different name — those cases return
+    /// false and are reported by the caller.
+    /// </para>
+    /// <para>
+    /// A splitter that reports <see cref="IDataSplitter{T}.SupportsValidation"/> == false yields no
+    /// validation partition; the validation slot then mirrors the test partition, matching the
+    /// built-in split's behavior when validationRatio is 0.
+    /// </para>
+    /// </remarks>
+    private bool TrySplitWithConfiguredSplitter(
+        TInput preparedX, TOutput preparedY,
+        out TInput xTrain, out TOutput yTrain,
+        out TInput xVal, out TOutput yVal,
+        out TInput xTest, out TOutput yTest)
+    {
+        xTrain = default!; yTrain = default!;
+        xVal = default!; yVal = default!;
+        xTest = default!; yTest = default!;
+
+        if (_configuredDataSplitter is null)
+        {
+            return false;
+        }
+
+        if (preparedX is not Matrix<T> x || preparedY is not Vector<T> y)
+        {
+            throw new NotSupportedException(
+                $"ConfigureDataSplitter was given '{_configuredDataSplitter.GetType().Name}', but a " +
+                $"configured splitter only applies to Matrix<T>/Vector<T> data; this build uses " +
+                $"{typeof(TInput).Name}/{typeof(TOutput).Name}. Remove the splitter or use a " +
+                "matrix/vector model, rather than have the split silently ignore your configuration.");
+        }
+
+        if (_configuredDataSplitter.RequiresLabels && y is null)
+        {
+            throw new InvalidOperationException(
+                $"Splitter '{_configuredDataSplitter.Description}' requires labels but none were supplied.");
+        }
+
+        var result = _configuredDataSplitter.Split(x, y);
+
+        xTrain = (TInput)(object)result.XTrain;
+        xTest = (TInput)(object)result.XTest;
+        yTrain = (TOutput)(object)(result.yTrain ?? Vector<T>.Empty());
+        yTest = (TOutput)(object)(result.yTest ?? Vector<T>.Empty());
+
+        // No validation partition (SupportsValidation == false, or the splitter simply produced
+        // none): mirror the test partition, as the built-in split does when validationRatio is 0.
+        xVal = (TInput)(object)(result.XValidation ?? result.XTest);
+        yVal = (TOutput)(object)(result.yValidation ?? result.yTest ?? Vector<T>.Empty());
+        return true;
+    }
+
+    /// <summary>
     /// Invokes <see cref="ITrainingCallback{T}.OnTrainBegin"/> on every registered training
     /// callback, once, before the first epoch of a supervised training run.
     /// </summary>
@@ -1099,6 +1252,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
 
+        // Push configured training components into the model/optimizer before anything trains.
+        ApplyConfiguredLossFunction();
+        ApplyConfiguredLearningRateScheduler();
+
         // ============================================================================
         // Training Infrastructure Initialization
         // ============================================================================
@@ -1827,8 +1984,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // impossible to know which original rows landed in the training partition, so groups
             // force an order-preserving split: training rows = the first floor(0.7·n) rows.
             bool shuffleBeforeSplit = !isTimeSeriesModel && _trainingGroups is null;
-            (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
-                preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
+
+            // An explicitly configured splitter wins over the built-in ratio split. Without this,
+            // ConfigureDataSplitter silently dropped its argument — which also left every splitter
+            // under Preprocessing/DataPreparation/Splitting (walk-forward, purged k-fold,
+            // combinatorial purged, ...) unreachable from the facade despite being implemented.
+            if (!TrySplitWithConfiguredSplitter(preparedX, preparedY,
+                    out XTrain, out yTrain, out XVal, out yVal, out XTest, out yTest))
+            {
+                (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
+                    preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
+            }
 
             // Apply data preparation (SMOTE, outlier removal, etc.) to training data ONLY after split.
             // Applying before split would leak test/validation information via synthetic samples.

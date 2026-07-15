@@ -50,6 +50,69 @@ namespace AiDotNet.TimeSeries;
 public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
     ITrainingEpochReporter<T>
 {
+    /// <summary>
+    /// Replaces the loss this model trains against, for the models that can accept one.
+    /// </summary>
+    /// <param name="lossFunction">The loss to adopt.</param>
+    /// <remarks>
+    /// <para>
+    /// The base deliberately does <b>not</b> implement <see cref="ISupportsLossFunction{T}"/>: the
+    /// TimeSeries family is split on whether an arbitrary loss is even meaningful. DeepAR trains a
+    /// Gaussian likelihood over its own (mean, scale) head, the Temporal Fusion Transformer's
+    /// quantile pinball loss defines the shape of its [B, H*Q] output, and DLinear fuses an analytic
+    /// MSE gradient into its update — for those, a substituted loss trains the wrong objective, not
+    /// merely a worse one.
+    /// </para>
+    /// <para>
+    /// So the capability is declared per model: point forecasters (NBEATS, N-HiTS, Informer,
+    /// Autoformer) implement <see cref="ISupportsLossFunction{T}"/> and delegate here; the intrinsic
+    /// ones simply don't implement it, and the type system reports that rather than a runtime throw.
+    /// </para>
+    /// </remarks>
+    protected void ApplyLossFunction(ILossFunction<T> lossFunction)
+    {
+        if (lossFunction is null)
+        {
+            throw new ArgumentNullException(nameof(lossFunction));
+        }
+
+        if (IsTrained)
+        {
+            throw new InvalidOperationException(
+                "The loss function cannot be changed after training; construct a new model instead.");
+        }
+
+        if (lossFunction is not LossFunctions.LossFunctionBase<T>)
+        {
+            throw new ArgumentException(
+                $"Loss function '{lossFunction.GetType().Name}' must derive from LossFunctionBase<T>: " +
+                "tape-based training needs ComputeTapeLoss, which ILossFunction<T> does not declare.",
+                nameof(lossFunction));
+        }
+
+        _defaultLossFunction = lossFunction;
+
+        // Mirror onto the options so a TrainCore that reads Options.LossFunction and the
+        // DefaultLossFunction/ComputeGradients path cannot disagree about which loss is in use.
+        Options.LossFunction = lossFunction;
+    }
+
+    /// <summary>
+    /// The training loss, as the tape-capable type the gradient loops require.
+    /// </summary>
+    /// <remarks>
+    /// The tape paths call <c>ComputeTapeLoss</c>, which lives on
+    /// <see cref="LossFunctions.LossFunctionBase{T}"/> rather than on <see cref="ILossFunction{T}"/>.
+    /// Resolving it here yields one legible error instead of an <see cref="InvalidCastException"/>
+    /// surfacing from inside a backward pass. Defaults to the model's configured loss, which is
+    /// mean squared error unless the caller supplied another.
+    /// </remarks>
+    protected LossFunctions.LossFunctionBase<T> TrainingLoss =>
+        DefaultLossFunction as LossFunctions.LossFunctionBase<T>
+        ?? throw new InvalidOperationException(
+            $"Loss function '{DefaultLossFunction.GetType().Name}' must derive from LossFunctionBase<T> " +
+            "for tape-based training; ILossFunction<T> alone does not provide ComputeTapeLoss.");
+
     /// <inheritdoc />
     public Func<TrainingProgress<T>, bool>? TrainingEpochCallback { get; set; }
 
@@ -246,7 +309,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// <summary>
     /// The default loss function used for gradient computation.
     /// </summary>
-    private readonly ILossFunction<T> _defaultLossFunction;
+    /// <summary>
+    /// The loss reported by <see cref="DefaultLossFunction"/> and used by <c>ComputeGradients</c>.
+    /// Not readonly so <see cref="SetLossFunction"/> can replace it; see that method for why a
+    /// model whose loss is intrinsic to its architecture must override and reject.
+    /// </summary>
+    private ILossFunction<T> _defaultLossFunction;
 
     /// <summary>
     /// Gets the last computed error metrics when the model was evaluated.
