@@ -2643,6 +2643,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, IntermediateSize = 64, " +
                     "NumExperts = 2, NumActiveExperts = 1, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "MOMENT" && model.TypeParameterCount == 1)
+            {
+                // MOMENT (Goswami et al. 2024, ICML) defaults to the ~385M-param
+                // Base config (ContextLength=512, HiddenDimension=1024, NumLayers=24,
+                // NumHeads=16, IntermediateSize=4096). In double precision the weight
+                // tensors alone are ~3 GB, and with Adam moments + activations a single
+                // train step exhausts the 16 GB CI runner (and this dev box) — the test
+                // process is OOM-killed before any invariant runs. Build the SAME T5
+                // encoder architecture (RevIN -> patch embed -> N transformer encoder
+                // blocks -> flatten -> forecast head) at CI-smoke scale so the full
+                // invariant suite runs, mirroring the TimeMoE reduction directly above.
+                // ContextLength=64 / ForecastHorizon=16 stay in lockstep with the
+                // InputShape (64) and OutputShape (16) the forecasting family emits for
+                // MOMENT. PatchLength=16 -> numPatches=4; HiddenDimension=32 is divisible
+                // by NumHeads=2 as MOMENT's option validator requires.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 16), " +
+                    "new AiDotNet.Models.Options.MOMENTOptions<double> { " +
+                    "ContextLength = 64, ForecastHorizon = 16, PatchLength = 16, " +
+                    "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, IntermediateSize = 64, " +
+                    "DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "VideoMAE" && model.TypeParameterCount == 1)
             {
                 // VideoMAE (Tong et al. 2022) defaults to ViT-Base scale
@@ -7362,6 +7386,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Predict's EnsureWeightShapeForInput. Keep the InputShape context in
             // lockstep with the reduced ContextLength=64 the ctor uses.
             "TimeMoE" => 64,
+            // MOMENT's paper context is 512, but the generated test builds it at
+            // CI-smoke scale (see the MOMENT constructor special-case in
+            // EmitGeneratedTestClass): the ~385M-param Base default OOM-kills the
+            // runner. Keep the InputShape context in lockstep with the reduced
+            // ContextLength=64 the ctor uses.
+            "MOMENT" => 64,
             "Sundial" => 2048,
             "Kairos" => 1024,
             "LagLlama" => 96,   // LagLlama paper default
@@ -7436,6 +7466,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // 113M-param foundation default's weight-streaming; keep OutputShape
             // in lockstep with that reduced horizon.
             "TimeMoE" => "16",
+            // MOMENT forecast head outputs [B, ForecastHorizon]. The generated test
+            // builds it at CI-smoke scale (ForecastHorizon=16) to avoid the ~385M-param
+            // Base default's OOM; keep OutputShape in lockstep with that reduced horizon.
+            "MOMENT" => "16",
             "TFC" => "96",
 
             // TimeGrad: forecast horizon (diffusion output is denoised target).
