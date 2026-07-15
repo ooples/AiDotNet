@@ -62,7 +62,7 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         int ffnDim,
         LayerBase<T> attention,
         IActivationFunction<T>? ffnActivation = null)
-        : base(new[] { hiddenSize }, new[] { hiddenSize })
+        : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
         if (hiddenSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(hiddenSize));

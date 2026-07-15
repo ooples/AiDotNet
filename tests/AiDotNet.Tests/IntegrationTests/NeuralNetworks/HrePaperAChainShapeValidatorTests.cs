@@ -30,9 +30,9 @@ public class HrePaperAChainShapeValidatorTests
 {
     /// <summary>
     /// Validator runs at chain-construction time and rejects the chain if any
-    /// adjacent-layer pair fails <c>AreShapesCompatible</c>. This is the first
-    /// time the rank-N declared (MHA <c>[-1, embDim]</c>) vs rank-(N+1)
-    /// resolved (Slice <c>[batch, ctxLen, embDim]</c>) shape pair is checked.
+    /// adjacent-layer pair fails <c>AreShapesCompatible</c>. This verifies the
+    /// MHA sequence output is accepted by the slice layer's per-sample input
+    /// contract.
     /// Pre-fix the chain construction threw with
     /// "Layer N (MultiHeadAttention) is not compatible with Layer N+1 (SequenceTokenSliceLayer)".
     /// </summary>
@@ -52,15 +52,14 @@ public class HrePaperAChainShapeValidatorTests
     }
 
     /// <summary>
-    /// After a real <c>Forward</c> mutates the slice layer's shape from
-    /// <c>[-1, -1, -1]</c> to a concrete <c>[batch, ctxLen, embDim]</c>, a
-    /// downstream <c>DeepCopy</c> re-runs the validator on the (now resolved)
-    /// chain — this is the exact failure path from HarmonicEngine PR #149,
+    /// After a real <c>Forward</c> resolves the slice layer's per-sample shape
+    /// to <c>[ctxLen, embDim]</c>, a downstream <c>DeepCopy</c> re-runs the validator
+    /// on the resolved chain — this is the exact failure path from HarmonicEngine PR #149,
     /// triggered by <c>AdamOptimizer.Optimize</c> →
     /// <c>OptimizerBase.PrepareAndEvaluateSolution</c> → <c>DeepCopy</c>.
     /// Pre-fix the post-forward revalidation threw because the validator
     /// couldn't reconcile MHA's still-declared rank-2 output with Slice's
-    /// now-rank-3 resolved input.
+    /// resolved per-sample input.
     /// </summary>
     [Fact]
     public void HreChain_DeepCopyAfterForward_PassesRevalidation()
@@ -69,8 +68,7 @@ public class HrePaperAChainShapeValidatorTests
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
         // Real forward — this is what causes SequenceTokenSliceLayer to call
-        // ResolveShapes with a concrete batch dim, mutating the chain's
-        // observable shape state.
+        // ResolveShapes with the concrete per-sample sequence dimensions.
         var input = new Tensor<float>(new[] { Batch, CtxLen });
         var span = input.AsWritableSpan();
         for (int i = 0; i < span.Length; i++) span[i] = i % VocabSize;

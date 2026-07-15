@@ -131,8 +131,14 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)
     {
-        var shape = input.Shape.ToArray();
-        ResolveShapes(shape, shape);
+        int[] runtimeShape = input.Shape.ToArray();
+        int[] sampleShape = runtimeShape;
+        if (runtimeShape.Length > 1)
+        {
+            sampleShape = new int[runtimeShape.Length - 1];
+            Array.Copy(runtimeShape, 1, sampleShape, 0, sampleShape.Length);
+        }
+        ResolveShapes(sampleShape, sampleShape);
     }
 
     /// <summary>
