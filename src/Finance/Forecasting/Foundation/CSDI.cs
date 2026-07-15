@@ -687,11 +687,11 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        if (seqLen <= 0) return input;
+        int instanceSize = input.Length / batchSize;
+        if (instanceSize <= 0) return input;
 
         bool reshaped = input.Rank != 2;
-        var flat = reshaped ? Engine.Reshape(input, new[] { batchSize, seqLen }) : input;
+        var flat = reshaped ? Engine.Reshape(input, new[] { batchSize, instanceSize }) : input;
         var mean = Engine.ReduceMean(flat, new[] { 1 }, keepDims: true);
         var variance = Engine.ReduceVariance(flat, new[] { 1 }, keepDims: true);
         var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5)));

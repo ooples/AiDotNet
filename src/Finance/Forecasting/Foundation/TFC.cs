@@ -919,13 +919,19 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> ComputeFrequencyRepresentation(Tensor<T> input)
     {
-        int n = input.Rank > 1 ? input.Shape[^1] : input.Length;
-        int numSamples = input.Rank > 1 ? input.Length / n : 1;
+        bool isMultivariateTimeSeries = input.Rank == 3;
+        int n = isMultivariateTimeSeries ? input.Shape[1] : input.Rank > 1 ? input.Shape[^1] : input.Length;
+        int numSamples = input.Length / n;
         int halfN = n / 2 + 1;
 
-        // Normalize to [B, n] for the batched RFFT contract.
-        bool reshaped = input.Rank != 2;
-        var flat = reshaped ? Engine.Reshape(input, new[] { numSamples, n }) : input;
+        // Finance time-series tensors use [batch, time, features]. Move time to the
+        // final axis so RFFT transforms each feature's temporal series independently.
+        // Rank-1 and rank-2 inputs already have time on their final axis.
+        Tensor<T> seriesMajor = isMultivariateTimeSeries
+            ? Engine.TensorPermute(input, new[] { 0, 2, 1 })
+            : input;
+        bool reshaped = seriesMajor.Rank != 2;
+        var flat = reshaped ? Engine.Reshape(seriesMajor, new[] { numSamples, n }) : seriesMajor;
 
         // RFFT returns interleaved [re0, im0, re1, im1, ..., re(halfN-1), im(halfN-1)],
         // shape [B, halfN * 2] = [B, n + 2].
@@ -953,6 +959,14 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         else
         {
             full = oneSided;
+        }
+
+        if (isMultivariateTimeSeries)
+        {
+            int batchSize = input.Shape[0];
+            int featureCount = input.Shape[2];
+            var restored = Engine.Reshape(full, new[] { batchSize, featureCount, n });
+            return Engine.TensorPermute(restored, new[] { 0, 2, 1 });
         }
 
         return reshaped ? Engine.Reshape(full, input._shape) : full;

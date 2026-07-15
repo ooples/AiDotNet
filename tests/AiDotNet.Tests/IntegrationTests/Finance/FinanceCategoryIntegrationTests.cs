@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Finance.Forecasting.Foundation;
+using AiDotNet.Models.Options;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -106,6 +108,50 @@ public class FinanceCategoryIntegrationTests
         Assert.NotEmpty(FinanceModelTestFactory.GetPortfolioModelTypes<float>());
         Assert.NotEmpty(FinanceModelTestFactory.GetVolatilityModelTypes<float>());
         Assert.NotEmpty(FinanceModelTestFactory.GetFactorModelTypes<float>());
+    }
+
+    [Fact]
+    public void CsdiInstanceNormalization_RankThreeInput_PreservesShape()
+    {
+        var options = new CSDIOptions<double>
+        {
+            SequenceLength = 4,
+            NumFeatures = 2,
+            HiddenDimension = 8,
+            NumResidualLayers = 1,
+            NumDiffusionSteps = 1,
+            NumHeads = 1,
+            TimeEmbeddingDim = 4
+        };
+        var model = new CSDI<double>(FinanceTestHelpers.CreateArchitecture<double>(8, 8), options);
+        var input = FinanceTestHelpers.CreateTimeSeriesInput<double>(2, 4, 2);
+
+        var normalized = model.ApplyInstanceNormalization(input);
+
+        Assert.Equal(input.Shape, normalized.Shape);
+        Assert.Equal(input.Length, normalized.Length);
+    }
+
+    [Fact]
+    public void TfcTraining_RankThreeInput_BackpropagatesThroughTemporalFft()
+    {
+        var options = new TFCOptions<double>
+        {
+            ContextLength = 8,
+            ForecastHorizon = 4,
+            HiddenDimension = 8,
+            ProjectionDimension = 4,
+            NumTimeLayers = 1,
+            NumFreqLayers = 1,
+            DropoutRate = 0.0
+        };
+        var model = new TFC<double>(FinanceTestHelpers.CreateArchitecture<double>(8, 4), options);
+        var input = FinanceTestHelpers.CreateTimeSeriesInput<double>(1, 8, 1);
+        var target = model.Predict(input);
+
+        model.Train(input, target);
+
+        Assert.True(model.GetFinancialMetrics().ContainsKey("LastLoss"));
     }
 
     [Theory]
