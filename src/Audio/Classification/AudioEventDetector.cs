@@ -537,13 +537,19 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
             return OnnxEncoder.Run(input);
         }
 
-        // Native mode: run through layers
+        // Native mode: run through layers to per-class logits, then apply a per-class SIGMOID.
+        // Sound event detection is a MULTI-LABEL task (Kong et al. 2020, "PANNs": each of the N
+        // events is independently present/absent), so the inference output is a per-class presence
+        // PROBABILITY in [0, 1] — not raw logits and not a softmax over mutually-exclusive classes.
+        // Training runs on the raw logits (ForwardForTraining walks the same layers WITHOUT this
+        // sigmoid, and the loss is applied to logits), the standard train-on-logits / predict-with-
+        // sigmoid pattern; this keeps the class scores non-negative and bounded at inference.
         var current = input;
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
-        return current;
+        return Engine.Sigmoid(current);
     }
 
     /// <summary>
