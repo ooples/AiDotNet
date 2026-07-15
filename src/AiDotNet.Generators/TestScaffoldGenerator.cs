@@ -5008,6 +5008,41 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
         }
 
+        // MelBandRoFormer (Wang et al. 2024) band-splits the spectrogram, linearly projects each band,
+        // then applies a per-band LayerNorm before the transformer — so a UNIFORM input rescale is
+        // normalised away (LayerNorm is invariant to x -> a*x, and its physical input is STFT magnitudes
+        // where a louder copy of the same audio must yield the same separation masks). That is correct
+        // paper behaviour, not a "forward ignores its input" bug. The base ScaledInput_ShouldChangeOutput
+        // probes magnitude sensitivity, which this architecture intentionally lacks; assert the genuine
+        // input-PATTERN sensitivity instead (two distinct random inputs must produce different outputs),
+        // mirroring the CRF/NER treatment above. Not an assertion weakening. AudioNN has no family branch
+        // that emits a ScaledInput override, so this fires exactly once.
+        if (model.ClassName == "MelBandRoFormer")
+        {
+            sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+            sb.AppendLine("    public override async System.Threading.Tasks.Task ScaledInput_ShouldChangeOutput()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+            sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+            sb.AppendLine("        using var network = CreateNetwork();");
+            sb.AppendLine("        var rng1 = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+            sb.AppendLine("        var rng2 = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom(seed: 1729);");
+            sb.AppendLine("        var input1 = CreateRandomTensor(InputShape, rng1);");
+            sb.AppendLine("        var input2 = CreateRandomTensor(InputShape, rng2);");
+            sb.AppendLine("        var output1 = network.Predict(input1);");
+            sb.AppendLine("        var output2 = network.Predict(input2);");
+            sb.AppendLine("        bool anyDifferent = false;");
+            sb.AppendLine("        int minLen = System.Math.Min(output1.Length, output2.Length);");
+            sb.AppendLine("        for (int i = 0; i < minLen; i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            if (System.Math.Abs(output1[i] - output2[i]) > 1e-12) { anyDifferent = true; break; }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        Xunit.Assert.True(anyDifferent,");
+            sb.AppendLine("            \"MelBandRoFormer produced identical outputs for two distinct random inputs - forward may ignore input. \" +");
+            sb.AppendLine("            \"(Input MAGNITUDE is intentionally normalised away by the per-band LayerNorm; this asserts input-PATTERN sensitivity.)\");");
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
         if (pinInitSeed)
         {
