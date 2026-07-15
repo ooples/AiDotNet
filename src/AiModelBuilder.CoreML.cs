@@ -17,7 +17,6 @@ namespace AiDotNet;
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private ILossFunction<T>? _configuredLossFunction;
-    private IActivationFunction<T>? _configuredActivationFunction;
     private IKernelFunction<T>? _configuredKernelFunction;
     private IClustering<T>? _configuredClustering;
     private ILayer<T>? _configuredLayer;
@@ -47,21 +46,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Configures the activation function for neural network layers.
-    /// </summary>
-    /// <param name="activationFunction">The activation function implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Activation functions add non-linearity to neural networks,
-    /// enabling them to learn complex patterns. Common choices include ReLU (fast, general-purpose),
-    /// Sigmoid (0-1 output), and Tanh (-1 to 1 output).</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureActivationFunction(IActivationFunction<T> activationFunction)
-    {
-        _configuredActivationFunction = activationFunction;
-        return this;
-    }
 
     /// <summary>
     /// Configures the kernel function for kernel-based methods (SVM, Gaussian processes, etc.).

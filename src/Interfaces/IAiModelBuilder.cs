@@ -1952,17 +1952,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureLossFunction(ILossFunction<T> lossFunction);
 
-    /// <summary>
-    /// Configures the activation function for neural network layers.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Activation functions add non-linearity to neural networks,
-    /// enabling them to learn complex patterns. Common choices include ReLU (fast, general-purpose),
-    /// Sigmoid (0-1 output), and Tanh (-1 to 1 output).</para>
-    /// </remarks>
-    /// <param name="activationFunction">The activation function implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureActivationFunction(IActivationFunction<T> activationFunction);
+    // ConfigureActivationFunction was removed: activation is a required parameter where a layer is
+    // constructed (new DenseLayer<T>(64, new ReLUActivation<T>())), so a builder-level equivalent
+    // could never be the real thing. It also had no single meaning — the correct choice differs by
+    // role (a ReLU output head clamps a regressor's negative predictions; a sigmoid on hidden layers
+    // reintroduces vanishing gradients), which is why the options model splits Hidden/Output rather
+    // than exposing one knob. It accepted a value and silently discarded it; removing it turns that
+    // runtime no-op into a compile error that names the problem.
 
     /// <summary>
     /// Configures the kernel function for kernel-based methods (SVM, Gaussian processes, etc.).
