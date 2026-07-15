@@ -251,7 +251,42 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <inheritdoc/>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
+        if (adjacencyMatrix == null)
+            throw new ArgumentNullException(nameof(adjacencyMatrix));
+
         _adjacencyMatrix = adjacencyMatrix;
+
+        // GraphAttention has a complete tape backward for node features and
+        // attention vectors. Convert the common dense 2D contract to edges so
+        // Forward can compose it without copying through detached scratch.
+        if (adjacencyMatrix.Rank == 2)
+        {
+            int numTargets = adjacencyMatrix.Shape[0];
+            int numSources = adjacencyMatrix.Shape[1];
+            var sources = new List<int>();
+            var targets = new List<int>();
+            for (int target = 0; target < numTargets; target++)
+            {
+                for (int source = 0; source < numSources; source++)
+                {
+                    if (!NumOps.Equals(adjacencyMatrix[target, source], NumOps.Zero))
+                    {
+                        sources.Add(source);
+                        targets.Add(target);
+                    }
+                }
+            }
+
+            _edgeSourceIndices = new Tensor<int>(sources.ToArray(), [sources.Count]);
+            _edgeTargetIndices = new Tensor<int>(targets.ToArray(), [targets.Count]);
+            _useSparseAggregation = true;
+        }
+        else
+        {
+            _edgeSourceIndices = null;
+            _edgeTargetIndices = null;
+            _useSparseAggregation = false;
+        }
     }
 
     /// <inheritdoc/>
@@ -359,45 +394,61 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
         if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
         {
-            // Sparse aggregation using Engine.MultiHeadGraphAttention (production-recommended).
-            // _attentionWeights is laid out as [numHeads, 2 * outputFeatures] with the
-            // source-half occupying columns [0, outputFeatures) and the target-half
-            // [outputFeatures, 2 * outputFeatures). Engine.TensorSlice returns each half
-            // as a view-style operation in one call instead of the per-(h, f) copy loop.
-            var attnWeightsSource = Engine.TensorSlice(_attentionWeights, [0, 0], [_numHeads, _outputFeatures]);
-            var attnWeightsTarget = Engine.TensorSlice(_attentionWeights, [0, _outputFeatures], [_numHeads, _outputFeatures]);
-
-            output = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
-            output.Fill(NumOps.Zero);
-
-            for (int b = 0; b < batchSize; b++)
+            // Compose each head from tape-recorded primitives. The aggregate
+            // MultiHeadGraphAttention kernel does not expose a backward for its
+            // head projection, while GraphAttention does.
+            var transformedHeads = new Tensor<T>[_numHeads];
+            var headOutputs = new Tensor<T>[_numHeads];
+            var headCoefficients = new Tensor<T>[_numHeads];
+            for (int h = 0; h < _numHeads; h++)
             {
-                // Extract batch features using Slice: [numNodes, inputFeatures]
-                var batchFeatures = processInput.Slice(b);
+                var headWeight = Engine.Reshape(
+                    Engine.TensorSlice(
+                        _weights,
+                        [h, 0, 0],
+                        [1, _inputFeatures, _outputFeatures]),
+                    [_inputFeatures, _outputFeatures]);
+                var transformed = BatchedMatMul3Dx2D(
+                    processInput,
+                    headWeight,
+                    batchSize,
+                    numNodes,
+                    _inputFeatures,
+                    _outputFeatures);
+                var attnSource = Engine.Reshape(
+                    Engine.TensorSlice(_attentionWeights, [h, 0], [1, _outputFeatures]),
+                    [_outputFeatures]);
+                var attnTarget = Engine.Reshape(
+                    Engine.TensorSlice(
+                        _attentionWeights,
+                        [h, _outputFeatures],
+                        [1, _outputFeatures]),
+                    [_outputFeatures]);
 
-                // Call Engine.MultiHeadGraphAttention
-                var batchOutput = Engine.MultiHeadGraphAttention(
-                    batchFeatures,
+                var headOutput = Engine.GraphAttention(
+                    transformed,
                     _edgeSourceIndices,
                     _edgeTargetIndices,
-                    _weights,
-                    attnWeightsSource,
-                    attnWeightsTarget,
+                    attnSource,
+                    attnTarget,
                     NumOps.ToDouble(_alpha),
-                    concatenate: false,  // Average heads
-                    out var batchAttnCoeffs);
+                    out var coefficients);
 
-                // Add bias using broadcasting and set in output
-                var biasBroadcast = Engine.Reshape(_bias, [1, _outputFeatures]);
-                var biasedOutput = Engine.TensorBroadcastAdd(batchOutput, biasBroadcast);
-                output.SetSlice(b, biasedOutput);
+                transformedHeads[h] = transformed;
+                headOutputs[h] = headOutput;
+                headCoefficients[h] = coefficients;
             }
 
-            // Store cached values for backward pass
-            _lastTransformed = null;
+            var stackedHeads = Engine.TensorStack(headOutputs, axis: 1);
+            var sparseHeadSum = Engine.ReduceSum(stackedHeads, [1], keepDims: false);
+            var sparseHeadAverage = Engine.TensorDivideScalar(sparseHeadSum, NumOps.FromDouble(_numHeads));
+            var biasBroadcast = Engine.Reshape(_bias, [1, 1, _outputFeatures]);
+            output = Engine.TensorBroadcastAdd(sparseHeadAverage, biasBroadcast);
+
+            _lastTransformed = cacheBwd ? Engine.TensorStack(transformedHeads, axis: 1) : null;
             _lastPreSoftmaxScores = null;
-            _lastAttentionCoefficients = null;
-            _lastHeadOutputs = null;
+            _lastAttentionCoefficients = cacheBwd ? Engine.TensorStack(headCoefficients, axis: 1) : null;
+            _lastHeadOutputs = cacheBwd ? stackedHeads : null;
 
             activatedOutput = ApplyActivation(output);
 
