@@ -2615,6 +2615,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 1, NumHeads = 4, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "ChatTTS" && model.TypeParameterCount == 1)
+            {
+                // ChatTTS (2noise) is a neural codec LM (text -> AR transformer -> DVAE codec tokens),
+                // built via CreateDefaultCodecLMLayers exactly like CSM / XTTSv2. Its paper defaults
+                // (LLMDim=768, NumLLMLayers=20, CodebookSize=626) run a single <double> forward in
+                // 14-28 s and their cumulative footprint OOM-killed the "Generated Layers A-F" shard on
+                // the 16 GB runner (the shard died with a runner shutdown signal while ChatTTS was
+                // executing). Build the SAME codec-LM architecture at CI-smoke scale, mirroring the CSM /
+                // XTTSv2 reductions: 1 codebook x 16 head, 64-wide LLM, 1 encoder + 2 LLM layers, 4
+                // heads. The DVAE codec-LM structure is preserved; only width/depth/codebook shrink.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 80, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions { NumCodebooks = 1, " +
+                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
+                    "NumLLMLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "TimeMoE" && model.TypeParameterCount == 1)
             {
                 // Time-MoE (Shi et al. 2024, ICLR 2025) defaults to a 113M-param
