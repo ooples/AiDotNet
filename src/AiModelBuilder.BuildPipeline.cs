@@ -93,6 +93,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Per-epoch losses accumulated for a configured <c>IStoppingCriterion</c>, which decides from
+    /// history rather than a single value.
+    /// </summary>
+    private readonly List<T> _stoppingLossHistory = new();
+
+    /// <summary>
     /// Pushes a loss supplied to <c>ConfigureLossFunction</c> into the model.
     /// </summary>
     /// <remarks>
@@ -141,10 +147,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// the streaming loop.
     /// </para>
     /// <para>
-    /// <c>UseAdaptiveLearningRate</c> writes the same <c>CurrentLearningRate</c> a scheduler sets,
-    /// multiplying/dividing it by <c>LearningRateDecay</c> per step, so the two together mean the
-    /// adaptive rule silently overwrites the schedule. Configuring both is rejected rather than
-    /// resolved arbitrarily.
+    /// There is no conflict to arbitrate with <c>UseAdaptiveLearningRate</c>: that flag is itself a
+    /// schedule (shrink while improving, grow while stalled), and the optimizer now expresses it as
+    /// an <c>AdaptiveFitnessScheduler</c> rather than a second rule writing the same field. An
+    /// explicitly configured scheduler simply replaces it, so nothing has to throw and nothing is
+    /// silently overwritten.
     /// </para>
     /// </remarks>
     private void ApplyConfiguredLearningRateScheduler()
@@ -166,14 +173,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             throw new NotSupportedException(
                 $"ConfigureLearningRateScheduler requires a gradient-based optimizer; " +
                 $"'{_optimizer.GetType().Name}' has no learning rate to schedule.");
-        }
-
-        if (gradientOptions.UseAdaptiveLearningRate)
-        {
-            throw new InvalidOperationException(
-                "ConfigureLearningRateScheduler cannot be combined with UseAdaptiveLearningRate: both " +
-                "write the optimizer's CurrentLearningRate, so the adaptive rule would overwrite the " +
-                "schedule every step. Disable UseAdaptiveLearningRate to use an explicit scheduler.");
         }
 
         gradientOptions.LearningRateScheduler = _configuredLearningRateScheduler;
@@ -460,14 +459,39 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
-        // (c) Honor the caller's cancellation token.
+        // (c) Consult a configured stopping criterion.
+        if (_configuredStoppingCriterion is not null)
+        {
+            _stoppingLossHistory.Add(epochLoss);
+
+            // IStoppingCriterion is defined over an active-learning context, whose labeling fields
+            // (budget, unlabeled pool) have no meaning for a supervised epoch loop. The criteria
+            // that read iteration/loss/elapsed — convergence, performance plateau, time budget —
+            // work against exactly what is populated here; ones that key off the labeling fields
+            // will read them as zero and are not meaningful on this path.
+            var stoppingContext = new ActiveLearning.Interfaces.ActiveLearningContext<T>
+            {
+                CurrentIteration = epoch,
+                LossHistory = _stoppingLossHistory,
+                ElapsedTime = elapsed,
+            };
+
+            if (_configuredStoppingCriterion.ShouldStop(stoppingContext))
+            {
+                shouldContinue = false;
+                stopReason ??=
+                    $"stopping criterion '{_configuredStoppingCriterion.Name}' requested stop at epoch {epoch}";
+            }
+        }
+
+        // (d) Honor the caller's cancellation token.
         if (cancellationToken.IsCancellationRequested)
         {
             shouldContinue = false;
             stopReason ??= $"cancellation requested at epoch {epoch}";
         }
 
-        // (c) Consult the monitor's NaN/divergence/stall detector.
+        // (e) Consult the monitor's NaN/divergence/stall detector.
         if (_trainingMonitor is not null && monitorSessionId is not null)
         {
             List<string> issues;

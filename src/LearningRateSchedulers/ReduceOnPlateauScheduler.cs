@@ -139,7 +139,12 @@ public class ReduceOnPlateauScheduler : LearningRateSchedulerBase
     /// </summary>
     /// <param name="metric">The monitored metric value (e.g., validation loss).</param>
     /// <returns>The current learning rate.</returns>
-    public double Step(double metric)
+    /// <remarks>
+    /// This is the real schedule: reductions are driven entirely by the metric. It overrides the
+    /// base so that anything driving schedulers through <see cref="ILearningRateScheduler"/> reaches
+    /// this logic rather than the metric-less overload.
+    /// </remarks>
+    public override double Step(double metric)
     {
         _currentStep++;
 
@@ -174,14 +179,35 @@ public class ReduceOnPlateauScheduler : LearningRateSchedulerBase
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Note: For ReduceOnPlateau, the standard Step() without a metric does not reduce LR.
-    /// Use Step(double metric) instead for proper functionality.
+    /// <para>
+    /// This schedule reduces the learning rate only in response to a metric, so a metric-less step
+    /// cannot do anything: it advances the counter and returns the rate unchanged.
+    /// </para>
+    /// <para>
+    /// That silence is a trap — a caller stepping this scheduler through the parameterless overload
+    /// gets a plateau schedule that never plateaus, with no indication anything is wrong. Use
+    /// <see cref="Step(double)"/>, which every caller inside the library now does. A warning is
+    /// emitted once here rather than an exception, since external code may already drive it this
+    /// way.
+    /// </para>
     /// </remarks>
     public override double Step()
     {
+        if (!_warnedAboutMetriclessStep)
+        {
+            _warnedAboutMetriclessStep = true;
+            System.Diagnostics.Trace.TraceWarning(
+                "ReduceOnPlateauScheduler.Step() was called without a metric, so the learning rate " +
+                "will never be reduced. Call Step(double metric) with the monitored value " +
+                "(typically validation loss).");
+        }
+
         _currentStep++;
         return _currentLearningRate;
     }
+
+    /// <summary>Ensures the metric-less warning is emitted once per scheduler, not per epoch.</summary>
+    private bool _warnedAboutMetriclessStep;
 
     private bool IsBetter(double current)
     {
