@@ -7432,14 +7432,17 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(transformerDim, reluActivation);
         yield return new LayerNormalizationLayer<T>();
 
+        // Transformer encoder stack. The residual (skip) connections are ESSENTIAL: the previous
+        // plain MHA -> LN -> FFN -> LN block had NO residual add, so a 12-layer encoder had no gradient
+        // highway — the embedding barely trained and the model collapsed to a uniform, input-insensitive
+        // output after only a few optimizer steps (DifferentInputs_AfterTraining degenerate solution).
+        // TransformerEncoderBlock wraps both sublayers (MHA, FFN) in residual adds + LayerNorm, matching
+        // the transformer architecture (Vaswani et al. 2017) the Mel-Band RoFormer builds on — the same
+        // fix already applied to the BERT / ViT encoders in this helper.
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (transformerDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, reluActivation);
-            yield return new DenseLayer<T>(transformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                transformerDim, numAttentionHeads, feedForwardDim, dropoutRate, reluActivation);
         }
 
         yield return new DenseLayer<T>(numFreqBins * numStems * 2, identityActivation);

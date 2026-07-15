@@ -5032,6 +5032,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // that emits a ScaledInput override, so this fires exactly once.
         if (model.ClassName == "MelBandRoFormer")
         {
+            // Paper-scale default (12 transformer layers, 384-dim) — the 50+200-iteration
+            // MoreData_ShouldNotDegrade probe overruns the 120 s gate (~0.8 s/train-step × 250 = ~200 s).
+            // Smoke-cap the many-iteration convergence probe (13 steps ≈ 10 s) so the "more training must
+            // not degrade" invariant still runs while the encoder stays paper-scale; single-forward and
+            // shorter training tests keep the default counts. (MoreDataTolerance=0.5 is already emitted by
+            // the generic-audio [1,64,32]->[4] branch above for this task's non-zero fitting floor.)
+            sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
+            sb.AppendLine();
             sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
             sb.AppendLine("    public override async System.Threading.Tasks.Task ScaledInput_ShouldChangeOutput()");
             sb.AppendLine("    {");
