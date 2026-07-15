@@ -341,6 +341,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // The autoregressive decode over a full utterance inherently exceeds the 120s per-test timeout
         // on CPU. Genuine foundation-scale generative compute, not a correctness bug — same heavy lane.
         "FireRedTTS",
+        // Llasa (Ye et al. 2025): LLaMA-based foundation TTS over XCodec2 tokens. Its single-forward
+        // tests pass, but even the TTS-branch smoke-capped MoreData (3+10 iters) exceeds the 120s gate at
+        // this paper-scale codec-LM's per-step cost (verified: MoreData_ShouldNotDegrade times out at
+        // exactly 120000 ms with no assertion — a pure timeout, not divergence). Genuine foundation-scale
+        // compute, deferred to the nightly heavy lane like its codec-TTS peers FireRedTTS / MegaTTS3.
+        "Llasa",
+        // LISA (Lai et al. 2024): referring-segmentation FOUNDATION model = a multimodal LLM + SAM mask
+        // decoder. Its single-forward tests pass, but MULTIPLE multi-iteration training invariants
+        // (MoreData_ShouldNotDegrade timed out at 120s; LossStrictlyDecreasesOnMemorizationTask and
+        // TrainingError_ShouldNotExceedTestError need the full paper-scale iteration budget) overran the
+        // gate — genuine foundation-scale compute, not a correctness bug. Deferred whole-class to the
+        // nightly heavy lane where it runs at full iteration counts.
+        "LISA",
         // InternVideo2: foundation-scale video-understanding transformer. Training OOMs the 16 GB runner
         // (verified: System.OutOfMemoryException in TensorAllocator.RentUninitialized during the train
         // step) — the activation/gradient footprint, not a correctness bug. Same heavy lane.
