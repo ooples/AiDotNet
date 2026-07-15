@@ -688,12 +688,23 @@ jobs:
           # perpetually red, like Integration C / NeuralNetworks A-L before their
           # splits. Split A-M → A-F + G-M so each serial half finishes under the
           # timeout. Gap-free + non-overlapping: union == the old A-M set.
-          - name: ModelFamily - Generated Layers A-F
+          # A-F was a single serial $heavyShard that OOM-killed the runner (shutdown signal
+          # ~2.5 min in) — it is DENSE with full-scale codec-LM TTS models (Amphion, AudioLM,
+          # Bark, ChatTTS, Chatterbox, CosyVoice*, ...) whose per-model peak (~2.6 GB weights +
+          # Adam state) stacks past the 16 GB envelope even serialized. Split A-F → A-C + D-F so
+          # each serial half holds fewer heavy models at once. Gap-free + non-overlapping: union == A-F.
+          - name: ModelFamily - Generated Layers A-C
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F)
+              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C)
+          - name: ModelFamily - Generated Layers D-F
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F)
           # G-M was a single serial shard that ran the full 45-min job timeout and got
           # CANCELLED before finishing (dense with heavy segmentation/foundation models,
           # e.g. Mask2Former). Split G-M → G-I + J-M so each serial half finishes under the
@@ -958,7 +969,8 @@ jobs:
             'ModelFamily - Diffusion Stable',
             'ModelFamily - Diffusion Step-Sync',
             'ModelFamily - Diffusion T-Z',
-            'ModelFamily - Generated Layers A-F',
+            'ModelFamily - Generated Layers A-C',
+            'ModelFamily - Generated Layers D-F',
             'ModelFamily - Generated Layers G-I',
             'ModelFamily - Generated Layers J-M',
             'ModelFamily - Generated Layers N-P',
@@ -1102,12 +1114,31 @@ jobs:
             $env:DOTNET_gcServer = '0'
             Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
           }
+
+          # Background memory sampler (serialized heavy shards only). These shards OOM-kill the
+          # runner with a shutdown signal BEFORE dotnet flushes TRX/console output, so the
+          # post-test snapshot below never runs and we lose the high-water mark. Stream timestamped
+          # system memory every 2 s straight to the step's LIVE log — GitHub ingests stdout
+          # continuously, so the LAST sample before a runner kill survives even though the process
+          # tree is torn down. It interleaves chronologically with xUnit's streamed per-test
+          # "Passed <Model>.<Test>" console lines, so the last test line printed just before the
+          # memory cliff identifies the model that blew the 16 GB envelope. The bash child inherits
+          # this step's stdout via -NoNewWindow so its output streams (not buffered in a job).
+          $memSampler = $null
+          if ($serializeShard) {
+            $samplerCmd = 'while true; do echo "[memdiag $(date -u +%H:%M:%S)] $(free -m | grep Mem:)"; sleep 2; done'
+            $memSampler = Start-Process -FilePath bash -ArgumentList '-c', $samplerCmd -NoNewWindow -PassThru
+            Write-Host "Heavy shard: started background memory sampler (pid $($memSampler.Id))"
+          }
+
           & dotnet @dotnetArgs
+          $exitCode = $LASTEXITCODE
+
+          if ($memSampler) { Stop-Process -Id $memSampler.Id -Force -ErrorAction SilentlyContinue }
 
           # Post-test resource snapshot. If the runner survives this point,
           # the test step finished naturally and the snapshot tells us what
           # the high-water mark looked like.
-          $exitCode = $LASTEXITCODE
           Write-Host "=== Post-test resource snapshot ==="
           Write-Host "Memory:"
           free -h
