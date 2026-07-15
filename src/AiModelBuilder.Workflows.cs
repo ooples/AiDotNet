@@ -660,6 +660,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         CurriculumLearningOptions<T, TInput, TOutput>? options = null)
     {
         _curriculumLearningOptions = options ?? new CurriculumLearningOptions<T, TInput, TOutput>();
+
+        // Carry over a scheduler configured before these options existed, so
+        // ConfigureCurriculumScheduler and ConfigureCurriculumLearning work in either order. Options
+        // passed here win, since they are the more specific statement of intent.
+        if (_configuredCurriculumScheduler is not null && _curriculumLearningOptions.CustomScheduler is null)
+        {
+            _curriculumLearningOptions.CustomScheduler = _configuredCurriculumScheduler;
+        }
+
         return this;
     }
 

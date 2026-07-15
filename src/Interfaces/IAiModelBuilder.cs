@@ -2278,7 +2278,12 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <param name="options">The model options to apply.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureModelOptions(Models.Options.ModelOptions options);
+    // ConfigureModelOptions was removed: a model's options are a constructor parameter
+    // (new NBEATSModel<T>(new NBEATSModelOptions<T> { ... })), read during construction to build the
+    // model's layers and state. By the time the builder sees the model those decisions are already
+    // made, so a builder-level setter could not apply them. IConfigurableModel is internal and
+    // exposes only GetOptions(); there is no setter to route this to. It accepted an options object
+    // and silently discarded it; removing it turns that runtime no-op into a compile error.
 
     /// <summary>
     /// Configures a data transformer for preprocessing or postprocessing data transformations.
