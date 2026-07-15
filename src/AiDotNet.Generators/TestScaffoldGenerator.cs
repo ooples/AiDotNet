@@ -609,13 +609,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // multi-iteration training invariants that overran the 120/180 s gate even after the
         // input-polymorphic lazy-shape fix, while single-forward tests stay full-fidelity.
         "ViLBERT",
-        // GLaMM (Rasheed et al. 2024): grounding VLM at paper scale (VisionDim=1024, 24 vision layers +
-        // fusion + detection decoder). Also in Fp32TestClassNames (<float>); the VisionLanguage family
-        // branch emits no iteration overrides, so this smoke cap fires exactly once — trimming the
-        // multi-iteration training invariants (Memorization / GradientFlow / MoreData) that overran the
-        // 120 s gate at paper scale even after the token-consistent architecture fix, while the
-        // single-forward invariants stay full-fidelity.
-        "GLaMM",
+        // NOTE: GLaMM / OWLViT and the other VisionLanguage.Grounding.* models are NOT listed here —
+        // the grounding InputShape branch (see EmitGeneratedTestClass) now emits the smoke-iteration
+        // override for the WHOLE grounding family (they share CreateDefaultGroundingDetectionLayers, a
+        // paper-scale ViT encoder + fusion + detection decoder). Listing them here too would
+        // double-define TrainingIterations / MemorizationTaskIterations.
         // NOTE: PANNs / PANNsModel / MPSENet are NOT listed here — they are in Fp32TestClassNames, and
         // the audio-family branch already emits the smoke-iteration overrides for every Fp32 member.
         // Listing them here as well would double-define TrainingIterations / MemorizationTaskIterations.
@@ -3691,6 +3689,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             int groundingVisionDim = GetGroundingVisionDim(model.ClassName);
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 4, {groundingVisionDim} }};");
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, 4, {groundingVisionDim} }};");
+
+            // These grounding models are paper-scale VL detection transformers sharing
+            // CreateDefaultGroundingDetectionLayers: a ViT image encoder (VisionDim 768–1024,
+            // NumVisionLayers 12–24) + a cross-modal fusion stack + a detection decoder — 24–36
+            // residual transformer blocks in total. A single Adam step walks the entire stack, so the
+            // default many-iteration training invariants (Training 10, MoreData 50/200, memorization
+            // 100) overrun the 120/180 s xUnit timeouts on CPU (verified: OWLViT.MoreData and
+            // GLaMM.DifferentInputs both time out at 120 s). Apply the same smoke-test iteration
+            // override the paper-scale VL branch uses — the encoder depth/width stay paper-faithful;
+            // only the iteration COUNT drops so the train path is still exercised (loss -> backward ->
+            // update, gradient direction, no first-step explosion) without stalling CI. Single-forward
+            // tests (DifferentInputs / Clone / Metadata) run at full fidelity. GLaMM/OWLViT are
+            // deliberately NOT in HeavyTrainingTimeoutClassNames so this fires exactly once.
+            sb.AppendLine("    protected override int TrainingIterations => 1;");
+            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+            sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
+            sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+            sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
         }
         else if (isVisionModel &&
                  model.FullyQualifiedName.Contains("NeuralRadianceFields"))

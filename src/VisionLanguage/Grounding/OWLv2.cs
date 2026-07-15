@@ -340,8 +340,11 @@ public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb;
+        // Each vision block is one residual TransformerEncoderLayer (+ an optional DropoutLayer);
+        // the encoder prefix is the linear input projection (patch-embedding stand-in) and the
+        // trailing prefix is the final encoder LayerNorm — 2 non-block layers total.
+        int lpb = _options.DropoutRate > 0 ? 2 : 1;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb;
     }
 
     private Tensor<T> TokenizeText(string text)

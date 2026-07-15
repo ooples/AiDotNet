@@ -24800,18 +24800,36 @@ public static class LayerHelper<T>
         int fusionFfnDim = fusionDim * 4;
         int detectionFfnDim = detectionDim * 4;
 
-        // === Vision Encoder (ViT/Swin backbone) ===
-        yield return new LayerNormalizationLayer<T>();
+        int fusionHeads = numHeads > 8 ? 8 : numHeads;
 
+        // === Vision Encoder (ViT/Swin backbone) ===
+        // Linear input projection (the ViT's patch-embedding projection, Dosovitskiy et al. 2021
+        // §3.1: "we flatten the patches and map to D dimensions with a trainable linear projection").
+        // Callers feed POST-patch token features [B, tokens, visionDim], so this Dense stands in for
+        // that embedding. It is REQUIRED as the front layer: a bare LayerNorm zeroes the variance of
+        // any per-token-constant input, so without a preceding projection two constant inputs (e.g.
+        // all-0.1 vs all-0.9) normalize to the identical vector and the network appears to "collapse"
+        // to an input-insensitive state (DifferentInputs_AfterTraining). The projection turns the
+        // constant's DC level into a distinct per-feature pattern that survives normalization.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
+
+        // Each block is a RESIDUAL transformer layer (Dosovitskiy et al. 2021, Eq 2-3):
+        // z' = MSA(LN(z)) + z ; z = MLP(LN(z')) + z'. The previous factory decomposed the block
+        // into a bare SEQUENTIAL MultiHeadAttention -> LayerNorm -> Dense -> Dense -> LayerNorm chain
+        // with NO skip connections — the residual adds the paper mandates were missing entirely.
+        // Without the "+ z" skip a deep encoder cannot carry the input to its output: the input
+        // signal attenuates ~3-4x per block, so two distinct constant inputs collapse to the same
+        // output post-training (DifferentInputs L2 -> 1e-14 across the 12+6+6 block stack).
+        // TransformerEncoderLayer applies MSA + residual + LN and the GELU MLP + residual + LN
+        // internally — the paper block as one trainable, serialisable unit (the same layer the ViT /
+        // SAM / DINO helpers use after the identical collapse was fixed there). The (numHeads, ffnDim)
+        // overload resolves the embedding size + all sublayer weights LAZILY on first forward.
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return CreateVisionMha(visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, visionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+        yield return new LayerNormalizationLayer<T>();
 
         // === Text Encoder Projection ===
         yield return new DenseLayer<T>(fusionDim, identityActivation);
@@ -24821,33 +24839,20 @@ public static class LayerHelper<T>
         if (visionDim != fusionDim)
             yield return new DenseLayer<T>(fusionDim, identityActivation);
 
-        // === Cross-Modal Feature Fusion ===
+        // === Cross-Modal Feature Fusion (residual transformer blocks) ===
         for (int i = 0; i < numFusionLayers; i++)
         {
-            // Vision-to-text cross-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (fusionDim) / (numHeads > 8 ? 8 : numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            // Text-to-vision cross-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (fusionDim) / (numHeads > 8 ? 8 : numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            // FFN
-            yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(fusionHeads, fusionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // === Detection Decoder ===
+        // === Detection Decoder (residual transformer blocks) ===
         if (fusionDim != detectionDim)
             yield return new DenseLayer<T>(detectionDim, identityActivation);
 
         for (int i = 0; i < numDetectionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (detectionDim) / (numHeads > 8 ? 8 : numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(detectionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(detectionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(fusionHeads, detectionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
