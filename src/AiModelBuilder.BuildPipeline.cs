@@ -114,6 +114,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// surfaced and the result is left null — matching the documented "not performed" meaning.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Why a configured cross-validator failed, if it did. Kept so the failure is inspectable
+    /// rather than inferred from a null result.
+    /// </summary>
+    internal Exception? _crossValidationFailure;
+
     private void RunConfiguredCrossValidation(
         AiModelResult<T, TInput, TOutput> result,
         TInput preparedX, TOutput preparedY,
@@ -130,9 +136,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         catch (Exception ex)
         {
+            // Surfaced, not swallowed silently: a caller who configured cross-validation and gets a
+            // null result would otherwise read it as "not performed" (per its own docs) with no clue
+            // that it ran and failed. The trained model is deliberately left intact.
             System.Diagnostics.Trace.TraceWarning(
-                $"Configured cross-validator '{_crossValidator.GetType().Name}' failed: {ex.Message}. " +
+                $"Configured cross-validator '{_crossValidator.GetType().Name}' failed: {ex}. " +
                 "The trained model is unaffected; CrossValidationResult is left unset.");
+            _crossValidationFailure = ex;
         }
     }
 

@@ -100,7 +100,10 @@ public class PurgedWalkForwardCrossValidator<T, TInput, TOutput> : CrossValidato
     /// </remarks>
     private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(TInput X)
     {
-        int nSamples = InputHelper<T, TInput>.GetInputSize(X);
+        // GetBatchSize is the SAMPLE count; GetInputSize returns the FEATURE count
+        // (Matrix<T> => matrix.Columns), which would hand the fold geometry the width of the
+        // data instead of its length.
+        int nSamples = InputHelper<T, TInput>.GetBatchSize(X);
         int usable = 0;
 
         foreach (var fold in PurgedWalkForwardValidator.Split(
