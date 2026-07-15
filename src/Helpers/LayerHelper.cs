@@ -9380,8 +9380,19 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Flow head (2 channels: horizontal and vertical flow)
+        // Flow head (2 channels: horizontal and vertical flow) at 1/8 resolution.
         yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
+
+        // Upsample the 1/8-resolution flow field back to the full input resolution.
+        // FlowFormer (Huang et al. 2022, §3.3) — like RAFT — predicts flow at 1/8 resolution
+        // and upsamples it to full resolution before output (the paper uses learned convex
+        // upsampling; three 2x bilinear upsamples are the standard baseline analogue and exactly
+        // reverse the encoder's three stride-2 downsamples). Without this the model emitted a
+        // [2, H/8, W/8] flow whose length was < input/4, losing the full-resolution flow field
+        // the paper produces (TemporalDim_Preserved).
+        yield return new UpsamplingLayer<T>(2);
+        yield return new UpsamplingLayer<T>(2);
+        yield return new UpsamplingLayer<T>(2);
     }
 
     /// <summary>
