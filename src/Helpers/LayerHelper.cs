@@ -22449,30 +22449,33 @@ public static class LayerHelper<T>
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
         int ffDim = encoderDim * feedForwardExpansionFactor;
 
-        // Conv subsampling
+        // Conv-subsampling front-end (Dense projection + normalization). Use LayerNormalization, NOT
+        // BatchNormalization: these are plain Dense projections (BatchNorm's only paper place in a
+        // Conformer is its conv module), BatchNorm is batch-dependent (breaks single-vs-batch
+        // consistency and determinism) and a lazy BatchNorm whose first forward is in inference mode
+        // throws NullReferenceException on its un-initialised eval-path gamma. LayerNorm is per-sample,
+        // deterministic, and matches the encoder blocks below.
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Conformer encoder blocks
+        // Conformer encoder blocks. Each block is a RESIDUAL transformer layer: the previous factory
+        // emitted a bare SEQUENTIAL FFN -> LN -> MHA -> LN -> conv-FFN -> LN -> FFN -> LN chain with NO
+        // skip connections, so the input signal attenuated ~per block and a deep (18-20 layer) encoder
+        // collapsed two distinct inputs to the same output post-training (DifferentInputs L2 -> 1e-13,
+        // the #1208/#1221 degenerate-solution signature). TransformerEncoderBlock applies MSA + residual
+        // + LN and the GELU MLP + residual + LN internally (the same block the LLM-ASR helper uses), so
+        // the residual "+ z" skips the Conformer paper mandates carry the input through the stack.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new DenseLayer<T>(ffDim, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(ffDim, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim,
+                numHeads: numAttentionHeads,
+                ffnDim: ffDim,
+                dropoutRate: dropoutRate,
+                ffnActivation: geluActivation);
         }
 
         // Prediction network (label predictor, LSTM-like)
