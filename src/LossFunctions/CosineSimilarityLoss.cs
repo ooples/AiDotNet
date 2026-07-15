@@ -126,8 +126,15 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
         var dot = Engine.ReduceSum(dotProduct, allAxes, keepDims: false);
         var predSq = Engine.TensorMultiply(predicted, predicted);
         var targSq = Engine.TensorMultiply(target, target);
-        var predNorm = Engine.TensorSqrt(Engine.ReduceSum(predSq, allAxes, keepDims: false));
-        var targNorm = Engine.TensorSqrt(Engine.ReduceSum(targSq, allAxes, keepDims: false));
+        // Epsilon goes INSIDE the sqrt: sqrt(sum(x^2) + eps). d/dx sqrt(s) = 1/(2*sqrt(s)), so a bare
+        // sqrt(sum(x^2)) has an UNBOUNDED gradient as the norm -> 0 and produces a NaN/Inf gradient the
+        // moment an embedding underflows to (near-)zero norm — the classic contrastive-loss training
+        // blow-up (and it only surfaces on the runner whose FMA/SIMD trajectory drives the norm that
+        // low). Adding eps before the sqrt bounds the gradient to 1/(2*sqrt(eps)); the earlier +1e-8 on
+        // the PRODUCT below only guarded the division, not these sqrt backward passes.
+        var sqEps = NumOps.FromDouble(1e-12);
+        var predNorm = Engine.TensorSqrt(Engine.TensorAddScalar(Engine.ReduceSum(predSq, allAxes, keepDims: false), sqEps));
+        var targNorm = Engine.TensorSqrt(Engine.TensorAddScalar(Engine.ReduceSum(targSq, allAxes, keepDims: false), sqEps));
         var normProduct = Engine.TensorMultiply(predNorm, targNorm);
         var safeNorm = Engine.TensorAddScalar(normProduct, NumOps.FromDouble(1e-8));
         var similarity = Engine.TensorDivide(dot, safeNorm);

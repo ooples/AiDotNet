@@ -169,7 +169,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VideoCLIPOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
         Options = _options;
@@ -213,7 +213,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+            _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
             InitializeLayers();
         }
         catch
@@ -248,7 +248,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VideoCLIPOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
         Options = _options;
@@ -271,7 +271,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
         _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        _lossFunction = lossFunction ?? new CosineSimilarityLoss<T>();
 
         InitializeNativeLayers(channels);
     }
@@ -1154,12 +1154,15 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             current = layer.Forward(current);
         }
 
-        // Take CLS token (row 0) as frame representation
-        // Extract first row from [seqLen, hiddenDim] → [hiddenDim]
+        // Take CLS token (row 0) as the frame representation. Use TAPE-TRACKED Engine ops
+        // (TensorNarrow + Reshape), NOT a raw Data.Span copy into a fresh Tensor: the raw copy
+        // produced a tensor with no GradFn, severing the ViT frame encoder from the gradient tape so
+        // its patch-embedding / attention / FFN weights received NO gradient and never trained — the
+        // opposite of the paper, where the frame encoder is learned end-to-end under the contrastive
+        // objective (Xu et al. 2021). Slicing row 0 through the Engine keeps the encoder on the tape.
         int hiddenDim = current.Shape[^1];
-        var clsData = new T[hiddenDim];
-        current.Data.Span.Slice(0, hiddenDim).CopyTo(clsData);
-        return new Tensor<T>(new[] { hiddenDim }, new Vector<T>(clsData));
+        var clsRow = Engine.TensorNarrow(current, 0, 0, 1); // [seqLen, hiddenDim] -> [1, hiddenDim]
+        return Engine.Reshape(clsRow, new[] { hiddenDim });
     }
 
     /// <summary>
