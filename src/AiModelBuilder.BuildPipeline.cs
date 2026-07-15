@@ -184,21 +184,27 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <returns>
     /// <c>true</c> when a configured splitter produced the partitions; <c>false</c> when no splitter
-    /// is configured or the data is not in a shape it accepts, in which case the caller falls back
-    /// to the built-in ratio split.
+    /// is configured, in which case the caller falls back to the built-in ratio split.
     /// </returns>
     /// <remarks>
     /// <para>
-    /// <see cref="IDataSplitter{T}"/> is defined over <c>Matrix&lt;T&gt;</c>/<c>Vector&lt;T&gt;</c>,
-    /// while the pipeline is generic over TInput/TOutput, so this only applies when the data is
-    /// actually matrix/vector shaped. Tensor and multi-output runs keep the built-in split rather
-    /// than silently ignoring a configured splitter under a different name — those cases return
-    /// false and are reported by the caller.
+    /// Wiring this is what makes every implementation under
+    /// <c>Preprocessing/DataPreparation/Splitting</c> reachable — walk-forward, purged k-fold,
+    /// combinatorial purged, stratified, grouped — all of which already derive
+    /// <c>DataSplitterBase&lt;T&gt;</c> and were simply unreachable while the configured value was
+    /// dropped.
     /// </para>
     /// <para>
-    /// A splitter that reports <see cref="IDataSplitter{T}.SupportsValidation"/> == false yields no
-    /// validation partition; the validation slot then mirrors the test partition, matching the
-    /// built-in split's behavior when validationRatio is 0.
+    /// <see cref="IDataSplitter{T}"/> covers both shapes: <c>Split</c> for Matrix/Vector and
+    /// <c>SplitTensor</c> for Tensor/Tensor. Anything else (e.g. multi-output Matrix/Matrix) has no
+    /// corresponding contract method, so it is reported rather than silently ignored.
+    /// </para>
+    /// <para>
+    /// When the splitter yields no validation partition, one is produced by re-applying <b>the same
+    /// splitter</b> to its own training partition. That keeps the caller's methodology at both
+    /// levels: a purged outer split gets a purged inner split, so early stopping can never validate
+    /// against a set built by a leakier rule than the one they chose. Only if that inner split is
+    /// impossible does the validation slot fall back to mirroring test.
     /// </para>
     /// </remarks>
     private bool TrySplitWithConfiguredSplitter(
@@ -211,38 +217,136 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         xVal = default!; yVal = default!;
         xTest = default!; yTest = default!;
 
-        if (_configuredDataSplitter is null)
+        var splitter = _configuredDataSplitter;
+        if (splitter is null)
         {
             return false;
         }
 
-        if (preparedX is not Matrix<T> x || preparedY is not Vector<T> y)
+        // A multi-fold splitter yields one train/test partition on this path. That is a real
+        // reduction of what was asked for, so say so instead of quietly using fold 0 — k-fold
+        // training belongs to ConfigureCrossValidation, which drives the folds properly.
+        if (splitter.NumSplits > 1)
         {
-            throw new NotSupportedException(
-                $"ConfigureDataSplitter was given '{_configuredDataSplitter.GetType().Name}', but a " +
-                $"configured splitter only applies to Matrix<T>/Vector<T> data; this build uses " +
-                $"{typeof(TInput).Name}/{typeof(TOutput).Name}. Remove the splitter or use a " +
-                "matrix/vector model, rather than have the split silently ignore your configuration.");
+            System.Diagnostics.Trace.TraceWarning(
+                $"Splitter '{splitter.Description}' defines {splitter.NumSplits} folds, but the " +
+                "supervised build trains once and uses the first split only. Use " +
+                "ConfigureCrossValidation to train across every fold.");
         }
 
-        if (_configuredDataSplitter.RequiresLabels && y is null)
+        if (preparedX is Matrix<T> x)
         {
-            throw new InvalidOperationException(
-                $"Splitter '{_configuredDataSplitter.Description}' requires labels but none were supplied.");
+            var y = preparedY as Vector<T>;
+            if (splitter.RequiresLabels && y is null)
+            {
+                throw new InvalidOperationException(
+                    $"Splitter '{splitter.Description}' requires labels, but the targets are " +
+                    $"{typeof(TOutput).Name} rather than Vector<T>.");
+            }
+
+            var r = splitter.Split(x, y);
+            xTrain = (TInput)(object)r.XTrain;
+            xTest = (TInput)(object)r.XTest;
+            yTrain = (TOutput)(object)(r.yTrain ?? Vector<T>.Empty());
+            yTest = (TOutput)(object)(r.yTest ?? Vector<T>.Empty());
+
+            if (r.XValidation is not null)
+            {
+                xVal = (TInput)(object)r.XValidation;
+                yVal = (TOutput)(object)(r.yValidation ?? Vector<T>.Empty());
+                return true;
+            }
+
+            // Nested inner split: same methodology, applied to the training partition.
+            if (TryInnerSplit(splitter, r.XTrain, r.yTrain, out var innerX, out var innerY,
+                    out var valX, out var valY))
+            {
+                xTrain = (TInput)(object)innerX;
+                yTrain = (TOutput)(object)(innerY ?? Vector<T>.Empty());
+                xVal = (TInput)(object)valX;
+                yVal = (TOutput)(object)(valY ?? Vector<T>.Empty());
+                return true;
+            }
+
+            xVal = (TInput)(object)r.XTest;
+            yVal = (TOutput)(object)(r.yTest ?? Vector<T>.Empty());
+            return true;
         }
 
-        var result = _configuredDataSplitter.Split(x, y);
+        if (preparedX is Tensor<T> xt)
+        {
+            var yt = preparedY as Tensor<T>;
+            if (splitter.RequiresLabels && yt is null)
+            {
+                throw new InvalidOperationException(
+                    $"Splitter '{splitter.Description}' requires labels, but the targets are " +
+                    $"{typeof(TOutput).Name} rather than Tensor<T>.");
+            }
 
-        xTrain = (TInput)(object)result.XTrain;
-        xTest = (TInput)(object)result.XTest;
-        yTrain = (TOutput)(object)(result.yTrain ?? Vector<T>.Empty());
-        yTest = (TOutput)(object)(result.yTest ?? Vector<T>.Empty());
+            var r = splitter.SplitTensor(xt, yt);
+            xTrain = (TInput)(object)r.XTrain;
+            xTest = (TInput)(object)r.XTest;
+            yTrain = (TOutput)(object)r.yTrain!;
+            yTest = (TOutput)(object)r.yTest!;
+            xVal = (TInput)(object)(r.XValidation ?? r.XTest);
+            yVal = (TOutput)(object)(r.yValidation ?? r.yTest)!;
+            return true;
+        }
 
-        // No validation partition (SupportsValidation == false, or the splitter simply produced
-        // none): mirror the test partition, as the built-in split does when validationRatio is 0.
-        xVal = (TInput)(object)(result.XValidation ?? result.XTest);
-        yVal = (TOutput)(object)(result.yValidation ?? result.yTest ?? Vector<T>.Empty());
-        return true;
+        throw new NotSupportedException(
+            $"ConfigureDataSplitter was given '{splitter.GetType().Name}', but IDataSplitter<T> only " +
+            $"splits Matrix<T>/Vector<T> or Tensor<T>/Tensor<T>; this build uses " +
+            $"{typeof(TInput).Name}/{typeof(TOutput).Name}, so the splitter could not be applied. " +
+            "Remove it rather than have it silently ignored.");
+    }
+
+    /// <summary>
+    /// Re-applies a splitter to its own training partition to carve out a validation set.
+    /// </summary>
+    /// <returns><c>false</c> when the inner split is not possible or degenerate.</returns>
+    /// <remarks>
+    /// Using the same splitter is the point: the validation set is then built by the same rule as
+    /// the outer split (purged stays purged, stratified stays stratified), rather than by a generic
+    /// tail carve-out that could leak across a label window — the flaw in the conventional
+    /// "hold out the last x%" approach.
+    /// </remarks>
+    private static bool TryInnerSplit(
+        IDataSplitter<T> splitter, Matrix<T> trainX, Vector<T>? trainY,
+        out Matrix<T> innerX, out Vector<T>? innerY,
+        out Matrix<T> valX, out Vector<T>? valY)
+    {
+        innerX = trainX; innerY = trainY;
+        valX = trainX; valY = trainY;
+
+        // Too little data to split again: two rows cannot yield a usable train and validation set.
+        if (trainX.Rows < 4)
+        {
+            return false;
+        }
+
+        try
+        {
+            var inner = splitter.Split(trainX, trainY);
+            if (inner.XTrain.Rows == 0 || inner.XTest.Rows == 0)
+            {
+                return false;
+            }
+
+            innerX = inner.XTrain;
+            innerY = inner.yTrain;
+            valX = inner.XValidation ?? inner.XTest;
+            valY = inner.yValidation ?? inner.yTest;
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // The splitter cannot subdivide this partition (too few rows for its fold/embargo
+            // geometry, say). Fall back rather than fail the whole build over a validation set.
+            System.Diagnostics.Trace.TraceWarning(
+                $"Splitter '{splitter.Description}' could not subdivide its training partition for a " +
+                $"validation set ({ex.Message}); validation will mirror the test partition.");
+            return false;
+        }
     }
 
     /// <summary>
