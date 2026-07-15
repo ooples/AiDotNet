@@ -2731,6 +2731,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "DecoderDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumAttentionHeads = 4, " +
                     "NumMels = 32, VocabSize = 64, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "Cutie" && model.TypeParameterCount == 1)
+            {
+                // Cutie (Cheng et al. 2023) is a video object-segmentation model with a working-memory
+                // bank: its defaults (numFeatures=256, memorySize=50 stored frames) make a single train
+                // step both multi-second and multi-GB — Training_ShouldReduceLoss timed out at 120 s and
+                // the shard's MemAvailable collapsed to ~100 MB (OOM-killed the A-C runner). Build the
+                // SAME architecture (pixel encoder -> memory-augmented transformer -> mask decoder) at
+                // CI-smoke scale via the numFeatures/memorySize ctor knobs; the [3,128,128] vision input
+                // and Regression architecture match the generic vision branch so the forward is
+                // unchanged, only width and the memory-bank depth shrink.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "numFeatures: 32, memorySize: 8)";
+            }
             else if (model.ClassName == "VideoMAE" && model.TypeParameterCount == 1)
             {
                 // VideoMAE (Tong et al. 2022) defaults to ViT-Base scale
@@ -3812,6 +3828,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // schedule does not produce in 100 steps. Shapes and iteration count are unchanged.
                 sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.999;");
             }
+        }
+        else if (model.ClassName == "Cutie")
+        {
+            // Cutie (Cheng et al. 2023) video object segmentation. Its generic-vision default was a
+            // [3,128,128] image, whose pixel encoder + memory-augmented transformer ran ~41 s per
+            // forward and OOM-killed the A-C runner during training. Feed a small [3,32,32] frame
+            // (in lockstep with the inputHeight/Width=32 ctor override) so the SAME architecture runs
+            // at CI-smoke cost. OutputShape is inferred from the warm-up Predict (mask logits).
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (model.ClassName == "DocBank")
         {

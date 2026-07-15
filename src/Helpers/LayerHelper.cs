@@ -10105,17 +10105,13 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
 
-        // Document-image patch embedding. LayoutLM (Xu et al. 2020) enriches its text+2D-layout
-        // stream with image REGION features from an external detector; for the self-contained
-        // [B, 3, H, W] document-image input the tests feed, a linear patch embedding tokenizes the
-        // image into a [B, numPatches, hiddenDim] sequence — the same visual-front role LayoutLMv2/v3
-        // give their conv backbone (PatchEmbeddingLayer does the spatial->sequence flatten tape-safely,
-        // so the DocumentNeuralNetworkBase inference reshape never re-mangles it). Without a visual
-        // front the raw pixels hit the first attention as 3-channel features and throw
-        // "Input embedding dimension (3) does not match weight dimension (768)".
-        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
-
-        // Word/patch embedding projection (runs in continuous mode on the patch-token sequence).
+        // LayoutLM v1 (Xu et al. 2020, KDD) is a TEXT + 2D-layout model: its input is a sequence of
+        // token IDs (the image-region features of the paper come from an EXTERNAL detector and are an
+        // optional downstream add-on, not part of the core encoder — the visual patch stream first
+        // appears in LayoutLMv2/v3). The generated tests feed a rank-1 token-ID sequence accordingly,
+        // so the token EmbeddingLayer is the front of the stack. A leading PatchEmbeddingLayer (added
+        // when the tests briefly fed a document IMAGE) is wrong for token input and threw
+        // "PatchEmbeddingLayer requires rank-3/4 input; got rank 1" on every forward.
         yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
 
         // Position embeddings
