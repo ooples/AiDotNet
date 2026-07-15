@@ -372,6 +372,13 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                     bestLoss = epochLoss;
                     bestSnapshot = allParams.Select(p => p.Clone()).ToList();
                 }
+
+                // Report after checkpointing so an early stop still leaves the best weights to
+                // restore below.
+                if (!ReportEpoch(epoch, timeBounded ? 0 : _options.Epochs, NumOps.FromDouble(epochLoss)))
+                {
+                    break;
+                }
             }
         }
 

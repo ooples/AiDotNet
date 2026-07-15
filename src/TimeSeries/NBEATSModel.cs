@@ -518,6 +518,13 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                             Engine.TensorMultiplyScalarInto(bestParamSnapshot[pi], trainableParams[pi], NumOps.One);
                     }
                 }
+
+                // Report after snapshotting so an early stop still leaves the best weights to
+                // restore below.
+                if (!ReportEpoch(epoch, timeBounded ? 0 : _options.Epochs, NumOps.FromDouble(epochLoss)))
+                {
+                    break;
+                }
             }
         }
 

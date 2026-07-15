@@ -178,4 +178,76 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
                 value, "MaxTrainingTimeSeconds cannot be negative. Use 0 for no limit.")
             : value;
     }
+
+    /// <summary>
+    /// Gets or sets whether training stops once the monitored loss stops improving.
+    /// </summary>
+    /// <value><c>true</c> to enable early stopping; defaults to <c>false</c>.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, a model's <c>Epochs</c> setting becomes an upper bound rather than an exact
+    /// iteration count: training ends as soon as the epoch loss fails to improve by at least
+    /// <see cref="EarlyStoppingMinDelta"/> for <see cref="EarlyStoppingPatience"/> consecutive
+    /// epochs. Pairs with the best-epoch-weights checkpointing the deep models already perform, so
+    /// stopping returns the best parameters seen rather than the last ones.
+    /// </para>
+    /// <para>
+    /// Defaults to <c>false</c> so existing configurations keep their exact-iteration-count
+    /// contract.
+    /// </para>
+    /// <para>
+    /// <b>Scope:</b> this monitors the <i>training</i> loss reported by the model, so it detects a
+    /// plateau — it cannot detect overfitting, for which held-out loss must be monitored instead
+    /// (training loss keeps falling while validation loss rises). Validation-based stopping needs a
+    /// held-out split evaluated mid-training, which the current contract prevents because
+    /// prediction requires a fully trained model; it is tracked separately rather than implied
+    /// here.
+    /// </para>
+    /// <para><b>For Beginners:</b> Early stopping ends training when the model stops getting
+    /// better, instead of always running a fixed number of passes, which saves time and avoids
+    /// wasted work.</para>
+    /// </remarks>
+    public bool UseEarlyStopping { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets how many consecutive non-improving epochs to tolerate before stopping.
+    /// </summary>
+    /// <value>The patience in epochs, defaulting to 10. Must be positive.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Training loss wobbles from epoch to epoch, so stopping at the
+    /// very first bad epoch would quit too soon. Patience is how many bad epochs in a row to sit
+    /// through before giving up.</para>
+    /// </remarks>
+    private int _earlyStoppingPatience = 10;
+
+    public int EarlyStoppingPatience
+    {
+        get => _earlyStoppingPatience;
+        set => _earlyStoppingPatience = value <= 0
+            ? throw new ArgumentOutOfRangeException(nameof(EarlyStoppingPatience),
+                value, "EarlyStoppingPatience must be positive.")
+            : value;
+    }
+
+    /// <summary>
+    /// Gets or sets the smallest loss decrease that counts as an improvement.
+    /// </summary>
+    /// <value>The minimum delta, defaulting to 1e-4. Must not be negative.</value>
+    /// <remarks>
+    /// <para>
+    /// Guards against a loss that keeps creeping down by negligible amounts registering as real
+    /// progress and so never triggering the patience counter.
+    /// </para>
+    /// </remarks>
+    private double _earlyStoppingMinDelta = 1e-4;
+
+    public double EarlyStoppingMinDelta
+    {
+        get => _earlyStoppingMinDelta;
+        set => _earlyStoppingMinDelta = value < 0 || double.IsNaN(value)
+            ? throw new ArgumentOutOfRangeException(nameof(EarlyStoppingMinDelta),
+                value, "EarlyStoppingMinDelta cannot be negative or NaN.")
+            : value;
+    }
+
 }

@@ -117,6 +117,10 @@ public class DLinearModel<T> : TimeSeriesModelBase<T>
             TrainingCancellationToken.ThrowIfCancellationRequested();
             var order = Enumerable.Range(0, n).OrderBy(_ => _random.Next()).ToList();
 
+            // Squared error accumulated over the epoch, to report a mean loss below.
+            double epochSquaredError = 0.0;
+            int epochSamples = 0;
+
             for (int batchStart = 0; batchStart < n; batchStart += _options.BatchSize)
             {
                 int batchEnd = Math.Min(batchStart + _options.BatchSize, n);
@@ -143,6 +147,12 @@ public class DLinearModel<T> : TimeSeriesModelBase<T>
                     double pred = Forecast(trend, seasonal);
                     double err = pred - Convert.ToDouble(y[i]); // dMSE/dpred ∝ error (linear gradients)
 
+                    if (IsFiniteValue(err))
+                    {
+                        epochSquaredError += err * err;
+                        epochSamples++;
+                    }
+
                     for (int j = 0; j < _l; j++)
                     {
                         gS[j] += err * seasonal[j];
@@ -162,6 +172,12 @@ public class DLinearModel<T> : TimeSeriesModelBase<T>
 
                 _bSeasonal -= lr * gbS * inv;
                 _bTrend -= lr * gbT * inv;
+            }
+
+            if (epochSamples > 0 &&
+                !ReportEpoch(epoch, _options.Epochs, NumOps.FromDouble(epochSquaredError / epochSamples)))
+            {
+                break;
             }
         }
 

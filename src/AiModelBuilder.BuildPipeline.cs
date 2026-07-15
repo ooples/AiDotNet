@@ -38,6 +38,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         /// <summary>Zero-based index of the last epoch observed.</summary>
         public int LastEpoch { get; private set; }
 
+        /// <summary>
+        /// How many epochs have been reported. Lets the direct-training path tell whether the model
+        /// reported its own epochs (see <see cref="ITrainingEpochReporter{T}"/>) or trained opaquely
+        /// and still needs its single synthetic epoch.
+        /// </summary>
+        public int EpochsObserved { get; private set; }
+
         /// <summary>Loss reported for the last epoch observed.</summary>
         public T LastLoss { get; private set; }
 
@@ -73,6 +80,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             LastEpoch = epoch;
             LastLoss = epochLoss;
+            EpochsObserved++;
             bool shouldContinue = _owner.InvokeTrainingEpoch(
                 epoch, _totalEpochs, epochLoss, _monitorSessionId, Elapsed, _cancellationToken, out var reason);
             if (!shouldContinue)
@@ -2444,7 +2452,30 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 });
             }
 
-            model.Train(directX, directY);
+            // Models on this path run their own epoch loop inside Train(), so the facade cannot see
+            // their epochs. Hand the bridge to any model that can report them, so
+            // ConfigureTrainingCallback/ConfigureTrainingMonitor observe real per-epoch progress and
+            // a callback returning false actually stops training — rather than being handed one
+            // synthetic epoch after training has already finished, which no veto can affect.
+            var epochReporter = model as ITrainingEpochReporter<T>;
+            if (epochReporter is not null && epochBridge is not null)
+            {
+                epochReporter.TrainingEpochCallback =
+                    progress => epochBridge.OnEpoch(progress.Epoch, progress.Loss);
+            }
+
+            try
+            {
+                model.Train(directX, directY);
+            }
+            finally
+            {
+                // Don't leave the builder's bridge attached to a model the caller still holds.
+                if (epochReporter is not null)
+                {
+                    epochReporter.TrainingEpochCallback = null;
+                }
+            }
 
             // Compute evaluation metrics
             int inputSize = InputHelper<T, TInput>.GetInputSize(directX);
@@ -2465,11 +2496,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 NumberOfParameters = inputSize
             });
 
-            // The direct-training path runs a single training pass; drive the per-epoch
-            // callbacks/monitor once so this path still streams metrics and honors abort/
-            // cancellation signals uniformly with the optimizer path. No-op when no
-            // monitor/callback is configured (bridge is null → default path untouched).
-            epochBridge?.OnEpoch(0, trainErrorStats.MSE);
+            // Models that train opaquely report nothing, so drive the per-epoch callbacks/monitor
+            // once for them: this path still streams metrics and honors abort/cancellation signals
+            // uniformly with the optimizer path. No-op when no monitor/callback is configured
+            // (bridge is null → default path untouched), and skipped when the model already
+            // reported its own epochs above, which would otherwise append a bogus extra epoch 0.
+            if (epochBridge is { EpochsObserved: 0 })
+            {
+                epochBridge.OnEpoch(0, trainErrorStats.MSE);
+            }
 
             // trainPredOutput is already TOutput from model.Predict
 

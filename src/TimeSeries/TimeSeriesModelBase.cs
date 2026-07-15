@@ -47,8 +47,27 @@ namespace AiDotNet.TimeSeries;
 /// - Website traffic prediction
 /// </para>
 /// </remarks>
-public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape
+public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
+    ITrainingEpochReporter<T>
 {
+    /// <inheritdoc />
+    public Func<TrainingProgress<T>, bool>? TrainingEpochCallback { get; set; }
+
+    /// <summary>Wall-clock start of the current training run, for progress snapshots.</summary>
+    private DateTime _trainingStartedUtc;
+
+    /// <summary>Best monitored loss seen so far in this run; drives the patience counter.</summary>
+    private double _bestMonitoredLoss;
+
+    /// <summary>Consecutive epochs without an improvement of at least EarlyStoppingMinDelta.</summary>
+    private int _epochsWithoutImprovement;
+
+    /// <summary>
+    /// Why the current run stopped before exhausting its epoch budget, or null if it ran to
+    /// completion. Useful for diagnostics and surfaced in tests.
+    /// </summary>
+    public string? TrainingStopReason { get; private set; }
+
     /// <summary>
     /// Configuration options for the time series model.
     /// </summary>
@@ -398,6 +417,11 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         }
         TrainingCancellationToken = linkedCts.Token;
 
+        _trainingStartedUtc = DateTime.UtcNow;
+        _bestMonitoredLoss = double.PositiveInfinity;
+        _epochsWithoutImprovement = 0;
+        TrainingStopReason = null;
+
         try
         {
             // Zero-alloc training after warmup (AiDotNet #1804): activate a
@@ -433,6 +457,79 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
         // Mark the model as trained (even after early cancellation)
         IsTrained = true;
+    }
+
+    /// <summary>
+    /// Reports a completed training epoch, and reports whether training should continue.
+    /// </summary>
+    /// <param name="epoch">The zero-based index of the epoch that just finished.</param>
+    /// <param name="totalEpochs">The planned epoch budget, or 0 when unknown/unbounded.</param>
+    /// <param name="monitoredLoss">
+    /// The epoch's loss. Pass validation loss when a validation split is in use, otherwise the mean
+    /// training loss — this is the quantity early stopping watches.
+    /// </param>
+    /// <returns><c>true</c> to keep training; <c>false</c> to stop after this epoch.</returns>
+    /// <remarks>
+    /// <para>
+    /// Derived classes that own an epoch loop should call this once per epoch and <c>break</c> when
+    /// it returns <c>false</c>. It deliberately does not cancel
+    /// <see cref="TrainingCancellationToken"/>: loops throw on that token, which would skip the
+    /// best-epoch-weights restore that runs after the loop and leave a diverged model behind. An
+    /// early stop must leave the model in its best usable state, so it is reported as a return
+    /// value for the loop to break on.
+    /// </para>
+    /// <para>
+    /// A non-finite loss (NaN/Infinity) never counts as an improvement, so a diverged run exhausts
+    /// its patience and stops rather than training on to the epoch budget.
+    /// </para>
+    /// </remarks>
+    protected bool ReportEpoch(int epoch, int totalEpochs, T monitoredLoss)
+    {
+        string? stopReason = null;
+
+        // (a) Let anything observing the build (the facade's ConfigureTrainingCallback chain) see
+        //     the epoch and veto further training.
+        var callback = TrainingEpochCallback;
+        if (callback is not null)
+        {
+            var progress = new TrainingProgress<T>(
+                epoch: epoch,
+                totalEpochs: totalEpochs,
+                loss: monitoredLoss,
+                metrics: null,
+                elapsed: DateTime.UtcNow - _trainingStartedUtc);
+
+            if (!callback(progress))
+            {
+                stopReason = $"training callback requested abort at epoch {epoch}";
+            }
+        }
+
+        // (b) Apply patience-based early stopping to the monitored loss. A NaN/Infinity loss fails
+        //     this comparison, so it counts as a non-improving epoch.
+        if (Options.UseEarlyStopping)
+        {
+            double loss = NumOps.ToDouble(monitoredLoss);
+            if (loss < _bestMonitoredLoss - Options.EarlyStoppingMinDelta)
+            {
+                _bestMonitoredLoss = loss;
+                _epochsWithoutImprovement = 0;
+            }
+            else if (++_epochsWithoutImprovement >= Options.EarlyStoppingPatience)
+            {
+                stopReason ??=
+                    $"early stopping at epoch {epoch}: no improvement greater than " +
+                    $"{Options.EarlyStoppingMinDelta} for {Options.EarlyStoppingPatience} epochs";
+            }
+        }
+
+        if (stopReason is not null)
+        {
+            TrainingStopReason ??= stopReason;
+            return false;
+        }
+
+        return !TrainingCancellationToken.IsCancellationRequested;
     }
 
     /// <summary>
