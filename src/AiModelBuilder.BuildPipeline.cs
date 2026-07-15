@@ -99,6 +99,76 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private readonly List<T> _stoppingLossHistory = new();
 
     /// <summary>
+    /// Computes the metrics supplied to <c>ConfigureRegressionMetric</c> /
+    /// <c>ConfigureClassificationMetric</c> and records them on the result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Evaluated on the TEST partition. A configured metric read off the training data would measure
+    /// memorization rather than the generalization the caller asked about, and would quietly
+    /// disagree with the model's reported test error.
+    /// </para>
+    /// <para>
+    /// Uses the predictions the optimizer already produced for the test partition rather than
+    /// re-running Predict on the raw test matrix. Feature selection means the trained model expects
+    /// only the selected columns, so re-predicting on the full matrix fails outright ("Number of
+    /// columns in the matrix must equal the length of the vector") — and were the shapes ever to
+    /// line up by accident, the metric would describe a different input than the model's own
+    /// reported error.
+    /// </para>
+    /// <para>
+    /// Both metric interfaces take <c>ReadOnlySpan&lt;T&gt;</c> of predictions and actuals, so this
+    /// only applies where predictions and targets flatten to a vector.
+    /// </para>
+    /// </remarks>
+    private void ComputeConfiguredMetrics(
+        AiModelResult<T, TInput, TOutput> result,
+        OptimizationResult<T, TInput, TOutput>.DatasetResult testResult)
+    {
+        if (_configuredRegressionMetric is null && _configuredClassificationMetric is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(testResult.Predictions);
+            var actual = ConversionsHelper.ConvertToVector<T, TOutput>(testResult.Y);
+
+            if (predicted.Length == 0 || predicted.Length != actual.Length)
+            {
+                throw new InvalidOperationException(
+                    $"predictions ({predicted.Length}) and targets ({actual.Length}) do not line up.");
+            }
+
+            var p = predicted.ToArray().AsSpan();
+            var a = actual.ToArray().AsSpan();
+
+            if (_configuredRegressionMetric is not null)
+            {
+                result.SetConfiguredMetric(
+                    _configuredRegressionMetric.Name,
+                    _configuredRegressionMetric.Compute(p, a));
+            }
+
+            if (_configuredClassificationMetric is not null)
+            {
+                result.SetConfiguredMetric(
+                    _configuredClassificationMetric.Name,
+                    _configuredClassificationMetric.Compute(p, a));
+            }
+        }
+        catch (Exception ex)
+        {
+            // A metric is a report, not the model: a failure here must not discard a completed
+            // training run. Surfaced rather than dropped, so an absent metric is explained.
+            System.Diagnostics.Trace.TraceWarning(
+                $"Configured metric could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; the metric is absent from AiModelResult.ConfiguredMetrics.");
+        }
+    }
+
+    /// <summary>
     /// Runs a cross-validator supplied to <c>ConfigureCrossValidation</c> and attaches its result.
     /// </summary>
     /// <remarks>
@@ -3558,6 +3628,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // documentation reads as "cross-validation was not performed", so a caller who asked for it was
         // told it had not run.
         RunConfiguredCrossValidation(finalResult, preparedX, preparedY, optimizer);
+        ComputeConfiguredMetrics(finalResult, optimizationResult.TestResult);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

@@ -465,6 +465,33 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public CrossValidationResult<T, TInput, TOutput>? CrossValidationResult { get; internal set; }
 
     /// <summary>
+    /// Values of the metrics supplied to <c>ConfigureRegressionMetric</c> /
+    /// <c>ConfigureClassificationMetric</c>, keyed by metric name.
+    /// </summary>
+    /// <value>
+    /// One entry per configured metric, computed on the held-out test partition. Empty when no
+    /// metric was configured.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Separate from the built-in <c>ErrorStats</c>/<c>PredictionStats</c>, which are a fixed set
+    /// computed for every run. These are the metrics the caller explicitly asked for.
+    /// </para>
+    /// <para>
+    /// Computed on the TEST partition, not the training data — a metric read off the data the model
+    /// fit is a measure of memorization, not of the generalization the caller is asking about.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you called <c>ConfigureRegressionMetric(new MeanAbsoluteError…)</c>,
+    /// this is where its value lands, under that metric's name.</para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, T> ConfiguredMetrics => _configuredMetrics;
+
+    private readonly Dictionary<string, T> _configuredMetrics = new();
+
+    /// <summary>Records a configured metric's value. Called by the builder during Build.</summary>
+    internal void SetConfiguredMetric(string name, T value) => _configuredMetrics[name] = value;
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>
