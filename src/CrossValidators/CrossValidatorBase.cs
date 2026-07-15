@@ -148,19 +148,23 @@ public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T
 
             var trainingTimer = Stopwatch.StartNew();
 
-            // Use optimizer.Optimize() instead of model.Train()
-            // Create empty test data using ModelHelper
-            var (emptyXTest, emptyYTest, _) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
-
+            // Use optimizer.Optimize() instead of model.Train().
+            //
+            // The held-out fold IS the test set: cross-validation has no third partition, and the
+            // whole point is that every sample serves as test data in exactly one fold. Passing
+            // empty test data here (as this did) is not merely redundant — ValidationHelper rejects
+            // it outright with "Test matrix cannot be empty", so every optimizer that validates its
+            // input threw before a single fold could train. That went unnoticed because
+            // ConfigureCrossValidation dropped its argument, so this method was never reached from
+            // the facade at all.
             var optimizationInput = new OptimizationInputData<T, TInput, TOutput>
             {
                 XTrain = XTrain,
                 YTrain = yTrain,
                 XValidation = XValidation,
                 YValidation = yValidation,
-                // Use empty test data for cross-validation
-                XTest = emptyXTest,
-                YTest = emptyYTest
+                XTest = XValidation,
+                YTest = yValidation
             };
 
             // Zero-alloc training scope (#1804): reuse Engine-op scratch across this fold's steps.
