@@ -567,35 +567,29 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // VECTORIZED: Initialize parameters with scaled random values
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numClasses + _numClasses)));
         T half = NumOps.FromDouble(0.5);
 
-        // Initialize transition matrix: (random - 0.5) * scale
-        var transRandom = Tensor<T>.CreateRandom(_transitionMatrix.Length, 1).Reshape(_transitionMatrix._shape);
-        var transHalf = new Tensor<T>(_transitionMatrix._shape);
-        transHalf.Fill(half);
-        var transCentered = Engine.TensorSubtract(transRandom, transHalf);
-        _transitionMatrix = Engine.TensorMultiplyScalar(transCentered, scale);
-
-        // Initialize start scores: (random - 0.5) * scale
-        var startRandom = Tensor<T>.CreateRandom(_startScores.Length, 1).Reshape(_startScores._shape);
-        var startHalf = new Tensor<T>(_startScores._shape);
-        startHalf.Fill(half);
-        var startCentered = Engine.TensorSubtract(startRandom, startHalf);
-        _startScores = Engine.TensorMultiplyScalar(startCentered, scale);
-
-        // Initialize end scores: (random - 0.5) * scale
-        var endRandom = Tensor<T>.CreateRandom(_endScores.Length, 1).Reshape(_endScores._shape);
-        var endHalf = new Tensor<T>(_endScores._shape);
-        endHalf.Fill(half);
-        var endCentered = Engine.TensorSubtract(endRandom, endHalf);
-        _endScores = Engine.TensorMultiplyScalar(endCentered, scale);
+        _transitionMatrix = CreatePersistentParameter([_numClasses, _numClasses], half, scale);
+        _startScores = CreatePersistentParameter([_numClasses], half, scale);
+        _endScores = CreatePersistentParameter([_numClasses], half, scale);
 
         // Register after all reassignments so references are to final tensors
         RegisterTrainableParameter(_transitionMatrix, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_startScores, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_endScores, PersistentTensorRole.Weights);
+    }
+
+    private Tensor<T> CreatePersistentParameter(int[] shape, T half, T scale)
+    {
+        var random = Tensor<T>.CreateRandom(shape);
+        var parameter = TensorAllocator.RentPinned<T>(shape);
+        for (int i = 0; i < parameter.Length; i++)
+        {
+            parameter[i] = NumOps.Multiply(NumOps.Subtract(random[i], half), scale);
+        }
+
+        return parameter;
     }
 
     /// <summary>

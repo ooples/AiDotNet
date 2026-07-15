@@ -3,11 +3,13 @@ using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NER.SequenceLabeling;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -135,6 +137,40 @@ public class BiLSTMCRFTests : SequenceLabelingNERTestBase
             }
         }
         return (input, labels);
+    }
+
+    [Fact]
+    public void CrfParameterShapes_RemainCanonicalAfterTrainingStep()
+    {
+        using var arena = TensorArena.Create();
+        using var model = CreateSmallModel();
+        var crf = Assert.Single(model.Layers.OfType<ConditionalRandomFieldLayer<double>>());
+
+        Assert.Equal(new[] { RegressionLabels, RegressionLabels }, crf.GetTrainableParameters()[0].Shape.ToArray());
+        Assert.Equal(new[] { RegressionLabels }, crf.GetTrainableParameters()[1].Shape.ToArray());
+        Assert.Equal(new[] { RegressionLabels }, crf.GetTrainableParameters()[2].Shape.ToArray());
+
+        model.SetTrainingMode(true);
+        Assert.Equal(new[] { RegressionLabels, RegressionLabels }, crf.GetTrainableParameters()[0].Shape.ToArray());
+        Assert.Equal(new[] { RegressionLabels }, crf.GetTrainableParameters()[1].Shape.ToArray());
+        Assert.Equal(new[] { RegressionLabels }, crf.GetTrainableParameters()[2].Shape.ToArray());
+
+        _ = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(model.Layers);
+        Assert.Equal(new[] { RegressionLabels, RegressionLabels }, crf.GetTrainableParameters()[0].Shape.ToArray());
+
+        var diagnosticExample = MakeExample(0);
+        _ = model.ForwardForTraining(diagnosticExample.input);
+        Assert.Equal(new[] { RegressionLabels, RegressionLabels }, crf.GetTrainableParameters()[0].Shape.ToArray());
+
+        for (int step = 0; step < 3; step++)
+        {
+            var (input, labels) = MakeExample(step);
+            model.Train(input, labels);
+
+            Assert.Equal(new[] { RegressionLabels, RegressionLabels }, crf.GetTrainableParameters()[0].Shape.ToArray());
+            Assert.Equal(new[] { RegressionLabels }, crf.GetTrainableParameters()[1].Shape.ToArray());
+            Assert.Equal(new[] { RegressionLabels }, crf.GetTrainableParameters()[2].Shape.ToArray());
+        }
     }
 
     /// <summary>
