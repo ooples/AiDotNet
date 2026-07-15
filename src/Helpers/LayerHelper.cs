@@ -22587,11 +22587,21 @@ public static class LayerHelper<T>
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
 
-        // Audio encoder (Conformer-style)
+        // Audio feature front-end (Dense projection + normalization).
+        // Use LayerNormalization, NOT BatchNormalization: (1) these are plain Dense projections, not a
+        // Conformer conv module (BatchNorm's only place in Conformer), and every downstream encoder /
+        // adapter / LLM block here already uses LayerNorm — mixing in BatchNorm is inconsistent with the
+        // Qwen/LLM-ASR architecture these models implement; (2) BatchNorm is batch-dependent, so a
+        // single-sample forward does not match the same row inside a batch (BatchConsistency_SingleMatchesBatch
+        // fails by construction) and its output is non-deterministic across differently-sized batches
+        // (Predict_ShouldBeDeterministic); (3) a lazy BatchNorm whose FIRST forward is in inference mode
+        // has un-initialised gamma and threw NullReferenceException in the eval-path scale computation.
+        // LayerNorm normalizes per-sample over the feature axis, so it is batch-independent, deterministic,
+        // and has no running-stats init hazard.
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Residual Pre-LN encoder blocks. A residual-FREE attention/FFN stack collapses to an

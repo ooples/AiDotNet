@@ -2684,6 +2684,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "CanaryQwen" && model.TypeParameterCount == 1)
+            {
+                // CanaryQwen (NVIDIA, 2025): multilingual ASR + translation with a Qwen-2.5 LLM decoder,
+                // built via CreateDefaultLLMASRLayers. Its paper defaults (EncoderDim=1024/24 layers,
+                // DecoderDim=1536/28 layers, VocabSize=151936) make even a SINGLE forward multi-minute:
+                // the final Dense(151936) output head alone is ~15 GFLOPs at seq 64, so every invariant
+                // (including single-forward BatchConsistency / determinism) overran the 120 s gate. Build
+                // the SAME architecture (audio front-end -> residual encoder blocks -> adapter -> LLM
+                // decoder blocks -> vocab head) at CI-smoke scale, mirroring the CSM / XTTSv2 codec-LM
+                // reductions: 64-wide, 2+2 layers, 4 heads, a 64-way vocab head. The Canary-Qwen
+                // structure is preserved; only width/depth/vocab shrink. Architecture matches the
+                // isAudio branch's [1,64,32] InputShape so lazy shapes resolve consistently.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.NeMo.CanaryQwenOptions { EncoderDim = 32, " +
+                    "DecoderDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumAttentionHeads = 4, " +
+                    "NumMels = 32, VocabSize = 64, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "VideoMAE" && model.TypeParameterCount == 1)
             {
                 // VideoMAE (Tong et al. 2022) defaults to ViT-Base scale
