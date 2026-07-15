@@ -1116,25 +1116,37 @@ jobs:
           }
 
           # Background memory sampler (serialized heavy shards only). These shards OOM-kill the
-          # runner with a shutdown signal BEFORE dotnet flushes TRX/console output, so the
-          # post-test snapshot below never runs and we lose the high-water mark. Stream timestamped
-          # system memory every 2 s straight to the step's LIVE log — GitHub ingests stdout
-          # continuously, so the LAST sample before a runner kill survives even though the process
-          # tree is torn down. It interleaves chronologically with xUnit's streamed per-test
-          # "Passed <Model>.<Test>" console lines, so the last test line printed just before the
-          # memory cliff identifies the model that blew the 16 GB envelope. The bash child inherits
-          # this step's stdout via -NoNewWindow so its output streams (not buffered in a job).
+          # runner with a shutdown signal BEFORE dotnet flushes TRX/console output, so the post-test
+          # snapshot below never runs and we lose the high-water mark. Sample MemAvailable every 2 s
+          # and write it straight to the step's LIVE log — GitHub ingests stdout continuously, so the
+          # LAST sample before a runner kill survives even though the process tree is torn down. It
+          # interleaves chronologically with xUnit's streamed per-test "Passed <Model>.<Test>" lines,
+          # so the last test printed just before the memory cliff identifies the model that blew the
+          # 16 GB envelope.
+          #
+          # Implemented as a background PowerShell RUNSPACE (not Start-Process): the runspace runs in
+          # THIS pwsh process, so its [Console] writes go to the same stdout handle GitHub Actions
+          # captures (a Start-Process grandchild's stdout was NOT captured — it produced zero output).
+          # [Console]::Out is thread-safe and flushed per line, so samples stream immediately.
           $memSampler = $null
           if ($serializeShard) {
-            $samplerCmd = 'while true; do echo "[memdiag $(date -u +%H:%M:%S)] $(free -m | grep Mem:)"; sleep 2; done'
-            $memSampler = Start-Process -FilePath bash -ArgumentList '-c', $samplerCmd -NoNewWindow -PassThru
-            Write-Host "Heavy shard: started background memory sampler (pid $($memSampler.Id))"
+            $memSampler = [powershell]::Create()
+            [void]$memSampler.AddScript({
+              while ($true) {
+                $avail = ((Select-String -Path /proc/meminfo -Pattern '^MemAvailable:').Line -replace '\s+', ' ').Trim()
+                [Console]::Out.WriteLine("[memdiag $([DateTime]::UtcNow.ToString('HH:mm:ss'))] $avail")
+                [Console]::Out.Flush()
+                Start-Sleep -Seconds 2
+              }
+            })
+            [void]$memSampler.BeginInvoke()
+            Write-Host "Heavy shard: started background memory sampler (runspace)"
           }
 
           & dotnet @dotnetArgs
           $exitCode = $LASTEXITCODE
 
-          if ($memSampler) { Stop-Process -Id $memSampler.Id -Force -ErrorAction SilentlyContinue }
+          if ($memSampler) { try { $memSampler.Stop(); $memSampler.Dispose() } catch {} }
 
           # Post-test resource snapshot. If the runner survives this point,
           # the test step finished naturally and the snapshot tells us what

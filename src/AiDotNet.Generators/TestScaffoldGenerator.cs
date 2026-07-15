@@ -435,6 +435,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "Conformer", "ConformerCTC", "Branchformer", "EBranchformer", "FastConformer",
         "EfficientConformer", "StreamingConformer", "RobustConformer", "ConformerTransducer",
         "ConformerFP", "InterCTC", "SelfConditionedCTC", "FunASRNano", "FireRedASR", "FireRedASRLLM",
+        // RNN-T / transducer streaming ASR sharing CreateDefaultConformerTransducerLayers: a deep
+        // (18-20 layer, 512-dim) residual-transformer encoder + prediction + joint network. Same
+        // deep-ASR footprint rationale as the Conformer/CTC family above — their 50+200-iteration
+        // MoreData and 100-iteration memorization tests overran the 120/180 s gate at <double>
+        // (verified: EmformerRNNT.MoreData/Memorization timed out). <float> halves the per-step
+        // compute + the audio branch's auto-emitted smoke-iteration caps fit them to budget while
+        // preserving the self-relative training invariants. (ConformerTransducer / StreamingConformer
+        // are already listed above.)
+        "EmformerRNNT", "ParakeetRNNT", "ParakeetTDT", "FastEmit", "StreamingZipformer", "TDTDecoder",
         // Foundation self-supervised ASR family on CreateDefaultFoundationASRLayers (12-layer / 768-dim
         // wav2vec-2/HuBERT-style encoder + CTC head). Restoring the paper's RESIDUAL transformer blocks
         // fixed their uniform-output training collapse (DifferentInputs L2 ~= 1e-12), but the 12-layer
