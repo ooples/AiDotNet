@@ -54,7 +54,7 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
     /// sequence axis (axis 1 of a rank-3 input).
     /// </summary>
     public SequenceTokenSliceLayer(Position position = Position.Last)
-        : base(new[] { -1, -1, -1 }, new[] { -1, -1 })
+        : base(new[] { -1, -1 }, new[] { -1 })
     {
         _position = position;
     }
@@ -74,11 +74,12 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
                 $"[batch, seq, dim]; got rank {input.Shape.Length}.",
                 nameof(input));
 
-        int rank = input.Shape.Length;
-        var inShape = new int[rank];
-        for (int i = 0; i < rank; i++) inShape[i] = input.Shape[i];
-        var outShape = new[] { inShape[0], inShape[2] };
-        ResolveShapes(inShape, outShape);
+        // Layer shape metadata is per-sample and excludes the leading batch
+        // dimension. Keeping the runtime batch here corrupts architecture
+        // validation when the resolved layer chain is later deep-copied.
+        ResolveShapes(
+            new[] { input.Shape[1], input.Shape[2] },
+            new[] { input.Shape[2] });
     }
 
     /// <inheritdoc />
