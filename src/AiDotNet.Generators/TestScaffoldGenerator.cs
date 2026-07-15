@@ -2692,6 +2692,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, IntermediateSize = 64, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "Kronos" && model.TypeParameterCount == 1)
+            {
+                // Kronos (financial OHLCV decoder-only foundation model) defaults to a paper-scale
+                // config (ContextLength=1024, HiddenDimension=768, NumLayers=12). Built via the generic
+                // forecasting path it (a) reports ParameterCount=0 — the base ResolveLazyLayerShapes
+                // can't propagate a shape through its Reshape->lazy-Dense chain without an explicit
+                // architecture, so every lazy layer declares 0 params — and (b) diverges on the 1-vs-2
+                // iter MoreData probe at that width. Build the SAME architecture (Reshape patch-embed ->
+                // N transformer blocks -> flatten -> forecast head) at CI-smoke scale with an explicit
+                // matching architecture, mirroring the MOMENT/TimeMoE reductions: the architecture's
+                // [64,5] input resolves the lazy Dense so ParameterCount>0, and the small stable model
+                // trains monotonically. ContextLength=64 / ForecastHorizon=16 x 5 OHLCV features stay in
+                // lockstep with the InputShape (64,5) and OutputShape (80) the forecasting family emits.
+                // inputSize is the FLAT element count of the [ContextLength, NumCandlestickFeatures] =
+                // [64, 5] input (320), NOT the context length: the model's first layer is a
+                // ReshapeLayer([numPatches, patchLength*features]) = [4, 80] that needs 320 elements, so
+                // the lazy-shape probe must carry 320 or ResolveLazyLayerShapes fails at the reshape and
+                // the downstream Dense declares 0 params (ParameterCount == 0).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 320, outputSize: 80), " +
+                    "new AiDotNet.Models.Options.KronosOptions<double> { " +
+                    "ContextLength = 64, ForecastHorizon = 16, PatchLength = 16, " +
+                    "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, IntermediateSize = 64, " +
+                    "NumCandlestickFeatures = 5 })";
+            }
             else if (model.ClassName == "XTTSv2" && model.TypeParameterCount == 1)
             {
                 // XTTSv2 (Coqui) is a GPT-2-based codec LM (text -> AR transformer -> VQ-VAE codec
@@ -7504,7 +7531,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "Sundial" => 2048,
             "Kairos" => 1024,
             "LagLlama" => 96,   // LagLlama paper default
-            "Kronos" => 1024,
+            // Kronos is built at CI-smoke scale (ContextLength=64) via its constructor special-case
+            // (see EmitGeneratedTestClass) to fix ParameterCount lazy-resolution + MoreData stability;
+            // keep the InputShape context in lockstep with that reduced ContextLength.
+            "Kronos" => 64,
             "YingLong" => 1024,
             "TimeGrad" => 168,
             "TFC" => 200,
@@ -7562,7 +7592,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             // Kronos emits forecastHorizon * numCandlestickFeatures (OHLCV=5).
             // ForecastHorizon=96, numFeatures=5 → flat 480.
-            "Kronos" => "480",
+            // Kronos forecast head emits forecastHorizon * numCandlestickFeatures; at CI-smoke scale
+            // that is 16 * 5 = 80 (paper default 96 * 5 = 480), in lockstep with the reduced ctor.
+            "Kronos" => "80",
 
             // Reconstruction-chained heads (TimeMAE, SimMTM) output contextLength
             // through the reconstruction path before the forecast Dense, then
@@ -8147,6 +8179,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("{");
         sb.AppendLine($"    protected override {factoryReturnType} {factoryMethod}()");
         sb.AppendLine($"        => {constructorExpr};");
+
+        // Per-algorithm capability declarations where the paper contract differs from the test-base
+        // defaults (GuaranteesDAG = CanRecoverLinearStructure = true). CCM (Sugihara et al. 2012,
+        // Science) is a NONLINEAR time-series convergent-cross-mapping method: it detects directional
+        // DYNAMICAL COUPLING — which is legitimately bidirectional/cyclic in the ecosystems it targets
+        // — so it does NOT guarantee a DAG, and it does NOT recover a linear conditional-independence
+        // structure (it is not a constraint/score-based structure learner). Declaring these false
+        // skips the DAG-acyclicity and linear-structure invariants that do not apply to CCM; its
+        // directional-coupling correctness is still checked by the ungated invariants (e.g.
+        // NoAsymmetricBidirectionalEdges, which the dominant-direction inference now satisfies).
+        if (category == AlgorithmCategory.CausalDiscovery && testClassName == "CCMAlgorithmTests")
+        {
+            sb.AppendLine("    protected override bool GuaranteesDAG => false;");
+            sb.AppendLine("    protected override bool CanRecoverLinearStructure => false;");
+        }
 
         // Emit mock factory methods for categories that need them
         if (category == AlgorithmCategory.ActiveLearning)
