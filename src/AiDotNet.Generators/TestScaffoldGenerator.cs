@@ -2336,6 +2336,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "outputSize: 4), " +
                     "numClasses: 4, embedDim: 64, numHeads: 4, numLayers: 2, numFrames: 4, patchSize: 8)";
             }
+            else if (model.ClassName == "MusicSourceSeparator" && model.TypeParameterCount == 1)
+            {
+                // MusicSourceSeparator has THREE constructors: (string modelPath) and (options) both
+                // build an ONNX/CPU-inference instance (_useNativeMode = false, no trainable layers),
+                // while (NeuralNetworkArchitecture, options?, optimizer?) builds the NATIVE trainable
+                // Demucs. Because the native ctor's architecture parameter is followed by optional
+                // params it is not detected as an "architecture-only" ctor, so the scaffold fell back
+                // to the (options) ONNX ctor — and every training invariant threw "Training is not
+                // supported in ONNX inference mode". Force the native training ctor. The waveform-Demucs
+                // InitializeLayers hardcodes its conv-U-Net dims, so any valid architecture works.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 256))";
+            }
             else if (model.ClassName == "AnimateDiff" && model.TypeParameterCount == 1)
             {
                 // AnimateDiff is a motion MODULE inserted into a pre-trained image-diffusion UNet — a
@@ -4238,6 +4253,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // count (axis 1), NOT the final embedding dim (fixed by the attention weights).
                 // DifferentInputLengths_ShouldNotCrash must halve the tokens, not the embedding.
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+            }
+            else if (model.ClassName == "MusicSourceSeparator")
+            {
+                // Faithful waveform-Demucs (Défossez et al. 2019): mono waveform input [1, L] (L a
+                // multiple of stride^depth = 4^2 = 16 so the conv-U-Net encoder/decoder lengths align
+                // for the skip-adds) -> StemCount source waveforms [StemCount, L]. StemCount defaults
+                // to 4. The generic-audio [1,64,32]->[4] shape does not match a separator's [S,L]
+                // output, so carve out the correct waveform I/O here.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 64 };");
+                sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             }
             else
             {
