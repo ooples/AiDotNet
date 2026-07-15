@@ -2665,6 +2665,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, IntermediateSize = 64, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "XTTSv2" && model.TypeParameterCount == 1)
+            {
+                // XTTSv2 (Coqui) is a GPT-2-based codec LM (text -> AR transformer -> VQ-VAE codec
+                // tokens), built via CreateDefaultCodecLMLayers exactly like CSM. Its paper defaults
+                // (LLMDim=1024, NumLLMLayers=30, CodebookSize=8192) make a single <double> train step
+                // through the 30-layer AR stack ~40 s, so MoreData / Training / memorization time out at
+                // the 120/180 s gate even at <float> and smoke iteration counts — the per-STEP cost, not
+                // the step COUNT, is the wall. Build the SAME codec-LM architecture (text encoder -> LLM
+                // transformer stack -> per-codebook logits) at CI-smoke scale, mirroring the CSM
+                // reduction above: 1 codebook x 16 = 16-way head, 64-wide LLM, 1 encoder + 2 LLM layers,
+                // 4 heads. The GPT-2 codec-LM structure is preserved; only width/depth shrink.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 80, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options { NumCodebooks = 1, " +
+                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
+                    "NumLLMLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "VideoMAE" && model.TypeParameterCount == 1)
             {
                 // VideoMAE (Tong et al. 2022) defaults to ViT-Base scale
