@@ -99,6 +99,44 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private readonly List<T> _stoppingLossHistory = new();
 
     /// <summary>
+    /// Runs a cross-validator supplied to <c>ConfigureCrossValidation</c> and attaches its result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Cross-validation runs on the FULL prepared data, not the train partition: it does its own
+    /// per-fold splitting, so handing it an already-split partition would nest one split inside
+    /// another and shrink every fold. It runs after the main fit so the returned model is the one
+    /// the caller asked for — the cross-validation reports how that configuration generalizes rather
+    /// than replacing it.
+    /// </para>
+    /// <para>
+    /// A cross-validator failing must not destroy a completed training run, so the failure is
+    /// surfaced and the result is left null — matching the documented "not performed" meaning.
+    /// </para>
+    /// </remarks>
+    private void RunConfiguredCrossValidation(
+        AiModelResult<T, TInput, TOutput> result,
+        TInput preparedX, TOutput preparedY,
+        IOptimizer<T, TInput, TOutput>? optimizer)
+    {
+        if (_crossValidator is null || _model is null || optimizer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            result.CrossValidationResult = _crossValidator.Validate(_model, preparedX, preparedY, optimizer);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Configured cross-validator '{_crossValidator.GetType().Name}' failed: {ex.Message}. " +
+                "The trained model is unaffected; CrossValidationResult is left unset.");
+        }
+    }
+
+    /// <summary>
     /// Pushes a loss supplied to <c>ConfigureLossFunction</c> into the model.
     /// </summary>
     /// <remarks>
@@ -3504,6 +3542,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         };
 
         var finalResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
+
+        // Run a configured cross-validator and surface its result. Without this, ConfigureCrossValidation
+        // dropped its argument and AiModelResult.CrossValidationResult stayed null — which its own
+        // documentation reads as "cross-validation was not performed", so a caller who asked for it was
+        // told it had not run.
+        RunConfiguredCrossValidation(finalResult, preparedX, preparedY, optimizer);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

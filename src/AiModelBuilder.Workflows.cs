@@ -538,8 +538,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
-    /// by training and testing it multiple times on different subsets of your training data.
-    /// Use the evaluation methods on AiModelResult to perform cross-validation after building.
+    /// by training and testing it multiple times on different subsets of your data. The configured
+    /// validator runs during Build and its result is on <c>AiModelResult.CrossValidationResult</c>.
+    /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// For labels that look forward (a forward return, say), prefer
+    /// <c>PurgedWalkForwardCrossValidator</c>: the other validators here, including
+    /// <c>TimeSeriesCrossValidator</c>, leak across the fold boundary because a label computed at the
+    /// last training index is derived from samples inside the validation fold, which flatters the
+    /// score.
+    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
     {
