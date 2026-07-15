@@ -730,91 +730,32 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// <returns>Output tensor [batch, numVertices, OutputChannels].</returns>
     private Tensor<T> ProcessBatched(Tensor<T> input, int batchSize, int numVertices, bool cacheBwd)
     {
-        var outputData = new T[batchSize * numVertices * OutputChannels];
-
-        // Thread-local storage for gathered features per batch sample
-        var localGatheredFeatures = new Tensor<T>[batchSize];
+        var gatheredFeatures = new Tensor<T>[batchSize];
+        var outputs = new Tensor<T>[batchSize];
         var transposedWeights = Engine.TensorTranspose(_weights);
 
-        Parallel.For(0, batchSize, b =>
-        {
-            var singleInput = ExtractBatchSlice(input, b, numVertices);
-
-            // Gather spiral features (thread-safe, result stored per-batch)
-            var gathered = GatherSpiralFeatures(singleInput, numVertices);
-            localGatheredFeatures[b] = gathered;
-
-            // Compute output using pre-transposed weights
-            var singleOutput = Engine.TensorMatMul(gathered, transposedWeights);
-            singleOutput = AddBiases(singleOutput, numVertices);
-
-            // Activation is applied exactly once by Forward() after ProcessBatched returns, so the
-            // per-sample output must stay PRE-activation here (matches the ProcessSingle path).
-            var singleData = singleOutput.ToArray();
-            int offset = b * numVertices * OutputChannels;
-            Array.Copy(singleData, 0, outputData, offset, singleData.Length);
-        });
-
-        // Combine gathered features for backward pass (sum across batch)
-        // For backward pass, we need the gathered features. Store the first batch's for gradient computation.
-        // A more complete solution would store all or use a different gradient strategy.
-        // #1668: _gatheredFeatures is a backward-only cache; only build+retain it when an eager
-        // Backward will read it, so inference holds no gathered arena scratch across a Reset.
-        if (cacheBwd && batchSize > 0 && localGatheredFeatures[0] != null)
-        {
-            _gatheredFeatures = CombineGatheredFeatures(localGatheredFeatures, batchSize, numVertices);
-        }
-        else
-        {
-            _gatheredFeatures = null;
-        }
-
-        return new Tensor<T>(outputData, [batchSize, numVertices, OutputChannels]);
-    }
-
-    /// <summary>
-    /// Combines gathered features from all batch samples for backward pass.
-    /// </summary>
-    /// <param name="localGatheredFeatures">Array of gathered features per batch sample.</param>
-    /// <param name="batchSize">Number of batch samples.</param>
-    /// <param name="numVertices">Number of vertices per sample.</param>
-    /// <returns>Combined gathered features tensor.</returns>
-    private Tensor<T> CombineGatheredFeatures(Tensor<T>[] localGatheredFeatures, int batchSize, int numVertices)
-    {
-        int featureDim = SpiralLength * InputChannels;
-        var combinedData = new T[batchSize * numVertices * featureDim];
-
+        // GradientTape is thread-local. Keep the per-sample engine operations on
+        // the recording thread and combine them with TensorStack.
         for (int b = 0; b < batchSize; b++)
         {
-            var batchData = localGatheredFeatures[b].ToArray();
-            int offset = b * numVertices * featureDim;
-            Array.Copy(batchData, 0, combinedData, offset, batchData.Length);
+            var singleInput = Engine.Reshape(
+                Engine.TensorSlice(
+                    input,
+                    [b, 0, 0],
+                    [1, numVertices, InputChannels]),
+                [numVertices, InputChannels]);
+            var gathered = GatherSpiralFeatures(singleInput, numVertices);
+            gatheredFeatures[b] = gathered;
+
+            var singleOutput = Engine.TensorMatMul(gathered, transposedWeights);
+            outputs[b] = AddBiases(singleOutput, numVertices);
         }
 
-        return new Tensor<T>(combinedData, [batchSize, numVertices, featureDim]);
-    }
+        _gatheredFeatures = cacheBwd
+            ? Engine.TensorStack(gatheredFeatures, axis: 0)
+            : null;
 
-    /// <summary>
-    /// Extracts a single sample from a batched tensor.
-    /// </summary>
-    /// <param name="batched">Batched tensor [batch, vertices, channels].</param>
-    /// <param name="batchIndex">Index of the batch to extract.</param>
-    /// <param name="numVertices">Number of vertices.</param>
-    /// <returns>Single sample tensor [vertices, channels].</returns>
-    private Tensor<T> ExtractBatchSlice(Tensor<T> batched, int batchIndex, int numVertices)
-    {
-        int channels = batched.Shape[2];
-        var data = new T[numVertices * channels];
-
-        for (int v = 0; v < numVertices; v++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                data[v * channels + c] = batched[batchIndex, v, c];
-            }
-        }
-
-        return new Tensor<T>(data, [numVertices, channels]);
+        return Engine.TensorStack(outputs, axis: 0);
     }
 
     /// <summary>
@@ -834,19 +775,15 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
         if (_spiralIndices == null)
             throw new InvalidOperationException("Spiral indices not set.");
 
-        int gatheredSize = InputChannels * SpiralLength;
-
-        // Create result tensor
-        var gathered = new Tensor<T>([numVertices, gatheredSize]);
+        var featureBlocks = new Tensor<T>[SpiralLength];
 
         // Gather features for each spiral position using vectorized operations
         for (int s = 0; s < SpiralLength; s++)
         {
-            int featureOffset = s * InputChannels;
-
             // Create indices for this spiral position
             var spiralPositionIndices = new int[numVertices];
             var validMask = new T[numVertices];
+            bool hasInvalidNeighbor = false;
 
             for (int v = 0; v < numVertices; v++)
             {
@@ -860,6 +797,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
                 {
                     spiralPositionIndices[v] = 0; // Placeholder, will be masked to zero
                     validMask[v] = NumOps.Zero;
+                    hasInvalidNeighbor = true;
                 }
             }
 
@@ -868,15 +806,16 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
             // Gather neighbor features
             var neighborFeatures = Engine.TensorGather(input, indicesTensor, axis: 0);
 
-            // Apply mask to zero out invalid neighbors
-            var mask = new Tensor<T>(validMask, [numVertices, 1]);
-            neighborFeatures = Engine.TensorMultiply(neighborFeatures, Engine.TensorTile(mask, [1, InputChannels]));
+            if (hasInvalidNeighbor)
+            {
+                var mask = new Tensor<T>(validMask, [numVertices, 1]);
+                neighborFeatures = Engine.TensorMultiply(neighborFeatures, mask);
+            }
 
-            // Set the gathered features into the result at the appropriate offset
-            gathered = Engine.TensorSetSlice(gathered, neighborFeatures, [0, featureOffset]);
+            featureBlocks[s] = neighborFeatures;
         }
 
-        return gathered;
+        return Engine.TensorConcatenate(featureBlocks, axis: 1);
     }
 
     /// <summary>

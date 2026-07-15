@@ -524,7 +524,7 @@ public partial class MeshPoolLayer<T> : LayerBase<T>
         var gradScale = Engine.ReduceSum(outputGradient, [1], keepDims: true);
 
         // Element-wise multiply scales with features: [numKept, InputChannels]
-        var scaledFeatures = Engine.TensorMultiply(keptFeatures, Engine.TensorTile(gradScale, [1, InputChannels]));
+        var scaledFeatures = Engine.TensorMultiply(keptFeatures, gradScale);
 
         // Sum over kept edges to get final gradient [InputChannels]
         return Engine.ReduceSum(scaledFeatures, [0], keepDims: false);
