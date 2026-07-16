@@ -87,6 +87,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// production is changing compared to what it was trained on. If drift is detected, it may
     /// signal that your model needs retraining. Common detectors include DDM, ADWIN, and
     /// Page-Hinkley methods.</para>
+    /// <para>
+    /// The configured detector drives a two-lens <see cref="DriftDetection.DriftMonitor{T}"/> calibrated
+    /// on the training residuals and checked against the held-out test stream. The attributed
+    /// <see cref="AiModelResult{T, TInput, TOutput}.DriftReport"/> (concept vs covariate drift) and the
+    /// live <see cref="AiModelResult{T, TInput, TOutput}.DriftMonitor"/> are surfaced on the built result;
+    /// production code streams live <c>(predicted, actual)</c> pairs through the same monitor.
+    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDriftDetection(AiDotNet.DriftDetection.IDriftDetector<T> driftDetector)
     {
