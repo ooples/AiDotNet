@@ -539,9 +539,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         using var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(50));
 
-        // Wait for some samples
-        Thread.Sleep(200);
-
+        Assert.True(await WaitForSamplesAsync(monitor), SampleTimeoutMessage);
         monitor.Stop();
 
         var history = monitor.GetHistory();
@@ -571,9 +569,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         using var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(20));
 
-        // Wait for samples
-        Thread.Sleep(100);
-
+        Assert.True(await WaitForSamplesAsync(monitor), SampleTimeoutMessage);
         monitor.Stop();
 
         var average = monitor.GetAverage();
@@ -587,9 +583,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         using var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(20));
 
-        // Wait for samples
-        Thread.Sleep(100);
-
+        Assert.True(await WaitForSamplesAsync(monitor), SampleTimeoutMessage);
         monitor.Stop();
 
         var peak = monitor.GetPeak();
@@ -603,9 +597,12 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         using var monitor = new ResourceMonitor();
         monitor.Start(TimeSpan.FromMilliseconds(20));
 
-        Thread.Sleep(100);
-
+        // Wait for real samples first: clearing an already-empty history would pass this test
+        // without ever exercising ClearHistory.
+        Assert.True(await WaitForSamplesAsync(monitor), SampleTimeoutMessage);
         monitor.Stop();
+        Assert.NotEmpty(monitor.GetHistory());
+
         monitor.ClearHistory();
 
         var history = monitor.GetHistory();
@@ -627,7 +624,7 @@ public class TrainingMonitoringIntegrationTests : IDisposable
         };
 
         monitor.Start(TimeSpan.FromMilliseconds(10));
-        Thread.Sleep(150); // Allow time for background thread to fire the event
+        Assert.True(await WaitForSamplesAsync(monitor), SampleTimeoutMessage);
         monitor.Stop();
 
         Assert.True(eventFired);
@@ -1765,4 +1762,41 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     }
 
     #endregion
+
+    /// <summary>How long to wait for the sampling timer to produce at least one snapshot.</summary>
+    /// <remarks>
+    /// Generous on purpose: the assertion is about the timeout NOT being reached, so a large value
+    /// costs nothing on a healthy run and only prevents a false failure on a loaded machine.
+    /// </remarks>
+    private static readonly TimeSpan SampleWaitTimeout = TimeSpan.FromSeconds(10);
+
+    private const string SampleTimeoutMessage =
+        "ResourceMonitor produced no samples within the timeout — its sampling timer never fired.";
+
+    /// <summary>
+    /// Waits until the monitor has recorded at least one snapshot.
+    /// </summary>
+    /// <returns><c>false</c> if none arrived before the timeout.</returns>
+    /// <remarks>
+    /// These tests used to sleep a fixed 100-150ms and assume the sampling timer had fired. That is
+    /// a race, not a wait: the timer runs on the thread pool, so under parallel test load on a busy
+    /// machine the callback can simply not have run yet, and the test fails for a reason that has
+    /// nothing to do with the monitor. Waiting for the condition asserts what the tests actually
+    /// mean — that samples get collected — instead of how fast the pool happened to schedule.
+    /// </remarks>
+    private static async Task<bool> WaitForSamplesAsync(ResourceMonitor monitor)
+    {
+        var deadline = DateTime.UtcNow + SampleWaitTimeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (monitor.GetHistory().Count > 0)
+            {
+                return true;
+            }
+
+            await Task.Delay(10);
+        }
+
+        return monitor.GetHistory().Count > 0;
+    }
 }
