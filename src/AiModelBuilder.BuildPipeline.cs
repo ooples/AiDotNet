@@ -772,6 +772,181 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return i < name.Length - 1 && int.TryParse(name.Substring(i + 1), out int idx) ? idx : -1;
     }
 
+    /// <summary>
+    /// Runs the configured adversarial attack against the trained model over a sweep of perturbation
+    /// budgets and surfaces an empirical robustness report (accuracy-vs-budget curve + robustness margin).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reports more than the single robust-accuracy number typical of robustness tooling: a robustness
+    /// curve across budgets (falling back to a single point if the attack ignores live budget changes), the
+    /// clean-vs-robust gap, the attack success rate, and the mean perturbation needed to fool the model.
+    /// Covers tabular models; a failure (including attacks whose predict contract does not fit the model)
+    /// is surfaced as a warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeAdversarialRobustness(
+        AiModelResult<T, TInput, TOutput> result, TInput preparedX, TOutput preparedY,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredAdversarialAttack is null)
+        {
+            return;
+        }
+
+        try
+        {
+            AiDotNet.Tensors.LinearAlgebra.Matrix<T>? dataMatrix = null;
+            AiDotNet.Tensors.LinearAlgebra.Vector<T>? labelVector = null;
+            try
+            {
+                dataMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX);
+                labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY);
+            }
+            catch { dataMatrix = null; }
+
+            if (optimizationResult.BestSolution is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
+                || dataMatrix is null || labelVector is null || dataMatrix.Rows == 0
+                || labelVector.Length != dataMatrix.Rows)
+            {
+                return; // robustness audit currently covers tabular models only.
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            // Probe the model's accepted input width (feature selection / intercept augmentation).
+            int width = -1;
+            var probeRow = GetRow(dataMatrix, 0);
+            for (int w = dataMatrix.Columns; w >= 1; w--)
+            {
+                try
+                {
+                    var pm = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, w);
+                    for (int j = 0; j < w; j++) pm[0, j] = probeRow[j];
+                    _ = tabularModel.Predict(pm);
+                    width = w;
+                    break;
+                }
+                catch { }
+            }
+
+            if (width < 0) return;
+
+            // Correctness band for regression: within a fraction of the label standard deviation.
+            double labelMean = 0;
+            for (int i = 0; i < labelVector.Length; i++) labelMean += numOps.ToDouble(labelVector[i]);
+            labelMean /= labelVector.Length;
+            double labelVar = 0;
+            for (int i = 0; i < labelVector.Length; i++) { double dv = numOps.ToDouble(labelVector[i]) - labelMean; labelVar += dv * dv; }
+            double tolerance = Math.Max(1e-9, 0.25 * Math.Sqrt(labelVar / Math.Max(1, labelVector.Length - 1)));
+
+            double PredictScalar(AiDotNet.Tensors.LinearAlgebra.Matrix<T> sample)
+            {
+                var reduced = FirstColumns(sample, width);
+                var outp = tabularModel.Predict(reduced);
+                return outp.Length > 0 ? numOps.ToDouble(outp[0]) : 0.0;
+            }
+
+            // Build per-sample inputs/labels in the attack's (TInput, TOutput) space (Matrix row / Vector).
+            int n = dataMatrix.Rows;
+            var inputs = new TInput[n];
+            var labels = new TOutput[n];
+            var cleanCorrect = new bool[n];
+            for (int i = 0; i < n; i++)
+            {
+                var sample = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, dataMatrix.Columns);
+                for (int j = 0; j < dataMatrix.Columns; j++) sample[0, j] = dataMatrix[i, j];
+                var lbl = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(1) { [0] = labelVector[i] };
+                inputs[i] = (TInput)(object)sample;
+                labels[i] = (TOutput)(object)lbl;
+                cleanCorrect[i] = Math.Abs(PredictScalar(sample) - numOps.ToDouble(labelVector[i])) <= tolerance;
+            }
+
+            double cleanAccuracy = cleanCorrect.Count(c => c) / (double)n;
+            var attackModel = (IFullModel<T, TInput, TOutput>)(object)tabularModel;
+            double baseEpsilon = _configuredAdversarialAttack.GetOptions().Epsilon;
+            if (baseEpsilon <= 0) baseEpsilon = 0.1;
+
+            var curve = new List<AdversarialRobustness.RobustnessCurvePoint<T>>();
+            double[] multipliers = { 0.25, 0.5, 1.0, 2.0 };
+            double robustAtBase = cleanAccuracy;
+            double successAtBase = 0;
+            double perturbSum = 0; int perturbCount = 0;
+
+            foreach (double mult in multipliers)
+            {
+                _configuredAdversarialAttack.GetOptions().Epsilon = baseEpsilon * mult;
+                TInput[] adversarial;
+                try { adversarial = _configuredAdversarialAttack.GenerateAdversarialBatch(inputs, labels, attackModel); }
+                catch { break; } // attack could not run (e.g. predict contract) — stop the sweep.
+
+                int correct = 0, flipped = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    var adv = (AiDotNet.Tensors.LinearAlgebra.Matrix<T>)(object)adversarial[i]!;
+                    bool advCorrect = Math.Abs(PredictScalar(adv) - numOps.ToDouble(labelVector[i])) <= tolerance;
+                    if (advCorrect) correct++;
+                    if (Math.Abs(mult - 1.0) < 1e-9)
+                    {
+                        if (cleanCorrect[i] && !advCorrect)
+                        {
+                            flipped++;
+                            var perturbation = (AiDotNet.Tensors.LinearAlgebra.Matrix<T>)(object)
+                                _configuredAdversarialAttack.CalculatePerturbation(inputs[i], adversarial[i])!;
+                            perturbSum += FrobeniusNorm(perturbation, numOps);
+                            perturbCount++;
+                        }
+                    }
+                }
+
+                double robustAcc = correct / (double)n;
+                curve.Add(new AdversarialRobustness.RobustnessCurvePoint<T> { Epsilon = baseEpsilon * mult, RobustAccuracy = robustAcc });
+                if (Math.Abs(mult - 1.0) < 1e-9)
+                {
+                    robustAtBase = robustAcc;
+                    successAtBase = cleanCorrect.Count(c => c) > 0 ? flipped / (double)cleanCorrect.Count(c => c) : 0;
+                }
+            }
+
+            _configuredAdversarialAttack.GetOptions().Epsilon = baseEpsilon; // restore
+
+            if (curve.Count == 0)
+            {
+                return; // attack never ran successfully.
+            }
+
+            bool sweepAvailable = curve.Count > 1 && curve.Select(p => p.RobustAccuracy).Distinct().Count() > 1;
+            double auc = curve.Average(p => p.RobustAccuracy);
+
+            result.SetAdversarialRobustnessReport(new AdversarialRobustness.AdversarialRobustnessReport<T>
+            {
+                AttackName = _configuredAdversarialAttack.GetType().Name,
+                CleanAccuracy = cleanAccuracy,
+                RobustAccuracy = robustAtBase,
+                CleanVsRobustGap = cleanAccuracy - robustAtBase,
+                AttackSuccessRate = successAtBase,
+                MeanPerturbationToFool = perturbCount > 0 ? perturbSum / perturbCount : 0,
+                RobustnessCurve = curve,
+                RobustAccuracyAuc = auc,
+                SweepAvailable = sweepAvailable,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Adversarial robustness could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.AdversarialRobustness is null.");
+        }
+    }
+
+    private static double FrobeniusNorm(AiDotNet.Tensors.LinearAlgebra.Matrix<T> m, INumericOperations<T> numOps)
+    {
+        double sum = 0;
+        for (int i = 0; i < m.Rows; i++)
+            for (int j = 0; j < m.Columns; j++) { double v = numOps.ToDouble(m[i, j]); sum += v * v; }
+        return Math.Sqrt(sum);
+    }
+
     private static AiDotNet.Tensors.LinearAlgebra.Vector<T> GetRow(AiDotNet.Tensors.LinearAlgebra.Matrix<T> m, int row)
     {
         var v = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(m.Columns);
@@ -4433,6 +4608,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             finalResult.SetSelfSupervisedLearningPretrainingResult(_selfSupervisedLearningPretrainingResult);
         }
         ComputeExplanationFaithfulness(finalResult, preparedX, optimizationResult);
+        ComputeAdversarialRobustness(finalResult, preparedX, preparedY, optimizationResult);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

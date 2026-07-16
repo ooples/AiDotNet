@@ -657,6 +657,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// The empirical adversarial-robustness audit, or <c>null</c> when no attack was configured via
+    /// <c>ConfigureAdversarialAttack(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// The configured attack is run against the trained model over a sweep of perturbation budgets; the
+    /// report gives an accuracy-versus-budget robustness curve, the robustness margin (mean perturbation
+    /// needed to fool the model), and the clean-versus-robust accuracy gap.
+    /// </remarks>
+    public AdversarialRobustness.AdversarialRobustnessReport<T>? AdversarialRobustness { get; private set; }
+
+    /// <summary>Records the adversarial-robustness audit. Called by the builder during Build.</summary>
+    internal void SetAdversarialRobustnessReport(AdversarialRobustness.AdversarialRobustnessReport<T> report)
+        => AdversarialRobustness = report;
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>
