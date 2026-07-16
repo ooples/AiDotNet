@@ -534,6 +534,40 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         => ClusteringEvaluation = evaluation;
 
     /// <summary>
+    /// The attributed drift assessment computed on the held-out test stream, or <c>null</c> when no drift
+    /// detector was configured via <c>ConfigureDriftDetection(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The monitor is calibrated on the training residuals, then the test residuals and predictions are
+    /// streamed through it. The report says whether the held-out stream already drifts from what the
+    /// model learned, and attributes it to <b>concept</b> drift (errors shifting) or <b>covariate</b>
+    /// drift (prediction distribution shifting). See <see cref="DriftMonitor"/> for the live handle.
+    /// </para>
+    /// </remarks>
+    public DriftDetection.DriftReport? DriftReport { get; private set; }
+
+    /// <summary>
+    /// The drift monitor calibrated during Build, or <c>null</c> when no drift detector was configured.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Surfaced so production code can keep streaming live <c>(predicted, actual)</c> pairs through the
+    /// same monitor (<c>Observe</c>) that was calibrated on this model's training data, continuing the
+    /// concept/covariate attribution past deployment.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public DriftDetection.DriftMonitor<T>? DriftMonitor { get; private set; }
+
+    /// <summary>Records the drift monitoring artifacts. Called by the builder during Build.</summary>
+    internal void SetDriftMonitoring(DriftDetection.DriftReport report, DriftDetection.DriftMonitor<T> monitor)
+    {
+        DriftReport = report;
+        DriftMonitor = monitor;
+    }
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>

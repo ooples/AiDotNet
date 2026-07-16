@@ -266,6 +266,61 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Calibrates the configured drift detector on the training residuals, checks it against the test
+    /// residuals, and attaches the attributed <see cref="DriftDetection.DriftReport"/> plus the live
+    /// <see cref="DriftDetection.DriftMonitor{T}"/> to the result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The monitor watches two lenses in one pass: the configured detector on the error stream
+    /// (<c>|predicted - actual|</c>) for concept drift, and a windowed mean-shift test on the predictions
+    /// for covariate drift. It is primed on the training predictions/targets so "normal" is the model's
+    /// own training behaviour, then the held-out test stream is checked through it — reporting whether the
+    /// held-out data already drifts and attributing it to concept vs covariate shift. The calibrated
+    /// monitor is surfaced so production can keep streaming live pairs through the same instance.
+    /// </para>
+    /// <para>
+    /// Skipped when no detector was configured or when train/test predictions are unavailable. Like the
+    /// metric reports, a failure here is surfaced as a warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeDriftMonitoring(
+        AiModelResult<T, TInput, TOutput> result,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredDriftDetector is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var trainPredicted = ConversionsHelper.ConvertToVector<T, TOutput>(optimizationResult.TrainingResult.Predictions);
+            var trainActual = ConversionsHelper.ConvertToVector<T, TOutput>(optimizationResult.TrainingResult.Y);
+            var testPredicted = ConversionsHelper.ConvertToVector<T, TOutput>(optimizationResult.TestResult.Predictions);
+            var testActual = ConversionsHelper.ConvertToVector<T, TOutput>(optimizationResult.TestResult.Y);
+
+            if (trainPredicted.Length == 0 || testPredicted.Length == 0
+                || trainPredicted.Length != trainActual.Length || testPredicted.Length != testActual.Length)
+            {
+                throw new InvalidOperationException(
+                    "train/test predictions and targets are unavailable or do not line up.");
+            }
+
+            var monitor = new DriftDetection.DriftMonitor<T>(_configuredDriftDetector);
+            monitor.Prime(trainPredicted, trainActual);
+            var report = monitor.Check(testPredicted, testActual);
+            result.SetDriftMonitoring(report, monitor);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Drift monitoring could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.DriftReport is null.");
+        }
+    }
+
+    /// <summary>
     /// Extracts one ground-truth label per row from the target, or <c>null</c> when the target is not a
     /// per-row integer label set suitable for external cluster metrics.
     /// </summary>
@@ -3923,6 +3978,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         RunConfiguredCrossValidation(finalResult, preparedX, preparedY, optimizer);
         ComputeConfiguredMetrics(finalResult, optimizationResult.TestResult);
         ComputeClusterEvaluation(finalResult, preparedX, preparedY);
+        ComputeDriftMonitoring(finalResult, optimizationResult);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);
