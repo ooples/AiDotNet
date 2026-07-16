@@ -19,8 +19,9 @@ Tracking issue: #1876. Related PR: #1875.
 - **DataTransformer** — was already removed as a strict duplicate of the fully-wired `ConfigurePreprocessing`.
 - **DistillationStrategy** — already reconciled onto the KD options in both call orderings during the KD work; now also engages the KD path (failing clearly on a missing teacher) when configured alone, instead of being silently ignored.
 - **ContinualLearning** — redesigned to a one-model, strategy-based API (nullable strategy → EWC + experience-replay hybrid default); training routes through a continual learner built around the configured model, and an all-tasks retention report (retained accuracy, forgetting, forward/backward transfer) is surfaced on `AiModelResult.ContinualLearningReport`.
+- **SelfSupervisedLearningMethod** (was SSLMethod) — a method configured alone now runs a default pretraining loop over the unlabeled inputs with representation-collapse detection and a linear-probe quality estimate, surfaced on `AiModelResult.SelfSupervisedLearningPretrainingResult`. Also renamed the whole SSL type hierarchy to `SelfSupervisedLearning*` (no abbreviations).
 
-Remaining: Tier 3 (SSLMethod, ExplorationStrategy, Environment), Tier 4/6 domain + robustness/tooling methods, and the `PARTIAL` federated/hyperparameter/pipeline fields.
+Remaining: Tier 3 (ExplorationStrategy, Environment — the RL pair), Tier 4/6 domain + robustness/tooling methods, and the `PARTIAL` federated/hyperparameter/pipeline fields.
 
 ---
 
