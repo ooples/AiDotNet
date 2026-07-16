@@ -620,6 +620,74 @@ public class DistributedTrainingDeepMathIntegrationTests
                     Assert.Equal(yRef[b, o], results[rr][b, o], 9);
     }
 
+    /// <summary>
+    /// INVARIANT (ZeRO Stage-3 / FSDP residency, Zhao et al. 2023): a Stage3ShardedLinear where each of
+    /// two ranks stores only HALF the flat weight, materializing the full weight just-in-time via
+    /// AllGather in Forward, produces output bit-identical (to tol) to the full non-sharded linear
+    /// Y = X·Wᵀ + b — AND each rank's resident parameter count is ~half the full weight (true residency,
+    /// not the full-vector gather of the cache-eviction path).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Stage3ShardedLinear_TwoRank_EqualsFullLinear_WithHalfResidentParams()
+    {
+        const int batch = 2, inputSize = 6, outputSize = 4;
+        var W = DeterministicMatrix(outputSize, inputSize, 11);   // [outputSize, inputSize]
+        var b = DeterministicVector(outputSize, 12);
+        var X = DeterministicMatrix(batch, inputSize, 13);
+
+        // Reference: Y = X·Wᵀ + b.
+        var yRef = new double[batch, outputSize];
+        for (int r = 0; r < batch; r++)
+            for (int o = 0; o < outputSize; o++)
+            {
+                double acc = b[o];
+                for (int i = 0; i < inputSize; i++) acc += X[r, i] * W[o, i];
+                yRef[r, o] = acc;
+            }
+
+        var Wt = MatrixToTensor(W, outputSize, inputSize);
+        var bt = VectorToTensor(b);
+        var Xt = MatrixToTensor(X, batch, inputSize);
+
+        var envId = System.Guid.NewGuid().ToString();
+        var results = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>[2];
+        var residentParams = new long[2];
+        var errors = new Exception?[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                    backend.Initialize();
+                    var layer = new AiDotNet.DistributedTraining.Layers.Stage3ShardedLinear<double>(backend, inputSize, outputSize);
+                    layer.SetFromFullWeights(Wt, bt);
+                    residentParams[rank] = layer.ParameterCount;
+                    results[rank] = layer.Forward(Xt);
+                    backend.Shutdown();
+                }
+                catch (Exception ex) { errors[rank] = ex; }
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        Assert.True(errors[0] is null, "rank 0: " + errors[0]);
+        Assert.True(errors[1] is null, "rank 1: " + errors[1]);
+        for (int rr = 0; rr < 2; rr++)
+            for (int rb = 0; rb < batch; rb++)
+                for (int o = 0; o < outputSize; o++)
+                    Assert.Equal(yRef[rb, o], results[rr][rb, o], 9);
+
+        // True residency: each rank stores ~half the flat weight (ceil(24/2)=12) + the replicated bias
+        // (4) = 16, strictly less than the full weight+bias (24 + 4 = 28).
+        long full = (long)outputSize * inputSize + outputSize;
+        Assert.True(residentParams[0] < full,
+            $"Stage-3 residency should store fewer than the full {full} params; stored {residentParams[0]}.");
+    }
+
     private static double[,] DeterministicMatrix(int rows, int cols, int seed)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
