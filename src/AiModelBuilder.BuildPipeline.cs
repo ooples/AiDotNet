@@ -376,6 +376,56 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Runs the configured (generic) query strategy over its unlabeled pool and attaches a diversity-aware
+    /// selection to the result — the input-type-generic twin of <see cref="ComputeActiveLearningSelection"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The strategy's <c>ComputeScores</c> supplies per-sample informativeness; the same
+    /// <see cref="ActiveLearning.BatchActiveLearner{T}"/> then chooses a diverse batch, with redundancy
+    /// measured via the generic three-tier representation cascade. Requires an explicit per-sample pool
+    /// (query strategies are generic over the input type, so the pool cannot be split from the batched
+    /// training data). Skipped when <see cref="ComputeActiveLearningSelection"/> already produced a
+    /// selection, so the two do not overwrite each other. A failure is surfaced as a warning.
+    /// </para>
+    /// </remarks>
+    private void ComputeQueryStrategySelection(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_configuredQueryStrategy is null || _queryStrategyPool is null || _model is null
+            || result.ActiveLearningSelection is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_queryStrategyPool.Count == 0)
+            {
+                throw new InvalidOperationException("the unlabeled pool is empty.");
+            }
+
+            var model = _model;
+            var inputs = new TInput[_queryStrategyPool.Count];
+            for (int i = 0; i < inputs.Length; i++) inputs[i] = _queryStrategyPool[i];
+            var dataset = new ActiveLearning.Data.InMemoryDataset<T, TInput, TOutput>(
+                inputs, new TOutput[inputs.Length], hasLabels: false);
+
+            var scores = _configuredQueryStrategy.ComputeScores(model, dataset);
+            var (representation, space) = ActiveLearning.ActiveLearningRepresentation.BuildForSamples<T, TInput, TOutput>(
+                model, _queryStrategyPool, s => ConversionsHelper.ConvertToVector<T, TInput>(s));
+            var selection = new ActiveLearning.BatchActiveLearner<T>(_queryStrategyDiversityWeight)
+                .Select(scores, representation, _queryStrategyBatchSize, _configuredQueryStrategy.Name, space);
+            result.SetActiveLearningSelection(selection);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Query-strategy selection could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ActiveLearningSelection is null.");
+        }
+    }
+
+    /// <summary>
     /// Extracts one ground-truth label per row from the target, or <c>null</c> when the target is not a
     /// per-row integer label set suitable for external cluster metrics.
     /// </summary>
@@ -4035,6 +4085,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ComputeClusterEvaluation(finalResult, preparedX, preparedY);
         ComputeDriftMonitoring(finalResult, optimizationResult);
         ComputeActiveLearningSelection(finalResult, optimizationResult);
+        ComputeQueryStrategySelection(finalResult);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

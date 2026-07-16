@@ -26,6 +26,68 @@ internal static class ActiveLearningRepresentation
     // memory; feature-hashing to this size preserves cosine geometry approximately (Johnson-Lindenstrauss).
     private const int MaxDimension = 4096;
 
+    /// <summary>
+    /// Generic three-tier representation for a list of individual samples (used by the generic
+    /// query-strategy path, where inputs are not necessarily Tensors).
+    /// </summary>
+    public static (Matrix<T> representation, string space) BuildForSamples<T, TIn, TOut>(
+        IFullModel<T, TIn, TOut> model,
+        IReadOnlyList<TIn> samples,
+        Func<TIn, Vector<T>> inputFeatures)
+    {
+        int n = samples.Count;
+
+        if (model is IGradientComputable<T, TIn, TOut> gradientModel)
+        {
+            try
+            {
+                var rows = new List<Vector<T>>(n);
+                foreach (var sample in samples)
+                {
+                    rows.Add(gradientModel.ComputeGradients(sample, model.Predict(sample)));
+                }
+
+                if (rows.Count > 0 && rows[0].Length > 0)
+                {
+                    return (StackRows(rows), "GradientEmbedding");
+                }
+            }
+            catch
+            {
+                // Fall through.
+            }
+        }
+
+        if (model is ISupportsRepresentation<T, TIn> representationModel)
+        {
+            try
+            {
+                var rows = new List<Vector<T>>(n);
+                foreach (var sample in samples)
+                {
+                    rows.Add(representationModel.GetRepresentation(sample));
+                }
+
+                if (rows.Count > 0 && rows[0].Length > 0)
+                {
+                    return (StackRows(rows), "ModelRepresentation");
+                }
+            }
+            catch
+            {
+                // Fall through.
+            }
+        }
+
+        var featureRows = new List<Vector<T>>(n);
+        foreach (var sample in samples)
+        {
+            featureRows.Add(inputFeatures(sample));
+        }
+
+        return (StackRows(featureRows), "InputFeatures");
+    }
+
     public static (Matrix<T> representation, string space) Build<T>(
         IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> pool)
     {

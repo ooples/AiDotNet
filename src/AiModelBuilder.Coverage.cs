@@ -40,6 +40,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IAdversarialDefense<T, TInput, TOutput>? _configuredAdversarialDefense;
     private ICertifiedDefense<T, TInput, TOutput>? _configuredCertifiedDefense;
     private ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput>? _configuredQueryStrategy;
+    private IReadOnlyList<TInput>? _queryStrategyPool;
+    private int _queryStrategyBatchSize = 10;
+    private double _queryStrategyDiversityWeight = 0.5;
     private IAudioEnhancer<T>? _configuredAudioEnhancer;
     private RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? _configuredSimilarityMetric;
 
@@ -412,16 +415,35 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Configures a query strategy for active learning sample selection.
     /// </summary>
     /// <param name="strategy">The query strategy implementation to use.</param>
+    /// <param name="unlabeledPool">
+    /// The per-sample unlabeled pool to rank. Required for the selection to run — query strategies are
+    /// generic over the input type, so (unlike the Tensor-typed ConfigureActiveLearning) the pool cannot
+    /// be derived by splitting the batched training data. When null, the strategy is recorded but no
+    /// selection is produced.
+    /// </param>
+    /// <param name="batchSize">How many samples to select for labeling. Defaults to 10.</param>
+    /// <param name="diversityWeight">Redundancy penalty for batch selection (0 = pure uncertainty). Defaults to 0.5.</param>
     /// <returns>The builder instance for method chaining.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Query strategies determine which unlabeled samples to select for
     /// labeling in active learning. The goal is to choose the most informative samples that will
     /// improve the model most efficiently. Common strategies include uncertainty sampling,
     /// query-by-committee, expected model change, and diversity sampling.</para>
+    /// <para>
+    /// The strategy's per-sample scores feed the same diversity-aware batch selection as
+    /// <c>ConfigureActiveLearning</c> (BADGE / facility-location style), with redundancy measured via the
+    /// three-tier representation cascade. The result lands on
+    /// <see cref="AiModelResult{T, TInput, TOutput}.ActiveLearningSelection"/>.
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureQueryStrategy(ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput> strategy)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureQueryStrategy(
+        ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput> strategy,
+        IReadOnlyList<TInput>? unlabeledPool = null, int batchSize = 10, double diversityWeight = 0.5)
     {
         _configuredQueryStrategy = strategy;
+        _queryStrategyPool = unlabeledPool;
+        _queryStrategyBatchSize = batchSize;
+        _queryStrategyDiversityWeight = diversityWeight;
         return this;
     }
 

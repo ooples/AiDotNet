@@ -2286,8 +2286,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// Configures a query strategy for active learning sample selection.
     /// </summary>
     /// <param name="strategy">The query strategy implementation to use.</param>
+    /// <param name="unlabeledPool">Per-sample unlabeled pool to rank; required for a selection to run.</param>
+    /// <param name="batchSize">How many samples to select for labeling. Defaults to 10.</param>
+    /// <param name="diversityWeight">Redundancy penalty for batch selection (0 = pure uncertainty). Defaults to 0.5.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureQueryStrategy(ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput> strategy);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureQueryStrategy(
+        ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput> strategy,
+        IReadOnlyList<TInput>? unlabeledPool = null, int batchSize = 10, double diversityWeight = 0.5);
 
     /// <summary>
     /// Configures an audio enhancer for improving audio quality.
