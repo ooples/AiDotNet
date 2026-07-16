@@ -700,6 +700,120 @@ public class DistributedTrainingDeepMathIntegrationTests
             $"Stage-3 residency should store fewer than the full {full} params; stored {residentParams[0]}.");
     }
 
+    /// <summary>
+    /// INVARIANT: FSDP == ZeRO Stage-3. A two-rank FSDP step ReduceScatters the (rank-dependent) gradients,
+    /// updates only each rank's shard, and AllGathers — reconstructing the identical full vector on both
+    /// ranks, equal to the single-rank result at the averaged gradient. Proves the FSDP path is the real
+    /// sharded step (not a full-replication placeholder): removing the collective would leave rank 0 (scale
+    /// 1) and rank 1 (scale 2) diverged from the scale-1.5 reference.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FSDP_TwoRanks_ReconstructIdenticalParameters_MatchingSingleRank()
+    {
+        await Task.Yield();
+        var refBackend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString());
+        refBackend.Initialize();
+        var refConfig = new ShardingConfiguration<double>(refBackend) { AutoSyncGradients = true };
+        var refModel = NewZeroModel(1.5);
+        new FSDPOptimizer<double, Vector<double>, Vector<double>>(NewAdam(), refConfig).Optimize(ZeroInput(refModel));
+        var single = refModel.GetParameters();
+        refBackend.Shutdown();
+
+        var envId = Guid.NewGuid().ToString();
+        var results = new Vector<double>[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                backend.Initialize();
+                var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+                var model = NewZeroModel(rank + 1);   // rank 0 -> scale 1, rank 1 -> scale 2
+                new FSDPOptimizer<double, Vector<double>, Vector<double>>(NewAdam(), config).Optimize(ZeroInput(model));
+                results[rank] = model.GetParameters();
+                backend.Shutdown();
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(results[0][i], results[1][i], ZeroTol);
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(single[i], results[0][i], ZeroTol);
+    }
+
+    /// <summary>
+    /// INVARIANT: the async SGD staleness bound (Stale-Synchronous Parallel, Ho et al. 2013) forces a
+    /// synchronization at least every (s+1) steps. staleness 0 ⇒ sync every step (synchronous SGD);
+    /// staleness 2 ⇒ sync at iterations 0,3,6,9 only, bounding the maximum drift to 2 steps.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task AsyncSGD_ShouldSync_EnforcesStalenessBound()
+    {
+        await Task.Yield();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString());
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+
+        var sync = new AsyncSGDOptimizer<double, Vector<double>, Vector<double>>(NewAdam(), config, allowStaleness: 0);
+        for (int i = 0; i < 6; i++)
+            Assert.True(sync.ShouldSync(i), $"staleness 0 must synchronize at every step (i={i})");
+
+        var stale = new AsyncSGDOptimizer<double, Vector<double>, Vector<double>>(NewAdam(), config, allowStaleness: 2);
+        for (int i = 0; i < 12; i++)
+            Assert.Equal(i % 3 == 0, stale.ShouldSync(i));
+        Assert.Equal(2, stale.MaxStaleness);
+
+        backend.Shutdown();
+    }
+
+    /// <summary>
+    /// INVARIANT: elastic re-sharding on a membership change reconciles state. Rank 0 carries the
+    /// authoritative parameters across the rendezvous and broadcasts them, so a worker that (re)joins with
+    /// DIFFERENT parameters resumes from the identical vector. Give each rank distinct parameters,
+    /// re-synchronize, and assert every rank equals rank 0's authoritative values. The previous placeholder
+    /// (no broadcast) would leave the ranks with their distinct starting parameters and fail this.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Elastic_ResynchronizeParameters_BroadcastsRank0StateToAllWorkers()
+    {
+        await Task.Yield();
+        var rank0Params = new double[ZeroN];
+        for (int i = 0; i < ZeroN; i++) rank0Params[i] = 0.5 + 0.1 * i;
+
+        var envId = Guid.NewGuid().ToString();
+        var results = new Vector<double>[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                backend.Initialize();
+                var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+
+                var model = NewZeroModel();
+                var p = new double[ZeroN];
+                for (int i = 0; i < ZeroN; i++) p[i] = rank == 0 ? rank0Params[i] : -7.0 - i;  // rank 1 joins DIFFERENT
+                model.SetParameters(new Vector<double>(p));
+
+                var elastic = new ElasticOptimizer<double, Vector<double>, Vector<double>>(
+                    NewAdam(), config, minWorkers: 1, maxWorkers: 8);
+                elastic.ResynchronizeParametersAcrossWorkers(model);
+                results[rank] = model.GetParameters();
+                backend.Shutdown();
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        for (int rank = 0; rank < 2; rank++)
+            for (int i = 0; i < ZeroN; i++)
+                Assert.Equal(rank0Params[i], results[rank][i], ZeroTol);
+    }
+
     private static double[,] DeterministicMatrix(int rows, int cols, int seed)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);

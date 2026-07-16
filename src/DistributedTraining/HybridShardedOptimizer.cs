@@ -392,13 +392,13 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
     /// <inheritdoc/>
     public override void SynchronizeOptimizerState()
     {
-        // In 3D parallelism, optimizer state management is complex:
-        // - Pipeline stages: independent states (no sync)
-        // - Tensor parallel: states partitioned by layer slice (sync within group)
-        // - Data parallel: states replicated (no sync needed)
-
-        // Full implementation would use process groups for each dimension
-        // Framework placeholder
+        // Intentional no-op. All required gradient synchronization is performed INLINE in Optimize via
+        // the two subgroup reductions — SubgroupAllReduce(SUM) within the tensor-parallel group and
+        // SubgroupAllReduce(AVERAGE) within the data-parallel group — followed by the wrapped optimizer's
+        // ApplyGradients (which owns its per-rank Adam m/v state). Pipeline stages own independent state,
+        // and tensor/data neighbours' optimizer state is either partitioned with their parameter shard or
+        // updated identically from the reduced gradient, so there is no additional per-step state exchange
+        // to perform here.
     }
 
     /// <inheritdoc/>

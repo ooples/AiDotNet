@@ -88,57 +88,43 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        if (inputData == null)
-        {
-            throw new ArgumentNullException(nameof(inputData));
-        }
-
-        // Ensure all processes start together
+        // Opening barrier: every rank starts the collective sequence together. Validation is inside the
+        // try so a rank that receives null still reaches the closing barrier and cannot strand peers.
         Config.CommunicationBackend.Barrier();
-
-        // Route through RunWrappedOptimizerStep so IShardingConfiguration.CpuOffloadOptimizer
-        // engages when set: the Adam m/v update runs on CpuEngine, keeping the optimizer
-        // state in CPU RAM. Behavior when the flag is off is unchanged.
-        var result = RunWrappedOptimizerStep(inputData);
-
-        // Synchronize parameters across all processes if auto-sync is enabled
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        try
         {
-            SynchronizeParameters(result.BestSolution);
+            if (inputData == null)
+                throw new ArgumentNullException(nameof(inputData));
+
+            // When cross-rank synchronization is off, fall back to a plain local step.
+            if (!Config.AutoSyncGradients)
+                return RunWrappedOptimizerStep(inputData);
+
+            // FSDP == ZeRO Stage-3 (Zhao et al. 2023; Rajbhandari et al. 2020): gradients AND optimizer
+            // state are partitioned. RunShardedZeroStep(shardGradients:true) ReduceScatters the gradients
+            // (each rank holds only its averaged shard), updates ONLY this rank's parameter shard with the
+            // wrapped optimizer — so its Adam m/v state is sized to the shard (real state partitioning) —
+            // and AllGathers the updated shards. The additional Stage-3 PARAMETER residency (gather only
+            // the active layer, release after) is provided by Stage3ShardedLinear at the layer level;
+            // FSDPModel handles the model-side param sharding. CpuOffload flags are honored inside the step.
+            return RunShardedZeroStep(inputData, shardGradients: true);
         }
-
-        // Synchronize optimizer state if needed
-        SynchronizeOptimizerState();
-
-        // ZeRO Stage-3 param offload: drop GPU-cached param buffers so the next
-        // forward re-uploads from the just-updated CPU-resident parameters.
-        // No-op when CpuOffloadParams is off.
-        OffloadParamsToCpu(result.BestSolution);
-
-        // Ensure all processes finish together
-        Config.CommunicationBackend.Barrier();
-
-        return result;
+        finally
+        {
+            // Closing barrier always runs (even on exception) so no rank is left waiting.
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
     public override void SynchronizeOptimizerState()
     {
-        // For now, this is a placeholder
-        // In a full implementation, we would synchronize optimizer-specific state
-        // like momentum buffers, variance estimates (for Adam), etc.
-
-        // Different optimizers have different state to sync:
-        // - SGD with momentum: velocity vectors
-        // - Adam: first and second moment estimates
-        // - RMSprop: squared gradient moving average
-
-        // This would require either:
-        // 1. Extending IOptimizer with state access methods
-        // 2. Type-specific handling for known optimizer types
-        // 3. A generic state serialization mechanism
-
-        // For the MVP, we assume stateless or that the wrapped optimizer handles its own state
+        // Intentional no-op (same invariant as ZeRO-1/ZeRO-2). Optimizer-state partitioning is achieved
+        // INTRINSICALLY inside RunShardedZeroStep: the wrapped optimizer's UpdateParameters is called with
+        // ONLY this rank's gradient/parameter shard, so its Adam m/v state is allocated and advanced solely
+        // for this rank's parameters. No rank holds another rank's state, and the only cross-rank exchange
+        // (the updated parameters) is the AllGather already performed in the step — so there is no per-step
+        // state synchronization to perform here.
     }
 
     /// <inheritdoc/>

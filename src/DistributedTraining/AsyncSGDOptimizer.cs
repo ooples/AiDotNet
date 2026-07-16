@@ -71,6 +71,13 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
     private readonly int _maxStaleness;
 
     /// <summary>
+    /// Maximum number of steps a worker may run ahead of the slowest worker before it must synchronize
+    /// (the Stale-Synchronous Parallel staleness bound, Ho et al. 2013). 0 means synchronize every step,
+    /// which reduces async SGD exactly to synchronous gradient SGD.
+    /// </summary>
+    public int MaxStaleness => _maxStaleness;
+
+    /// <summary>
     /// Creates an async SGD optimizer.
     /// </summary>
     /// <param name="wrappedOptimizer">The optimizer to wrap with async capabilities</param>
@@ -82,6 +89,9 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
         int allowStaleness = 0)
         : base(wrappedOptimizer, config)
     {
+        if (allowStaleness < 0)
+            throw new ArgumentOutOfRangeException(nameof(allowStaleness), "Staleness bound must be non-negative.");
+
         _maxStaleness = allowStaleness;
     }
 
@@ -91,34 +101,60 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
         if (inputData == null)
             throw new ArgumentNullException(nameof(inputData));
 
-        // NO barrier at start - async operation!
+        var gradientOptimizer = WrappedOptimizer as IGradientBasedOptimizer<T, TInput, TOutput>;
 
-        // Optimize locally without waiting. RunWrappedOptimizerStep engages
-        // IShardingConfiguration.CpuOffloadOptimizer when set: Adam m/v state +
-        // step run on CpuEngine. Async SGD has no synchronous reduce, so
-        // gradient-offload is a no-op here — the CpuOffloadGradients flag
-        // has no observable effect on this strategy (documented on the flag).
-        var result = RunWrappedOptimizerStep(inputData);
-
-        // Asynchronous parameter update
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        // Populate InitialSolution from the wrapped optimizer's model if not already supplied,
+        // so we have a concrete pre-step parameter vector to update from.
+        if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
         {
-            // In true async SGD:
-            // 1. Push gradients to parameter server (non-blocking)
-            // 2. Pull updated parameters (may be from other workers' updates)
-            // 3. Continue immediately without waiting
-
-            // For this framework implementation, we provide simplified async pattern
-            // Production would use parameter server or async AllReduce
-            var parameters = InterfaceGuard.Parameterizable(result.BestSolution).GetParameters();
-
-            // Simulate async update - in production, this would be non-blocking
-            Config.CommunicationBackend.AllReduce(parameters, ReductionOperation.Average);
-
-            InterfaceGuard.Parameterizable(result.BestSolution).SetParameters(parameters);
+            inputData.InitialSolution = baseOptimizer.Model.Clone();
         }
 
-        // NO barrier at end - continue immediately!
+        // NO barrier — async SGD deliberately does not synchronize workers (this is the defining
+        // property that distinguishes it from DDP/synchronous SGD).
+
+        // Save the pre-step parameters so the parameter-server update is applied from the correct base
+        // (the wrapped step below also advances params locally; we re-apply from the saved base to avoid
+        // double-stepping, exactly as DDP does).
+        Vector<T>? savedParameters = null;
+        if (Config.AutoSyncGradients && gradientOptimizer != null && inputData.InitialSolution != null)
+        {
+            savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
+        }
+
+        // Local step computes this worker's gradient (RunWrappedOptimizerStep also engages
+        // IShardingConfiguration.CpuOffloadOptimizer when set: Adam m/v state + step run on CpuEngine).
+        var result = RunWrappedOptimizerStep(inputData);
+
+        // Parameter-server / Downpour async SGD (Dean et al. 2012; Stale-Synchronous Parallel, Ho et al.
+        // 2013): each worker pushes its GRADIENT (not its parameters) to the server, which applies the
+        // combined update. This is gradient-based, NOT parameter averaging (parameter averaging is a
+        // different algorithm — model/EASGD averaging). The asynchrony and the up-to-_maxStaleness stale
+        // reads are a property of the RUNTIME; the synchronous InMemory backend enforces staleness 0, and
+        // async SGD at staleness 0 reduces exactly to synchronous gradient SGD, which is the limit
+        // implemented here. A real async runtime relaxes the collective into non-blocking per-worker pushes
+        // bounded by _maxStaleness.
+        if (Config.AutoSyncGradients && gradientOptimizer != null && savedParameters != null && result.BestSolution != null)
+        {
+            var localGradients = gradientOptimizer.LastComputedGradients;
+
+            if (localGradients != null && localGradients.Length > 0)
+            {
+                // Drain any deferred GPU download so the combine below operates on live CPU values.
+                OffloadGradientsToCpu(localGradients);
+
+                // Combine each worker's gradient (staleness-0 limit of the parameter-server accumulate).
+                Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
+
+                // Apply the combined gradient once, from the saved (pre-step) parameters — the safe
+                // 3-parameter overload prevents double-stepping and works with any optimizer.
+                result.BestSolution = gradientOptimizer.ApplyGradients(savedParameters, localGradients, result.BestSolution);
+            }
+        }
+
+        OffloadParamsToCpu(result.BestSolution);
+
+        // NO barrier at end — continue immediately!
 
         return result;
     }
@@ -137,13 +173,17 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
     /// <returns>True if should synchronize at this iteration</returns>
     public bool ShouldSync(int iteration)
     {
-        // Some async implementations do periodic sync every N iterations
-        // to prevent too much drift
-        if (_maxStaleness == 0)
-            return true; // Always sync (becomes sync SGD)
+        if (iteration < 0)
+            throw new ArgumentOutOfRangeException(nameof(iteration), "Iteration must be non-negative.");
 
-        // Framework pattern - could implement periodic sync
-        return false;
+        // Stale-Synchronous Parallel bounded-staleness barrier (Ho et al. 2013): a worker may run ahead by
+        // at most _maxStaleness steps before it MUST synchronize, so no replica ever reads parameters more
+        // than _maxStaleness steps stale. staleness 0 => synchronize every step (reduces to synchronous
+        // SGD). staleness s>0 => synchronize once every (s+1) steps, which bounds the maximum drift to s.
+        if (_maxStaleness == 0)
+            return true;
+
+        return (iteration % (_maxStaleness + 1)) == 0;
     }
 
     /// <inheritdoc/>
