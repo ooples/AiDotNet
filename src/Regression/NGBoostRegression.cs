@@ -88,7 +88,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Configuration options.
     /// </summary>
-    private readonly NGBoostRegressionOptions _options;
+    private readonly NGBoostRegressionOptions<T> _options;
 
     /// <summary>
     /// Number of parameters in the distribution.
@@ -118,18 +118,20 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     /// <param name="options">Configuration options for the algorithm.</param>
     /// <param name="regularization">Optional regularization strategy.</param>
-    public NGBoostRegression(NGBoostRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    public NGBoostRegression(NGBoostRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _yMean = NumOps.Zero;
         _yStd = NumOps.Zero;
-        _options = options ?? new NGBoostRegressionOptions();
+        _options = options ?? new NGBoostRegressionOptions<T>();
         _trees = [];
         _initialParameters = new Vector<T>(0);
         _numParams = 0;
 
-        // Initialize scoring rule
-        _scoringRule = _options.ScoringRule switch
+        // A supplied rule wins; otherwise the enum names one of the built-in rules, which stays the
+        // default. The enum is the convenience for the common cases, not the limit — the interface
+        // is what lets a caller bring a scoring rule the library does not ship.
+        _scoringRule = _options.CustomScoringRule ?? _options.ScoringRule switch
         {
             NGBoostScoringRuleType.LogScore => new LogScore<T>(),
             NGBoostScoringRuleType.CRPS => new CRPSScore<T>(),

@@ -1,3 +1,5 @@
+using AiDotNet.Scoring;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -19,7 +21,7 @@ namespace AiDotNet.Models.Options;
 /// This uncertainty information is valuable for decision-making.
 /// </para>
 /// </remarks>
-public class NGBoostRegressionOptions : DecisionTreeOptions
+public class NGBoostRegressionOptions<T> : DecisionTreeOptions
 {
     /// <summary>
     /// Gets or sets the number of boosting iterations (trees).
@@ -110,6 +112,24 @@ public class NGBoostRegressionOptions : DecisionTreeOptions
     /// </para>
     /// </remarks>
     public NGBoostScoringRuleType ScoringRule { get; set; } = NGBoostScoringRuleType.LogScore;
+
+    /// <summary>
+    /// Gets or sets a custom scoring rule, overriding <see cref="ScoringRule"/>.
+    /// </summary>
+    /// <value>
+    /// A scoring rule implementation, or <c>null</c> (the default) to use the built-in rule named by
+    /// <see cref="ScoringRule"/>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// The enum names the rules the library ships; this accepts any <see cref="IScoringRule{T}"/>,
+    /// including one you write. It is nullable and defaults to null so callers who do not supply one
+    /// keep the standard rule the enum selects — the enum is the default, not a competing mechanism.
+    /// </para>
+    /// <para><b>For Beginners:</b> A scoring rule measures how good a probabilistic prediction is.
+    /// Leave this unset to use LogScore or CRPS; set it only if you have a rule of your own.</para>
+    /// </remarks>
+    public IScoringRule<T>? CustomScoringRule { get; set; }
 
     /// <summary>
     /// Gets or sets whether to use natural gradients.
