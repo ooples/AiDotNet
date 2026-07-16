@@ -15,9 +15,7 @@ namespace AiDotNet;
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private ILossFunction<T>? _configuredLossFunction;
-    private IAnomalyDetector<T>? _configuredAnomalyDetector;
     private ILearningRateScheduler? _configuredLearningRateScheduler;
-    private IGaussianProcess<T>? _configuredGaussianProcess;
 
     /// <summary>
     /// Configures the loss function used to measure prediction error during training.
@@ -44,21 +42,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     // ConfigureLayer removed: a layer is a constructor input to a NeuralNetworkArchitecture, which
     // the model is built from. Compose the architecture and pass the model via ConfigureModel(...).
 
-    /// <summary>
-    /// Configures an anomaly detection algorithm for identifying unusual data points.
-    /// </summary>
-    /// <param name="anomalyDetector">The anomaly detector implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Anomaly detection finds data points that don't fit the normal
-    /// pattern, like fraudulent transactions, network intrusions, or equipment failures.
-    /// Available methods include Isolation Forest, One-Class SVM, Autoencoders, and more.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureAnomalyDetector(IAnomalyDetector<T> anomalyDetector)
-    {
-        _configuredAnomalyDetector = anomalyDetector;
-        return this;
-    }
+    // ConfigureAnomalyDetector removed: IAnomalyDetector<T> is now an IFullModel<T, Matrix<T>,
+    // Vector<T>> (unsupervised, like clustering), so pass it via ConfigureModel(...).
 
     // ConfigureInterpolation removed: an interpolation method is a constructor parameter of the
     // consuming model/estimator. Set it on that model's options — the one door.
@@ -94,20 +79,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     // ConfigureMatrixDecomposition removed: a decomposition is a constructor parameter of the
     // consuming linear-algebra model/solver. Set it on that model's options — the one door.
 
-    /// <summary>
-    /// Configures a Gaussian process model for probabilistic predictions with uncertainty estimates.
-    /// </summary>
-    /// <param name="gaussianProcess">The Gaussian process implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Gaussian processes provide predictions along with uncertainty
-    /// estimates, telling you not just what the prediction is but how confident the model is.
-    /// They are ideal for small datasets and situations where knowing prediction confidence matters,
-    /// such as Bayesian optimization and active learning.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureGaussianProcess(IGaussianProcess<T> gaussianProcess)
-    {
-        _configuredGaussianProcess = gaussianProcess;
-        return this;
-    }
+    // ConfigureGaussianProcess removed: IGaussianProcess<T> is now an IFullModel<T, Matrix<T>,
+    // Vector<T>>, so pass it via ConfigureModel(...). Its (mean, variance) Predict overload and
+    // uncertainty API remain available directly on the model instance.
 }
