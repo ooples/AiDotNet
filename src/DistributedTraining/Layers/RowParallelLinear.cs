@@ -16,7 +16,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// is replicated and added ONCE after the reduce. Weight-shard gradients come from the tape (no
 /// manual backward).
 /// </summary>
-public sealed class RowParallelLinear<T> : LayerBase<T>
+internal sealed class RowParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly ReduceFromTensorParallelRegion<T> _g;
@@ -36,7 +36,7 @@ public sealed class RowParallelLinear<T> : LayerBase<T>
         int inputSize,
         int outputSize,
         IActivationFunction<T>? activationFunction = null)
-        : base([ShardCount(inputSize, backend.WorldSize, backend.Rank)],
+        : base([ShardCount(TensorParallelGuards.ValidatedInputSize(backend, inputSize, outputSize), backend.WorldSize, backend.Rank)],
                [outputSize],
                activationFunction ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
@@ -110,6 +110,12 @@ public sealed class RowParallelLinear<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters is null)
+            throw new System.ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+            throw new System.ArgumentException(
+                $"Expected {ParameterCount} parameters (out {_outputSize} x localIn {_localInputSize} + bias {_outputSize}), got {parameters.Length}.",
+                nameof(parameters));
         int idx = 0;
         for (int o = 0; o < _outputSize; o++)
             for (int i = 0; i < _localInputSize; i++)

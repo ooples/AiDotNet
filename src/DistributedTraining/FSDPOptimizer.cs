@@ -88,44 +88,56 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        // Opening barrier: every rank starts the collective sequence together. Validation is inside the
-        // try so a rank that receives null still reaches the closing barrier and cannot strand peers.
+        // Validate BEFORE touching any collective: a null input is a programming error that must fail this
+        // rank immediately, not after it has entered a barrier/collective that peers are blocked on.
+        if (inputData == null)
+            throw new ArgumentNullException(nameof(inputData));
+
+        // Local-step mode runs ENTIRELY OUTSIDE the collective sequence (no barrier, no ReduceScatter/
+        // AllGather), so a rank configured for local steps can never deadlock against a rank in the sharded
+        // path. This must precede the opening barrier.
+        if (!Config.AutoSyncGradients)
+            return RunWrappedOptimizerStep(inputData);
+
+        // Synchronized FSDP == ZeRO Stage-3 (Zhao et al. 2023; Rajbhandari et al. 2020): gradients AND
+        // optimizer state are partitioned. RunShardedZeroStep(shardGradients:true) ReduceScatters the
+        // gradients (each rank holds only its averaged shard), updates ONLY this rank's parameter shard with
+        // the wrapped optimizer — so its Adam m/v state is sized to the shard (real state partitioning) —
+        // and AllGathers the updated shards. Stage-3 PARAMETER residency is provided by the Stage-3 sharded
+        // layer; FSDPModel handles the model-side param sharding. CpuOffload flags are honored in the step.
+        //
+        // This is SPMD: every rank MUST reach the same collective sequence. The opening barrier lines the
+        // ranks up; the closing barrier is a clean STEP-BOUNDARY synchronization so no rank races ahead to
+        // the next step (or, in a shared-runtime harness, into another rank's teardown) while a peer is
+        // still finishing this step's AllGather.
+        //
+        // What the closing barrier is NOT: fault tolerance. It is deliberately placed on the SUCCESS path
+        // (not in a try/finally) because a finally-barrier would be FALSE SAFETY — if one rank fails inside
+        // ReduceScatter/AllGather while a peer is blocked in that same collective, a trailing Barrier() (a
+        // DIFFERENT collective) cannot rescue the mismatched sequence. Recovering from a divergent
+        // mid-collective failure requires a backend-level abort/cancellation, which ICommunicationBackend
+        // does not expose; a symmetric failure (all ranks throw) needs no barrier and the next step's
+        // opening barrier re-synchronizes survivors.
         Config.CommunicationBackend.Barrier();
-        try
-        {
-            if (inputData == null)
-                throw new ArgumentNullException(nameof(inputData));
-
-            // When cross-rank synchronization is off, fall back to a plain local step.
-            if (!Config.AutoSyncGradients)
-                return RunWrappedOptimizerStep(inputData);
-
-            // FSDP == ZeRO Stage-3 (Zhao et al. 2023; Rajbhandari et al. 2020): gradients AND optimizer
-            // state are partitioned. RunShardedZeroStep(shardGradients:true) ReduceScatters the gradients
-            // (each rank holds only its averaged shard), updates ONLY this rank's parameter shard with the
-            // wrapped optimizer — so its Adam m/v state is sized to the shard (real state partitioning) —
-            // and AllGathers the updated shards. The additional Stage-3 PARAMETER residency (gather only
-            // the active layer, release after) is provided by Stage3ShardedLinear at the layer level;
-            // FSDPModel handles the model-side param sharding. CpuOffload flags are honored inside the step.
-            return RunShardedZeroStep(inputData, shardGradients: true);
-        }
-        finally
-        {
-            // Closing barrier always runs (even on exception) so no rank is left waiting.
-            Config.CommunicationBackend.Barrier();
-        }
+        var result = RunShardedZeroStep(inputData, shardGradients: true);
+        Config.CommunicationBackend.Barrier();
+        return result;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported for FSDP: optimizer state is PARTITIONED, not replicated. State partitioning is
+    /// achieved intrinsically inside <c>RunShardedZeroStep</c> — the wrapped optimizer's
+    /// <c>UpdateParameters</c> is called with ONLY this rank's gradient/parameter shard, so its Adam m/v
+    /// state is allocated and advanced solely for this rank's parameters. No rank holds another rank's
+    /// state, so there is no cross-rank state to synchronize; calling this method would be a logic error,
+    /// and returning silently could mislead a caller into believing a synchronization occurred.
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // Intentional no-op (same invariant as ZeRO-1/ZeRO-2). Optimizer-state partitioning is achieved
-        // INTRINSICALLY inside RunShardedZeroStep: the wrapped optimizer's UpdateParameters is called with
-        // ONLY this rank's gradient/parameter shard, so its Adam m/v state is allocated and advanced solely
-        // for this rank's parameters. No rank holds another rank's state, and the only cross-rank exchange
-        // (the updated parameters) is the AllGather already performed in the step — so there is no per-step
-        // state synchronization to perform here.
-    }
+        => throw new NotSupportedException(
+            "FSDP optimizer state is partitioned across ranks during Optimize (each rank owns only its " +
+            "shard's Adam state); there is no replicated state to synchronize, so explicit state " +
+            "synchronization is neither required nor supported.");
 
     /// <inheritdoc/>
     public override bool ShouldEarlyStop()

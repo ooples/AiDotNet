@@ -237,8 +237,11 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         if (shardGradients)
         {
             // ZeRO-2/3: ReduceScatter averages AND scatters — pad to a multiple of worldSize first.
+            // Materialize the ORIGINAL gradient buffer FIRST: PadTo copies element-by-element, so any
+            // deferred GPU download must be drained on `gradients` itself — offloading only the freshly
+            // allocated `paddedGrads` would leave PadTo reading stale/empty device-backed values.
+            OffloadGradientsToCpu(gradients);
             var paddedGrads = PadTo(gradients, paddedLen);
-            OffloadGradientsToCpu(paddedGrads);
             myGradShard = Config.CommunicationBackend.ReduceScatter(paddedGrads, ReductionOperation.Average);
         }
         else
@@ -257,11 +260,21 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         {
             updatedShard = gradOpt.UpdateParameters(myParamShard, myGradShard);
         }
+        // Reject a malformed shard rather than silently zero-filling parameters downstream: the wrapped
+        // optimizer MUST return exactly this rank's shard length.
+        if (updatedShard.Length != shardSize)
+            throw new InvalidOperationException(
+                $"ZeRO: wrapped optimizer returned an updated shard of length {updatedShard.Length}, expected {shardSize}.");
 
         // 4. AllGather the shards -> full (padded) params -> trim padding -> write back.
         var gathered = worldSize > 1
             ? Config.CommunicationBackend.AllGather(updatedShard)
             : updatedShard;
+        // The gather must reconstruct exactly the padded vector; a short result would let TrimTo pad the
+        // model with zeros (silent corruption). Validate the boundary before trimming the known padding.
+        if (gathered.Length != paddedLen)
+            throw new InvalidOperationException(
+                $"ZeRO: AllGather returned {gathered.Length} parameters, expected {paddedLen} ({worldSize} x {shardSize}).");
         var finalParams = TrimTo(gathered, totalParams);
         paramModel.SetParameters(finalParams);
 
@@ -389,10 +402,15 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     private Vector<T> TrimTo(Vector<T> source, int length)
     {
         if (source.Length == length) return source;
+        // TrimTo only removes the zero-padding tail added by PadTo; a source SHORTER than the requested
+        // logical length means an upstream shard/gather was malformed, and silently zero-filling it would
+        // corrupt the model parameters. Reject it instead.
+        if (source.Length < length)
+            throw new ArgumentException(
+                $"Cannot trim a vector of length {source.Length} up to {length}; source is shorter than the requested length.",
+                nameof(source));
         var trimmed = new T[length];
-        int copy = Math.Min(source.Length, length);
-        for (int i = 0; i < copy; i++) trimmed[i] = source[i];
-        for (int i = copy; i < length; i++) trimmed[i] = NumOps.Zero;
+        for (int i = 0; i < length; i++) trimmed[i] = source[i];
         return new Vector<T>(trimmed);
     }
 

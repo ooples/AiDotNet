@@ -105,15 +105,17 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported for ZeRO-2 (same contract as ZeRO-1/FSDP): optimizer state is PARTITIONED. Gradients
+    /// are ReduceScattered so each rank holds only its shard, and the wrapped optimizer's UpdateParameters
+    /// runs on ONLY that shard, so its Adam m/v state is advanced solely for this rank's parameters. There
+    /// is no replicated cross-rank state to synchronize; returning silently would mislead the caller.
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // Intentional no-op (same invariant as ZeRO-1). ZeRO-2 optimizer-state partitioning is achieved
-        // INTRINSICALLY inside RunShardedZeroStep: gradients are ReduceScattered so each rank holds only
-        // its shard, and the wrapped optimizer's UpdateParameters is called with ONLY that shard, so its
-        // Adam m/v state is allocated and advanced solely for this rank's parameters. No rank ever holds
-        // another rank's optimizer state, and the only cross-rank exchange (the updated parameters) is the
-        // AllGather already performed in the step — so there is no per-step state synchronization to do.
-    }
+        => throw new NotSupportedException(
+            "ZeRO-2 optimizer state is partitioned across ranks (each rank owns only its shard's Adam " +
+            "state); there is no replicated state to synchronize, so explicit state synchronization is " +
+            "neither required nor supported.");
 
     /// <inheritdoc/>
     public override byte[] Serialize()

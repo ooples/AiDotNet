@@ -187,21 +187,15 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     }
 
     /// <summary>
-    /// Creates a configuration equivalent to DeepSpeed ZeRO Stage-3 with full offload
-    /// (a.k.a. ZeRO-Infinity minus the NVMe tier): optimizer state, gradients, AND
-    /// (sharded) parameters all live on the CPU. Parameters are all-gathered to GPU
-    /// only during their layer's forward/backward. Trains models many multiples of
-    /// GPU VRAM in size at the cost of substantial PCIe traffic. Requires a sharded
-    /// strategy (FSDP / ZeRO2 / ZeRO3); DDP has no shard to offload.
-    /// </summary>
-    /// <summary>
-    /// Enables all three CPU-offload flags: optimizer state (real ZeRO-1/2 state partitioning +
-    /// CPU update), gradients (CPU-resident during the reduce), and parameters. Note the parameter
-    /// semantics: on a black-box wrapped model <see cref="IShardingConfiguration{T}.CpuOffloadParams"/>
-    /// is GPU-cache eviction (see its docs), NOT peak-residency reduction — true Stage-3 residency
-    /// requires building the model from
-    /// <see cref="AiDotNet.DistributedTraining.Layers.Stage3ShardedLinear{T}"/>. "Full" here therefore
-    /// means "all three offload contracts engaged", not "Stage-3 residency for any model".
+    /// Enables all three CPU-offload contracts at once: optimizer state (real ZeRO-1/2 state partitioning +
+    /// CPU-resident Adam update), gradients (CPU-resident during the reduce), and parameters. "Full" means
+    /// "all three offload flags engaged" — NOT "DeepSpeed ZeRO Stage-3 residency for any model". The
+    /// parameter semantics depend on the model: on a black-box wrapped model
+    /// <see cref="IShardingConfiguration{T}.CpuOffloadParams"/> is GPU-cache eviction (see its docs), not a
+    /// peak-residency reduction; true Stage-3 residency (all-gather each layer's parameters to GPU only for
+    /// its forward/backward, then release) requires building the model from
+    /// <see cref="AiDotNet.DistributedTraining.Layers.Stage3ShardedLinear{T}"/>. Requires a sharded strategy
+    /// (FSDP / ZeRO2 / ZeRO3); DDP has no shard to offload.
     /// </summary>
     public static ShardingConfiguration<T> CreateForZeROOffloadFull(ICommunicationBackend<T> communicationBackend)
     {

@@ -15,10 +15,11 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// <c>dX = Σ_r dX_r</c>. Weight/bias-shard gradients are produced automatically by the tape from the
 /// Engine matmul (no manual backward — the framework is tape-autodiff only).
 /// </summary>
-public sealed class ColumnParallelLinear<T> : LayerBase<T>
+internal sealed class ColumnParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly CopyToTensorParallelRegion<T> _f;
+    private readonly GatherFromTensorParallelRegion<T> _gather;
     private readonly int _inputSize;
     private readonly int _fullOutputSize;
     private readonly int _localOutputSize;
@@ -37,12 +38,13 @@ public sealed class ColumnParallelLinear<T> : LayerBase<T>
         int outputSize,
         bool gatherOutput = false,
         IActivationFunction<T>? activationFunction = null)
-        : base([inputSize],
+        : base([TensorParallelGuards.ValidatedInputSize(backend, inputSize, outputSize)],
                [gatherOutput ? outputSize : ShardCount(outputSize, backend.WorldSize, backend.Rank)],
                activationFunction ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
         _backend = backend;
         _f = new CopyToTensorParallelRegion<T>(backend);
+        _gather = new GatherFromTensorParallelRegion<T>(backend, outputSize);
         _inputSize = inputSize;
         _fullOutputSize = outputSize;
         _localOutputSize = ShardCount(outputSize, backend.WorldSize, backend.Rank);
@@ -83,27 +85,9 @@ public sealed class ColumnParallelLinear<T> : LayerBase<T>
         var linear = Engine.TensorMatMul(x, weightT);                        // [batch, localOut]
         var biased = Engine.TensorBroadcastAdd(linear, Engine.Reshape(_biasShard, new[] { 1, _localOutputSize }));
         var local = ApplyActivation(biased);
-        return _gatherOutput ? GatherColumns(local, input.Shape[0]) : local;
-    }
-
-    private Tensor<T> GatherColumns(Tensor<T> local, int batch)
-    {
-        // AllGather returns each rank's [batch, localOut_r] flattened row-major; re-lay into
-        // [batch, fullOutputSize] by output-column block. (Backward for the gather is the local slice,
-        // handled when a downstream layer slices its columns; used only for standalone column-parallel.)
-        var gathered = _backend.AllGather(local.ToVector());
-        var full = new Tensor<T>([batch, _fullOutputSize]);
-        int offset = 0, colBase = 0;
-        for (int r = 0; r < _backend.WorldSize; r++)
-        {
-            int outR = ShardCount(_fullOutputSize, _backend.WorldSize, r);
-            for (int b = 0; b < batch; b++)
-                for (int c = 0; c < outR; c++)
-                    full[b, colBase + c] = gathered[offset + b * outR + c];
-            offset += batch * outR;
-            colBase += outR;
-        }
-        return full;
+        // Tape-aware gather: forward AllGathers the output columns, backward returns this rank's column
+        // slice so gradients still flow to _weightShard/_biasShard (a value-copy gather would sever them).
+        return _gatherOutput ? _gather.Apply(local) : local;
     }
 
     /// <summary>Sets this rank's shard from the FULL weight/bias by slicing its output rows — used to
@@ -133,6 +117,12 @@ public sealed class ColumnParallelLinear<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters is null)
+            throw new System.ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+            throw new System.ArgumentException(
+                $"Expected {ParameterCount} parameters (localOut {_localOutputSize} x in {_inputSize} + bias {_localOutputSize}), got {parameters.Length}.",
+                nameof(parameters));
         int idx = 0;
         for (int o = 0; o < _localOutputSize; o++)
             for (int i = 0; i < _inputSize; i++)

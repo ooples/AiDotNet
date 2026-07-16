@@ -14,10 +14,11 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// the layer, not the model. This is the residency the cache-eviction <c>CpuOffloadParams</c> path
 /// only approximated.
 /// </summary>
-public sealed class Stage3ShardedLinear<T> : LayerBase<T>
+internal sealed class Stage3ShardedLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly FsdpAllGatherParameter<T> _unshard;
+    private readonly AverageGradientAcrossRanks<T> _averageBiasGradient;
     private readonly int _inputSize;
     private readonly int _outputSize;
     private readonly int _fullLen;
@@ -35,15 +36,16 @@ public sealed class Stage3ShardedLinear<T> : LayerBase<T>
         int inputSize,
         int outputSize,
         IActivationFunction<T>? activationFunction = null)
-        : base([inputSize], [outputSize],
+        : base([TensorParallelGuards.ValidatedInputSize(backend, inputSize, outputSize)], [outputSize],
                activationFunction ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
         _backend = backend;
         _inputSize = inputSize;
         _outputSize = outputSize;
-        _fullLen = outputSize * inputSize;
+        _fullLen = checked(outputSize * inputSize);   // guard against int overflow on large layers
         _shardLen = (_fullLen + backend.WorldSize - 1) / backend.WorldSize;   // ceil
         _unshard = new FsdpAllGatherParameter<T>(backend, new[] { outputSize, inputSize }, _shardLen);
+        _averageBiasGradient = new AverageGradientAcrossRanks<T>(backend);
 
         _weightShard = new Tensor<T>([_shardLen]);
         _bias = new Tensor<T>([outputSize]);
@@ -69,7 +71,12 @@ public sealed class Stage3ShardedLinear<T> : LayerBase<T>
         var fullWeight = _unshard.Apply(_weightShard);                          // [outputSize, inputSize] (transient)
         var weightT = Engine.TensorTranspose(fullWeight);                      // [inputSize, outputSize]
         var linear = Engine.TensorMatMul(input, weightT);                      // [batch, outputSize]
-        var biased = Engine.TensorBroadcastAdd(linear, Engine.Reshape(_bias, new[] { 1, _outputSize }));
+        // The bias is REPLICATED (not sharded like the weight, which FsdpAllGatherParameter.Backward
+        // reduce-scatter-averages). Route it through the identity-forward/all-reduce-average-backward op so
+        // its data-parallel gradient is averaged across ranks — otherwise each rank's local batch would
+        // drift the replicated bias apart.
+        var syncBias = _averageBiasGradient.Apply(_bias);
+        var biased = Engine.TensorBroadcastAdd(linear, Engine.Reshape(syncBias, new[] { 1, _outputSize }));
         return ApplyActivation(biased);
     }
 
@@ -97,6 +104,12 @@ public sealed class Stage3ShardedLinear<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters is null)
+            throw new System.ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+            throw new System.ArgumentException(
+                $"Expected {ParameterCount} parameters (weight shard {_shardLen} + bias {_outputSize}), got {parameters.Length}.",
+                nameof(parameters));
         int idx = 0;
         for (int i = 0; i < _shardLen; i++) _weightShard[i] = parameters[idx++];
         for (int o = 0; o < _outputSize; o++) _bias[o] = parameters[idx++];

@@ -157,12 +157,13 @@ public interface IShardingConfiguration<T>
     /// </para>
     /// <para>
     /// • <b>True Stage-3 residency</b> (gather only the active layer, release after — PyTorch FSDP
-    /// <c>cpu_offload_params</c> / DeepSpeed ZeRO Stage-3 <c>offload_param</c>) is provided by building
-    /// the model from <see cref="AiDotNet.DistributedTraining.Layers.Stage3ShardedLinear{T}"/>, which
-    /// keeps only each rank's parameter shard resident and AllGathers the full weight just-in-time per
-    /// layer via a tape unshard/reshard op. Use those layers when peak parameter residency (not just GPU
-    /// cache pressure) must scale with the layer rather than the model. NVMe offload is a further
-    /// extension (not implemented).
+    /// <c>cpu_offload_params</c> / DeepSpeed ZeRO Stage-3 <c>offload_param</c>) is provided internally by
+    /// the framework's Stage-3 sharded layer primitive, which keeps only each rank's parameter shard
+    /// resident and AllGathers the full weight just-in-time per layer via a tape unshard/reshard op. It is
+    /// selected through the distributed model/builder APIs (the concrete layer type is an internal
+    /// implementation detail), and applies when peak parameter residency — not just GPU cache pressure —
+    /// must scale with the layer rather than the model. NVMe offload is a further extension (not
+    /// implemented).
     /// </para>
     /// <para>Only meaningful for sharded strategies (FSDP, ZeRO2, ZeRO3); DDP replicates full parameters
     /// and has no shard to offload. Default: false.</para>

@@ -200,10 +200,24 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
         // strategy replicates parameters across workers, so re-sharding is a full broadcast; a
         // parameter-sharded strategy would additionally re-partition the flat parameter/optimizer-state
         // vectors by the new world size (each rank taking its ceil(N / newWorldSize) slice).
-        if (inputData.InitialSolution != null)
+        //
+        // CRITICAL: the broadcast is a COLLECTIVE — it must NOT be gated on rank-local InitialSolution, or a
+        // rank that happened to receive a model would enter Broadcast while a rank that did not would skip it
+        // and race ahead to the closing barrier, deadlocking the worker set. Resolve a model on every rank
+        // and require ALL ranks to have one (an AllReduce(Min) over a 1/0 availability flag) BEFORE any rank
+        // broadcasts. A missing model on any rank makes every rank throw identically (no divergence).
+        var model = inputData.InitialSolution
+            ?? (WrappedOptimizer as OptimizerBase<T, TInput, TOutput>)?.Model;
+        var available = new Vector<T>(new[] { model is null ? NumOps.Zero : NumOps.One });
+        Config.CommunicationBackend.AllReduce(available, ReductionOperation.Min);
+        if (model is null || NumOps.Equals(available[0], NumOps.Zero))
         {
-            ResynchronizeParametersAcrossWorkers(inputData.InitialSolution);
+            throw new InvalidOperationException(
+                "Elastic rendezvous requires every worker to provide a model (OptimizationInputData.InitialSolution " +
+                "or a wrapped OptimizerBase whose Model is set) so the authoritative parameters can be broadcast.");
         }
+
+        ResynchronizeParametersAcrossWorkers(model);
 
         _currentWorldSize = newWorldSize;
     }

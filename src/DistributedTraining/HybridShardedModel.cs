@@ -333,12 +333,15 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         //   4. ApplyGradients: Update parameters using synchronized gradients
         //   5. UpdateShards: Extract local shard from updated parameters
         //
-        // Note: Full 3D parallelism is complex and requires:
-        // - Pipeline: forward/backward through stages with microbatching
-        // - Tensor: partial computation within each layer with all-reduce
-        // - Data: different batches on data-parallel replicas
-        //
-        // This framework provides the foundation with simplified implementation.
+        // Synchronization model for THIS parameter-sharded hybrid wrapper (see SynchronizeGradients for
+        // the full rationale): the wrapped model is a black box whose compute cannot be layer-partitioned,
+        // so every rank gathers the full parameters and computes the FULL-model gradient. Data-parallel
+        // replicas therefore hold replicated parameters but process different batches and MUST be averaged
+        // (done in SynchronizeGradients); tensor/pipeline neighbours own DISJOINT parameter shards of that
+        // full gradient, so there is nothing to reduce across them. Compute-partitioned tensor parallelism
+        // (partial per-layer matmuls + in-layer all-reduce) is provided separately by the Megatron layer
+        // primitives (ColumnParallelLinear/RowParallelLinear); a model built from those does not need this
+        // black-box wrapper.
 
         // Gather full parameters
         var fullParams = GatherFullParameters();
@@ -353,7 +356,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             // cache entry before any subgroup reduction runs inside
             // SynchronizeGradients. No-op when CpuOffloadGradients is off.
             OffloadGradientsToCpu(_computedGradients);
-            // Synchronize gradients (throws NotSupportedException if _dataParallelSize > 1)
+            // Average gradients within the data-parallel replica subgroup (no-op at _dataParallelSize == 1).
             SynchronizeGradients();
 
             // Apply the synchronized gradients to update parameters

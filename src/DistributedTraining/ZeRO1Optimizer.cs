@@ -78,18 +78,19 @@ public class ZeRO1Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported for ZeRO-1: optimizer state is PARTITIONED, not replicated. Each rank calls the wrapped
+    /// optimizer's UpdateParameters with ONLY its parameter shard, so the Adam m/v state is allocated and
+    /// advanced solely for that shard — no rank ever holds another rank's state. There is therefore no
+    /// replicated cross-rank state to synchronize; returning silently would mislead a caller into believing
+    /// a synchronization occurred. (Persisting the full optimizer state for a checkpoint is a serialization
+    /// concern — each rank saves its own shard state — not a hot-path synchronization.)
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // ZeRO-1 optimizer-state partitioning is achieved INTRINSICALLY inside Optimize: each rank
-        // calls the wrapped optimizer's UpdateParameters with ONLY its parameter shard, so the wrapped
-        // optimizer's persistent Adam m/v state is allocated and advanced solely for that shard — no
-        // rank ever holds the other ranks' state. Consequently there is no per-step state exchange to
-        // perform here: each rank owns and retains its shard's state across steps, and the only
-        // cross-rank exchange needed (the updated PARAMETERS) is the AllGather already done in the step.
-        // This method therefore intentionally does no work; state ownership is not a placeholder but a
-        // structural property of the sharded update. (A checkpoint that needs the full optimizer state
-        // would AllGather each rank's shard state; that belongs to serialization, not the hot path.)
-    }
+        => throw new NotSupportedException(
+            "ZeRO-1 optimizer state is partitioned across ranks (each rank owns only its shard's Adam " +
+            "state); there is no replicated state to synchronize, so explicit state synchronization is " +
+            "neither required nor supported.");
 
     /// <inheritdoc/>
     public override byte[] Serialize()

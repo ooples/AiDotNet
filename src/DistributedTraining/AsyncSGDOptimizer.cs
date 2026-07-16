@@ -89,6 +89,14 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
         int allowStaleness = 0)
         : base(wrappedOptimizer, config)
     {
+        // Async SGD's synchronized path applies averaged GRADIENTS via ApplyGradients, so a non-gradient
+        // optimizer cannot participate. Reject it at construction instead of silently skipping the
+        // distributed gradient synchronization at training time.
+        if (wrappedOptimizer is not IGradientBasedOptimizer<T, TInput, TOutput>)
+            throw new ArgumentException(
+                "Async SGD requires a gradient-based optimizer (IGradientBasedOptimizer).",
+                nameof(wrappedOptimizer));
+
         if (allowStaleness < 0)
             throw new ArgumentOutOfRangeException(nameof(allowStaleness), "Staleness bound must be non-negative.");
 

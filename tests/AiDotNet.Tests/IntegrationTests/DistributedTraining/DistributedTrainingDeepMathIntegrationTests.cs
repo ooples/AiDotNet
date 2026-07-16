@@ -697,11 +697,15 @@ public class DistributedTrainingDeepMathIntegrationTests
                 for (int o = 0; o < outputSize; o++)
                     Assert.Equal(yRef[rb, o], results[rr][rb, o], 9);
 
-        // True residency: each rank stores ~half the flat weight (ceil(24/2)=12) + the replicated bias
-        // (4) = 16, strictly less than the full weight+bias (24 + 4 = 28).
-        long full = (long)outputSize * inputSize + outputSize;
-        Assert.True(residentParams[0] < full,
-            $"Stage-3 residency should store fewer than the full {full} params; stored {residentParams[0]}.");
+        // True residency (EXACT): each rank stores only its flat-weight shard — ceil(outputSize*inputSize /
+        // worldSize) — plus the replicated bias (outputSize). With 4x6 weights over 2 ranks that is
+        // ceil(24/2)=12 + 4 = 16 on BOTH ranks, strictly less than the full weight+bias (24 + 4 = 28).
+        long weightParams = (long)outputSize * inputSize;
+        long expectedResident = (weightParams + 1) / 2 + outputSize; // ceil(weight/2) shard + replicated bias
+        long full = weightParams + outputSize;
+        Assert.Equal(expectedResident, residentParams[0]);
+        Assert.Equal(expectedResident, residentParams[1]);
+        Assert.True(expectedResident < full, $"resident {expectedResident} must be < full {full}");
     }
 
     /// <summary>

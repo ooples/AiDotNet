@@ -2311,7 +2311,9 @@ public class DistributedTrainingIntegrationTests
 
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)
         {
-            var newModel = new MockDistributedModel(_parameterCount);
+            // Preserve the rank gradient scale — a copy that reset it to the default would silently restore
+            // identical gradients across ranks and invalidate the collective (per-rank gradient) tests.
+            var newModel = new MockDistributedModel(_parameterCount, _gradientScale);
             newModel.SetParameters(parameters);
             return newModel;
         }
@@ -2339,7 +2341,9 @@ public class DistributedTrainingIntegrationTests
 
         public IFullModel<double, Vector<double>, Vector<double>> Clone()
         {
-            var cloned = new MockDistributedModel(_parameterCount);
+            // Preserve the rank gradient scale (see WithParameters) so a cloned rank-scaled model keeps its
+            // distinct gradients — otherwise collective tests that rely on per-rank gradients silently pass.
+            var cloned = new MockDistributedModel(_parameterCount, _gradientScale);
             cloned.SetParameters(_parameters);
             return cloned;
         }
