@@ -22,6 +22,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private IAudioEffect<T>? _configuredAudioEffect;
     private IActiveLearningStrategy<T>? _configuredActiveLearningStrategy;
+    private Tensor<T>? _activeLearningPool;
+    private int _activeLearningBatchSize = 10;
+    private double _activeLearningDiversityWeight = 0.5;
     private IContinualLearner<T, TInput, TOutput>? _configuredContinualLearner;
     private AiDotNet.DriftDetection.IDriftDetector<T>? _configuredDriftDetector;
     private IDistanceMetric<T>? _configuredDistanceMetric;
@@ -48,15 +51,37 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Configures an active learning strategy for intelligently selecting training samples.
     /// </summary>
     /// <param name="strategy">The active learning strategy implementation to use.</param>
+    /// <param name="unlabeledPool">
+    /// The pool of unlabeled samples to rank. When <c>null</c>, the held-out test partition is used as the
+    /// candidate pool, so a useful "which samples is the model least sure about" ranking is produced with
+    /// no extra configuration.
+    /// </param>
+    /// <param name="batchSize">How many samples to select for labeling. Defaults to 10.</param>
+    /// <param name="diversityWeight">
+    /// Redundancy penalty for batch selection (0 = pure uncertainty, higher = more diversity pressure).
+    /// Defaults to 0.5.
+    /// </param>
     /// <returns>The builder instance for method chaining.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Active learning helps your model learn more efficiently by
     /// choosing the most informative samples to label next. Instead of labeling all your data,
     /// the model asks for labels on the examples it's most uncertain about, saving labeling effort.</para>
+    /// <para>
+    /// The configured strategy supplies per-sample informativeness; on top of that, the batch is chosen
+    /// with a diversity/redundancy penalty (BADGE / facility-location style) so it covers the pool rather
+    /// than collecting near-duplicate uncertain samples. Diversity is measured in the strongest available
+    /// space — authentic BADGE gradient embeddings, then a model-exposed representation, then input
+    /// features. The ranking and selected batch are surfaced on
+    /// <see cref="AiModelResult{T, TInput, TOutput}.ActiveLearningSelection"/>.
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(IActiveLearningStrategy<T> strategy)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(
+        IActiveLearningStrategy<T> strategy, Tensor<T>? unlabeledPool = null, int batchSize = 10, double diversityWeight = 0.5)
     {
         _configuredActiveLearningStrategy = strategy;
+        _activeLearningPool = unlabeledPool;
+        _activeLearningBatchSize = batchSize;
+        _activeLearningDiversityWeight = diversityWeight;
         return this;
     }
 

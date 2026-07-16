@@ -568,6 +568,24 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// The active-learning ranking and selected batch, or <c>null</c> when no active-learning strategy was
+    /// configured via <c>ConfigureActiveLearning(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The configured strategy scores the unlabeled pool by informativeness; the batch is then chosen with
+    /// a diversity/redundancy penalty (BADGE / facility-location style) measured in the strongest available
+    /// space (gradient embeddings, a model representation, or input features) so it covers the pool rather
+    /// than collecting near-duplicate uncertain samples.
+    /// </para>
+    /// </remarks>
+    public ActiveLearning.ActiveLearningSelection? ActiveLearningSelection { get; private set; }
+
+    /// <summary>Records the active-learning selection. Called by the builder during Build.</summary>
+    internal void SetActiveLearningSelection(ActiveLearning.ActiveLearningSelection selection)
+        => ActiveLearningSelection = selection;
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>

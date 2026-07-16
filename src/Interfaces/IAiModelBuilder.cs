@@ -2029,8 +2029,12 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// the model asks for labels on the examples it's most uncertain about, saving labeling effort.</para>
     /// </remarks>
     /// <param name="strategy">The active learning strategy implementation to use.</param>
+    /// <param name="unlabeledPool">Unlabeled pool to rank; when null, the held-out test partition is used.</param>
+    /// <param name="batchSize">How many samples to select for labeling. Defaults to 10.</param>
+    /// <param name="diversityWeight">Redundancy penalty for batch selection (0 = pure uncertainty). Defaults to 0.5.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(IActiveLearningStrategy<T> strategy);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(
+        IActiveLearningStrategy<T> strategy, Tensor<T>? unlabeledPool = null, int batchSize = 10, double diversityWeight = 0.5);
 
     /// <summary>
     /// Configures a continual learning trainer that can learn new tasks without forgetting old ones.

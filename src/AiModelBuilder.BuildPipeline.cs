@@ -321,6 +321,61 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Runs the configured active-learning strategy over the unlabeled pool (or the held-out test
+    /// partition) and attaches a diversity-aware selection to the result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The strategy scores each pool sample's informativeness; the batch is then chosen with a diversity
+    /// penalty (see <see cref="ActiveLearning.BatchActiveLearner{T}"/>) in the strongest representation
+    /// space available (BADGE gradient embeddings, a model representation, or input features) so it covers
+    /// the pool instead of collecting redundant uncertain samples. Applies only when the model is an
+    /// <c>IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c> — the strategy interface's constraint.
+    /// A failure is surfaced as a warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeActiveLearningSelection(
+        AiModelResult<T, TInput, TOutput> result,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredActiveLearningStrategy is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_model is not IFullModel<T, Tensor<T>, Tensor<T>> tensorModel)
+            {
+                throw new NotSupportedException(
+                    "active learning requires a Tensor-typed model (IFullModel<T, Tensor<T>, Tensor<T>>).");
+            }
+
+            var pool = _activeLearningPool
+                ?? (optimizationResult.TestResult.X as Tensor<T>)
+                ?? throw new InvalidOperationException(
+                    "no unlabeled pool was configured and the held-out test partition is not a Tensor.");
+
+            if (pool.Shape.Length < 1 || pool.Shape[0] == 0)
+            {
+                throw new InvalidOperationException("the unlabeled pool is empty.");
+            }
+
+            var scores = _configuredActiveLearningStrategy.ComputeInformativenessScores(tensorModel, pool);
+            var (representation, space) = ActiveLearning.ActiveLearningRepresentation.Build(tensorModel, pool);
+            var selection = new ActiveLearning.BatchActiveLearner<T>(_activeLearningDiversityWeight)
+                .Select(scores, representation, _activeLearningBatchSize, _configuredActiveLearningStrategy.Name, space);
+            result.SetActiveLearningSelection(selection);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Active-learning selection could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ActiveLearningSelection is null.");
+        }
+    }
+
+    /// <summary>
     /// Extracts one ground-truth label per row from the target, or <c>null</c> when the target is not a
     /// per-row integer label set suitable for external cluster metrics.
     /// </summary>
@@ -3979,6 +4034,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ComputeConfiguredMetrics(finalResult, optimizationResult.TestResult);
         ComputeClusterEvaluation(finalResult, preparedX, preparedY);
         ComputeDriftMonitoring(finalResult, optimizationResult);
+        ComputeActiveLearningSelection(finalResult, optimizationResult);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);
