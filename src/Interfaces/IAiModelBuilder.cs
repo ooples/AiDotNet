@@ -2045,9 +2045,12 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// networks suffer from "catastrophic forgetting" - continual learning techniques like
     /// EWC, LwF, and GEM prevent this.</para>
     /// </remarks>
-    /// <param name="learner">The continual learner implementation to use.</param>
+    /// <param name="strategy">The continual-learning strategy; null uses an EWC + experience-replay hybrid default.</param>
+    /// <param name="config">Optional continual-learning configuration; sensible defaults when null.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(ContinualLearning.Interfaces.IContinualLearner<T, TInput, TOutput> learner);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(
+        ContinualLearning.Interfaces.IContinualLearningStrategy<T, TInput, TOutput>? strategy = null,
+        ContinualLearning.Interfaces.IContinualLearnerConfig<T>? config = null);
 
     /// <summary>
     /// Configures a drift detector for monitoring changes in data distribution over time.

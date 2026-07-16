@@ -579,6 +579,69 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Trains the configured model on the current task through a continual learner (built around that same
+    /// model), preserving prior tasks, and stashes the task result plus the all-tasks retention report.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// There is one model: the continual learner is constructed around <paramref name="model"/> (from
+    /// ConfigureModel), so training this task updates that model in place with anti-forgetting. The
+    /// strategy defaults to Elastic Weight Consolidation with experience replay (a regularization+rehearsal
+    /// hybrid). After learning, all tasks seen so far are re-evaluated into a retention report.
+    /// </para>
+    /// </remarks>
+    private void RunContinualLearningTraining(IFullModel<T, TInput, TOutput> model, TInput xTrain, TOutput yTrain)
+    {
+        var lossFunction = _configuredLossFunction ?? model.DefaultLossFunction;
+        var config = _continualLearningConfig ?? new ContinualLearning.Config.ContinualLearnerConfig<T>();
+        var learner = ContinualLearning.ContinualLearningTrainerFactory.Create(
+            _continualLearningStrategy, model, lossFunction, config);
+
+        var taskData = BuildContinualTaskDataset(xTrain, yTrain);
+        _continualLearningTaskResult = learner.LearnTask(taskData);
+
+        try
+        {
+            _continualLearningRetention = learner.EvaluateAllTasks();
+        }
+        catch (Exception ex)
+        {
+            // The retention report is a diagnostic; a failure here must not discard a completed task.
+            System.Diagnostics.Trace.TraceWarning(
+                $"Continual-learning retention report could not be computed: {ex.Message}.");
+        }
+    }
+
+    /// <summary>
+    /// Builds a per-sample dataset for the current continual-learning task from the batched training data.
+    /// </summary>
+    /// <remarks>
+    /// Continual learners iterate per sample, so the batched <paramref name="xTrain"/>/<paramref
+    /// name="yTrain"/> are split into individual rows. Supported for Tensor-shaped inputs/targets (the
+    /// neural-network case); other shapes throw a clear error.
+    /// </remarks>
+    private ActiveLearning.Data.InMemoryDataset<T, TInput, TOutput> BuildContinualTaskDataset(TInput xTrain, TOutput yTrain)
+    {
+        if (xTrain is not Tensor<T> xTensor || yTrain is not Tensor<T> yTensor)
+        {
+            throw new NotSupportedException(
+                "continual learning currently requires Tensor-shaped training inputs and targets " +
+                $"(got {typeof(TInput).Name}/{typeof(TOutput).Name}).");
+        }
+
+        int rows = xTensor.Shape[0];
+        var inputs = new TInput[rows];
+        var outputs = new TOutput[rows];
+        for (int i = 0; i < rows; i++)
+        {
+            inputs[i] = (TInput)(object)RowTensor(xTensor, i);
+            outputs[i] = (TOutput)(object)RowTensor(yTensor, i);
+        }
+
+        return new ActiveLearning.Data.InMemoryDataset<T, TInput, TOutput>(inputs, outputs, hasLabels: true);
+    }
+
+    /// <summary>
     /// Runs a cross-validator supplied to <c>ConfigureCrossValidation</c> and attaches its result.
     /// </summary>
     /// <remarks>
@@ -3380,6 +3443,29 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         else
         {
+            // CONTINUAL LEARNING PATH: train the configured model on this task through a continual
+            // learner built around it, preserving prior tasks. Replaces standard optimizer training,
+            // which would overwrite earlier tasks.
+            if (_continualLearningEnabled)
+            {
+                RunContinualLearningTraining(model, XTrain, yTrain);
+
+                int clInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+                var clPredictions = model.Predict(XTrain);
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                    Iterations = 1,
+                    SelectedFeatureIndices = Enumerable.Range(0, clInputSize).ToList(),
+                    TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                    {
+                        X = XTrain, Y = yTrain, Predictions = clPredictions,
+                    },
+                };
+
+                goto knowledgeDistillationHandled;
+            }
+
             // REGULAR TRAINING PATH
             if (_knowledgeDistillationOptions is not null)
             {
@@ -4097,6 +4183,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ComputeDriftMonitoring(finalResult, optimizationResult);
         ComputeActiveLearningSelection(finalResult, optimizationResult);
         ComputeQueryStrategySelection(finalResult);
+        if (_continualLearningTaskResult is not null)
+        {
+            finalResult.SetContinualLearning(_continualLearningTaskResult, _continualLearningRetention);
+        }
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

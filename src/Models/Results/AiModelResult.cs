@@ -586,6 +586,37 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         => ActiveLearningSelection = selection;
 
     /// <summary>
+    /// The outcome of learning this task under continual learning, or <c>null</c> when
+    /// <c>ConfigureContinualLearning(...)</c> was not used.
+    /// </summary>
+    /// <remarks>Training loss/accuracy for the current task plus its regularization history and, once
+    /// prior tasks exist, the average accuracy retained on them.</remarks>
+    public ContinualLearning.Results.ContinualLearningResult<T>? ContinualLearningResult { get; private set; }
+
+    /// <summary>
+    /// The continual-learning retention report across all tasks learned so far, or <c>null</c> when
+    /// continual learning was not used.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// After learning the current task, every task seen so far is re-evaluated: per-task retained
+    /// accuracy, average accuracy, average forgetting, and forward/backward transfer. Surfacing this by
+    /// default is what makes the facade's continual learning more actionable than libraries that only
+    /// train — you can see whether prior knowledge was preserved.
+    /// </para>
+    /// </remarks>
+    public ContinualLearning.Results.ContinualEvaluationResult<T>? ContinualLearningReport { get; private set; }
+
+    /// <summary>Records the continual-learning artifacts. Called by the builder during Build.</summary>
+    internal void SetContinualLearning(
+        ContinualLearning.Results.ContinualLearningResult<T> result,
+        ContinualLearning.Results.ContinualEvaluationResult<T>? report)
+    {
+        ContinualLearningResult = result;
+        ContinualLearningReport = report;
+    }
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>

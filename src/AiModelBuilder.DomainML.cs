@@ -25,7 +25,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private Tensor<T>? _activeLearningPool;
     private int _activeLearningBatchSize = 10;
     private double _activeLearningDiversityWeight = 0.5;
-    private IContinualLearner<T, TInput, TOutput>? _configuredContinualLearner;
+    private bool _continualLearningEnabled;
+    private ContinualLearning.Interfaces.IContinualLearningStrategy<T, TInput, TOutput>? _continualLearningStrategy;
+    private ContinualLearning.Interfaces.IContinualLearnerConfig<T>? _continualLearningConfig;
+    private ContinualLearning.Results.ContinualLearningResult<T>? _continualLearningTaskResult;
+    private ContinualLearning.Results.ContinualEvaluationResult<T>? _continualLearningRetention;
     private AiDotNet.DriftDetection.IDriftDetector<T>? _configuredDriftDetector;
     private IDistanceMetric<T>? _configuredDistanceMetric;
     private IEmbeddingModel<T>? _configuredEmbeddingModel;
@@ -86,19 +90,37 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Configures a continual learning trainer that can learn new tasks without forgetting old ones.
+    /// Configures continual learning so the model learns this task without forgetting earlier ones.
     /// </summary>
-    /// <param name="learner">The continual learner implementation to use.</param>
+    /// <param name="strategy">
+    /// The continual-learning strategy (EWC, LwF, GEM, MAS, SI). When <c>null</c>, the industry-standard
+    /// default is used: Elastic Weight Consolidation combined with experience replay — a
+    /// regularization+rehearsal hybrid that outperforms either alone.
+    /// </param>
+    /// <param name="config">
+    /// Optional continual-learning configuration (learning rate, epochs, replay memory size). Defaults to
+    /// sensible values when <c>null</c>.
+    /// </param>
     /// <returns>The builder instance for method chaining.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Continual learning (lifelong learning) enables your model to
     /// learn new tasks over time without forgetting what it learned before. Traditional neural
     /// networks suffer from "catastrophic forgetting" - continual learning techniques like
     /// EWC, LwF, and GEM prevent this.</para>
+    /// <para>
+    /// There is one model: the strategy is applied to the model configured via <c>ConfigureModel</c>.
+    /// Training this Build routes through the continual learner, which preserves prior tasks; the
+    /// per-task retention report (retained accuracy, average forgetting, forward/backward transfer) is
+    /// surfaced on <see cref="AiModelResult{T, TInput, TOutput}.ContinualLearningReport"/>.
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(IContinualLearner<T, TInput, TOutput> learner)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(
+        ContinualLearning.Interfaces.IContinualLearningStrategy<T, TInput, TOutput>? strategy = null,
+        ContinualLearning.Interfaces.IContinualLearnerConfig<T>? config = null)
     {
-        _configuredContinualLearner = learner;
+        _continualLearningEnabled = true;
+        _continualLearningStrategy = strategy;
+        _continualLearningConfig = config;
         return this;
     }
 
