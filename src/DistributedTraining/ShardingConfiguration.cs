@@ -194,6 +194,15 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     /// GPU VRAM in size at the cost of substantial PCIe traffic. Requires a sharded
     /// strategy (FSDP / ZeRO2 / ZeRO3); DDP has no shard to offload.
     /// </summary>
+    /// <summary>
+    /// Enables all three CPU-offload flags: optimizer state (real ZeRO-1/2 state partitioning +
+    /// CPU update), gradients (CPU-resident during the reduce), and parameters. Note the parameter
+    /// semantics: on a black-box wrapped model <see cref="IShardingConfiguration{T}.CpuOffloadParams"/>
+    /// is GPU-cache eviction (see its docs), NOT peak-residency reduction — true Stage-3 residency
+    /// requires building the model from
+    /// <see cref="AiDotNet.DistributedTraining.Layers.Stage3ShardedLinear{T}"/>. "Full" here therefore
+    /// means "all three offload contracts engaged", not "Stage-3 residency for any model".
+    /// </summary>
     public static ShardingConfiguration<T> CreateForZeROOffloadFull(ICommunicationBackend<T> communicationBackend)
     {
         if (communicationBackend == null)

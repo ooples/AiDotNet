@@ -146,20 +146,26 @@ public interface IShardingConfiguration<T>
     /// are gathered to GPU for the current forward/backward, then freed.
     /// </summary>
     /// <remarks>
+    /// <para><b>Semantics depend on how the model is built:</b></para>
     /// <para>
-    /// Only valid for sharded strategies (FSDP, ZeRO2, ZeRO3); DDP replicates
-    /// full parameters on every rank and has no shard to offload. When enabled,
-    /// the ShardedModel drops the GPU-side parameter buffer after each backward,
-    /// so the next step's all-gather reads from CPU-resident storage. This is
-    /// the "ZeRO-Infinity for RAM" step; NVMe offload is a further extension
-    /// (not implemented — future work).
+    /// • <b>Black-box wrapped model (ShardedModelBase / ShardedOptimizerBase):</b> this flag performs
+    /// GPU-parameter-CACHE EVICTION between steps — after the update, the GPU-side parameter buffer is
+    /// materialized to CPU and the GPU cache entry is dropped, so the next step re-uploads from the
+    /// CPU-resident values. It does NOT reduce peak resident parameters, because those paths still
+    /// gather the full parameter vector for the forward/backward (the wrapped model's compute is opaque
+    /// and cannot be streamed layer-by-layer).
     /// </para>
-    /// <para><b>For Beginners:</b>
-    /// The most aggressive memory-saving option: parameters themselves live on
-    /// the CPU except while a layer is actually being computed. Enables training
-    /// models much larger than GPU VRAM at the cost of substantial PCIe traffic.
+    /// <para>
+    /// • <b>True Stage-3 residency</b> (gather only the active layer, release after — PyTorch FSDP
+    /// <c>cpu_offload_params</c> / DeepSpeed ZeRO Stage-3 <c>offload_param</c>) is provided by building
+    /// the model from <see cref="AiDotNet.DistributedTraining.Layers.Stage3ShardedLinear{T}"/>, which
+    /// keeps only each rank's parameter shard resident and AllGathers the full weight just-in-time per
+    /// layer via a tape unshard/reshard op. Use those layers when peak parameter residency (not just GPU
+    /// cache pressure) must scale with the layer rather than the model. NVMe offload is a further
+    /// extension (not implemented).
     /// </para>
-    /// <para>Default: false</para>
+    /// <para>Only meaningful for sharded strategies (FSDP, ZeRO2, ZeRO3); DDP replicates full parameters
+    /// and has no shard to offload. Default: false.</para>
     /// </remarks>
     bool CpuOffloadParams { get; }
 }

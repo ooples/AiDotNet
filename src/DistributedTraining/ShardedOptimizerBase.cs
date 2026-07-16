@@ -367,7 +367,14 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         if (AiDotNetEngine.Current is not DirectGpuTensorEngine gpu) return;
         Vector<T>? parameters;
         try { parameters = InterfaceGuard.Parameterizable(model).GetParameters(); }
-        catch { return; }
+        catch (System.Exception ex)
+        {
+            // Do NOT silently disable offload on failure — the caller asked for CpuOffloadParams, so a
+            // model whose parameters cannot be extracted is a real misconfiguration that must surface.
+            throw new System.InvalidOperationException(
+                "CpuOffloadParams is enabled but the model's parameters could not be extracted for " +
+                "offload. Wrap a parameterizable model, or disable CpuOffloadParams.", ex);
+        }
         if (parameters is null || parameters.Length == 0) return;
         var array = parameters.GetDataArray();
         if (array is null) return;
