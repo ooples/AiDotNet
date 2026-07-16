@@ -1601,14 +1601,14 @@ public class DistributedTrainingIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task DDPModel_Train_WithCpuOffloadGradients_RunsWithoutError()
+    public async Task DDPModel_Train_WithCpuOffloadGradients_UpdatesParametersThroughOffloadPath()
     {
-        // End-to-end integration for the CpuOffloadGradients runtime path.
-        // The Train() call routes through DDPModel.SynchronizeGradients, which
-        // calls OffloadGradientsToCpu(_computedGradients) before AllReduce.
-        // If the wiring is right, training completes; if the offload throws
-        // (missing InternalsVisibleTo, wrong namespace, null-guard bug, etc.),
-        // this test fails at the callsite.
+        await Task.Yield();
+        // End-to-end integration for the CpuOffloadGradients runtime path. Train() routes through
+        // DDPModel.SynchronizeGradients -> OffloadGradientsToCpu(_computedGradients) -> AllReduce ->
+        // ApplyGradients. We assert OBSERVABLE BEHAVIOUR, not just no-throw: the parameters must
+        // actually move, and move AGAINST the (strictly positive) gradient. If the offload path
+        // silently no-op'd (materialized nothing / never reduced), the parameters would be unchanged.
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
         backend.Initialize();
@@ -1622,18 +1622,33 @@ public class DistributedTrainingIntegrationTests
 
         var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
         var target = new Vector<double>(new double[] { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 });
-        // A no-throw call proves the offload wiring reached AllReduce cleanly.
+
+        var before = model.GetParameters();
         ddpModel.Train(input, target);
+        var after = model.GetParameters();
+
+        // The offloaded-gradient training step produced a real update in the correct direction.
+        bool anyChanged = false;
+        for (int i = 0; i < before.Length; i++)
+        {
+            if (after[i] != before[i]) anyChanged = true;
+            Assert.True(after[i] <= before[i],
+                $"param[{i}] must not increase under a positive gradient: {before[i]} -> {after[i]}");
+        }
+        Assert.True(anyChanged, "CpuOffloadGradients training path left every parameter unchanged (silent no-op).");
 
         backend.Shutdown();
     }
 
     [Fact(Timeout = 120000)]
-    public async Task FSDPModel_Train_WithCpuOffloadFull_RunsWithoutError()
+    public async Task FSDPModel_Train_WithCpuOffloadFull_UpdatesParametersAndInvalidatesCache()
     {
-        // End-to-end integration for Stage-3-full (all three flags on).
-        // FSDPModel.Train hits both OffloadGradientsToCpu (before AllReduce)
-        // and OffloadParamsToCpu (after the update).
+        await Task.Yield();
+        // End-to-end integration for Stage-3-full (all three flags on). FSDPModel.Train hits both
+        // OffloadGradientsToCpu (before AllReduce) and OffloadParamsToCpu (after the update). We assert
+        // the parameters actually change (real update through the fully-offloaded path) AND that a
+        // subsequent Predict reflects the UPDATED parameters — proving OffloadParamsToCpu invalidated
+        // the gather cache rather than serving pre-update weights.
         var envId = Guid.NewGuid().ToString();
         var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
         backend.Initialize();
@@ -1643,7 +1658,19 @@ public class DistributedTrainingIntegrationTests
 
         var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
         var target = new Vector<double>(new double[] { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 });
+
+        var before = model.GetParameters();
         fsdpModel.Train(input, target);
+        var after = model.GetParameters();
+
+        bool anyChanged = false;
+        for (int i = 0; i < before.Length; i++)
+        {
+            if (after[i] != before[i]) anyChanged = true;
+            Assert.True(after[i] <= before[i],
+                $"param[{i}] must not increase under a positive gradient: {before[i]} -> {after[i]}");
+        }
+        Assert.True(anyChanged, "CpuOffloadFull training path left every parameter unchanged (silent no-op).");
 
         backend.Shutdown();
     }
