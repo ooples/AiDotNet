@@ -96,8 +96,10 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
         // Ensure all processes start together
         Config.CommunicationBackend.Barrier();
 
-        // Perform optimization on the wrapped optimizer
-        var result = WrappedOptimizer.Optimize(inputData);
+        // Route through RunWrappedOptimizerStep so IShardingConfiguration.CpuOffloadOptimizer
+        // engages when set: the Adam m/v update runs on CpuEngine, keeping the optimizer
+        // state in CPU RAM. Behavior when the flag is off is unchanged.
+        var result = RunWrappedOptimizerStep(inputData);
 
         // Synchronize parameters across all processes if auto-sync is enabled
         if (Config.AutoSyncGradients && result.BestSolution != null)

@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
 
 
@@ -112,6 +113,94 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
 
     /// <inheritdoc/>
     public abstract void SynchronizeOptimizerState();
+
+    /// <summary>
+    /// Runs the wrapped optimizer's Optimize step with the CPU-offload contract
+    /// applied from <see cref="IShardingConfiguration{T}.CpuOffloadOptimizer"/>. When
+    /// the flag is set AND the process is currently running on a non-CPU engine
+    /// (typically <c>DirectGpuTensorEngine</c>), the engine is temporarily swapped
+    /// to <see cref="CpuEngine"/> for the duration of the wrapped step so that
+    /// every op inside — Adam's <c>m_t = β1·m_{t-1} + (1-β1)·g</c>, the bias
+    /// correction, the parameter update — runs on the CPU and the m/v state
+    /// tensors are never uploaded to GPU VRAM. This is the standard
+    /// DeepSpeed ZeRO-Offload contract for Stage-1: the forward + backward
+    /// stay on GPU (their tensors are the caller's problem), but the update
+    /// step and the persistent optimizer state live in CPU RAM.
+    ///
+    /// <para>Also, when <see cref="IShardingConfiguration{T}.CpuOffloadGradients"/>
+    /// is set, we materialize (download) the current gradient tensors before
+    /// entering the wrapped step so the CPU-side Adam step reads real values
+    /// rather than empty deferred arrays.</para>
+    ///
+    /// <para>Callers: every derived optimizer's <c>Optimize</c> override should
+    /// invoke <c>WrappedOptimizer.Optimize(inputData)</c> through this helper
+    /// (instead of directly) so the offload contract applies uniformly across
+    /// FSDP, ZeRO1/2/3, DDP, and PipelineParallel strategies.</para>
+    /// </summary>
+    /// <param name="inputData">The input data forwarded to the wrapped optimizer.</param>
+    /// <returns>The wrapped optimizer's OptimizationResult.</returns>
+    protected OptimizationResult<T, TInput, TOutput> RunWrappedOptimizerStep(
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        using (BeginCpuOffloadScope())
+        {
+            return WrappedOptimizer.Optimize(inputData);
+        }
+    }
+
+    /// <summary>
+    /// Enters the CPU-offload engine scope described in
+    /// <see cref="RunWrappedOptimizerStep"/>. Exposed as a separate helper so
+    /// specialized derived optimizers (e.g. asynchronous SGD, gradient
+    /// compression) that don't call <c>WrappedOptimizer.Optimize</c> directly
+    /// can still opt into the same contract by wrapping their own step
+    /// inline: <c>using var _ = BeginCpuOffloadScope();</c>. The returned
+    /// disposable is a lightweight no-op when the flag is off or the current
+    /// engine is already CPU-based.
+    /// </summary>
+    protected IDisposable BeginCpuOffloadScope()
+    {
+        return CpuOffloadScope.Enter(Config);
+    }
+
+    // Lightweight RAII holder for the engine swap. Swap is a global static write
+    // (AiDotNetEngine.Current); the scope restores the prior engine on dispose so
+    // the caller can nest scopes safely. The struct-inside-class layout keeps
+    // the fast-path (offload off) allocation-free — Enter returns a shared
+    // NoOp singleton, not a new heap object.
+    private static class CpuOffloadScope
+    {
+        internal static IDisposable Enter(IShardingConfiguration<T> config)
+        {
+            if (!config.CpuOffloadOptimizer)
+                return NoOp.Instance;
+
+            var prior = AiDotNetEngine.Current;
+            // Already on CPU (no GPU engine active) → nothing to swap.
+            if (prior is CpuEngine)
+                return NoOp.Instance;
+
+            AiDotNetEngine.Current = new CpuEngine();
+            return new EngineRestore(prior);
+        }
+
+        private sealed class NoOp : IDisposable
+        {
+            internal static readonly NoOp Instance = new();
+            public void Dispose() { }
+        }
+
+        private sealed class EngineRestore : IDisposable
+        {
+            private IEngine? _prior;
+            internal EngineRestore(IEngine prior) { _prior = prior; }
+            public void Dispose()
+            {
+                var prior = System.Threading.Interlocked.Exchange(ref _prior, null);
+                if (prior is not null) AiDotNetEngine.Current = prior;
+            }
+        }
+    }
 
     /// <summary>
     /// Synchronizes model parameters across all processes using AllReduce with averaging.

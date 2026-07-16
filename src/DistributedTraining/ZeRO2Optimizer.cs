@@ -97,8 +97,11 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
                 savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
             }
 
-            // Step 1: Optimize locally to compute gradients
-            var localResult = WrappedOptimizer.Optimize(inputData);
+            // Step 1: Optimize locally to compute gradients.
+            // Routes through RunWrappedOptimizerStep so IShardingConfiguration.CpuOffloadOptimizer
+            // engages: Adam m/v state + step run on CPU while the sharded gradient
+            // reduce-scatter below stays on the original engine.
+            var localResult = RunWrappedOptimizerStep(inputData);
 
             // Step 2: ZeRO-2 gradient sharding with ReduceScatter
             if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)

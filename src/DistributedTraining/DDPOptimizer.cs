@@ -113,8 +113,12 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
                 savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
             }
 
-            // Step 1: Optimize locally to compute gradients (and apply them locally)
-            var localResult = WrappedOptimizer.Optimize(inputData);
+            // Step 1: Optimize locally to compute gradients (and apply them locally).
+            // RunWrappedOptimizerStep engages IShardingConfiguration.CpuOffloadOptimizer:
+            // Adam m/v state + step run on CpuEngine when the flag is set. DDP
+            // replicates full parameters and doesn't shard state, so
+            // CpuOffloadParams is a no-op here (validated at facade level).
+            var localResult = RunWrappedOptimizerStep(inputData);
 
             // Step 2: Synchronize gradients across all workers
             if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)

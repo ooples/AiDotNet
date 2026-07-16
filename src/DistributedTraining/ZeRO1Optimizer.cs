@@ -53,8 +53,10 @@ public class ZeRO1Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
 
         Config.CommunicationBackend.Barrier();
 
-        // Optimize on local data
-        var result = WrappedOptimizer.Optimize(inputData);
+        // ZeRO-Offload contract: RunWrappedOptimizerStep engages Config.CpuOffloadOptimizer
+        // when set. ZeRO-1 shards optimizer state across ranks; CPU-offload additionally
+        // keeps each rank's shard in CPU RAM and runs the Adam step there.
+        var result = RunWrappedOptimizerStep(inputData);
 
         // Synchronize parameters (AllReduce like DDP)
         if (Config.AutoSyncGradients && result.BestSolution != null)

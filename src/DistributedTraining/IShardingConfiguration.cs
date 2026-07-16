@@ -81,4 +81,85 @@ public interface IShardingConfiguration<T>
     /// <para>Default: 0.01</para>
     /// </remarks>
     T LearningRate { get; }
+
+    // ───────────────────── CPU offload (ZeRO-Offload equivalent) ─────────────────────
+    // The three flags below mirror DeepSpeed ZeRO-Offload / PyTorch FSDP CPUOffload.
+    // They let a train step keep its optimizer state, its gradients, and/or its
+    // sharded parameters in CPU RAM instead of GPU VRAM, trading PCIe traffic for
+    // the ability to train models whose combined resident footprint would
+    // otherwise exceed the GPU. Any combination is legal; the three degrees of
+    // freedom compose into DeepSpeed's Stage-1 (optimizer), Stage-2 (+ gradients),
+    // and Stage-3 (+ parameters) equivalents when the strategy is FSDP/ZeRO2/ZeRO3.
+    // DDP is compatible with CpuOffloadOptimizer only — its non-sharded gradient
+    // reduction still needs the grads present locally, and DDP doesn't shard
+    // params at all.
+
+    /// <summary>
+    /// Gets whether to keep optimizer state (Adam's m/v moments, momentum buffers,
+    /// etc.) on the CPU and run the optimizer step on the CPU too.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The "80% memory win" of DeepSpeed's ZeRO-Offload. For an Adam-family
+    /// optimizer, m and v each mirror the parameter tensor's shape, so full-
+    /// precision optimizer state costs ~2× the parameter memory. Moving that
+    /// to CPU frees GPU VRAM for larger batch sizes, longer sequences, or a
+    /// larger model — at the cost of a PCIe round-trip per step for gradients
+    /// (in) and updated parameters (out).
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// Turn this on when you're running out of GPU memory and the optimizer's
+    /// bookkeeping (m and v arrays) is a significant chunk of what you're
+    /// holding. Training math still happens on the GPU; only the parameter
+    /// update step runs on the CPU.
+    /// </para>
+    /// <para>Default: false</para>
+    /// </remarks>
+    bool CpuOffloadOptimizer { get; }
+
+    /// <summary>
+    /// Gets whether to page gradient tensors to CPU RAM before the sharded
+    /// reduction (all-reduce for DDP, reduce-scatter for FSDP/ZeRO). Composes
+    /// with <see cref="CpuOffloadOptimizer"/> so the whole optimizer step
+    /// (grads + m + v + params) can run on the CPU when both are enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Standalone <c>CpuOffloadGradients</c> is DeepSpeed ZeRO Stage-2's
+    /// equivalent: gradients are freed from GPU as soon as the backward pass
+    /// produces them, reduced across ranks on CPU, then discarded (each rank
+    /// only keeps its own shard).
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After the backward pass computes gradients on the GPU, this option
+    /// moves them to CPU RAM immediately. Frees more GPU VRAM but adds a
+    /// download per parameter tensor per step.
+    /// </para>
+    /// <para>Default: false</para>
+    /// </remarks>
+    bool CpuOffloadGradients { get; }
+
+    /// <summary>
+    /// Gets whether to page the (sharded) parameter tensors to CPU RAM between
+    /// training steps. Equivalent to PyTorch FSDP's <c>cpu_offload_params=True</c>
+    /// / DeepSpeed ZeRO Stage-3's "offload_param" — parameters live on CPU,
+    /// are gathered to GPU for the current forward/backward, then freed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only valid for sharded strategies (FSDP, ZeRO2, ZeRO3); DDP replicates
+    /// full parameters on every rank and has no shard to offload. When enabled,
+    /// the ShardedModel drops the GPU-side parameter buffer after each backward,
+    /// so the next step's all-gather reads from CPU-resident storage. This is
+    /// the "ZeRO-Infinity for RAM" step; NVMe offload is a further extension
+    /// (not implemented — future work).
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// The most aggressive memory-saving option: parameters themselves live on
+    /// the CPU except while a layer is actually being computed. Enables training
+    /// models much larger than GPU VRAM at the cost of substantial PCIe traffic.
+    /// </para>
+    /// <para>Default: false</para>
+    /// </remarks>
+    bool CpuOffloadParams { get; }
 }
