@@ -3122,6 +3122,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         bool trainingDispatchCompleted = false;
         try
         {
+        // A distillation strategy configured without ConfigureKnowledgeDistillation still expresses
+        // intent to distill; engage the KD path (which fails clearly if no teacher was supplied) rather
+        // than silently training as if the strategy were never configured.
+        if (_configuredDistillationStrategy is not null && _knowledgeDistillationOptions is null)
+        {
+            _knowledgeDistillationOptions = new KnowledgeDistillationOptions<T, TInput, TOutput>
+            {
+                Strategy = _configuredDistillationStrategy,
+            };
+        }
+
         // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
         if (_federatedLearningOptions != null)
         {
