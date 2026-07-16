@@ -127,6 +127,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <para><b>For Beginners:</b> Embedding models convert high-dimensional or categorical data
     /// into compact, dense vectors that capture semantic meaning. Similar items end up close
     /// together in the embedding space. Used for text (Word2Vec, BERT), images, graphs, and more.</para>
+    /// <para>
+    /// An embedding model is a preprocessing/transform component (text → dense vector), not a trainable
+    /// predictive model, so it is not routed through training. The configured embedder is surfaced on the
+    /// built result as <see cref="AiModelResult{T, TInput, TOutput}.EmbeddingModel"/> so callers can embed
+    /// new inputs at inference time consistently with how features were prepared.
+    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureEmbeddingModel(IEmbeddingModel<T> embeddingModel)
     {

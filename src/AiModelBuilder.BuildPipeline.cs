@@ -1330,6 +1330,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             TextVectorizer = _configuredTextVectorizer,
+            EmbeddingModel = _configuredEmbeddingModel,
             PreprocessingInfo = (_preprocessingPipeline is not null && pipelineFitted) || _targetPipeline is not null
                 ? new PreprocessingInfo<T, TInput, TOutput>
                 {
@@ -3850,6 +3851,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             TextVectorizer = _configuredTextVectorizer,
+            EmbeddingModel = _configuredEmbeddingModel,
             PreprocessingInfo = preprocessingInfo,
             PostprocessingPipeline = _postprocessingPipeline,
             KnowledgeDistillationOptions = _knowledgeDistillationOptions,

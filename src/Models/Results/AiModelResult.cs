@@ -122,6 +122,19 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ITextVectorizer<T>? TextVectorizer { get; private set; }
 
     /// <summary>
+    /// The embedding model configured via <c>ConfigureEmbeddingModel(...)</c>, or <c>null</c> when none was.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An embedding model turns text into dense vectors — a preprocessing/transform step, not a trainable
+    /// predictive model. The result surfaces it so callers can embed new text at inference time
+    /// (<c>Embed</c>/<c>EmbedBatch</c>) consistently with how features were prepared.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public Interfaces.IEmbeddingModel<T>? EmbeddingModel { get; private set; }
+
+    /// <summary>
     /// Gets the options used to create this model result.
     /// </summary>
     /// <remarks>
@@ -1355,6 +1368,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         TextVectorizer = options.TextVectorizer;
+        EmbeddingModel = options.EmbeddingModel;
 
         ModelMetaData = Model?.GetModelMetadata() ?? new();
 

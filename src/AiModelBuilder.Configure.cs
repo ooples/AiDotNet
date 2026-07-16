@@ -1979,6 +1979,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             TextVectorizer = _configuredTextVectorizer,
+            EmbeddingModel = _configuredEmbeddingModel,
             PreprocessingInfo = preprocessingInfo,
             PostprocessingPipeline = _postprocessingPipeline,
             KnowledgeDistillationOptions = _knowledgeDistillationOptions,
