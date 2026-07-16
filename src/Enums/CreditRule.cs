@@ -100,4 +100,14 @@ public enum CreditRule
     /// layers; use <see cref="LocalErrorSignal"/> or Direct Feedback Alignment for non-contiguous stacks.
     /// </summary>
     DifferenceTargetPropagation = 9,
+
+    /// <summary>
+    /// <b>Direct Difference Target Propagation (DDTP-linear)</b> — Meulemans et al., 2020. Keeps Difference Target
+    /// Propagation's <b>learned inverses</b> but routes them <b>directly from the output</b> (like Direct Feedback
+    /// Alignment) rather than chaining layer-to-layer. Each hidden layer's feedback is a direct map from the output,
+    /// trained online to reconstruct that layer's activation from the network output (≈ a direct <c>W⁺</c>). It fills
+    /// the missing corner of the design matrix — learned-inverse feedback that, unlike
+    /// <see cref="DifferenceTargetPropagation"/>, also applies to <b>non-contiguous</b> stacks.
+    /// </summary>
+    DirectDifferenceTargetPropagation = 10,
 }

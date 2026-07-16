@@ -97,4 +97,17 @@ public static class CreditRules
     public static ICreditRule<T> DifferenceTargetPropagation<T>(
         int? seed = null, double inverseLearningRate = 0.05, double weightDecay = 0.0, double outputStepSize = 1.0)
         => new DifferenceTargetPropagationCreditRule<T>(seed, inverseLearningRate, weightDecay, outputStepSize);
+
+    /// <summary>
+    /// <b>Direct Difference Target Propagation (DDTP-linear)</b> (Meulemans et al., 2020): Difference Target
+    /// Propagation's learned inverses routed <i>directly from the output</i> (like Direct Feedback Alignment), each
+    /// trained online to reconstruct its layer's activation from the network output. Learned-inverse feedback that —
+    /// unlike sequential DTP — also applies to non-contiguous trainable stacks.
+    /// </summary>
+    /// <param name="seed">Optional RNG seed for reproducible direct-inverse initialisation.</param>
+    /// <param name="inverseLearningRate">Step size for the per-layer direct-reconstruction learning (default 0.05).</param>
+    /// <param name="weightDecay">L2 decay on the learned direct inverses (default 0).</param>
+    public static ICreditRule<T> DirectDifferenceTargetPropagation<T>(
+        int? seed = null, double inverseLearningRate = 0.05, double weightDecay = 0.0)
+        => new DirectDifferenceTargetPropagationCreditRule<T>(seed, inverseLearningRate, weightDecay);
 }
