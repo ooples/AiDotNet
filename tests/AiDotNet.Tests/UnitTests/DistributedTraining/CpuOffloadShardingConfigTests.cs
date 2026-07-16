@@ -1,10 +1,12 @@
 using System;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.DistributedTraining;
@@ -188,7 +190,87 @@ public class CpuOffloadShardingConfigTests
         }
     }
 
+    // ── gradient offload runtime tests ───────────────────────────────────
+    //
+    // The observable contract of CpuOffloadGradients is: before the sharded
+    // reduce, any deferred GPU download registered against the gradient
+    // vector's backing array must be drained (so the reduce sees live values,
+    // not the uninitialized bytes GC.AllocateUninitializedArray left in
+    // place — see AiDotNet.Tensors PR #604 FinishGpuOp). We assert this
+    // directly by registering a materializer callback that flips a flag
+    // when fired.
+
+    [Fact(Timeout = 60000)]
+    public void GradientOffload_DrainsDeferredDownload_BeforeReduce()
+    {
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var config = new ShardingConfiguration<double>(backend)
+        {
+            AutoSyncGradients = true,
+            CpuOffloadGradients = true,
+        };
+
+        var gradientArray = new double[8];
+        var gradients = new Vector<double>(gradientArray);
+        bool materializerFired = false;
+        // Register a deferred materializer that flips the flag when the array is
+        // requested. This mimics what FinishGpuOp does after a GPU op — the
+        // array is registered as deferred until the first host read.
+        DeferredArrayMaterializer.Register(gradientArray, arr =>
+        {
+            var typed = (double[])arr;
+            for (int i = 0; i < typed.Length; i++) typed[i] = i + 1; // "download"
+            materializerFired = true;
+        });
+
+        // Route through a stub sharded optimizer that captures the pre-reduce
+        // gradient state. We use a subclass with access to the protected
+        // helper via an internal test-only method.
+        var probe = new GradientProbeOptimizer<double, double[], double>(config);
+        probe.CallOffload(gradients);
+
+        Assert.True(materializerFired,
+            "OffloadGradientsToCpu must drain any pending deferred download so the reduce reads live values.");
+        // Cleanup — remove the registration so other tests aren't polluted.
+        DeferredArrayMaterializer.Remove(gradientArray);
+    }
+
+    [Fact(Timeout = 60000)]
+    public void GradientOffload_IsNoOp_WhenFlagOff()
+    {
+        var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+        var config = new ShardingConfiguration<double>(backend); // CpuOffloadGradients=false
+
+        var gradientArray = new double[8];
+        var gradients = new Vector<double>(gradientArray);
+        bool materializerFired = false;
+        DeferredArrayMaterializer.Register(gradientArray, _ => materializerFired = true);
+
+        var probe = new GradientProbeOptimizer<double, double[], double>(config);
+        probe.CallOffload(gradients);
+
+        Assert.False(materializerFired,
+            "Flag off must NOT trigger materialization (pass-through path).");
+        DeferredArrayMaterializer.Remove(gradientArray);
+    }
+
     // ── test-only helper ─────────────────────────────────────────────────
+
+    /// <summary>Test-only sharded optimizer that exposes the protected
+    /// OffloadGradientsToCpu helper so the tests can call it directly
+    /// without spinning up a full IOptimizer + Adam step.</summary>
+    private sealed class GradientProbeOptimizer<T, TInput, TOutput>
+        : ShardedOptimizerBase<T, TInput, TOutput>
+    {
+        public GradientProbeOptimizer(IShardingConfiguration<T> config)
+            : base(new EngineCapturingOptimizer<T, TInput, TOutput>(_ => { }), config) { }
+        public void CallOffload(Vector<T> gradients) => OffloadGradientsToCpu(gradients);
+        public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
+            => new OptimizationResult<T, TInput, TOutput>();
+        public override void SynchronizeOptimizerState() { }
+        public override byte[] Serialize() => Array.Empty<byte>();
+        public override void Deserialize(byte[] data) { }
+    }
 
     private sealed class EngineCapturingOptimizer<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>
     {

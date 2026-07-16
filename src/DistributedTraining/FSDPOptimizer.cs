@@ -110,6 +110,11 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
         // Synchronize optimizer state if needed
         SynchronizeOptimizerState();
 
+        // ZeRO Stage-3 param offload: drop GPU-cached param buffers so the next
+        // forward re-uploads from the just-updated CPU-resident parameters.
+        // No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu(result.BestSolution);
+
         // Ensure all processes finish together
         Config.CommunicationBackend.Barrier();
 

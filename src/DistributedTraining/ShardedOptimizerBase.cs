@@ -163,6 +163,80 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         return CpuOffloadScope.Enter(Config);
     }
 
+    /// <summary>
+    /// Force-materializes a gradient vector's backing array (drains any pending
+    /// deferred GPU download) and drops the GPU-cached buffer for that array,
+    /// implementing the runtime side of <see cref="IShardingConfiguration{T}.CpuOffloadGradients"/>.
+    ///
+    /// <para>Called by derived optimizers immediately before the sharded
+    /// reduction (<see cref="ICommunicationBackend{T}.AllReduce"/> for DDP,
+    /// <see cref="ICommunicationBackend{T}.ReduceScatter"/> for ZeRO2/3 and
+    /// FSDP). The reduction operates on the managed <c>Vector&lt;T&gt;</c>
+    /// backing array directly — after this call, that array is guaranteed
+    /// to hold the current gradient values (not stale zeros from a not-yet-
+    /// materialized deferred download) and no GPU cache entry pins a copy
+    /// of the pre-reduction bytes.</para>
+    ///
+    /// <para>DeepSpeed's ZeRO Stage-2 contract: gradients are freed from GPU
+    /// VRAM as soon as the backward produces them, reduced across ranks in
+    /// CPU RAM, then discarded (each rank keeps only its own shard of the
+    /// averaged gradient). This helper does the "freed from GPU" half; the
+    /// reduce-scatter that follows in each derived optimizer produces the
+    /// per-rank shard.</para>
+    /// </summary>
+    protected void OffloadGradientsToCpu(Vector<T>? gradients)
+    {
+        if (!Config.CpuOffloadGradients || gradients is null || gradients.Length == 0) return;
+        var array = gradients.GetDataArray();
+        if (array is null) return;
+        // Force any pending deferred GPU download to drain into `array` NOW so
+        // the follow-up AllReduce/ReduceScatter sees the just-produced gradient
+        // values instead of the uninitialized bytes GC.AllocateUninitializedArray
+        // left in place (see AiDotNet.Tensors PR #604 FinishGpuOp).
+        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        // Drop the GPU cache entry so the next op that touches this array
+        // re-uploads from CPU (which now holds the post-reduce shard). Without
+        // this the GPU engine's persistent-weight cache would keep serving the
+        // pre-reduce bytes.
+        if (AiDotNetEngine.Current is DirectGpuTensorEngine gpu)
+        {
+            gpu.InvalidateWeightCache(array);
+        }
+    }
+
+    /// <summary>
+    /// After the sharded optimizer step, drops any GPU-cached parameter
+    /// buffers for the model's parameters, implementing the runtime side of
+    /// <see cref="IShardingConfiguration{T}.CpuOffloadParams"/>. The next
+    /// forward pass then re-uploads from the CPU-resident (updated) params,
+    /// so the parameter tensors don't accumulate a resident GPU shadow copy
+    /// between steps.
+    ///
+    /// <para>Contract note: this is only meaningful for sharded strategies
+    /// (FSDP, ZeRO2, ZeRO3) — DDP replicates the full parameter set on every
+    /// rank and has no shard to page. DDP callers that reach this helper
+    /// short-circuit at the flag check via the sanity guard the facade
+    /// applies; the guard here is a fallback so the helper itself is safe
+    /// to call from any strategy.</para>
+    /// </summary>
+    protected void OffloadParamsToCpu(IFullModel<T, TInput, TOutput>? model)
+    {
+        if (!Config.CpuOffloadParams || model is null) return;
+        if (AiDotNetEngine.Current is not DirectGpuTensorEngine gpu) return;
+        Vector<T>? parameters;
+        try { parameters = InterfaceGuard.Parameterizable(model).GetParameters(); }
+        catch { return; }
+        if (parameters is null || parameters.Length == 0) return;
+        var array = parameters.GetDataArray();
+        if (array is null) return;
+        // Force any pending download so the CPU array holds the updated
+        // values, THEN invalidate the GPU cache so the next forward
+        // re-uploads (the point of CpuOffloadParams is that params live on
+        // CPU between steps; the GPU sees them only during the next forward).
+        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        gpu.InvalidateWeightCache(array);
+    }
+
     // Lightweight RAII holder for the engine swap. Swap is a global static write
     // (AiDotNetEngine.Current); the scope restores the prior engine on dispose so
     // the caller can nest scopes safely. The struct-inside-class layout keeps

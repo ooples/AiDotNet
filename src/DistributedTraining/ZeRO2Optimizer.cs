@@ -110,6 +110,12 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
 
                 if (localGradients != null && localGradients.Length > 0)
                 {
+                    // ZeRO Stage-2 offload: drain any deferred GPU download into
+                    // the managed backing array and drop the GPU cache entry so
+                    // the ReduceScatter reads live CPU values. No-op when the
+                    // CpuOffloadGradients flag is off.
+                    OffloadGradientsToCpu(localGradients);
+
                     // ZeRO-2 CORE: ReduceScatter averages gradients AND scatters them
                     // Each rank receives only its shard of the averaged gradients
                     var myGradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
@@ -142,6 +148,11 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
             }
 
             SynchronizeOptimizerState();
+
+            // ZeRO Stage-3 param offload: drop GPU-cached param buffers so the
+            // next forward re-uploads from the (just-updated) CPU-resident
+            // AllGather'd parameters. No-op when CpuOffloadParams is off.
+            OffloadParamsToCpu(localResult.BestSolution);
 
             return localResult;
         }

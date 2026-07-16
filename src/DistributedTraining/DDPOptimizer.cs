@@ -127,6 +127,13 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
 
                 if (localGradients != null && localGradients.Length > 0)
                 {
+                    // ZeRO Stage-2 offload: if CpuOffloadGradients is on, force any
+                    // deferred GPU download to drain into the managed backing array
+                    // and drop the GPU cache entry so the AllReduce below reduces
+                    // live CPU values (and the GPU doesn't retain stale gradient
+                    // bytes across steps). No-op when the flag is off.
+                    OffloadGradientsToCpu(localGradients);
+
                     // Average gradients across all workers (true DDP)
                     Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
 
@@ -140,6 +147,12 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
                     localResult.BestSolution = finalModel;
                 }
             }
+
+            // Optional param offload — DDP replicates params, so this is a
+            // "drop the GPU cache between steps" operation on the full
+            // parameter set. No-op when CpuOffloadParams is off (which is
+            // the recommended DDP configuration).
+            OffloadParamsToCpu(localResult.BestSolution);
 
             return localResult;
         }

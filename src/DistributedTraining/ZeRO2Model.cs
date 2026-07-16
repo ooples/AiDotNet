@@ -130,6 +130,14 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
                 "Gradients have not been computed. Call Train() before SynchronizeGradients().");
         }
 
+        // ZeRO Stage-2 offload: drain any deferred GPU download into the
+        // gradient's managed backing array and drop its GPU cache entry so
+        // the ReduceScatter operates on current CPU values. Applied to
+        // _computedGradients (not the padded copy below) because that's
+        // where the deferred materializer is registered. No-op when
+        // CpuOffloadGradients is off.
+        OffloadGradientsToCpu(_computedGradients);
+
         var totalParams = _computedGradients.Length;
 
         // Calculate chunk size using ceiling division to align with ReduceScatter boundaries
@@ -226,6 +234,11 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
             InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
             LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         }
+
+        // ZeRO Stage-3 offload: after the update, drop any GPU-cached copy of
+        // the wrapped model's parameters so the next forward re-uploads from
+        // the CPU-resident updated values. No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu();
     }
 
     /// <summary>

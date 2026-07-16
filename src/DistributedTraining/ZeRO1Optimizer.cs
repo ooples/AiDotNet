@@ -67,6 +67,13 @@ public class ZeRO1Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
         // Synchronize sharded optimizer state
         SynchronizeOptimizerState();
 
+        // ZeRO Stage-3 param offload: drop GPU-cached param buffers so the next
+        // forward re-uploads from the just-updated CPU-resident parameters.
+        // ZeRO-1 shards optimizer state (not params) but the flag still targets
+        // the DEVICE placement of the parameters between steps, which is a
+        // valid orthogonal choice. No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu(result.BestSolution);
+
         Config.CommunicationBackend.Barrier();
 
         return result;
