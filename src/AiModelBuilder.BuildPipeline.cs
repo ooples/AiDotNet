@@ -169,6 +169,133 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Auto-evaluates a clustering model's result with cluster-validity indices and attaches them to
+    /// <see cref="AiModelResult{T, TInput, TOutput}.ClusteringEvaluation"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every clustering model is evaluated: the standard internal indices (Silhouette, Davies-Bouldin,
+    /// Calinski-Harabasz, Dunn, Connectivity) run without any configuration, computed on the fitted data
+    /// and the model's learned cluster assignments. Cluster validity is intrinsically in-sample — it
+    /// scores the geometry of the assignments the model produced — so this uses the training data, not a
+    /// held-out partition. Non-clustering models are skipped.
+    /// </para>
+    /// <para>
+    /// <c>ConfigureClusterMetric</c> / <c>ConfigureExternalClusterMetric</c> add a custom index to the
+    /// default set rather than replacing it. External indices (Adjusted Rand, NMI, V-Measure,
+    /// Fowlkes-Mallows) compare assignments to ground-truth labels; they run only when the build carries
+    /// one integer-valued label per row. Continuous targets are treated as "no ground truth" so an
+    /// external index is never computed against values that are not class labels.
+    /// </para>
+    /// <para>
+    /// Each index is also mirrored, by name, into <see cref="AiModelResult{T, TInput,
+    /// TOutput}.ConfiguredMetrics"/>. Like the supervised metrics, a failure here is surfaced as a
+    /// warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeClusterEvaluation(
+        AiModelResult<T, TInput, TOutput> result,
+        TInput preparedX, TOutput preparedY)
+    {
+        if (_model is not Clustering.Base.ClusteringBase<T> clustering)
+        {
+            return;
+        }
+
+        try
+        {
+            var data = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX);
+            var labels = clustering.Labels ?? clustering.Predict(data);
+            if (labels is null || labels.Length != data.Rows)
+            {
+                throw new InvalidOperationException(
+                    $"cluster labels ({labels?.Length ?? 0}) do not line up with data rows ({data.Rows}).");
+            }
+
+            var evaluator = new Clustering.Evaluation.ClusteringEvaluator<T>();
+            if (_configuredClusterMetric is not null)
+            {
+                evaluator.AddInternalMetric(_configuredClusterMetric);
+            }
+
+            if (_configuredExternalClusterMetric is not null)
+            {
+                evaluator.AddExternalMetric(_configuredExternalClusterMetric);
+            }
+
+            var trueLabels = TryExtractClusterGroundTruth(preparedY, data.Rows);
+            var evaluation = evaluator.EvaluateAll(data, labels, trueLabels);
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            foreach (var kv in evaluation.InternalMetrics)
+            {
+                result.SetConfiguredMetric(kv.Key, numOps.FromDouble(kv.Value));
+            }
+
+            foreach (var kv in evaluation.ExternalMetrics)
+            {
+                result.SetConfiguredMetric(kv.Key, numOps.FromDouble(kv.Value));
+            }
+
+            result.SetClusteringEvaluation(evaluation);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Clustering evaluation could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ClusteringEvaluation is null.");
+        }
+    }
+
+    /// <summary>
+    /// Extracts one ground-truth label per row from the target, or <c>null</c> when the target is not a
+    /// per-row integer label set suitable for external cluster metrics.
+    /// </summary>
+    /// <remarks>
+    /// External cluster metrics treat their inputs as categorical class labels, so only a target that
+    /// flattens to exactly <paramref name="rows"/> integer-valued entries qualifies. A continuous or
+    /// wrong-length target returns <c>null</c>, which suppresses external metrics rather than scoring
+    /// against values that are not labels.
+    /// </remarks>
+    private static Vector<T>? TryExtractClusterGroundTruth(TOutput target, int rows)
+    {
+        Vector<T> vector;
+        switch (target)
+        {
+            case Vector<T> v:
+                vector = v;
+                break;
+            case Tensor<T> t:
+                if (t.Length != rows)
+                {
+                    return null;
+                }
+
+                vector = t.ToVector();
+                break;
+            default:
+                return null;
+        }
+
+        if (vector.Length != rows)
+        {
+            return null;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double value = numOps.ToDouble(vector[i]);
+            if (Math.Abs(value - Math.Round(value)) > 1e-9)
+            {
+                return null;
+            }
+        }
+
+        return vector;
+    }
+
+    /// <summary>
     /// Trains a student in place by knowledge distillation against the configured teacher.
     /// </summary>
     /// <remarks>
@@ -3775,6 +3902,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // told it had not run.
         RunConfiguredCrossValidation(finalResult, preparedX, preparedY, optimizer);
         ComputeConfiguredMetrics(finalResult, optimizationResult.TestResult);
+        ComputeClusterEvaluation(finalResult, preparedX, preparedY);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

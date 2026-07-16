@@ -492,6 +492,35 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal void SetConfiguredMetric(string name, T value) => _configuredMetrics[name] = value;
 
     /// <summary>
+    /// Gets the clustering evaluation for this model, or <c>null</c> when the built model is not a
+    /// clustering model.
+    /// </summary>
+    /// <value>
+    /// The internal cluster-validity indices (Silhouette, Davies-Bouldin, Calinski-Harabasz, Dunn,
+    /// Connectivity) computed on the training data and its learned cluster assignments, plus external
+    /// indices (Adjusted Rand, NMI, V-Measure, Fowlkes-Mallows) when ground-truth labels were supplied,
+    /// plus cluster count and sizes. <c>null</c> for non-clustering models.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Every clustering model is auto-evaluated: the standard internal indices run without any
+    /// configuration. <c>ConfigureClusterMetric</c> / <c>ConfigureExternalClusterMetric</c> add custom
+    /// indices to that set rather than replacing it. The same values are also mirrored, by name, into
+    /// <see cref="ConfiguredMetrics"/> for uniform access.
+    /// </para>
+    /// <para>
+    /// Cluster validity is intrinsically an in-sample measure — it scores the geometry of the
+    /// assignments the model produced — so unlike <see cref="ConfiguredMetrics"/> for supervised models
+    /// this is computed on the fitted data, not a held-out partition.
+    /// </para>
+    /// </remarks>
+    public Clustering.Evaluation.ClusteringEvaluationResult? ClusteringEvaluation { get; private set; }
+
+    /// <summary>Records the clustering evaluation. Called by the builder during Build.</summary>
+    internal void SetClusteringEvaluation(Clustering.Evaluation.ClusteringEvaluationResult evaluation)
+        => ClusteringEvaluation = evaluation;
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>
