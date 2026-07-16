@@ -2290,7 +2290,11 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <param name="transformer">The data transformer implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureDataTransformer(IDataTransformer<T, TInput, TInput> transformer);
+    // ConfigureDataTransformer was removed: it was a strict duplicate of ConfigurePreprocessing,
+    // which takes the identical IDataTransformer<T, TInput, TInput> and is fully wired. Its doc
+    // claimed "preprocessing OR postprocessing", but its type parameters <T, TInput, TInput> only
+    // permit the preprocessing direction — the mismatch that likely produced the bug. Use
+    // ConfigurePreprocessing for the input direction and ConfigurePostprocessing for the output one.
 
     /// <summary>
     /// Configures a data splitting strategy for dividing datasets into train/test/validation sets.

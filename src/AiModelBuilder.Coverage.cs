@@ -22,7 +22,6 @@ namespace AiDotNet;
 /// <typeparam name="TOutput">The output type.</typeparam>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
-    private IDataTransformer<T, TInput, TInput>? _configuredDataTransformer;
     private IDataSplitter<T>? _configuredDataSplitter;
     private IClassificationMetric<T>? _configuredClassificationMetric;
     private IRegressionMetric<T>? _configuredRegressionMetric;
@@ -50,22 +49,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? _configuredSimilarityMetric;
 
 
-    /// <summary>
-    /// Configures a data transformer for preprocessing or postprocessing data transformations.
-    /// </summary>
-    /// <param name="transformer">The data transformer implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Data transformers convert your data from one form to another,
-    /// such as scaling numbers to a standard range, encoding text as numbers, or reducing the
-    /// number of features. Available transformers include StandardScaler, MinMaxScaler,
-    /// OneHotEncoder, PCA, PolynomialFeatures, SimpleImputer, and hundreds more.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataTransformer(IDataTransformer<T, TInput, TInput> transformer)
-    {
-        _configuredDataTransformer = transformer;
-        return this;
-    }
 
     /// <summary>
     /// Configures a data splitting strategy for dividing datasets into train/test/validation sets.
