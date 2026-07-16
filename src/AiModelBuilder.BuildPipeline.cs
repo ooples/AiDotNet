@@ -169,6 +169,111 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Trains a student in place by knowledge distillation against the configured teacher.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Distillation cannot go through the optimizer's supervised loop: its loss combines a soft term
+    /// against the teacher's logits with a hard term against the true label, and the optimizer's
+    /// (predicted, actual) loss contract carries no teacher. So this drives the student's own
+    /// gradient surface directly. Each epoch, for each sample: run the teacher to get its logits, ask
+    /// the configured <see cref="IDistillationStrategy{T}"/> for the gradient of the combined loss
+    /// with respect to the student output (via <see cref="DistillationLossAdapter{T}"/>), and
+    /// backpropagate it through the student with <c>ComputeGradients</c>/<c>ApplyGradients</c>.
+    /// </para>
+    /// <para>
+    /// The teacher is fixed during student training, so its logits are computed per step from
+    /// whichever teacher the options supply (an explicit forward delegate, an <c>IFullModel</c>
+    /// teacher, or an <c>ITeacherModel</c>). The strategy defaults to response-based distillation
+    /// built from the options' temperature and alpha when none is configured.
+    /// </para>
+    /// </remarks>
+    private void RunKnowledgeDistillationTraining(
+        IGradientComputable<T, TInput, TOutput> student,
+        TInput xTrain, TOutput yTrain,
+        IOptimizer<T, TInput, TOutput> optimizer)
+    {
+        var kd = _knowledgeDistillationOptions!;
+
+        if (xTrain is not Tensor<T> studentInputs || yTrain is not Tensor<T> studentTargets)
+        {
+            throw new NotSupportedException(
+                "Knowledge distillation requires tensor-shaped training data (Tensor<T> inputs and " +
+                $"targets); this build supplied {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+        }
+
+        var teacherForward = ResolveTeacherForward(kd);
+        var strategy = kd.Strategy
+            ?? KnowledgeDistillation.DistillationStrategyFactory<T>.CreateResponseBasedStrategy(
+                kd.Temperature, kd.Alpha);
+        var lossAdapter = new KnowledgeDistillation.DistillationLossAdapter<T>(strategy);
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rows = studentInputs.Shape[0];
+        int epochs = optimizer.GetOptions()?.MaxIterations ?? kd.Epochs;
+        var lr = numOps.FromDouble(optimizer.GetOptions()?.InitialLearningRate ?? 0.01);
+
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            for (int row = 0; row < rows; row++)
+            {
+                var inputRow = RowTensor(studentInputs, row);
+                var teacherOutput = teacherForward(inputRow);
+
+                // The hard-label term (when the strategy uses it) reads the true label for this row.
+                lossAdapter.CurrentTrueLabel = RowTensor(studentTargets, row).ToVector();
+
+                // ComputeGradients routes an ILossFunction (not a LossFunctionBase) through its
+                // CalculateDerivative fallback, so the adapter's derivative — the distillation
+                // gradient — is what gets backpropagated. The teacher output is the target. The casts
+                // are safe: xTrain/yTrain were confirmed Tensor<T> above, so TInput/TOutput are too.
+                var gradients = student.ComputeGradients(
+                    (TInput)(object)inputRow, (TOutput)(object)teacherOutput, lossAdapter);
+                student.ApplyGradients(gradients, lr);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolves the teacher into a single forward function, whichever way the options express it.
+    /// </summary>
+    private Func<Tensor<T>, Tensor<T>> ResolveTeacherForward(
+        KnowledgeDistillationOptions<T, TInput, TOutput> kd)
+    {
+        if (kd.TeacherForward is not null)
+        {
+            return input => (Tensor<T>)(object)kd.TeacherForward((TInput)(object)input)!;
+        }
+
+        if (kd.TeacherModel is not null)
+        {
+            return input => (Tensor<T>)(object)kd.TeacherModel.Predict((TInput)(object)input)!;
+        }
+
+        if (kd.Teacher is not null)
+        {
+            return input => (Tensor<T>)(object)kd.Teacher.GetLogits((TInput)(object)input)!;
+        }
+
+        throw new InvalidOperationException(
+            "ConfigureKnowledgeDistillation requires a teacher. Set one of KnowledgeDistillationOptions." +
+            "Teacher, .TeacherModel, or .TeacherForward.");
+    }
+
+    /// <summary>Extracts a single row of a 2-D tensor as a [1, features] tensor.</summary>
+    private static Tensor<T> RowTensor(Tensor<T> matrix, int row)
+    {
+        int cols = matrix.Shape[1];
+        var result = new Tensor<T>(new[] { 1, cols });
+        for (int c = 0; c < cols; c++)
+        {
+            result[0, c] = matrix[row, c];
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Runs a cross-validator supplied to <c>ConfigureCrossValidation</c> and attaches its result.
     /// </summary>
     /// <remarks>
@@ -2789,9 +2894,32 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // (non-parametric models, ClusteringBase, NN + LoRA).
             if (_knowledgeDistillationOptions is not null)
             {
+                // A gradient-computable student on the direct path (e.g. a LoRA-wrapped neural
+                // network) can distill exactly as on the regular path. Genuinely non-parametric
+                // models (density clustering, most time-series) cannot: distillation is soft-label
+                // gradient matching, which those don't do.
+                if (model is IGradientComputable<T, TInput, TOutput> directDistillable)
+                {
+                    RunKnowledgeDistillationTraining(directDistillable, XTrain, yTrain, finalOptimizer);
+                    int distInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+                    optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                    {
+                        BestSolution = model,
+                        Iterations = 1,
+                        SelectedFeatureIndices = Enumerable.Range(0, distInputSize).ToList(),
+                        TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                        {
+                            X = XTrain, Y = yTrain, Predictions = model.Predict(XTrain),
+                        },
+                    };
+                    goto knowledgeDistillationHandled;
+                }
+
                 throw new NotSupportedException(
-                    "Knowledge distillation is not supported for non-parametric models. " +
-                    "Remove the ConfigureKnowledgeDistillation() call.");
+                    $"Knowledge distillation requires a gradient-computable student, but the model on the " +
+                    $"direct-training path ('{model.GetType().Name}') is not one. Distillation is soft-label " +
+                    "gradient matching, which non-parametric models (density clustering, most time series) " +
+                    "do not perform. Remove the ConfigureKnowledgeDistillation() call for this model.");
             }
 
             // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
@@ -2938,27 +3066,41 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // REGULAR TRAINING PATH
             if (_knowledgeDistillationOptions is not null)
             {
-                // Knowledge-distillation tape integration is still pending
-                // (the teacher-aware loss combiner needs a tape-aware
-                // wrapper around the standard loss to keep gradients
-                // flowing through both terms). Until that lands, surface
-                // a runtime warning so users discover the gap early
-                // rather than after Build returns silently. Restore the
-                // hard contract: a user who called ConfigureKnowledgeDistillation
-                // expects KD to actually run; downgrading the original
-                // NotSupportedException to a Trace warning silently broke
-                // that contract (review #1368). The configured options
-                // still round-trip onto AiModelResult.KnowledgeDistillationOptions
-                // for consumers who want to drive distillation manually,
-                // but they must opt out of automatic Build-time KD by
-                // omitting ConfigureKnowledgeDistillation OR by switching
-                // to a model path that supports it.
-                throw new NotSupportedException(
-                    "ConfigureKnowledgeDistillation is not yet integrated with the tape-based training flow " +
-                    "for this model path. Either omit ConfigureKnowledgeDistillation, switch to a model " +
-                    "type that supports it (parametric-model branch), or drive distillation manually " +
-                    "post-build via AiModelResult.KnowledgeDistillationOptions. Track upstream integration " +
-                    "in the AiDotNet repo issues.");
+                // Knowledge distillation trains the student against a combined objective: a soft term
+                // matching the teacher's logits plus a hard term against the true label. That signal
+                // cannot travel through the optimizer's (predicted, actual) loss contract, which
+                // carries no teacher, so distillation runs its own gradient loop here rather than
+                // through finalOptimizer.Optimize. The gradient is produced by the configured
+                // IDistillationStrategy and applied through the student's own IGradientComputable
+                // surface via DistillationLossAdapter (see that type for why it deliberately routes
+                // through the CalculateDerivative fallback rather than the tape loss).
+                if (model is not IGradientComputable<T, TInput, TOutput> distillableStudent)
+                {
+                    throw new NotSupportedException(
+                        $"ConfigureKnowledgeDistillation requires a gradient-computable student, but model " +
+                        $"'{model.GetType().Name}' does not implement IGradientComputable<T, TInput, TOutput>. " +
+                        "Use a neural-network student, or drive distillation manually post-build via " +
+                        "AiModelResult.KnowledgeDistillationOptions.");
+                }
+
+                RunKnowledgeDistillationTraining(distillableStudent, XTrain, yTrain, finalOptimizer);
+
+                // The student is trained in place; report it as the built model, mirroring the other
+                // in-place training branches.
+                int distInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+                var distPredictions = model.Predict(XTrain);
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                    Iterations = 1,
+                    SelectedFeatureIndices = Enumerable.Range(0, distInputSize).ToList(),
+                    TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                    {
+                        X = XTrain, Y = yTrain, Predictions = distPredictions,
+                    },
+                };
+
+                goto knowledgeDistillationHandled;
             }
 
             // Ensure the optimizer has the model configured before optimization
@@ -3146,6 +3288,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
             }
         }
+
+        // Knowledge distillation trains the student in place above and jumps here, skipping the
+        // optimizer dispatch and its epoch-bridge handling (distillation runs its own gradient loop).
+        knowledgeDistillationHandled:
 
         // ============================================================================
         // FINE-TUNING (#1357 / #1361) — applies preference learning, RLHF, SFT, etc.
