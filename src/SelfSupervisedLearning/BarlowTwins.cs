@@ -49,16 +49,16 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Barlow Twins: Self-Supervised Learning via Redundancy Reduction", "https://arxiv.org/abs/2103.03230", Year = 2021, Authors = "Jure Zbontar, Li Jing, Ishan Misra, Yann LeCun, Stéphane Deny")]
-public class BarlowTwins<T> : SSLMethodBase<T>
+public class BarlowTwins<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly BarlowTwinsLoss<T> _loss;
-    private readonly SSLAugmentationPolicies<T> _augmentation;
+    private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
 
     /// <inheritdoc />
     public override string Name => "Barlow Twins";
 
     /// <inheritdoc />
-    public override SSLMethodCategory Category => SSLMethodCategory.NonContrastive;
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.NonContrastive;
 
     /// <inheritdoc />
     public override bool RequiresMemoryBank => false;
@@ -80,14 +80,14 @@ public class BarlowTwins<T> : SSLMethodBase<T>
     public BarlowTwins(
         INeuralNetwork<T> encoder,
         IProjectorHead<T> projector,
-        SSLConfig<T>? config = null)
-        : base(encoder, projector, config ?? new SSLConfig<T>())
+        SelfSupervisedLearningConfig<T>? config = null)
+        : base(encoder, projector, config ?? new SelfSupervisedLearningConfig<T>())
     {
         var btConfig = _config.BarlowTwins ?? new BarlowTwinsConfig();
         var lambda = btConfig.Lambda ?? 0.0051; // Default from paper
 
         _loss = new BarlowTwinsLoss<T>(lambda);
-        _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
+        _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
     private void UpdateParameters(T learningRate, Vector<T> accumulatedProjGrads)
@@ -125,7 +125,7 @@ public class BarlowTwins<T> : SSLMethodBase<T>
         var projector = new MLPProjector<T>(
             encoderOutputDim, hiddenDim, projectionDim, useBatchNormOnOutput: true);
 
-        var config = new SSLConfig<T>
+        var config = new SelfSupervisedLearningConfig<T>
         {
             BarlowTwins = new BarlowTwinsConfig { Lambda = lambda }
         };

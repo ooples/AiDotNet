@@ -45,19 +45,19 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An Empirical Study of Training Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.02057", Year = 2021, Authors = "Xinlei Chen, Saining Xie, Kaiming He")]
-public class MoCoV3<T> : SSLMethodBase<T>
+public class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly IMomentumEncoder<T> _momentumEncoder;
     private readonly IProjectorHead<T>? _momentumProjector;
     private readonly IProjectorHead<T>? _predictor;
     private readonly InfoNCELoss<T> _loss;
-    private readonly SSLAugmentationPolicies<T> _augmentation;
+    private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
 
     /// <inheritdoc />
     public override string Name => "MoCo v3";
 
     /// <inheritdoc />
-    public override SSLMethodCategory Category => SSLMethodCategory.Contrastive;
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.Contrastive;
 
     /// <inheritdoc />
     public override bool RequiresMemoryBank => false; // MoCo v3 doesn't use queue
@@ -80,7 +80,7 @@ public class MoCoV3<T> : SSLMethodBase<T>
         IProjectorHead<T> projector,
         IProjectorHead<T> momentumProjector,
         IProjectorHead<T>? predictor = null,
-        SSLConfig<T>? config = null)
+        SelfSupervisedLearningConfig<T>? config = null)
         : base(encoder, projector, config ?? CreateMoCoV3Config())
     {
         Guard.NotNull(momentumEncoder);
@@ -91,7 +91,7 @@ public class MoCoV3<T> : SSLMethodBase<T>
 
         var temperature = _config.Temperature ?? 0.2; // MoCo v3 uses higher temperature
         _loss = new InfoNCELoss<T>(temperature);
-        _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
+        _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
     /// <summary>
@@ -125,9 +125,9 @@ public class MoCoV3<T> : SSLMethodBase<T>
         return new MoCoV3<T>(encoder, momentumEncoder, projector, momentumProjector, predictor);
     }
 
-    private static SSLConfig<T> CreateMoCoV3Config()
+    private static SelfSupervisedLearningConfig<T> CreateMoCoV3Config()
     {
-        return new SSLConfig<T>
+        return new SelfSupervisedLearningConfig<T>
         {
             Temperature = 0.2,
             LearningRate = 1.5e-4, // Lower LR for ViT

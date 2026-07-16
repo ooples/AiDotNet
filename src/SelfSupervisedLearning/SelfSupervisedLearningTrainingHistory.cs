@@ -4,7 +4,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// Training history from SSL pretraining.
 /// </summary>
 /// <typeparam name="T">The numeric type used for computations.</typeparam>
-public class SSLTrainingHistory<T>
+public class SelfSupervisedLearningTrainingHistory<T>
 {
     /// <summary>
     /// Loss values per epoch.

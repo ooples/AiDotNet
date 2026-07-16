@@ -13,7 +13,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// everything you need: the trained encoder, training history, and evaluation metrics.
 /// You can use the encoder for downstream tasks or continue training.</para>
 /// </remarks>
-public class SSLResult<T>
+public class SelfSupervisedLearningResult<T>
 {
     /// <summary>
     /// Gets or sets the pretrained encoder network.
@@ -28,7 +28,7 @@ public class SSLResult<T>
     /// Gets or sets the name of the SSL method that was used for training.
     /// </summary>
     /// <remarks>
-    /// <para>Taken from <see cref="ISSLMethod{T}.Name"/> of the method that actually ran, so it
+    /// <para>Taken from <see cref="ISelfSupervisedLearningMethod{T}.Name"/> of the method that actually ran, so it
     /// reports custom methods as faithfully as shipped ones.</para>
     /// <para>Examples: "SimCLR", "MoCo v2", "BYOL", "DINO", "MAE".</para>
     /// </remarks>
@@ -37,17 +37,17 @@ public class SSLResult<T>
     /// <summary>
     /// Gets or sets the training configuration used.
     /// </summary>
-    public SSLConfig<T>? Config { get; set; }
+    public SelfSupervisedLearningConfig<T>? Config { get; set; }
 
     /// <summary>
     /// Gets or sets the training history.
     /// </summary>
-    public SSLTrainingHistory<T>? History { get; set; }
+    public SelfSupervisedLearningTrainingHistory<T>? History { get; set; }
 
     /// <summary>
     /// Gets or sets the final SSL metrics.
     /// </summary>
-    public SSLMetricReport<T>? FinalMetrics { get; set; }
+    public SelfSupervisedLearningMetricReport<T>? FinalMetrics { get; set; }
 
     /// <summary>
     /// Gets or sets the linear evaluation result (if performed).
@@ -97,13 +97,13 @@ public class SSLResult<T>
     /// <summary>
     /// Creates a successful SSL result.
     /// </summary>
-    public static SSLResult<T> Success(
+    public static SelfSupervisedLearningResult<T> Success(
         INeuralNetwork<T> encoder,
         string methodName,
-        SSLConfig<T> config,
-        SSLTrainingHistory<T> history)
+        SelfSupervisedLearningConfig<T> config,
+        SelfSupervisedLearningTrainingHistory<T> history)
     {
-        return new SSLResult<T>
+        return new SelfSupervisedLearningResult<T>
         {
             Encoder = encoder,
             MethodName = methodName,
@@ -117,9 +117,9 @@ public class SSLResult<T>
     /// <summary>
     /// Creates a failed SSL result.
     /// </summary>
-    public static SSLResult<T> Failure(string errorMessage)
+    public static SelfSupervisedLearningResult<T> Failure(string errorMessage)
     {
-        return new SSLResult<T>
+        return new SelfSupervisedLearningResult<T>
         {
             IsSuccess = false,
             ErrorMessage = errorMessage

@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.IntegrationTests.SelfSupervisedLearning;
 /// and temperature scheduling. Verifies exact hand-calculated values and mathematical
 /// properties to catch bugs in InfoNCE, NT-Xent, Barlow Twins, and BYOL losses.
 /// </summary>
-public class SSLLossesDeepMathIntegrationTests
+public class SelfSupervisedLearningLossesDeepMathIntegrationTests
 {
     private const double Tol = 1e-6;
     private const double RelaxedTol = 1e-4;

@@ -20,7 +20,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para>Derived classes (SimCLR, MoCo, BYOL, etc.) implement the specific training logic
 /// in the <see cref="TrainStepCore"/> method.</para>
 /// </remarks>
-public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISSLMethod<T>
+public abstract class SelfSupervisedLearningMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISelfSupervisedLearningMethod<T>
 {
     // NumOps and Engine are inherited from ModelBase
 
@@ -43,7 +43,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     /// <summary>
     /// The SSL configuration.
     /// </summary>
-    protected readonly SSLConfig<T> _config;
+    protected readonly SelfSupervisedLearningConfig<T> _config;
 
     /// <summary>
     /// Whether the method is in training mode.
@@ -64,7 +64,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     public abstract string Name { get; }
 
     /// <inheritdoc />
-    public abstract SSLMethodCategory Category { get; }
+    public abstract SelfSupervisedLearningMethodCategory Category { get; }
 
     /// <inheritdoc />
     public abstract bool RequiresMemoryBank { get; }
@@ -92,27 +92,27 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     }
 
     /// <summary>
-    /// Initializes a new instance of the SSLMethodBase class.
+    /// Initializes a new instance of the SelfSupervisedLearningMethodBase class.
     /// </summary>
     /// <param name="encoder">The encoder neural network.</param>
     /// <param name="projector">Optional projection head.</param>
     /// <param name="config">SSL configuration.</param>
-    protected SSLMethodBase(
+    protected SelfSupervisedLearningMethodBase(
         INeuralNetwork<T> encoder,
         IProjectorHead<T>? projector,
-        SSLConfig<T>? config)
+        SelfSupervisedLearningConfig<T>? config)
     {
         Guard.NotNull(encoder);
         _encoder = encoder;
         _projector = projector;
-        _config = config ?? new SSLConfig<T>();
+        _config = config ?? new SelfSupervisedLearningConfig<T>();
     }
 
     /// <inheritdoc />
     public INeuralNetwork<T> GetEncoder() => _encoder;
 
     /// <inheritdoc />
-    public SSLStepResult<T> TrainStep(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext = null)
+    public SelfSupervisedLearningStepResult<T> TrainStep(Tensor<T> batch, SelfSupervisedLearningAugmentationContext<T>? augmentationContext = null)
     {
         if (batch is null)
         {
@@ -135,10 +135,10 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     /// <param name="batch">The input batch tensor.</param>
     /// <param name="augmentationContext">Optional augmentation context.</param>
     /// <returns>The result of the training step.</returns>
-    protected virtual SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
+    protected virtual SelfSupervisedLearningStepResult<T> TrainStepCore(Tensor<T> batch, SelfSupervisedLearningAugmentationContext<T>? augmentationContext)
     {
         // Default implementation uses tape-based training
-        return new SSLStepResult<T> { Loss = NumOps.Zero };
+        return new SelfSupervisedLearningStepResult<T> { Loss = NumOps.Zero };
     }
 
     /// <inheritdoc />
@@ -368,9 +368,9 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     /// </summary>
     /// <param name="loss">The loss value.</param>
     /// <returns>A step result with populated common fields.</returns>
-    protected SSLStepResult<T> CreateStepResult(T loss)
+    protected SelfSupervisedLearningStepResult<T> CreateStepResult(T loss)
     {
-        return new SSLStepResult<T>
+        return new SelfSupervisedLearningStepResult<T>
         {
             Loss = loss,
             CurrentLearningRate = GetEffectiveLearningRate(),
@@ -583,7 +583,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        return (SSLMethodBase<T>)MemberwiseClone();
+        return (SelfSupervisedLearningMethodBase<T>)MemberwiseClone();
     }
 
     /// <inheritdoc/>

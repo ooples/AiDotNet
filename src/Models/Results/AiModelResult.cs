@@ -617,6 +617,22 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// The self-supervised pretraining report, or <c>null</c> when no SSL method was configured (or an
+    /// explicit pretrain action was used instead of the default loop).
+    /// </summary>
+    /// <remarks>
+    /// The loss trajectory, a representation-collapse check (the classic BYOL/SimSiam failure a falling
+    /// loss can hide), and — when labels are available — a linear-probe quality estimate of the learned
+    /// representations.
+    /// </remarks>
+    public SelfSupervisedLearning.SelfSupervisedLearningPretrainingResult<T>? SelfSupervisedLearningPretrainingResult { get; private set; }
+
+    /// <summary>Records the self-supervised pretraining report. Called by the builder during Build.</summary>
+    internal void SetSelfSupervisedLearningPretrainingResult(
+        SelfSupervisedLearning.SelfSupervisedLearningPretrainingResult<T> result)
+        => SelfSupervisedLearningPretrainingResult = result;
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>

@@ -20,7 +20,7 @@ namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 /// <item><b>Uniformity:</b> Distribution of features on hypersphere (should be uniform)</item>
 /// </list>
 /// </remarks>
-public class SSLMetrics<T>
+public class SelfSupervisedLearningMetrics<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -300,10 +300,10 @@ public class SSLMetrics<T>
     /// <summary>
     /// Computes a full set of SSL metrics.
     /// </summary>
-    public SSLMetricReport<T> ComputeFullReport(
+    public SelfSupervisedLearningMetricReport<T> ComputeFullReport(
         Tensor<T> z1, Tensor<T> z2)
     {
-        return new SSLMetricReport<T>
+        return new SelfSupervisedLearningMetricReport<T>
         {
             Std1 = ComputeRepresentationStd(z1),
             Std2 = ComputeRepresentationStd(z2),

@@ -53,7 +53,7 @@ public class DINO<T> : TeacherStudentSSL<T>
     public override string Name => "DINO";
 
     /// <inheritdoc />
-    public override SSLMethodCategory Category => SSLMethodCategory.SelfDistillation;
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.SelfDistillation;
 
     /// <summary>
     /// Initializes a new instance of the DINO class.
@@ -70,9 +70,9 @@ public class DINO<T> : TeacherStudentSSL<T>
         IProjectorHead<T> studentProjector,
         IProjectorHead<T> teacherProjector,
         int outputDim = 65536,
-        SSLConfig<T>? config = null)
+        SelfSupervisedLearningConfig<T>? config = null)
         : base(studentEncoder, teacherEncoder, studentProjector, teacherProjector,
-               outputDim, config ?? new SSLConfig<T>())
+               outputDim, config ?? new SelfSupervisedLearningConfig<T>())
     {
         _outputDim = outputDim;
 

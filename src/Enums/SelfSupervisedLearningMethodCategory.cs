@@ -12,7 +12,7 @@ namespace AiDotNet.Enums;
 /// <item><b>SelfDistillation:</b> Learn by matching predictions between teacher and student networks</item>
 /// </list>
 /// </remarks>
-public enum SSLMethodCategory
+public enum SelfSupervisedLearningMethodCategory
 {
     /// <summary>
     /// Contrastive learning methods (SimCLR, MoCo).

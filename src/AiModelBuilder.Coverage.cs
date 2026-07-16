@@ -221,14 +221,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// contrastive learning (SimCLR, MoCo), masked prediction (BERT, MAE), and bootstrap methods
     /// (BYOL, SimSiam). These representations can then be fine-tuned for downstream tasks.</para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureSSLMethod(ISSLMethod<T> method)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearningMethod(ISelfSupervisedLearningMethod<T> method)
     {
         if (method is null) throw new ArgumentNullException(nameof(method));
 
         // Write through to the SSL config so the method reaches the pretraining hook. Create the
         // config if ConfigureSelfSupervisedLearning has not run yet; that overload reuses this
         // instance, so the two compose in either call order.
-        (_sslConfig ??= new SelfSupervisedLearning.SSLConfig<T>()).Method = method;
+        (_selfSupervisedLearningConfig ??= new SelfSupervisedLearning.SelfSupervisedLearningConfig<T>()).Method = method;
         return this;
     }
 

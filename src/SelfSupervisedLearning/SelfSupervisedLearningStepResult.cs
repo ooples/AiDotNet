@@ -8,7 +8,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para><b>For Beginners:</b> This contains all the information from one training iteration,
 /// including the loss value and any additional metrics specific to the SSL method.</para>
 /// </remarks>
-public class SSLStepResult<T>
+public class SelfSupervisedLearningStepResult<T>
 {
     /// <summary>
     /// Gets or sets the primary loss value for this step.

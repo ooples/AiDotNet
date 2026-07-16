@@ -1907,12 +1907,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </code>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
-        Action<SelfSupervisedLearning.SSLConfig<T>>? configure = null)
+        Action<SelfSupervisedLearning.SelfSupervisedLearningConfig<T>>? configure = null)
     {
-        // Reuse any config an earlier ConfigureSSLMethod call created, so the two entry points
+        // Reuse any config an earlier ConfigureSelfSupervisedLearningMethod call created, so the two entry points
         // compose in either order rather than the later one silently clobbering the earlier.
-        _sslConfig ??= new SelfSupervisedLearning.SSLConfig<T>();
-        configure?.Invoke(_sslConfig);
+        _selfSupervisedLearningConfig ??= new SelfSupervisedLearning.SelfSupervisedLearningConfig<T>();
+        configure?.Invoke(_selfSupervisedLearningConfig);
         return this;
     }
 
@@ -1920,33 +1920,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Configures self-supervised learning with a typed pretraining hook
     /// (<see cref="AiDotNet"/>#1361).
     /// </summary>
-    /// <param name="configure">Optional <see cref="SelfSupervisedLearning.SSLConfig{T}"/>
-    /// configurator. When null, a default <c>SSLConfig&lt;T&gt;</c> is used.</param>
+    /// <param name="configure">Optional <see cref="SelfSupervisedLearning.SelfSupervisedLearningConfig{T}"/>
+    /// configurator. When null, a default <c>SelfSupervisedLearningConfig&lt;T&gt;</c> is used.</param>
     /// <param name="pretrainAction">User-supplied pretraining hook invoked BEFORE
-    /// main training. Receives the current base model + SSLConfig&lt;T&gt; + cancellation
+    /// main training. Receives the current base model + SelfSupervisedLearningConfig&lt;T&gt; + cancellation
     /// token; returns the model that should feed into main training (typically the
     /// same model with its encoder updated via <see cref="SelfSupervisedLearning
-    /// .ISSLMethod{T}"/>'s TrainStep loop). The configured-but-no-action pattern
+    /// .ISelfSupervisedLearningMethod{T}"/>'s TrainStep loop). The configured-but-no-action pattern
     /// preserves backwards compatibility — SSL settings are stored on the result
     /// without forcing any pretraining stage to run.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// The two-argument overload is the wire-up entry point — the single-argument
-    /// overload above stores SSLConfig&lt;T&gt; but does NOT run a pretraining stage (the
+    /// overload above stores SelfSupervisedLearningConfig&lt;T&gt; but does NOT run a pretraining stage (the
     /// SSL subsystem requires an encoder-shaped <c>INeuralNetwork&lt;T&gt;</c> which
     /// is not interchangeable with arbitrary <c>IFullModel&lt;T, TInput, TOutput&gt;
     /// </c>; the user-supplied action is where the conversion happens).
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
-        Action<SelfSupervisedLearning.SSLConfig<T>>? configure,
-        Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig<T>, CancellationToken,
+        Action<SelfSupervisedLearning.SelfSupervisedLearningConfig<T>>? configure,
+        Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SelfSupervisedLearningConfig<T>, CancellationToken,
             Task<IFullModel<T, TInput, TOutput>>> pretrainAction)
     {
         if (pretrainAction is null) throw new ArgumentNullException(nameof(pretrainAction));
-        // Reuse any config an earlier ConfigureSSLMethod call created (see the overload above).
-        _sslConfig ??= new SelfSupervisedLearning.SSLConfig<T>();
-        configure?.Invoke(_sslConfig);
-        _sslPretrainAction = pretrainAction;
+        // Reuse any config an earlier ConfigureSelfSupervisedLearningMethod call created (see the overload above).
+        _selfSupervisedLearningConfig ??= new SelfSupervisedLearning.SelfSupervisedLearningConfig<T>();
+        configure?.Invoke(_selfSupervisedLearningConfig);
+        _selfSupervisedLearningPretrainAction = pretrainAction;
         return this;
     }
 

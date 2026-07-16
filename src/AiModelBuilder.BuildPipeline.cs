@@ -565,6 +565,48 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             "Teacher, .TeacherModel, or .TeacherForward.");
     }
 
+    /// <summary>
+    /// Runs the default self-supervised pretraining loop when a method was configured without an explicit
+    /// pretrain action: pretrains over the unlabeled inputs, watches for representation collapse, and
+    /// probes representation quality. Returns the report, or <c>null</c> when it could not run.
+    /// </summary>
+    private SelfSupervisedLearning.SelfSupervisedLearningPretrainingResult<T>? RunDefaultSelfSupervisedLearningPretraining(
+        SelfSupervisedLearning.SelfSupervisedLearningConfig<T> config, TInput x, TOutput y)
+    {
+        try
+        {
+            if (x is not Tensor<T> data)
+            {
+                throw new NotSupportedException(
+                    $"default self-supervised pretraining requires Tensor inputs (got {typeof(TInput).Name}).");
+            }
+
+            // Targets feed the optional linear probe; only use them when they line up one-per-sample.
+            Tensors.LinearAlgebra.Vector<T>? targets = null;
+            try
+            {
+                var candidate = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+                if (candidate.Length == data.Shape[0]) targets = candidate;
+            }
+            catch
+            {
+                targets = null;
+            }
+
+            int epochs = config.PretrainingEpochs ?? 5;
+            int batchSize = config.BatchSize ?? 32;
+            return SelfSupervisedLearning.SelfSupervisedLearningPretrainer.Run(
+                config.Method!, data, targets, epochs, batchSize);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Default self-supervised pretraining could not run: {ex.Message}. Main training proceeds " +
+                "on the un-pretrained model; AiModelResult.SelfSupervisedLearningPretrainingResult is null.");
+            return null;
+        }
+    }
+
     /// <summary>Extracts a single row of a 2-D tensor as a [1, features] tensor.</summary>
     private static Tensor<T> RowTensor(Tensor<T> matrix, int row)
     {
@@ -2179,19 +2221,28 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // method (SimCLR / MoCo / BYOL / DINO / MAE / Barlow Twins) over its
         // pretraining batches and returning the model that should feed into main
         // supervised training (typically the same model with its encoder updated).
-        // The single-argument overload (Action<SSLConfig<T>>) stores configuration
+        // The single-argument overload (Action<SelfSupervisedLearningConfig<T>>) stores configuration
         // without running any pretraining stage — that path is config-only.
         // ============================================================================
-        if (_sslPretrainAction is not null)
+        if (_selfSupervisedLearningPretrainAction is not null)
         {
-            if (_sslConfig is null)
+            if (_selfSupervisedLearningConfig is null)
                 throw new InvalidOperationException(
-                    "_sslPretrainAction was set without _sslConfig — internal builder invariant violated.");
-            _model = await _sslPretrainAction(_model, _sslConfig, CancellationToken.None).ConfigureAwait(false);
+                    "_selfSupervisedLearningPretrainAction was set without _selfSupervisedLearningConfig — internal builder invariant violated.");
+            _model = await _selfSupervisedLearningPretrainAction(_model, _selfSupervisedLearningConfig, CancellationToken.None).ConfigureAwait(false);
             if (_model is null)
                 throw new InvalidOperationException(
                     "ConfigureSelfSupervisedLearning's pretrainAction returned null. " +
                     "The hook must return a non-null IFullModel<T, TInput, TOutput> for main training to proceed.");
+        }
+        else if (_selfSupervisedLearningConfig?.Method is not null)
+        {
+            // An SSL method configured without an explicit pretrain action still runs: a default loop
+            // pretrains the method on the unlabeled inputs, watching for representation collapse and
+            // probing representation quality. If the method was built around the model's encoder, the
+            // model is pretrained in place; otherwise the pretrained encoder is on the method
+            // (GetEncoder). The result is surfaced on AiModelResult.SelfSupervisedLearningPretrainingResult.
+            _selfSupervisedLearningPretrainingResult = RunDefaultSelfSupervisedLearningPretraining(_selfSupervisedLearningConfig, x, y);
         }
 
         // Wire instance-level preprocessing/postprocessing onto DocumentNeuralNetworkBase models.
@@ -4186,6 +4237,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (_continualLearningTaskResult is not null)
         {
             finalResult.SetContinualLearning(_continualLearningTaskResult, _continualLearningRetention);
+        }
+        if (_selfSupervisedLearningPretrainingResult is not null)
+        {
+            finalResult.SetSelfSupervisedLearningPretrainingResult(_selfSupervisedLearningPretrainingResult);
         }
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);

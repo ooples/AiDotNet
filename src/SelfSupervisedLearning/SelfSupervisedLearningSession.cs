@@ -29,14 +29,14 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
-public class SSLSession<T>
+public class SelfSupervisedLearningSession<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private readonly ISSLMethod<T> _method;
-    private readonly SSLConfig<T> _config;
-    private readonly SSLMetrics<T> _metrics;
-    private SSLTrainingHistory<T> _history;
+    private readonly ISelfSupervisedLearningMethod<T> _method;
+    private readonly SelfSupervisedLearningConfig<T> _config;
+    private readonly SelfSupervisedLearningMetrics<T> _metrics;
+    private SelfSupervisedLearningTrainingHistory<T> _history;
 
     private int _currentEpoch;
     private int _globalStep;
@@ -67,7 +67,7 @@ public class SSLSession<T>
     /// <summary>
     /// Event raised after each training step.
     /// </summary>
-    public event Action<int, SSLStepResult<T>>? OnStepComplete;
+    public event Action<int, SelfSupervisedLearningStepResult<T>>? OnStepComplete;
 
     /// <summary>
     /// Event raised when collapse is detected.
@@ -92,20 +92,20 @@ public class SSLSession<T>
     /// <summary>
     /// Gets the SSL method being used.
     /// </summary>
-    public ISSLMethod<T> Method => _method;
+    public ISelfSupervisedLearningMethod<T> Method => _method;
 
     /// <summary>
     /// Initializes a new SSL training session.
     /// </summary>
     /// <param name="method">The SSL method to use.</param>
     /// <param name="config">Training configuration.</param>
-    public SSLSession(ISSLMethod<T> method, SSLConfig<T>? config = null)
+    public SelfSupervisedLearningSession(ISelfSupervisedLearningMethod<T> method, SelfSupervisedLearningConfig<T>? config = null)
     {
         Guard.NotNull(method);
         _method = method;
-        _config = config ?? new SSLConfig<T>();
-        _metrics = new SSLMetrics<T>();
-        _history = new SSLTrainingHistory<T>();
+        _config = config ?? new SelfSupervisedLearningConfig<T>();
+        _metrics = new SelfSupervisedLearningMetrics<T>();
+        _history = new SelfSupervisedLearningTrainingHistory<T>();
 
         // Initialize distributed training if configured
         var distConfig = _config.Distributed;
@@ -127,14 +127,14 @@ public class SSLSession<T>
     /// <summary>
     /// Creates the communication backend based on configuration.
     /// </summary>
-    private ICommunicationBackend<T> CreateCommunicationBackend(SSLDistributedConfig distConfig)
+    private ICommunicationBackend<T> CreateCommunicationBackend(SelfSupervisedLearningDistributedConfig distConfig)
     {
         return distConfig.Backend switch
         {
-            SSLCommunicationBackend.InMemory => new InMemoryCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
-            SSLCommunicationBackend.NCCL => new NCCLCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
-            SSLCommunicationBackend.MPI => new MPICommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
-            SSLCommunicationBackend.Gloo => new GlooCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
+            SelfSupervisedLearningCommunicationBackend.InMemory => new InMemoryCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
+            SelfSupervisedLearningCommunicationBackend.NCCL => new NCCLCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
+            SelfSupervisedLearningCommunicationBackend.MPI => new MPICommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
+            SelfSupervisedLearningCommunicationBackend.Gloo => new GlooCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
             _ => new InMemoryCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank)
         };
     }
@@ -161,7 +161,7 @@ public class SSLSession<T>
     /// <param name="validationData">Optional validation data for k-NN evaluation.</param>
     /// <param name="validationLabels">Optional validation labels.</param>
     /// <returns>Training result.</returns>
-    public SSLResult<T> Train(
+    public SelfSupervisedLearningResult<T> Train(
         Func<IEnumerable<Tensor<T>>> dataLoader,
         Tensor<T>? validationData = null,
         int[]? validationLabels = null)
@@ -194,7 +194,7 @@ public class SSLSession<T>
         }
         catch (Exception ex)
         {
-            return SSLResult<T>.Failure(ex.Message);
+            return SelfSupervisedLearningResult<T>.Failure(ex.Message);
         }
         finally
         {
@@ -264,7 +264,7 @@ public class SSLSession<T>
 
         _history.AddEpochMetrics(
             epochLoss, std, knnAcc,
-            _method is SSLMethodBase<T> baseMethod ? baseMethod.GetEffectiveLearningRate() : 0,
+            _method is SelfSupervisedLearningMethodBase<T> baseMethod ? baseMethod.GetEffectiveLearningRate() : 0,
             0);
 
         // DDP: Epoch-end barrier to synchronize all workers
@@ -299,7 +299,7 @@ public class SSLSession<T>
         _communicationBackend.AllReduce(gradients, ReductionOperation.Average);
 
         // The encoder will use these averaged gradients in its next update
-        // Note: This requires the SSLMethod to properly apply gradients after this sync
+        // Note: This requires the SelfSupervisedLearningMethod to properly apply gradients after this sync
     }
 
     /// <summary>
@@ -350,19 +350,19 @@ public class SSLSession<T>
     {
         _currentEpoch = 0;
         _globalStep = 0;
-        _history = new SSLTrainingHistory<T>();
+        _history = new SelfSupervisedLearningTrainingHistory<T>();
         _method.Reset();
     }
 
     /// <summary>
     /// Gets the current training history.
     /// </summary>
-    public SSLTrainingHistory<T> GetHistory() => _history;
+    public SelfSupervisedLearningTrainingHistory<T> GetHistory() => _history;
 
     /// <summary>
     /// Runs evaluation on the current encoder.
     /// </summary>
-    public SSLMetricReport<T> Evaluate(Tensor<T> data)
+    public SelfSupervisedLearningMetricReport<T> Evaluate(Tensor<T> data)
     {
         var z1 = _method.Encode(data);
         var z2 = _method.Encode(data); // Same data, different augmentation would be used in practice
@@ -370,13 +370,13 @@ public class SSLSession<T>
         return _metrics.ComputeFullReport(z1, z2);
     }
 
-    private SSLResult<T> CreateResult()
+    private SelfSupervisedLearningResult<T> CreateResult()
     {
         var elapsed = DateTime.Now - _startTime;
 
         // Report the method that actually ran, not the one the config names — the session is handed a
         // constructed method and the two can differ.
-        var result = SSLResult<T>.Success(
+        var result = SelfSupervisedLearningResult<T>.Success(
             _method.GetEncoder(),
             _method.Name,
             _config,
@@ -500,7 +500,7 @@ public class SSLSession<T>
     /// <param name="checkpointPath">Path to save the checkpoint.</param>
     public void SaveCheckpoint(string checkpointPath)
     {
-        var checkpointData = new SSLCheckpointData
+        var checkpointData = new SelfSupervisedLearningCheckpointData
         {
             CurrentEpoch = _currentEpoch,
             GlobalStep = _globalStep,
@@ -550,10 +550,10 @@ public class SSLSession<T>
     /// <param name="encoder">The encoder network to load weights into.</param>
     /// <param name="methodFactory">Factory to create the SSL method from the encoder.</param>
     /// <returns>A session restored from the checkpoint.</returns>
-    public static SSLSession<T> FromCheckpoint(
+    public static SelfSupervisedLearningSession<T> FromCheckpoint(
         string checkpointPath,
         INeuralNetwork<T> encoder,
-        Func<INeuralNetwork<T>, ISSLMethod<T>> methodFactory)
+        Func<INeuralNetwork<T>, ISelfSupervisedLearningMethod<T>> methodFactory)
     {
         // Load checkpoint metadata
         var metadataPath = checkpointPath + ".meta";
@@ -563,7 +563,7 @@ public class SSLSession<T>
         }
 
         var metadataJson = File.ReadAllText(metadataPath);
-        var checkpointData = JsonSerializer.Deserialize<SSLCheckpointData>(metadataJson)
+        var checkpointData = JsonSerializer.Deserialize<SelfSupervisedLearningCheckpointData>(metadataJson)
             ?? throw new InvalidDataException("Failed to deserialize checkpoint metadata");
 
         // Load encoder parameters
@@ -583,12 +583,12 @@ public class SSLSession<T>
         encoder.UpdateParameters(new Vector<T>(parameters));
 
         // Deserialize config
-        var config = JsonSerializer.Deserialize<SSLConfig<T>>(checkpointData.ConfigJson)
-            ?? new SSLConfig<T>();
+        var config = JsonSerializer.Deserialize<SelfSupervisedLearningConfig<T>>(checkpointData.ConfigJson)
+            ?? new SelfSupervisedLearningConfig<T>();
 
         // Create method and session
         var method = methodFactory(encoder);
-        var session = new SSLSession<T>(method, config)
+        var session = new SelfSupervisedLearningSession<T>(method, config)
         {
             _currentEpoch = checkpointData.CurrentEpoch,
             _globalStep = checkpointData.GlobalStep
@@ -597,7 +597,7 @@ public class SSLSession<T>
         // Restore history if available
         if (!string.IsNullOrEmpty(checkpointData.HistoryJson))
         {
-            var history = JsonSerializer.Deserialize<SSLTrainingHistory<T>>(checkpointData.HistoryJson);
+            var history = JsonSerializer.Deserialize<SelfSupervisedLearningTrainingHistory<T>>(checkpointData.HistoryJson);
             if (history is not null)
             {
                 session._history = history;
@@ -611,7 +611,7 @@ public class SSLSession<T>
 /// <summary>
 /// Data structure for SSL checkpoint serialization.
 /// </summary>
-internal class SSLCheckpointData
+internal class SelfSupervisedLearningCheckpointData
 {
     public int CurrentEpoch { get; set; }
     public int GlobalStep { get; set; }

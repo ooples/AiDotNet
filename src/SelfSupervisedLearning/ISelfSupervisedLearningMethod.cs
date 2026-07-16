@@ -31,8 +31,8 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// var embeddings = simclr.Encode(newData);
 /// </code>
 /// </remarks>
-[AiDotNet.Configuration.YamlConfigurable("SSLMethod")]
-public interface ISSLMethod<T>
+[AiDotNet.Configuration.YamlConfigurable("SelfSupervisedLearningMethod")]
+public interface ISelfSupervisedLearningMethod<T>
 {
     /// <summary>
     /// Gets the name of this SSL method.
@@ -48,7 +48,7 @@ public interface ISSLMethod<T>
     /// <remarks>
     /// <para>Categories include Contrastive, NonContrastive, Generative, and SelfDistillation.</para>
     /// </remarks>
-    SSLMethodCategory Category { get; }
+    SelfSupervisedLearningMethodCategory Category { get; }
 
     /// <summary>
     /// Indicates whether this method requires a memory bank for negative samples.
@@ -93,7 +93,7 @@ public interface ISSLMethod<T>
     /// <item>Updates model parameters</item>
     /// </list>
     /// </remarks>
-    SSLStepResult<T> TrainStep(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext = null);
+    SelfSupervisedLearningStepResult<T> TrainStep(Tensor<T> batch, SelfSupervisedLearningAugmentationContext<T>? augmentationContext = null);
 
     /// <summary>
     /// Encodes input data into learned representations.

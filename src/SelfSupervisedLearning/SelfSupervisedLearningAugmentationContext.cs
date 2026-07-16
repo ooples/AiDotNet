@@ -8,7 +8,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para><b>For Beginners:</b> This provides information and state for creating augmented views.
 /// SSL methods typically create multiple views of each input for contrastive/self-supervised learning.</para>
 /// </remarks>
-public class SSLAugmentationContext<T>
+public class SelfSupervisedLearningAugmentationContext<T>
 {
     /// <summary>
     /// Gets or sets whether this is the first view (used in multi-view methods).

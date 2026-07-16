@@ -38,7 +38,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// });
 /// </code>
 /// </remarks>
-public class SSLConfig<T>
+public class SelfSupervisedLearningConfig<T>
 {
     // === Core Settings ===
 
@@ -55,7 +55,7 @@ public class SSLConfig<T>
     /// <see cref="MoCoV3{T}"/>, <see cref="BYOL{T}"/>, <see cref="SimSiam{T}"/>,
     /// <see cref="BarlowTwins{T}"/>, <see cref="DINO{T}"/>, <see cref="iBOT{T}"/> and
     /// <see cref="MAE{T}"/>, each with a static <c>Create</c> factory that builds it from an encoder.
-    /// Any other <see cref="ISSLMethod{T}"/> works too.
+    /// Any other <see cref="ISelfSupervisedLearningMethod{T}"/> works too.
     /// </para>
     /// <para><b>For Beginners:</b> An SSL method is the strategy used to learn from unlabeled data.
     /// Leave this null to get SimCLR, which is simple and performs well. Pick another when you have a
@@ -63,12 +63,12 @@ public class SSLConfig<T>
     /// DINO for Vision Transformers, MAE for masked autoencoding.</para>
     /// <para>
     /// This holds a live method object that owns the encoder, so it is not part of the JSON
-    /// checkpoint. <see cref="SSLSession{T}.FromCheckpoint"/> already takes a method factory to
+    /// checkpoint. <see cref="SelfSupervisedLearningSession{T}.FromCheckpoint"/> already takes a method factory to
     /// rebuild it; the method's name is still recorded by <see cref="GetConfiguration"/>.
     /// </para>
     /// </remarks>
     [System.Text.Json.Serialization.JsonIgnore]
-    public ISSLMethod<T>? Method { get; set; }
+    public ISelfSupervisedLearningMethod<T>? Method { get; set; }
 
     /// <summary>
     /// Gets or sets the number of pretraining epochs.
@@ -269,21 +269,21 @@ public class SSLConfig<T>
     /// Each GPU processes a different batch, and gradients are averaged across all GPUs. This is
     /// especially important for SSL methods like SimCLR that benefit from very large effective batch sizes.</para>
     /// </remarks>
-    public SSLDistributedConfig? Distributed { get; set; }
+    public SelfSupervisedLearningDistributedConfig? Distributed { get; set; }
 
     /// <summary>
     /// Gets or sets the optimizer type for SSL training.
     /// </summary>
     /// <remarks>
-    /// <para>Default: <c>SSLOptimizerType.LARS</c></para>
+    /// <para>Default: <c>SelfSupervisedLearningOptimizerType.LARS</c></para>
     /// <para>LARS is recommended for large batch SSL training. LAMB is better for transformer-based encoders.</para>
     /// </remarks>
-    public SSLOptimizerType? OptimizerType { get; set; }
+    public SelfSupervisedLearningOptimizerType? OptimizerType { get; set; }
 
     /// <summary>
     /// Creates a new SSL configuration with industry-standard defaults.
     /// </summary>
-    public SSLConfig()
+    public SelfSupervisedLearningConfig()
     {
     }
 
@@ -343,7 +343,7 @@ public class SSLConfig<T>
 /// <item>Memory bank methods like MoCo can share queue across workers</item>
 /// </list>
 /// </remarks>
-public class SSLDistributedConfig
+public class SelfSupervisedLearningDistributedConfig
 {
     /// <summary>
     /// Gets or sets whether distributed training is enabled.
@@ -402,10 +402,10 @@ public class SSLDistributedConfig
     /// Gets or sets the communication backend type.
     /// </summary>
     /// <remarks>
-    /// <para>Default: <c>SSLCommunicationBackend.InMemory</c></para>
+    /// <para>Default: <c>SelfSupervisedLearningCommunicationBackend.InMemory</c></para>
     /// <para>Use NCCL for multi-GPU, MPI for multi-node training.</para>
     /// </remarks>
-    public SSLCommunicationBackend Backend { get; set; } = SSLCommunicationBackend.InMemory;
+    public SelfSupervisedLearningCommunicationBackend Backend { get; set; } = SelfSupervisedLearningCommunicationBackend.InMemory;
 
     /// <summary>
     /// Gets or sets whether all workers share the same memory queue (for MoCo).
@@ -447,7 +447,7 @@ public class SSLDistributedConfig
 /// <summary>
 /// Optimizer types optimized for SSL training.
 /// </summary>
-public enum SSLOptimizerType
+public enum SelfSupervisedLearningOptimizerType
 {
     /// <summary>
     /// Standard SGD with momentum.
@@ -478,7 +478,7 @@ public enum SSLOptimizerType
 /// <summary>
 /// Communication backends for distributed SSL training.
 /// </summary>
-public enum SSLCommunicationBackend
+public enum SelfSupervisedLearningCommunicationBackend
 {
     /// <summary>
     /// In-memory communication (single machine, testing).

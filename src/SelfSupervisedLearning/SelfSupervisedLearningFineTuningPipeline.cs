@@ -30,7 +30,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
-public class SSLFineTuningPipeline<T>
+public class SelfSupervisedLearningFineTuningPipeline<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -56,7 +56,7 @@ public class SSLFineTuningPipeline<T>
     /// <param name="encoder">Pretrained encoder to fine-tune.</param>
     /// <param name="encoderOutputDim">Output dimension of the encoder.</param>
     /// <param name="numClasses">Number of classes for classification.</param>
-    public SSLFineTuningPipeline(
+    public SelfSupervisedLearningFineTuningPipeline(
         INeuralNetwork<T> encoder,
         int encoderOutputDim,
         int numClasses)
@@ -83,7 +83,7 @@ public class SSLFineTuningPipeline<T>
     /// <summary>
     /// Configures fine-tuning parameters.
     /// </summary>
-    public SSLFineTuningPipeline<T> WithConfig(Action<FineTuningConfig> configure)
+    public SelfSupervisedLearningFineTuningPipeline<T> WithConfig(Action<FineTuningConfig> configure)
     {
         configure(_config);
         return this;
@@ -92,7 +92,7 @@ public class SSLFineTuningPipeline<T>
     /// <summary>
     /// Sets the fine-tuning strategy.
     /// </summary>
-    public SSLFineTuningPipeline<T> WithStrategy(FineTuningStrategy strategy)
+    public SelfSupervisedLearningFineTuningPipeline<T> WithStrategy(FineTuningStrategy strategy)
     {
         _config.Strategy = strategy;
         return this;

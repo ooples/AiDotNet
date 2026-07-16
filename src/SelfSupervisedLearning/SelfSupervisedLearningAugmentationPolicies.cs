@@ -29,17 +29,17 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <item><b>DINO:</b> Multi-crop strategy (global + local crops)</item>
 /// </list>
 /// </remarks>
-public class SSLAugmentationPolicies<T>
+public class SelfSupervisedLearningAugmentationPolicies<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly Random _random;
 
     /// <summary>
-    /// Initializes a new instance of the SSLAugmentationPolicies class.
+    /// Initializes a new instance of the SelfSupervisedLearningAugmentationPolicies class.
     /// </summary>
     /// <param name="seed">Optional random seed for reproducibility.</param>
-    public SSLAugmentationPolicies(int? seed = null)
+    public SelfSupervisedLearningAugmentationPolicies(int? seed = null)
     {
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.Shared;
     }
@@ -627,25 +627,25 @@ public class SSLAugmentationPolicies<T>
     /// <summary>
     /// Creates a standard SimCLR augmentation policy.
     /// </summary>
-    public static SSLAugmentationPolicies<T> ForSimCLR(int? seed = null)
+    public static SelfSupervisedLearningAugmentationPolicies<T> ForSimCLR(int? seed = null)
     {
-        return new SSLAugmentationPolicies<T>(seed);
+        return new SelfSupervisedLearningAugmentationPolicies<T>(seed);
     }
 
     /// <summary>
     /// Creates a standard BYOL augmentation policy.
     /// </summary>
-    public static SSLAugmentationPolicies<T> ForBYOL(int? seed = null)
+    public static SelfSupervisedLearningAugmentationPolicies<T> ForBYOL(int? seed = null)
     {
-        return new SSLAugmentationPolicies<T>(seed);
+        return new SelfSupervisedLearningAugmentationPolicies<T>(seed);
     }
 
     /// <summary>
     /// Creates a standard DINO augmentation policy.
     /// </summary>
-    public static SSLAugmentationPolicies<T> ForDINO(int? seed = null)
+    public static SelfSupervisedLearningAugmentationPolicies<T> ForDINO(int? seed = null)
     {
-        return new SSLAugmentationPolicies<T>(seed);
+        return new SelfSupervisedLearningAugmentationPolicies<T>(seed);
     }
 
     /// <summary>

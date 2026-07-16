@@ -48,20 +48,20 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Bootstrap Your Own Latent - A New Approach to Self-Supervised Learning", "https://arxiv.org/abs/2006.07733", Year = 2020, Authors = "Jean-Bastien Grill, Florian Strub, Florent Altché, Corentin Tallec, Pierre Richemond, Elena Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Guo, Mohammad Gheshlaghi Azar, Bilal Piot, Koray Kavukcuoglu, Rémi Munos, Michal Valko")]
-public class BYOL<T> : SSLMethodBase<T>
+public class BYOL<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly IMomentumEncoder<T> _targetEncoder;
     private readonly SymmetricProjector<T> _onlineProjector;
     private readonly SymmetricProjector<T> _targetProjector;
     private readonly BYOLLoss<T> _loss;
-    private readonly SSLAugmentationPolicies<T> _augmentation;
+    private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
     private readonly double _baseMomentum;
 
     /// <inheritdoc />
     public override string Name => "BYOL";
 
     /// <inheritdoc />
-    public override SSLMethodCategory Category => SSLMethodCategory.NonContrastive;
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.NonContrastive;
 
     /// <inheritdoc />
     public override bool RequiresMemoryBank => false;
@@ -82,8 +82,8 @@ public class BYOL<T> : SSLMethodBase<T>
         IMomentumEncoder<T> targetEncoder,
         SymmetricProjector<T> onlineProjector,
         SymmetricProjector<T> targetProjector,
-        SSLConfig<T>? config = null)
-        : base(encoder, onlineProjector, config ?? new SSLConfig<T>())
+        SelfSupervisedLearningConfig<T>? config = null)
+        : base(encoder, onlineProjector, config ?? new SelfSupervisedLearningConfig<T>())
     {
         Guard.NotNull(targetEncoder);
         _targetEncoder = targetEncoder;
@@ -99,7 +99,7 @@ public class BYOL<T> : SSLMethodBase<T>
         _baseMomentum = byolConfig.BaseMomentum ?? 0.996;
 
         _loss = new BYOLLoss<T>();
-        _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
+        _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
     private void UpdateOnlineParameters(T learningRate)

@@ -57,15 +57,15 @@ public class MoCoV2<T> : MoCo<T>
         IProjectorHead<T> projector,
         IProjectorHead<T> momentumProjector,
         int embeddingDim = 128,
-        SSLConfig<T>? config = null)
+        SelfSupervisedLearningConfig<T>? config = null)
         : base(encoder, momentumEncoder, projector, momentumProjector, embeddingDim,
               config ?? CreateMoCoV2Config())
     {
     }
 
-    private static SSLConfig<T> CreateMoCoV2Config()
+    private static SelfSupervisedLearningConfig<T> CreateMoCoV2Config()
     {
-        return new SSLConfig<T>
+        return new SelfSupervisedLearningConfig<T>
         {
             UseCosineDecay = true,
             MoCo = new MoCoConfig { UseMLPProjector = true }

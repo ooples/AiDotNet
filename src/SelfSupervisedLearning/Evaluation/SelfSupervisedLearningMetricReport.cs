@@ -3,7 +3,7 @@ namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 /// <summary>
 /// Complete SSL metrics report.
 /// </summary>
-public class SSLMetricReport<T>
+public class SelfSupervisedLearningMetricReport<T>
 {
     /// <summary>Standard deviation of first view representations.</summary>
     public required T Std1 { get; set; }

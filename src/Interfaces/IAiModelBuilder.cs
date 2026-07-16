@@ -1637,24 +1637,24 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// training.
     /// </summary>
     IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
-        Action<AiDotNet.SelfSupervisedLearning.SSLConfig<T>>? configure = null);
+        Action<AiDotNet.SelfSupervisedLearning.SelfSupervisedLearningConfig<T>>? configure = null);
 
     /// <summary>
     /// Configures self-supervised pretraining with a user-supplied typed hook
     /// (AiDotNet#1361 wire-up).
     /// </summary>
-    /// <param name="configure">Optional <see cref="AiDotNet.SelfSupervisedLearning.SSLConfig{T}"/>
-    /// configurator. When null, a default <c>SSLConfig&lt;T&gt;</c> is used.</param>
+    /// <param name="configure">Optional <see cref="AiDotNet.SelfSupervisedLearning.SelfSupervisedLearningConfig{T}"/>
+    /// configurator. When null, a default <c>SelfSupervisedLearningConfig&lt;T&gt;</c> is used.</param>
     /// <param name="pretrainAction">User-supplied pretraining hook invoked BEFORE
-    /// main training. Receives the current base model + SSLConfig&lt;T&gt; + cancellation
+    /// main training. Receives the current base model + SelfSupervisedLearningConfig&lt;T&gt; + cancellation
     /// token; returns the model that should feed into main training (typically
     /// the same model with its encoder updated via an
-    /// <see cref="AiDotNet.SelfSupervisedLearning.ISSLMethod{T}"/>'s TrainStep
+    /// <see cref="AiDotNet.SelfSupervisedLearning.ISelfSupervisedLearningMethod{T}"/>'s TrainStep
     /// loop).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
-        Action<AiDotNet.SelfSupervisedLearning.SSLConfig<T>>? configure,
-        Func<IFullModel<T, TInput, TOutput>, AiDotNet.SelfSupervisedLearning.SSLConfig<T>, CancellationToken,
+        Action<AiDotNet.SelfSupervisedLearning.SelfSupervisedLearningConfig<T>>? configure,
+        Func<IFullModel<T, TInput, TOutput>, AiDotNet.SelfSupervisedLearning.SelfSupervisedLearningConfig<T>, CancellationToken,
             Task<IFullModel<T, TInput, TOutput>>> pretrainAction);
 
     /// <summary>
@@ -2213,7 +2213,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <param name="method">The SSL method implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureSSLMethod(SelfSupervisedLearning.ISSLMethod<T> method);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearningMethod(SelfSupervisedLearning.ISelfSupervisedLearningMethod<T> method);
 
     /// <summary>
     /// Configures a stopping criterion for active learning loops.

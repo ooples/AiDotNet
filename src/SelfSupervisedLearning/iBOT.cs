@@ -55,7 +55,7 @@ public class iBOT<T> : TeacherStudentSSL<T>
     public override string Name => "iBOT";
 
     /// <inheritdoc />
-    public override SSLMethodCategory Category => SSLMethodCategory.SelfDistillation;
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.SelfDistillation;
 
     /// <summary>
     /// Gets the weight for masked image modeling loss.
@@ -86,9 +86,9 @@ public class iBOT<T> : TeacherStudentSSL<T>
         int outputDim = 8192,
         double mimWeight = 1.0,
         double maskRatio = 0.4,
-        SSLConfig<T>? config = null)
+        SelfSupervisedLearningConfig<T>? config = null)
         : base(studentEncoder, teacherEncoder, studentProjector, teacherProjector,
-               outputDim, config ?? new SSLConfig<T>())
+               outputDim, config ?? new SelfSupervisedLearningConfig<T>())
     {
         _outputDim = outputDim;
         _mimWeight = mimWeight;

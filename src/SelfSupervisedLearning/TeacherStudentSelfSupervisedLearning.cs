@@ -24,7 +24,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Methods using this pattern:</b> DINO, iBOT, EsViT, DINOv2</para>
 /// </remarks>
-public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
+public abstract class TeacherStudentSSL<T> : SelfSupervisedLearningMethodBase<T>
 {
     /// <summary>
     /// The teacher encoder (momentum-updated copy of student).
@@ -49,7 +49,7 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
     /// <summary>
     /// Augmentation policies for creating views.
     /// </summary>
-    protected readonly SSLAugmentationPolicies<T> Augmentation;
+    protected readonly SelfSupervisedLearningAugmentationPolicies<T> Augmentation;
 
     /// <summary>
     /// Number of global crops (larger views used by both student and teacher).
@@ -82,8 +82,8 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
         IProjectorHead<T> studentProjector,
         IProjectorHead<T> teacherProjector,
         int outputDim,
-        SSLConfig<T>? config = null)
-        : base(studentEncoder, studentProjector, config ?? new SSLConfig<T>())
+        SelfSupervisedLearningConfig<T>? config = null)
+        : base(studentEncoder, studentProjector, config ?? new SelfSupervisedLearningConfig<T>())
     {
         Guard.NotNull(teacherEncoder);
         TeacherEncoder = teacherEncoder;
@@ -92,7 +92,7 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
 
         BaseMomentum = teacherEncoder.Momentum;
         Centering = new CenteringMechanism<T>(outputDim);
-        Augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
+        Augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
     /// <summary>

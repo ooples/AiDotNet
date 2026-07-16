@@ -45,11 +45,11 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked Autoencoders Are Scalable Vision Learners", "https://arxiv.org/abs/2111.06377", Year = 2022, Authors = "Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, Ross Girshick")]
-public class MAE<T> : SSLMethodBase<T>
+public class MAE<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly INeuralNetwork<T>? _decoder;
     private readonly MAEReconstructionLoss<T> _loss;
-    private readonly SSLAugmentationPolicies<T> _augmentation;
+    private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
     private readonly int _patchSize;
     private readonly int _numPatches;
     private readonly double _maskRatio;
@@ -59,7 +59,7 @@ public class MAE<T> : SSLMethodBase<T>
     public override string Name => "MAE";
 
     /// <inheritdoc />
-    public override SSLMethodCategory Category => SSLMethodCategory.Generative;
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.Generative;
 
     /// <inheritdoc />
     public override bool RequiresMemoryBank => false;
@@ -92,8 +92,8 @@ public class MAE<T> : SSLMethodBase<T>
         int patchSize = 16,
         int imageSize = 224,
         double maskRatio = 0.75,
-        SSLConfig<T>? config = null)
-        : base(encoder, null, config ?? new SSLConfig<T>())
+        SelfSupervisedLearningConfig<T>? config = null)
+        : base(encoder, null, config ?? new SelfSupervisedLearningConfig<T>())
     {
         _decoder = decoder;
         _patchSize = patchSize;
@@ -104,7 +104,7 @@ public class MAE<T> : SSLMethodBase<T>
         _decoderEmbedDim = maeConfig.DecoderEmbedDimension ?? 512;
 
         _loss = new MAEReconstructionLoss<T>(normalize: true, perPatchNormalization: true);
-        _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
+        _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
     private Tensor<T> Patchify(Tensor<T> images)

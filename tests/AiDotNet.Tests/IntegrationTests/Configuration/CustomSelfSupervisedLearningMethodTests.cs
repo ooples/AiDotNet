@@ -10,12 +10,12 @@ using Xunit;
 namespace AiDotNet.Tests.IntegrationTests.Configuration;
 
 /// <summary>
-/// Covers the enum-to-interface migration for the SSL method: <c>SSLConfig&lt;T&gt;.Method</c> is an
-/// <see cref="ISSLMethod{T}"/>, nullable, defaulting to SimCLR — the standard contrastive baseline and
-/// what this pipeline has always defaulted to. <c>SSLMethodType</c> is gone; a closed enum could only
+/// Covers the enum-to-interface migration for the SSL method: <c>SelfSupervisedLearningConfig&lt;T&gt;.Method</c> is an
+/// <see cref="ISelfSupervisedLearningMethod{T}"/>, nullable, defaulting to SimCLR — the standard contrastive baseline and
+/// what this pipeline has always defaulted to. <c>SelfSupervisedLearningMethodType</c> is gone; a closed enum could only
 /// ever name the methods the library ships.
 ///
-/// <para>Assertions read <see cref="SSLResult{T}.MethodName"/>, which the session takes from the
+/// <para>Assertions read <see cref="SelfSupervisedLearningResult{T}.MethodName"/>, which the session takes from the
 /// method that actually ran — observable state, not "it constructed".</para>
 /// </summary>
 public class CustomSSLMethodTests
@@ -49,9 +49,9 @@ public class CustomSSLMethodTests
         };
     }
 
-    private static SSLResult<double> RunPipeline(Action<SSLConfig<double>> configure)
+    private static SelfSupervisedLearningResult<double> RunPipeline(Action<SelfSupervisedLearningConfig<double>> configure)
     {
-        var pipeline = new SSLPretrainingPipeline<double>(BuildEncoder(), EncoderOutputDim)
+        var pipeline = new SelfSupervisedLearningPretrainingPipeline<double>(BuildEncoder(), EncoderOutputDim)
             .WithConfig(cfg =>
             {
                 cfg.PretrainingEpochs = 1;
@@ -67,7 +67,7 @@ public class CustomSSLMethodTests
     }
 
     /// <summary>An SSL method the library does not ship — the point of the interface door.</summary>
-    private sealed class SentinelSSLMethod : ISSLMethod<double>
+    private sealed class SentinelSSLMethod : ISelfSupervisedLearningMethod<double>
     {
         private readonly INeuralNetwork<double> _encoder;
 
@@ -75,7 +75,7 @@ public class CustomSSLMethodTests
 
         public string Name => "sentinel";
 
-        public SSLMethodCategory Category => SSLMethodCategory.Contrastive;
+        public SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.Contrastive;
 
         public bool RequiresMemoryBank => false;
 
@@ -85,9 +85,9 @@ public class CustomSSLMethodTests
 
         public INeuralNetwork<double> GetEncoder() => _encoder;
 
-        public SSLStepResult<double> TrainStep(
-            Tensor<double> batch, SSLAugmentationContext<double>? augmentationContext = null)
-            => new SSLStepResult<double> { Loss = 0.0 };
+        public SelfSupervisedLearningStepResult<double> TrainStep(
+            Tensor<double> batch, SelfSupervisedLearningAugmentationContext<double>? augmentationContext = null)
+            => new SelfSupervisedLearningStepResult<double> { Loss = 0.0 };
 
         public Tensor<double> Encode(Tensor<double> input) => _encoder.Predict(input);
 
@@ -147,7 +147,7 @@ public class CustomSSLMethodTests
     public async Task SuppliedMethod_IsRecordedByNameInTheConfigurationDictionary()
     {
         // An enum ordinal only worked while the choice was closed; the name works for any method.
-        var config = new SSLConfig<double> { Method = new SentinelSSLMethod(BuildEncoder()) };
+        var config = new SelfSupervisedLearningConfig<double> { Method = new SentinelSSLMethod(BuildEncoder()) };
 
         Assert.Equal("sentinel", config.GetConfiguration()["method"]);
         await Task.CompletedTask;
