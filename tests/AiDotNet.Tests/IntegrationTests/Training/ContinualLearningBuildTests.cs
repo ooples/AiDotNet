@@ -59,7 +59,7 @@ public class ContinualLearningBuildTests
 
         Assert.NotNull(result.ContinualLearningResult);
         // One task has been learned this Build.
-        Assert.Equal(0, result.ContinualLearningResult!.TaskId);
+        Assert.Equal(0, result.ContinualLearningResult?.TaskId ?? -1);
         // The retention report re-evaluates every task learned so far (here, one).
         Assert.NotNull(result.ContinualLearningReport);
     }

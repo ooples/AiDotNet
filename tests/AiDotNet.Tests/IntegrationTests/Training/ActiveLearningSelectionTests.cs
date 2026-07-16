@@ -111,7 +111,7 @@ public class ActiveLearningSelectionTests
             .BuildAsync();
 
         Assert.NotNull(result.ActiveLearningSelection);
-        Assert.Equal(3, result.ActiveLearningSelection!.SelectedIndices.Length);
+        Assert.Equal(3, result.ActiveLearningSelection?.SelectedIndices.Length ?? -1);
         Assert.Equal(12, result.ActiveLearningSelection.Ranking.Count);
         Assert.Equal("decreasing-test", result.ActiveLearningSelection.StrategyName);
         // The three-tier cascade must have chosen one of the recognized representation spaces.

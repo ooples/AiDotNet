@@ -92,7 +92,7 @@ public class SelfSupervisedLearningPretrainingTests
 
         var report = result.SelfSupervisedLearningPretrainingResult;
         Assert.NotNull(report);
-        Assert.Equal("fake-ssl", report!.MethodName);
+        Assert.Equal("fake-ssl", report?.MethodName);
         Assert.True(report.StepsRun > 0, "no pretraining steps ran");
         Assert.False(report.CollapseDetected, "varied representations should not read as collapse");
         Assert.NotNull(report.LinearProbeR2); // one target per sample, so a probe runs
@@ -110,7 +110,7 @@ public class SelfSupervisedLearningPretrainingTests
             .BuildAsync();
 
         Assert.NotNull(result.SelfSupervisedLearningPretrainingResult);
-        Assert.True(result.SelfSupervisedLearningPretrainingResult!.CollapseDetected,
+        Assert.True(result.SelfSupervisedLearningPretrainingResult?.CollapseDetected == true,
             "constant representations should be flagged as collapse");
     }
 

@@ -80,7 +80,7 @@ public class ConfiguredQueryStrategyTests
             .BuildAsync();
 
         Assert.NotNull(result.ActiveLearningSelection);
-        Assert.Equal(3, result.ActiveLearningSelection!.SelectedIndices.Length);
+        Assert.Equal(3, result.ActiveLearningSelection?.SelectedIndices.Length ?? -1);
         Assert.Equal(10, result.ActiveLearningSelection.Ranking.Count);
         Assert.Equal("decreasing-query", result.ActiveLearningSelection.StrategyName);
     }

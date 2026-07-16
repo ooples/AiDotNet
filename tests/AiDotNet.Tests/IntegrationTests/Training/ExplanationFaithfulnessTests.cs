@@ -81,7 +81,7 @@ public class ExplanationFaithfulnessTests
 
         Assert.Same(explainer, result.ModelExplainer);
         Assert.NotNull(result.ExplanationFaithfulness);
-        Assert.NotNull(result.ExplanationFaithfulness!.ExplainerFaithfulness);
+        Assert.NotNull(result.ExplanationFaithfulness?.ExplainerFaithfulness);
         Assert.Equal("FixedGlobalExplainer", result.ExplanationFaithfulness.ExplainerName);
     }
 

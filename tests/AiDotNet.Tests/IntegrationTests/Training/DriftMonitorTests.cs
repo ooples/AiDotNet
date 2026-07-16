@@ -82,7 +82,7 @@ public class DriftMonitorTests
         // The report and the live monitor are surfaced whenever a detector is configured.
         Assert.NotNull(result.DriftReport);
         Assert.NotNull(result.DriftMonitor);
-        Assert.True(result.DriftReport!.ObservationsChecked > 0);
+        Assert.True((result.DriftReport?.ObservationsChecked ?? 0) > 0);
     }
 
     [Fact(Timeout = 120000)]
