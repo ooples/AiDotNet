@@ -20,8 +20,9 @@ Tracking issue: #1876. Related PR: #1875.
 - **DistillationStrategy** — already reconciled onto the KD options in both call orderings during the KD work; now also engages the KD path (failing clearly on a missing teacher) when configured alone, instead of being silently ignored.
 - **ContinualLearning** — redesigned to a one-model, strategy-based API (nullable strategy → EWC + experience-replay hybrid default); training routes through a continual learner built around the configured model, and an all-tasks retention report (retained accuracy, forgetting, forward/backward transfer) is surfaced on `AiModelResult.ContinualLearningReport`.
 - **SelfSupervisedLearningMethod** (was SSLMethod) — a method configured alone now runs a default pretraining loop over the unlabeled inputs with representation-collapse detection and a linear-probe quality estimate, surfaced on `AiModelResult.SelfSupervisedLearningPretrainingResult`. Also renamed the whole SSL type hierarchy to `SelfSupervisedLearning*` (no abbreviations).
+- **ExplorationStrategy + Environment (RL pair)** — already wired (ConfigureEnvironment bootstraps the RL path; ConfigureExplorationStrategy reconciles both orderings). Added the exceed-industry lever they lacked: **ConfigureCuriosity** with a Random Network Distillation intrinsic-reward default for sparse-reward exploration; the novelty bonus is added per RL step and the mean intrinsic reward is surfaced.
 
-Remaining: Tier 3 (ExplorationStrategy, Environment — the RL pair), Tier 4/6 domain + robustness/tooling methods, and the `PARTIAL` federated/hyperparameter/pipeline fields.
+**Tier 3 is complete.** Remaining: Tier 4/6 domain + robustness/tooling methods (AudioEffect, AudioEnhancer, TimeSeriesDecomposition, ModelExplainer, AdversarialAttack/Defense, CertifiedDefense, ModelCompressionStrategy, Tool) and the `PARTIAL` federated/hyperparameter/pipeline fields.
 
 ---
 
