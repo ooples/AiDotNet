@@ -54,21 +54,30 @@ public class TensorParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<
 
         Config.CommunicationBackend.Barrier();
 
-        // Optimize on local tensor-parallel shard. RunWrappedOptimizerStep
-        // engages IShardingConfiguration.CpuOffloadOptimizer: Adam m/v state
-        // + step run on CpuEngine.
-        var result = RunWrappedOptimizerStep(inputData);
-
-        // Synchronize across tensor-parallel group
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        // The closing barrier is a collective: every rank MUST reach it, or ranks that
+        // succeeded will block forever waiting on a rank that threw in the post-step work
+        // (wrapped step, parameter sync, or offload). Run the whole body under try/finally
+        // so the barrier executes unconditionally — matching PipelineParallelOptimizer.
+        try
         {
-            SynchronizeParameters(result.BestSolution);
+            // Optimize on local tensor-parallel shard. RunWrappedOptimizerStep
+            // engages IShardingConfiguration.CpuOffloadOptimizer: Adam m/v state
+            // + step run on CpuEngine.
+            var result = RunWrappedOptimizerStep(inputData);
+
+            // Synchronize across tensor-parallel group
+            if (Config.AutoSyncGradients && result.BestSolution != null)
+            {
+                SynchronizeParameters(result.BestSolution);
+            }
+
+            OffloadParamsToCpu(result.BestSolution);
+            return result;
         }
-
-        OffloadParamsToCpu(result.BestSolution);
-        Config.CommunicationBackend.Barrier();
-
-        return result;
+        finally
+        {
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>

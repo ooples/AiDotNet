@@ -156,10 +156,16 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
                 // outer engine was GPU the compress runs on GPU. That's
                 // fine; the CpuOffloadGradients contract is "on CPU during
                 // the reduce", which this achieves.
-                OffloadGradientsToCpu(localGradients);
 
                 // Step 3: Compress local gradients
                 var compressedGradients = CompressGradients(localGradients);
+
+                // Offload the COMPRESSED buffer — that is the vector actually handed to
+                // the collective below, so it (not the pre-compression localGradients) is
+                // what must be CPU-resident during the reduce. CompressGradients allocates
+                // a fresh vector that can still be GPU/deferred-backed, so offloading only
+                // localGradients left the communicated buffer on the device.
+                OffloadGradientsToCpu(compressedGradients);
 
                 // Step 4: Synchronize compressed gradients across all ranks and average them
                 Config.CommunicationBackend.AllReduce(compressedGradients, ReductionOperation.Average);

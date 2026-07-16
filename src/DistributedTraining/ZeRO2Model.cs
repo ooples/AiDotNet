@@ -235,6 +235,15 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
             LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         }
 
+        // Write the post-update parameters back into the wrapped model. In the
+        // AutoSyncGradients path LocalShard is the AllGathered updated full vector,
+        // but WrappedModel still holds the PRE-update parameters set on line 189 for
+        // gradient computation — so without this, OffloadParamsToCpu would materialize
+        // and invalidate the stale array and the next forward would serve pre-update
+        // weights. (The else branch already updated the model in place, but SetParameters
+        // to the identical LocalShard there is a harmless no-op.)
+        InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
+
         // ZeRO Stage-3 offload: after the update, drop any GPU-cached copy of
         // the wrapped model's parameters so the next forward re-uploads from
         // the CPU-resident updated values. No-op when CpuOffloadParams is off.

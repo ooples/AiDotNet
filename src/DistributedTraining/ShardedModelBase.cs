@@ -302,6 +302,11 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
     protected void OffloadParamsToCpu()
     {
         if (!Config.CpuOffloadParams) return;
+        // Invalidate the sharded-model gather cache FIRST, unconditionally — its bytes
+        // otherwise still reflect the pre-update parameters and the next Predict/Train
+        // would serve them. This must happen even on CPU execution (no GPU engine), where
+        // there is no weight cache to invalidate but the gather cache is just as stale.
+        CachedFullParameters = null;
         if (AiDotNetEngine.Current is not DirectGpuTensorEngine gpu) return;
         Vector<T>? parameters;
         try { parameters = InterfaceGuard.Parameterizable(WrappedModelInternal).GetParameters(); }
@@ -311,10 +316,6 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
         if (array is null) return;
         AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
         gpu.InvalidateWeightCache(array);
-        // Force the sharded-model gather cache to refresh too — its bytes
-        // otherwise still reflect the pre-update parameters and the next
-        // Predict/Train would serve them.
-        CachedFullParameters = null;
     }
 
     /// <summary>

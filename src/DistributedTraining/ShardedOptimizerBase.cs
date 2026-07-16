@@ -237,11 +237,22 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         gpu.InvalidateWeightCache(array);
     }
 
-    // Lightweight RAII holder for the engine swap. Swap is a global static write
-    // (AiDotNetEngine.Current); the scope restores the prior engine on dispose so
-    // the caller can nest scopes safely. The struct-inside-class layout keeps
-    // the fast-path (offload off) allocation-free — Enter returns a shared
-    // NoOp singleton, not a new heap object.
+    // RAII holder for the engine swap. AiDotNetEngine.Current is a PROCESS-GLOBAL static
+    // (Volatile.Read/Write over one `_current` field) that every tensor op reads. That has two
+    // consequences for concurrent offload scopes:
+    //   1. Correctness: the CPU-offload contract requires every op inside the wrapped step to run
+    //      on CpuEngine. If another thread reassigns the global Current to a GPU engine mid-step,
+    //      this step's ops silently run on GPU — defeating the offload.
+    //   2. Safety: two threads interleaving save→swap→restore around a shared global can capture
+    //      each other's temporary CpuEngine as "prior" and restore the wrong engine.
+    // Both are inherent to a single global Current, so the coherent fix is to serialize the whole
+    // swap+step+restore through a process-wide gate — the equivalent, for one shared Current, of the
+    // AsyncLocal engine stack an execution-context-local Current would provide. The gate is a Monitor
+    // (reentrant), so nested offload scopes on the same thread — an offloaded optimizer wrapping
+    // another — still work. The fast path (offload off, or already on CPU) takes no lock and returns
+    // the shared NoOp singleton, so the common case stays allocation- and contention-free.
+    private static readonly object EngineSwapGate = new();
+
     private static class CpuOffloadScope
     {
         internal static IDisposable Enter(IShardingConfiguration<T> config)
@@ -249,13 +260,30 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
             if (!config.CpuOffloadOptimizer)
                 return NoOp.Instance;
 
-            var prior = AiDotNetEngine.Current;
-            // Already on CPU (no GPU engine active) → nothing to swap.
-            if (prior is CpuEngine)
-                return NoOp.Instance;
+            bool taken = false;
+            System.Threading.Monitor.Enter(EngineSwapGate, ref taken);
+            try
+            {
+                var prior = AiDotNetEngine.Current;
+                // Already on CPU (no GPU engine active) → nothing to swap; release the gate now.
+                if (prior is CpuEngine)
+                {
+                    if (taken) { System.Threading.Monitor.Exit(EngineSwapGate); taken = false; }
+                    return NoOp.Instance;
+                }
 
-            AiDotNetEngine.Current = new CpuEngine();
-            return new EngineRestore(prior);
+                AiDotNetEngine.Current = new CpuEngine();
+                // Ownership of the held gate transfers to EngineRestore, which releases it on Dispose
+                // AFTER restoring the prior engine.
+                var restore = new EngineRestore(prior);
+                taken = false;
+                return restore;
+            }
+            catch
+            {
+                if (taken) System.Threading.Monitor.Exit(EngineSwapGate);
+                throw;
+            }
         }
 
         private sealed class NoOp : IDisposable
@@ -271,7 +299,11 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
             public void Dispose()
             {
                 var prior = System.Threading.Interlocked.Exchange(ref _prior, null);
-                if (prior is not null) AiDotNetEngine.Current = prior;
+                if (prior is not null)
+                {
+                    AiDotNetEngine.Current = prior;
+                    System.Threading.Monitor.Exit(EngineSwapGate);
+                }
             }
         }
     }
