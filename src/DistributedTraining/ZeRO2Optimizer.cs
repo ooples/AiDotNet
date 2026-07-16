@@ -82,79 +82,22 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
             if (inputData == null)
                 throw new ArgumentNullException(nameof(inputData));
 
-            var gradientOptimizer = (IGradientBasedOptimizer<T, TInput, TOutput>)WrappedOptimizer;
+            // When cross-rank synchronization is off, fall back to a plain local step.
+            if (!Config.AutoSyncGradients)
+                return RunWrappedOptimizerStep(inputData);
 
-            // Populate InitialSolution from wrapped optimizer's model if not already set
-            if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
-            {
-                inputData.InitialSolution = baseOptimizer.Model.Clone();
-            }
-
-            // CRITICAL: Save parameters BEFORE local optimization
-            Vector<T>? savedParameters = null;
-            if (Config.AutoSyncGradients && inputData.InitialSolution != null)
-            {
-                savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
-            }
-
-            // Step 1: Optimize locally to compute gradients.
-            // Routes through RunWrappedOptimizerStep so IShardingConfiguration.CpuOffloadOptimizer
-            // engages: Adam m/v state + step run on CPU while the sharded gradient
-            // reduce-scatter below stays on the original engine.
-            var localResult = RunWrappedOptimizerStep(inputData);
-
-            // Step 2: ZeRO-2 gradient sharding with ReduceScatter
-            if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)
-            {
-                var localGradients = gradientOptimizer.LastComputedGradients;
-
-                if (localGradients != null && localGradients.Length > 0)
-                {
-                    // ZeRO Stage-2 offload: drain any deferred GPU download into
-                    // the managed backing array and drop the GPU cache entry so
-                    // the ReduceScatter reads live CPU values. No-op when the
-                    // CpuOffloadGradients flag is off.
-                    OffloadGradientsToCpu(localGradients);
-
-                    // ZeRO-2 CORE: ReduceScatter averages gradients AND scatters them
-                    // Each rank receives only its shard of the averaged gradients
-                    var myGradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
-
-                    // Calculate which parameter shard this rank owns
-                    int totalParams = savedParameters.Length;
-                    int shardSize = myGradientShard.Length;
-                    int myShardStart = Rank * shardSize;
-
-                    // Extract this rank's parameter shard
-                    var myParamShard = new T[shardSize];
-                    for (int i = 0; i < shardSize && (myShardStart + i) < totalParams; i++)
-                    {
-                        myParamShard[i] = savedParameters[myShardStart + i];
-                    }
-                    var myParamShardVector = new Vector<T>(myParamShard);
-
-                    // Step 3: Update ONLY this rank's shard using the gradient shard
-                    // This is where ZeRO-2 saves memory - only updating 1/N of parameters
-                    var updatedShard = gradientOptimizer.UpdateParameters(myParamShardVector, myGradientShard);
-
-                    // Step 4: AllGather to reconstruct full parameters from all shards
-                    // Each rank contributes its updated shard, everyone gets full parameter vector
-                    var fullParameters = Config.CommunicationBackend.AllGather(updatedShard);
-
-                    // Step 5: Create model with reconstructed full parameters
-                    var finalModel = InterfaceGuard.Parameterizable(localResult.BestSolution).WithParameters(fullParameters);
-                    localResult.BestSolution = finalModel;
-                }
-            }
+            // ZeRO Stage-2 (Rajbhandari et al. 2020): gradients AND optimizer state are PARTITIONED.
+            // RunShardedZeroStep with shardGradients:true computes gradients backward-only (no full
+            // update), ReduceScatters them so each rank holds ONLY its averaged gradient shard (the
+            // full averaged gradient is never materialized on any rank — the memory win over ZeRO-1),
+            // updates just this rank's parameter shard with the wrapped optimizer (whose Adam m/v state
+            // is therefore sized to the shard), and AllGathers the updated shards into the full vector.
+            // CpuOffloadOptimizer is scoped to the update; CpuOffloadGradients drains the shard to CPU
+            // before it is read; CpuOffloadParams drops the GPU param cache after write-back.
+            var result = RunShardedZeroStep(inputData, shardGradients: true);
 
             SynchronizeOptimizerState();
-
-            // ZeRO Stage-3 param offload: drop GPU-cached param buffers so the
-            // next forward re-uploads from the (just-updated) CPU-resident
-            // AllGather'd parameters. No-op when CpuOffloadParams is off.
-            OffloadParamsToCpu(localResult.BestSolution);
-
-            return localResult;
+            return result;
         }
         finally
         {

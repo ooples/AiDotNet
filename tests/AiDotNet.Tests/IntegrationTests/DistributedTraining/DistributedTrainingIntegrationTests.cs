@@ -2142,7 +2142,7 @@ public class DistributedTrainingIntegrationTests
     /// aggregators call InterfaceGuard.Parameterizable(client) at runtime
     /// and require the closed type to advertise IParameterizable.
     /// </summary>
-    private class MockDistributedModel : IFullModel<double, Vector<double>, Vector<double>>,
+    internal class MockDistributedModel : IFullModel<double, Vector<double>, Vector<double>>,
         IParameterizable<double, Vector<double>, Vector<double>>,
         IGradientComputable<double, Vector<double>, Vector<double>>
     {

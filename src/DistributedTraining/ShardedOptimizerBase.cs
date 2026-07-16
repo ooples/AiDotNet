@@ -164,6 +164,148 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     }
 
     /// <summary>
+    /// Executes one paper-faithful ZeRO sharded optimizer step (Rajbhandari et al. 2020, "ZeRO:
+    /// Memory Optimizations Toward Training Trillion Parameter Models"; CPU offload per Ren et al.
+    /// 2021, "ZeRO-Offload: Democratizing Billion-Scale Model Training"):
+    /// <list type="number">
+    /// <item><b>Backward only</b> — compute local gradients via
+    /// <see cref="IGradientComputable{T,TInput,TOutput}.ComputeGradients"/>, WITHOUT running the wrapped
+    /// optimizer's full <c>Optimize</c>, so its Adam m/v state is never advanced on the full parameter
+    /// vector (that would defeat state partitioning and double-step the update).</item>
+    /// <item><b>Reduce</b> the gradients across ranks — <c>AllReduce</c> for ZeRO-1 (gradients stay
+    /// replicated), or <c>ReduceScatter</c> for ZeRO-2/3 (each rank holds only its averaged shard).</item>
+    /// <item><b>Sharded update</b> — update ONLY this rank's parameter shard with the wrapped optimizer.
+    /// Because the wrapped optimizer only ever sees this shard, its persistent state (Adam's m/v) is
+    /// sized to the shard: this IS optimizer-state partitioning. CPU offload (the engine swap) is scoped
+    /// to THIS update alone — forward/backward already ran on the accelerator; only the optimizer state
+    /// and parameter update move to CPU.</item>
+    /// <item><b>AllGather</b> the updated shards to reconstruct the full parameter vector, write it back
+    /// to the model, then drop any GPU-cached parameters for the next forward.</item>
+    /// </list>
+    /// The wrapped optimizer's <c>UpdateParameters(shard, gradShard)</c> is the SINGLE optimizer step —
+    /// no full-vector update precedes it — so there is no double-stepping and the m/v state stays sized
+    /// to the shard across steps.
+    /// </summary>
+    /// <param name="inputData">Training batch (<c>XTrain</c>/<c>YTrain</c>) plus the model to shard
+    /// (<c>InitialSolution</c>, or the wrapped <see cref="OptimizerBase{T,TInput,TOutput}"/>'s Model).</param>
+    /// <param name="shardGradients"><c>false</c> = ZeRO-1 (AllReduce full gradients, then slice this
+    /// rank's shard: gradients replicated, only optimizer state + parameters sharded). <c>true</c> =
+    /// ZeRO-2/3 (ReduceScatter: gradients are sharded too, so the full averaged gradient is never
+    /// materialized on any single rank).</param>
+    protected OptimizationResult<T, TInput, TOutput> RunShardedZeroStep(
+        OptimizationInputData<T, TInput, TOutput> inputData,
+        bool shardGradients)
+    {
+        if (inputData is null) throw new ArgumentNullException(nameof(inputData));
+
+        var model = inputData.InitialSolution
+            ?? (WrappedOptimizer as OptimizerBase<T, TInput, TOutput>)?.Model?.Clone()
+            ?? throw new InvalidOperationException(
+                "ZeRO sharded step requires a model to compute gradients from: set " +
+                "OptimizationInputData.InitialSolution, or wrap an OptimizerBase whose Model is set.");
+
+        if (WrappedOptimizer is not IGradientBasedOptimizer<T, TInput, TOutput> gradOpt)
+            throw new InvalidOperationException(
+                $"ZeRO requires a gradient-based wrapped optimizer; received {WrappedOptimizer.GetType().Name}.");
+
+        var paramModel = InterfaceGuard.Parameterizable(model);
+        var gradModel = InterfaceGuard.GradientComputable(model);
+
+        var originalParams = paramModel.GetParameters();
+        if (originalParams is null || originalParams.Length == 0)
+            return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
+        int totalParams = originalParams.Length;
+
+        int worldSize = WorldSize < 1 ? 1 : WorldSize;
+        // Ceil split so the shards tile the (possibly zero-padded) parameter vector evenly — required
+        // by ReduceScatter (length divisible by worldSize) and AllGather (equal-length concatenation).
+        int shardSize = (totalParams + worldSize - 1) / worldSize;
+        int paddedLen = shardSize * worldSize;
+        int myStart = Rank * shardSize;
+
+        // 1. Backward only — gradients WITHOUT advancing optimizer state.
+        var gradients = gradModel.ComputeGradients(inputData.XTrain, inputData.YTrain);
+        if (gradients is null || gradients.Length == 0)
+            return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
+        if (gradients.Length != totalParams)
+            throw new InvalidOperationException(
+                $"ZeRO: gradient length {gradients.Length} does not match parameter count {totalParams}.");
+
+        // 2. Reduce across ranks; select this rank's gradient shard.
+        Vector<T> myGradShard;
+        if (shardGradients)
+        {
+            // ZeRO-2/3: ReduceScatter averages AND scatters — pad to a multiple of worldSize first.
+            var paddedGrads = PadTo(gradients, paddedLen);
+            myGradShard = Config.CommunicationBackend.ReduceScatter(paddedGrads, ReductionOperation.Average);
+        }
+        else
+        {
+            // ZeRO-1: AllReduce averages the replicated full gradients in place; slice this shard.
+            Config.CommunicationBackend.AllReduce(gradients, ReductionOperation.Average);
+            myGradShard = SliceShard(gradients, myStart, shardSize, totalParams);
+        }
+
+        // 3. Sharded update — the SINGLE optimizer step; Adam m/v state sized to the shard; the
+        //    CPU-offload engine swap is scoped to this update only.
+        var myParamShard = SliceShard(originalParams, myStart, shardSize, totalParams);
+        Vector<T> updatedShard;
+        using (BeginCpuOffloadScope())
+        {
+            OffloadGradientsToCpu(myGradShard);
+            updatedShard = gradOpt.UpdateParameters(myParamShard, myGradShard);
+        }
+
+        // 4. AllGather the shards -> full (padded) params -> trim padding -> write back.
+        var gathered = worldSize > 1
+            ? Config.CommunicationBackend.AllGather(updatedShard)
+            : updatedShard;
+        var finalParams = TrimTo(gathered, totalParams);
+        paramModel.SetParameters(finalParams);
+
+        // Stage-3 parameter offload hook (no-op unless CpuOffloadParams is set).
+        OffloadParamsToCpu(model);
+
+        return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
+    }
+
+    /// <summary>Returns a length-<paramref name="length"/> copy of <paramref name="source"/>, zero-padding any tail.</summary>
+    private Vector<T> PadTo(Vector<T> source, int length)
+    {
+        if (source.Length == length) return source;
+        var padded = new T[length];
+        int copy = Math.Min(source.Length, length);
+        for (int i = 0; i < copy; i++) padded[i] = source[i];
+        for (int i = copy; i < length; i++) padded[i] = NumOps.Zero;
+        return new Vector<T>(padded);
+    }
+
+    /// <summary>Extracts <paramref name="length"/> elements from <paramref name="start"/>, zero-padding
+    /// indices at or beyond <paramref name="validEnd"/> so every rank's shard is the same length (the
+    /// collectives require equal-length shards; the padding is trimmed after the final AllGather).</summary>
+    private Vector<T> SliceShard(Vector<T> source, int start, int length, int validEnd)
+    {
+        var shard = new T[length];
+        for (int i = 0; i < length; i++)
+        {
+            int idx = start + i;
+            shard[i] = idx < validEnd ? source[idx] : NumOps.Zero;
+        }
+        return new Vector<T>(shard);
+    }
+
+    /// <summary>Returns the first <paramref name="length"/> elements (drops the shard padding introduced for the collectives).</summary>
+    private Vector<T> TrimTo(Vector<T> source, int length)
+    {
+        if (source.Length == length) return source;
+        var trimmed = new T[length];
+        int copy = Math.Min(source.Length, length);
+        for (int i = 0; i < copy; i++) trimmed[i] = source[i];
+        for (int i = copy; i < length; i++) trimmed[i] = NumOps.Zero;
+        return new Vector<T>(trimmed);
+    }
+
+    /// <summary>
     /// Force-materializes a gradient vector's backing array (drains any pending
     /// deferred GPU download) and drops the GPU-cached buffer for that array,
     /// implementing the runtime side of <see cref="IShardingConfiguration{T}.CpuOffloadGradients"/>.

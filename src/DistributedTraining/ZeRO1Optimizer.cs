@@ -51,50 +51,42 @@ public class ZeRO1Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
         if (inputData == null)
             throw new ArgumentNullException(nameof(inputData));
 
+        // Opening barrier: every rank starts the collective sequence together.
         Config.CommunicationBackend.Barrier();
-
-        // ZeRO-Offload contract: RunWrappedOptimizerStep engages Config.CpuOffloadOptimizer
-        // when set. ZeRO-1 shards optimizer state across ranks; CPU-offload additionally
-        // keeps each rank's shard in CPU RAM and runs the Adam step there.
-        var result = RunWrappedOptimizerStep(inputData);
-
-        // Synchronize parameters (AllReduce like DDP)
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        try
         {
-            SynchronizeParameters(result.BestSolution);
+            // When cross-rank synchronization is off, fall back to a plain local step (equivalent
+            // to non-distributed training on this rank).
+            if (!Config.AutoSyncGradients)
+                return RunWrappedOptimizerStep(inputData);
+
+            // ZeRO Stage-1 (Rajbhandari et al. 2020): gradients stay REPLICATED (AllReduce), while the
+            // optimizer state (Adam m/v) AND the parameter update are PARTITIONED — each rank updates
+            // only its parameter shard with the wrapped optimizer, so that optimizer's persistent state
+            // is sized to the shard. RunShardedZeroStep computes gradients backward-only, AllReduces
+            // them, applies the sharded update (with CpuOffloadOptimizer scoped to the update), and
+            // AllGathers the updated shards back into the full parameter vector.
+            return RunShardedZeroStep(inputData, shardGradients: false);
         }
-
-        // Synchronize sharded optimizer state
-        SynchronizeOptimizerState();
-
-        // ZeRO Stage-3 param offload: drop GPU-cached param buffers so the next
-        // forward re-uploads from the just-updated CPU-resident parameters.
-        // ZeRO-1 shards optimizer state (not params) but the flag still targets
-        // the DEVICE placement of the parameters between steps, which is a
-        // valid orthogonal choice. No-op when CpuOffloadParams is off.
-        OffloadParamsToCpu(result.BestSolution);
-
-        Config.CommunicationBackend.Barrier();
-
-        return result;
+        finally
+        {
+            // Closing barrier always runs (even on exception) so no rank is left waiting on a peer.
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
     public override void SynchronizeOptimizerState()
     {
-        // In ZeRO-1, optimizer states are sharded across processes
-        // Each process owns a partition of the optimizer state
-        // When updating parameters, we need to AllGather the relevant state slices
-
-        // For this framework implementation, this is a placeholder
-        // Full implementation would:
-        // 1. Partition optimizer state by parameter index
-        // 2. Each rank owns state for parameters [start:end]
-        // 3. During update, AllGather state as needed
-        // 4. Apply updates using gathered state
-
-        // This requires deeper integration with optimizer internals
-        // which varies by optimizer type (Adam, SGD, RMSprop, etc.)
+        // ZeRO-1 optimizer-state partitioning is achieved INTRINSICALLY inside Optimize: each rank
+        // calls the wrapped optimizer's UpdateParameters with ONLY its parameter shard, so the wrapped
+        // optimizer's persistent Adam m/v state is allocated and advanced solely for that shard — no
+        // rank ever holds the other ranks' state. Consequently there is no per-step state exchange to
+        // perform here: each rank owns and retains its shard's state across steps, and the only
+        // cross-rank exchange needed (the updated PARAMETERS) is the AllGather already done in the step.
+        // This method therefore intentionally does no work; state ownership is not a placeholder but a
+        // structural property of the sharded update. (A checkpoint that needs the full optimizer state
+        // would AllGather each rank's shard state; that belongs to serialization, not the hot path.)
     }
 
     /// <inheritdoc/>

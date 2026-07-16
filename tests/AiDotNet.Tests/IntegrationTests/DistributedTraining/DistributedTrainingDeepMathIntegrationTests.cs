@@ -1,6 +1,11 @@
 using AiDotNet.DistributedTraining;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Inputs;
+using AiDotNet.Optimizers;
 using Xunit;
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
@@ -275,5 +280,207 @@ public class DistributedTrainingDeepMathIntegrationTests
             Assert.True(ratio > 2.0,
                 $"Memory savings ratio should be > 2x for {totalLayers} layers, got {ratio:F2}x");
         }
+    }
+
+    // =====================================================================================
+    // ZeRO sharded-optimizer MATH INVARIANTS
+    // (Rajbhandari et al. 2020, "ZeRO: Memory Optimizations Toward Training Trillion Parameter
+    //  Models"; Ren et al. 2021, "ZeRO-Offload").
+    //
+    // The defining correctness property of ZeRO is that partitioning the optimizer state /
+    // gradients / parameters across ranks is MATHEMATICALLY TRANSPARENT: it changes only where
+    // memory lives, never the numerical result. Adam updates each parameter independently from its
+    // own (gradient, m, v), so a per-rank shard update is bit-for-bit the same as the corresponding
+    // slice of the full-vector update. These invariants prove exactly that.
+    // =====================================================================================
+
+    private const double ZeroTol = 1e-9;
+    private const int ZeroN = 8;
+
+    private static OptimizationInputData<double, Vector<double>, Vector<double>> ZeroInput(
+        IFullModel<double, Vector<double>, Vector<double>> model)
+        => new OptimizationInputData<double, Vector<double>, Vector<double>>
+        {
+            XTrain = new Vector<double>(new double[ZeroN]),
+            YTrain = new Vector<double>(new double[ZeroN]),
+            InitialSolution = model,
+        };
+
+    private static DistributedTrainingIntegrationTests.MockDistributedModel NewZeroModel()
+        => new DistributedTrainingIntegrationTests.MockDistributedModel(ZeroN);
+
+    private static IGradientBasedOptimizer<double, Vector<double>, Vector<double>> NewAdam()
+        => new AdamOptimizer<double, Vector<double>, Vector<double>>(null);
+
+    /// <summary>
+    /// INVARIANT: one ZeRO-1 step on a single rank is bit-for-bit a single Adam update on the full
+    /// parameter vector. (World size 1 ⇒ the AllReduce is identity and the one shard is the whole
+    /// vector, so the only thing that runs is the wrapped optimizer's UpdateParameters.)
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO1_WorldSize1_EqualsDirectAdamStep()
+    {
+        await Task.Yield();
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+
+        // Reference: plain Adam applied to the same params + the model's (fixed) gradient.
+        var refModel = NewZeroModel();
+        var p0 = refModel.GetParameters();
+        var g = refModel.ComputeGradients(new Vector<double>(new double[ZeroN]), new Vector<double>(new double[ZeroN]));
+        var expected = NewAdam().UpdateParameters(p0.Clone(), g.Clone());
+
+        // ZeRO-1 sharded step.
+        var model = NewZeroModel();
+        var zero1 = new ZeRO1Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), config);
+        zero1.Optimize(ZeroInput(model));
+        var got = model.GetParameters();
+
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(expected[i], got[i], ZeroTol);
+
+        backend.Shutdown();
+    }
+
+    /// <summary>
+    /// INVARIANT: ZeRO-1 and ZeRO-2 are numerically identical — they differ only in whether the
+    /// gradient is replicated (AllReduce) or sharded (ReduceScatter), which is a memory choice, not
+    /// a math one. On a single rank both reduce to the same full Adam step.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO1_And_ZeRO2_WorldSize1_ProduceIdenticalParameters()
+    {
+        await Task.Yield();
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+
+        var m1 = NewZeroModel();
+        new ZeRO1Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), config).Optimize(ZeroInput(m1));
+        var z1 = m1.GetParameters();
+
+        var m2 = NewZeroModel();
+        new ZeRO2Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), config).Optimize(ZeroInput(m2));
+        var z2 = m2.GetParameters();
+
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(z1[i], z2[i], ZeroTol);
+
+        backend.Shutdown();
+    }
+
+    /// <summary>
+    /// INVARIANT (the crux of ZeRO correctness): a TWO-rank ZeRO-1 run — where each rank holds and
+    /// updates only its optimizer-state shard, then AllGathers — reconstructs the EXACT SAME full
+    /// parameter vector on both ranks, and that vector equals the single-rank result. This proves the
+    /// state partitioning is transparent (per-parameter Adam independence) and the shards tile and
+    /// reassemble correctly.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO1_TwoRanks_ReconstructIdenticalParameters_MatchingSingleRank()
+    {
+        // Single-rank reference.
+        var refBackend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString());
+        refBackend.Initialize();
+        var refConfig = new ShardingConfiguration<double>(refBackend) { AutoSyncGradients = true };
+        var refModel = NewZeroModel();
+        new ZeRO1Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), refConfig).Optimize(ZeroInput(refModel));
+        var single = refModel.GetParameters();
+        refBackend.Shutdown();
+
+        // Two-rank run over a shared InMemory environment.
+        var envId = Guid.NewGuid().ToString();
+        var results = new Vector<double>[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                backend.Initialize();
+                var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+                var model = NewZeroModel();
+                new ZeRO1Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), config).Optimize(ZeroInput(model));
+                results[rank] = model.GetParameters();
+                backend.Shutdown();
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        // Both ranks reconstruct the identical full vector ...
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(results[0][i], results[1][i], ZeroTol);
+        // ... and it is bit-for-bit the single-rank (un-sharded) result.
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(single[i], results[0][i], ZeroTol);
+    }
+
+    /// <summary>
+    /// INVARIANT: the same two-rank transparency holds for ZeRO-2, where the GRADIENT is also sharded
+    /// (ReduceScatter) so no rank ever materializes the full averaged gradient — yet the reassembled
+    /// parameters still match the single-rank result exactly.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO2_TwoRanks_ReconstructIdenticalParameters_MatchingSingleRank()
+    {
+        var refBackend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString());
+        refBackend.Initialize();
+        var refConfig = new ShardingConfiguration<double>(refBackend) { AutoSyncGradients = true };
+        var refModel = NewZeroModel();
+        new ZeRO2Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), refConfig).Optimize(ZeroInput(refModel));
+        var single = refModel.GetParameters();
+        refBackend.Shutdown();
+
+        var envId = Guid.NewGuid().ToString();
+        var results = new Vector<double>[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                backend.Initialize();
+                var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+                var model = NewZeroModel();
+                new ZeRO2Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), config).Optimize(ZeroInput(model));
+                results[rank] = model.GetParameters();
+                backend.Shutdown();
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(results[0][i], results[1][i], ZeroTol);
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(single[i], results[0][i], ZeroTol);
+    }
+
+    /// <summary>
+    /// INVARIANT: a ZeRO-1 step actually MOVES parameters against the gradient (real training, not a
+    /// no-op). With the model's strictly-positive gradient, every parameter must strictly decrease.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ZeRO1_Step_MovesEveryParameterAgainstGradient()
+    {
+        await Task.Yield();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString());
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+
+        var model = NewZeroModel();
+        var before = model.GetParameters();
+        new ZeRO1Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), config).Optimize(ZeroInput(model));
+        var after = model.GetParameters();
+
+        for (int i = 0; i < ZeroN; i++)
+            Assert.True(after[i] < before[i],
+                $"param[{i}] must decrease under a positive gradient: before={before[i]}, after={after[i]}");
+
+        backend.Shutdown();
     }
 }
