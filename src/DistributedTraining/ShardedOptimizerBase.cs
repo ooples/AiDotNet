@@ -231,17 +231,20 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
             throw new InvalidOperationException(
                 $"ZeRO: gradient length {gradients.Length} does not match parameter count {totalParams}.");
 
-        // 2. Reduce across ranks; select this rank's gradient shard.
+        // 2. Reduce across ranks; select this rank's gradient shard. CpuOffloadGradients must make the
+        //    buffer that is actually COMMUNICATED CPU-resident, so offload BEFORE the collective.
         Vector<T> myGradShard;
         if (shardGradients)
         {
             // ZeRO-2/3: ReduceScatter averages AND scatters — pad to a multiple of worldSize first.
             var paddedGrads = PadTo(gradients, paddedLen);
+            OffloadGradientsToCpu(paddedGrads);
             myGradShard = Config.CommunicationBackend.ReduceScatter(paddedGrads, ReductionOperation.Average);
         }
         else
         {
             // ZeRO-1: AllReduce averages the replicated full gradients in place; slice this shard.
+            OffloadGradientsToCpu(gradients);
             Config.CommunicationBackend.AllReduce(gradients, ReductionOperation.Average);
             myGradShard = SliceShard(gradients, myStart, shardSize, totalParams);
         }
@@ -252,7 +255,6 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         Vector<T> updatedShard;
         using (BeginCpuOffloadScope())
         {
-            OffloadGradientsToCpu(myGradShard);
             updatedShard = gradOpt.UpdateParameters(myParamShard, myGradShard);
         }
 

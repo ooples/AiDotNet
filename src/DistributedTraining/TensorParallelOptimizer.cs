@@ -49,17 +49,18 @@ public class TensorParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        if (inputData == null)
-            throw new ArgumentNullException(nameof(inputData));
-
         Config.CommunicationBackend.Barrier();
 
         // The closing barrier is a collective: every rank MUST reach it, or ranks that
         // succeeded will block forever waiting on a rank that threw in the post-step work
-        // (wrapped step, parameter sync, or offload). Run the whole body under try/finally
-        // so the barrier executes unconditionally — matching PipelineParallelOptimizer.
+        // (validation, wrapped step, parameter sync, or offload). Run the whole body — INCLUDING
+        // the null validation — under try/finally so the barrier executes unconditionally and a
+        // rank that receives null cannot strand its peers.
         try
         {
+            if (inputData == null)
+                throw new ArgumentNullException(nameof(inputData));
+
             // Optimize on local tensor-parallel shard. RunWrappedOptimizerStep
             // engages IShardingConfiguration.CpuOffloadOptimizer: Adam m/v state
             // + step run on CpuEngine.

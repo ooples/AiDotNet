@@ -95,8 +95,6 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
             // CpuOffloadOptimizer is scoped to the update; CpuOffloadGradients drains the shard to CPU
             // before it is read; CpuOffloadParams drops the GPU param cache after write-back.
             var result = RunShardedZeroStep(inputData, shardGradients: true);
-
-            SynchronizeOptimizerState();
             return result;
         }
         finally
@@ -109,14 +107,12 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     /// <inheritdoc/>
     public override void SynchronizeOptimizerState()
     {
-        // In ZeRO-2, both optimizer states and gradients are sharded
-        // Each process:
-        // 1. Owns a shard of optimizer state
-        // 2. Receives its shard of reduced gradients via ReduceScatter
-        // 3. Updates only its parameter shard
-        // 4. AllGather updated parameters for next forward pass
-
-        // Framework placeholder - full implementation requires optimizer integration
+        // Intentional no-op (same invariant as ZeRO-1). ZeRO-2 optimizer-state partitioning is achieved
+        // INTRINSICALLY inside RunShardedZeroStep: gradients are ReduceScattered so each rank holds only
+        // its shard, and the wrapped optimizer's UpdateParameters is called with ONLY that shard, so its
+        // Adam m/v state is allocated and advanced solely for this rank's parameters. No rank ever holds
+        // another rank's optimizer state, and the only cross-rank exchange (the updated parameters) is the
+        // AllGather already performed in the step — so there is no per-step state synchronization to do.
     }
 
     /// <inheritdoc/>

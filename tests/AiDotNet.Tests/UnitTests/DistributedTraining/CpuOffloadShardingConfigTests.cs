@@ -30,6 +30,10 @@ namespace AiDotNetTests.UnitTests.DistributedTraining;
 /// a synchronous <c>void</c> test (it can only cancel between awaits), so the timeout would
 /// otherwise be silently unenforced.
 /// </remarks>
+// Serialized: several tests swap the PROCESS-GLOBAL AiDotNetEngine.Current to a CpuEngine/DispatchProxy
+// and restore it. Running in the non-parallel "ConvergenceSensitive" collection prevents another test
+// from racing that swap and observing/restoring the wrong global engine.
+[Xunit.Collection("ConvergenceSensitive")]
 public class CpuOffloadShardingConfigTests
 {
     // ── config-surface tests ─────────────────────────────────────────────

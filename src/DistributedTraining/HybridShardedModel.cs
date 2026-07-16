@@ -253,15 +253,17 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
                 "Gradients have not been computed. Call Train() before SynchronizeGradients().");
         }
 
-        // In 3D parallelism (hybrid sharding), gradient synchronization is complex:
-        // - Tensor-parallel: Need to reduce partial gradients within tensor group
-        // - Data-parallel: Need to average gradients across data replicas
-        // - Pipeline-parallel: Each stage handles its own gradients
-        //
-        // Correct synchronization requires:
-        // 1. AllReduce within tensor-parallel group (sum partial gradients from same pipeline stage)
-        // 2. AllReduce within data-parallel group (average gradients across data replicas that share same pipeline/tensor position)
-        // 3. Pipeline parallel stages handle their own gradient accumulation
+        // Synchronization scope for THIS (parameter-sharding) hybrid model: this wrapper gathers the
+        // full parameters and computes the FULL-model gradient on every rank (the wrapped model's
+        // compute is a black box that cannot be layer-partitioned). Therefore:
+        // - Tensor- and pipeline-parallel neighbours own DIFFERENT parameter shards of that full
+        //   gradient — there are NO partial-sum contributions to reduce across them (partial-sum
+        //   tensor-parallel gradients arise only in COMPUTE-partitioned Megatron TP, which is provided
+        //   separately by ColumnParallelLinear/RowParallelLinear whose ḡ operator carries the in-layer
+        //   AllReduce). So no cross-tensor/pipeline gradient reduction is required or correct here.
+        // - Data-parallel replicas share the same parameter shard but may process different data, so
+        //   THEIR gradients must be averaged. That data-parallel subgroup average is the complete and
+        //   correct gradient synchronization for this model; it is performed below.
 
         // Average gradients across the DATA-PARALLEL replica group ONLY — the ranks sharing this
         // rank's pipeline+tensor position, which hold REPLICATED parameters but processed different

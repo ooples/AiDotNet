@@ -311,8 +311,8 @@ public class DistributedTrainingDeepMathIntegrationTests
             InitialSolution = model,
         };
 
-    private static DistributedTrainingIntegrationTests.MockDistributedModel NewZeroModel()
-        => new DistributedTrainingIntegrationTests.MockDistributedModel(ZeroN);
+    private static DistributedTrainingIntegrationTests.MockDistributedModel NewZeroModel(double gradientScale = 1.0)
+        => new DistributedTrainingIntegrationTests.MockDistributedModel(ZeroN, gradientScale);
 
     private static IGradientBasedOptimizer<double, Vector<double>, Vector<double>> NewAdam()
         => new AdamOptimizer<double, Vector<double>, Vector<double>>(null);
@@ -387,11 +387,15 @@ public class DistributedTrainingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ZeRO1_TwoRanks_ReconstructIdenticalParameters_MatchingSingleRank()
     {
-        // Single-rank reference.
+        await Task.Yield();
+        // The two ranks produce DIFFERENT gradients (scale 1 and 2); a correct AllReduce(Average) makes
+        // both update with the mean gradient (scale 1.5), so the single-rank reference uses scale 1.5.
+        // If the collective were removed, rank 0 (scale 1) and rank 1 (scale 2) would diverge from the
+        // 1.5 reference and this test would fail — so it genuinely exercises the reduce.
         var refBackend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString());
         refBackend.Initialize();
         var refConfig = new ShardingConfiguration<double>(refBackend) { AutoSyncGradients = true };
-        var refModel = NewZeroModel();
+        var refModel = NewZeroModel(1.5);
         new ZeRO1Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), refConfig).Optimize(ZeroInput(refModel));
         var single = refModel.GetParameters();
         refBackend.Shutdown();
@@ -408,7 +412,7 @@ public class DistributedTrainingDeepMathIntegrationTests
                 var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
                 backend.Initialize();
                 var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
-                var model = NewZeroModel();
+                var model = NewZeroModel(rank + 1);   // rank 0 -> scale 1, rank 1 -> scale 2
                 new ZeRO1Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), config).Optimize(ZeroInput(model));
                 results[rank] = model.GetParameters();
                 backend.Shutdown();
@@ -432,10 +436,14 @@ public class DistributedTrainingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ZeRO2_TwoRanks_ReconstructIdenticalParameters_MatchingSingleRank()
     {
+        await Task.Yield();
+        // Rank-dependent gradients (scale 1 and 2): a correct ReduceScatter(Average) gives each rank the
+        // mean-gradient (scale 1.5) shard, matching the single-rank reference at scale 1.5. Removing the
+        // collective would leave the ranks at scales 1/2 and fail the comparison.
         var refBackend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString());
         refBackend.Initialize();
         var refConfig = new ShardingConfiguration<double>(refBackend) { AutoSyncGradients = true };
-        var refModel = NewZeroModel();
+        var refModel = NewZeroModel(1.5);
         new ZeRO2Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), refConfig).Optimize(ZeroInput(refModel));
         var single = refModel.GetParameters();
         refBackend.Shutdown();
@@ -451,7 +459,7 @@ public class DistributedTrainingDeepMathIntegrationTests
                 var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
                 backend.Initialize();
                 var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
-                var model = NewZeroModel();
+                var model = NewZeroModel(rank + 1);   // rank 0 -> scale 1, rank 1 -> scale 2
                 new ZeRO2Optimizer<double, Vector<double>, Vector<double>>(NewAdam(), config).Optimize(ZeroInput(model));
                 results[rank] = model.GetParameters();
                 backend.Shutdown();
@@ -498,6 +506,7 @@ public class DistributedTrainingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Hybrid_DataParallelSubgroup_ReducesGradientsWithoutThrowing_AndStaysConsistent()
     {
+        await Task.Yield();
         var envId = Guid.NewGuid().ToString();
         var results = new Vector<double>[2];
         var errors = new Exception?[2];
@@ -512,7 +521,10 @@ public class DistributedTrainingDeepMathIntegrationTests
                     var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
                     backend.Initialize();
                     var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
-                    var model = NewZeroModel();
+                    // Rank-dependent gradients (scale 1 and 2): only a correct data-parallel subgroup
+                    // average leaves both replicas consistent; a removed/broken reduce would leave rank 0
+                    // (scale 1) and rank 1 (scale 2) with different parameters and fail the check below.
+                    var model = NewZeroModel(rank + 1);
                     // pipeline=1, tensor=1 => the two ranks form a single data-parallel group of size 2.
                     var hybrid = new HybridShardedModel<double, Vector<double>, Vector<double>>(model, config, 1, 1, 2);
                     hybrid.Train(new Vector<double>(new double[ZeroN]), new Vector<double>(new double[ZeroN]));

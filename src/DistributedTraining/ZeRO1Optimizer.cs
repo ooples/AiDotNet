@@ -48,13 +48,15 @@ public class ZeRO1Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        if (inputData == null)
-            throw new ArgumentNullException(nameof(inputData));
-
-        // Opening barrier: every rank starts the collective sequence together.
+        // Opening barrier: every rank starts the collective sequence together. Validation happens AFTER
+        // it (and inside the try) so a rank that receives null still reaches the closing barrier and
+        // cannot strand its peers.
         Config.CommunicationBackend.Barrier();
         try
         {
+            if (inputData == null)
+                throw new ArgumentNullException(nameof(inputData));
+
             // When cross-rank synchronization is off, fall back to a plain local step (equivalent
             // to non-distributed training on this rank).
             if (!Config.AutoSyncGradients)

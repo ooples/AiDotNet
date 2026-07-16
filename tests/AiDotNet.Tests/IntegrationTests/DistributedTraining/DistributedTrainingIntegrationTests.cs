@@ -2176,10 +2176,12 @@ public class DistributedTrainingIntegrationTests
         private Vector<double> _parameters;
         private Vector<double>? _gradients;
         private readonly int _parameterCount;
+        private readonly double _gradientScale;
 
-        public MockDistributedModel(int parameterCount)
+        public MockDistributedModel(int parameterCount, double gradientScale = 1.0)
         {
             _parameterCount = parameterCount;
+            _gradientScale = gradientScale;
             _parameters = new Vector<double>(Enumerable.Range(0, parameterCount).Select(i => (double)i * 0.1).ToArray());
         }
 
@@ -2208,11 +2210,13 @@ public class DistributedTrainingIntegrationTests
 
         public Vector<double> ComputeGradients(Vector<double> input, Vector<double> expectedOutput, ILossFunction<double>? lossFunction = null)
         {
-            // Mock gradient computation
+            // Mock gradient computation, scaled by _gradientScale so multi-rank tests can give each
+            // rank a DIFFERENT gradient (e.g. scale 1 vs 2) — then a broken/removed collective no longer
+            // yields the same result as a correct reduce.
             var gradients = new double[_parameters.Length];
             for (int i = 0; i < gradients.Length; i++)
             {
-                gradients[i] = 0.01 * (i + 1);
+                gradients[i] = 0.01 * (i + 1) * _gradientScale;
             }
             _gradients = new Vector<double>(gradients);
             return _gradients;
