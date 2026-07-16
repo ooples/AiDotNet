@@ -30,6 +30,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IExternalClusterMetric<T>? _configuredExternalClusterMetric;
     private ICurriculumScheduler<T>? _configuredCurriculumScheduler;
     private ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T>? _configuredExplorationStrategy;
+    private ReinforcementLearning.IntrinsicMotivation.IIntrinsicRewardModule<T>? _configuredIntrinsicRewardModule;
+    private double _configuredIntrinsicRewardWeight = 0.5;
     private IStoppingCriterion<T>? _configuredStoppingCriterion;
     private ITimeSeriesDecomposition<T>? _configuredTimeSeriesDecomposition;
     private IDistillationStrategy<T>? _configuredDistillationStrategy;
@@ -205,6 +207,44 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (_rlOptions is not null && _rlOptions.ExplorationStrategy is null)
         {
             _rlOptions.ExplorationStrategy = strategy;
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures curiosity (intrinsic-motivation) exploration for reinforcement learning: a novelty
+    /// bonus is added to the environment reward each step so the agent seeks unfamiliar states, which is
+    /// what makes sparse-reward tasks learnable.
+    /// </summary>
+    /// <param name="module">
+    /// The intrinsic-reward module. When <c>null</c>, the industry-leading default is used: Random Network
+    /// Distillation (prediction error against a fixed random network as the novelty signal).
+    /// </param>
+    /// <param name="weight">Weight applied to the intrinsic reward before adding it to the extrinsic reward. Defaults to 0.5.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If your environment only rewards the agent rarely, the agent has no
+    /// signal to learn from most of the time. Curiosity gives it a bonus for discovering new situations,
+    /// so it keeps exploring purposefully. The bonus fades as situations become familiar.</para>
+    /// <para>
+    /// Applies to the reinforcement-learning training path (with a configured environment); the mean
+    /// intrinsic reward is surfaced on the result's reinforcement-learning metrics.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCuriosity(
+        ReinforcementLearning.IntrinsicMotivation.IIntrinsicRewardModule<T>? module = null, double weight = 0.5)
+    {
+        _configuredIntrinsicRewardModule = module
+            ?? new ReinforcementLearning.IntrinsicMotivation.RandomNetworkDistillation<T>(seed: _rlOptions?.Seed);
+        _configuredIntrinsicRewardWeight = weight;
+
+        // Order-independent with ConfigureReinforcementLearning / ConfigureEnvironment: fill the options
+        // if they already exist; otherwise BuildRLInternalAsync falls back to the configured field.
+        if (_rlOptions is not null && _rlOptions.IntrinsicRewardModule is null)
+        {
+            _rlOptions.IntrinsicRewardModule = _configuredIntrinsicRewardModule;
+            _rlOptions.IntrinsicRewardWeight = weight;
         }
 
         return this;

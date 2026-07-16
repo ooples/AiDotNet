@@ -2209,6 +2209,16 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureExplorationStrategy(ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T> strategy);
 
     /// <summary>
+    /// Configures curiosity (intrinsic-motivation) exploration for reinforcement learning; null uses a
+    /// Random Network Distillation default.
+    /// </summary>
+    /// <param name="module">The intrinsic-reward module; null uses Random Network Distillation.</param>
+    /// <param name="weight">Weight applied to the intrinsic reward. Defaults to 0.5.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCuriosity(
+        ReinforcementLearning.IntrinsicMotivation.IIntrinsicRewardModule<T>? module = null, double weight = 0.5);
+
+    /// <summary>
     /// Configures a self-supervised learning method for learning representations without labeled data.
     /// </summary>
     /// <param name="method">The SSL method implementation to use.</param>

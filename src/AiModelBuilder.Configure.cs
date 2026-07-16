@@ -2151,12 +2151,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ? null
             : (_rlOptions.Seed.HasValue ? new Random(_rlOptions.Seed.Value) : new Random());
 
+        // Curiosity: an intrinsic-reward module adds a novelty bonus to each step's reward (order-
+        // independent with ConfigureReinforcementLearning via the configured-field fallback).
+        var intrinsicRewardModule = _rlOptions.IntrinsicRewardModule ?? _configuredIntrinsicRewardModule;
+        double intrinsicRewardWeight = _rlOptions.IntrinsicRewardModule is not null
+            ? _rlOptions.IntrinsicRewardWeight
+            : _configuredIntrinsicRewardWeight;
+        double intrinsicRewardSum = 0;
+        long intrinsicRewardCount = 0;
+
         // Training loop
         for (int episode = 0; episode < episodes; episode++)
         {
             var state = _rlOptions.Environment.Reset();
             rlAgent.ResetEpisode();
             explorationStrategy?.Reset();
+            intrinsicRewardModule?.Reset();
 
             T episodeReward = numOps.Zero;
             int steps = 0;
@@ -2182,6 +2192,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                 // Take step in environment
                 var (nextState, reward, isDone, info) = _rlOptions.Environment.Step(action);
+
+                // Curiosity: add a novelty bonus for the state reached, then learn it so it fades.
+                if (intrinsicRewardModule is not null)
+                {
+                    var intrinsic = intrinsicRewardModule.ComputeIntrinsicReward(nextState);
+                    intrinsicRewardModule.Update(nextState);
+                    reward = numOps.Add(reward, numOps.FromDouble(intrinsicRewardWeight * numOps.ToDouble(intrinsic)));
+                    intrinsicRewardSum += numOps.ToDouble(intrinsic);
+                    intrinsicRewardCount++;
+                }
 
                 // Store experience
                 rlAgent.StoreExperience(state, action, reward, nextState, isDone);
@@ -2377,6 +2397,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ProcessKnowledgeGraphOptions(result);
         AttachSafetyPipeline(result);
         AttachAdversarialRobustness(result);
+
+        // Surface the mean intrinsic (curiosity) reward, so a caller can see how much novelty drove
+        // training and watch it fade across runs as the environment becomes familiar.
+        if (intrinsicRewardCount > 0)
+        {
+            result.SetConfiguredMetric("MeanIntrinsicReward", numOps.FromDouble(intrinsicRewardSum / intrinsicRewardCount));
+        }
 
         return result;
     }
