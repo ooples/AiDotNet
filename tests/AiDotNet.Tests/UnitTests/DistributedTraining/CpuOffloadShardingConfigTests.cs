@@ -124,7 +124,7 @@ public class CpuOffloadShardingConfigTests
             IEngine? seen = null;
             var stub = new EngineCapturingOptimizer<double, Matrix<double>, Vector<double>>(
                 capture: e => seen = e);
-            var sharded = new DDPOptimizer<double, Matrix<double>, Vector<double>>(stub, config);
+            var sharded = new WrappedStepProbeOptimizer<double, Matrix<double>, Vector<double>>(stub, config);
 
             sharded.Optimize(new OptimizationInputData<double, Matrix<double>, Vector<double>>());
 
@@ -154,7 +154,7 @@ public class CpuOffloadShardingConfigTests
 
             var stub = new EngineCapturingOptimizer<double, Matrix<double>, Vector<double>>(
                 capture: _ => throw new InvalidOperationException("boom inside wrapped step"));
-            var sharded = new DDPOptimizer<double, Matrix<double>, Vector<double>>(stub, config);
+            var sharded = new WrappedStepProbeOptimizer<double, Matrix<double>, Vector<double>>(stub, config);
 
             Assert.Throws<InvalidOperationException>(() =>
                 sharded.Optimize(new OptimizationInputData<double, Matrix<double>, Vector<double>>()));
@@ -187,7 +187,7 @@ public class CpuOffloadShardingConfigTests
             IEngine? seen = null;
             var stub = new EngineCapturingOptimizer<double, Matrix<double>, Vector<double>>(
                 capture: e => seen = e);
-            var sharded = new DDPOptimizer<double, Matrix<double>, Vector<double>>(stub, config);
+            var sharded = new WrappedStepProbeOptimizer<double, Matrix<double>, Vector<double>>(stub, config);
 
             sharded.Optimize(new OptimizationInputData<double, Matrix<double>, Vector<double>>());
 
@@ -218,7 +218,7 @@ public class CpuOffloadShardingConfigTests
             IEngine? seen = null;
             var stub = new EngineCapturingOptimizer<double, Matrix<double>, Vector<double>>(
                 capture: e => seen = e);
-            var sharded = new DDPOptimizer<double, Matrix<double>, Vector<double>>(stub, config);
+            var sharded = new WrappedStepProbeOptimizer<double, Matrix<double>, Vector<double>>(stub, config);
 
             sharded.Optimize(new OptimizationInputData<double, Matrix<double>, Vector<double>>());
 
@@ -345,8 +345,29 @@ public class CpuOffloadShardingConfigTests
     }
 
     /// <summary>
-    /// Strict gradient-based-optimizer test double. It implements IGradientBasedOptimizer so
-    /// DDPOptimizer accepts it, but only <see cref="Optimize"/> — which records the engine active
+    /// Test-only sharded optimizer whose <see cref="Optimize"/> is exactly
+    /// <c>RunWrappedOptimizerStep</c>, so the engine-swap tests exercise THAT helper directly, decoupled
+    /// from any strategy's routing choice. (DDP/AsyncSGD/Elastic/GradientCompression now take the
+    /// single-step gradient path and no longer call the wrapped optimizer's Optimize; LocalSGD, Pipeline,
+    /// TensorParallel and Hybrid still route their local step through RunWrappedOptimizerStep, so its
+    /// CPU-offload contract remains live and worth testing in isolation.)
+    /// </summary>
+    private sealed class WrappedStepProbeOptimizer<T, TInput, TOutput>
+        : ShardedOptimizerBase<T, TInput, TOutput>
+    {
+        public WrappedStepProbeOptimizer(IOptimizer<T, TInput, TOutput> wrapped, IShardingConfiguration<T> config)
+            : base(wrapped, config) { }
+
+        public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
+            => RunWrappedOptimizerStep(inputData);
+        public override void SynchronizeOptimizerState() { }
+        public override byte[] Serialize() => throw new NotSupportedException();
+        public override void Deserialize(byte[] data) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Strict gradient-based-optimizer test double. It implements IGradientBasedOptimizer so the sharded
+    /// wrapper accepts it, but only <see cref="Optimize"/> — which records the engine active
     /// inside the wrapped step — is a real contract member. Because the double is not an
     /// OptimizerBase and exposes no InitialSolution, DDP's Optimize invokes nothing else on it, so
     /// every other member throws NotSupportedException: a strict mock that surfaces any unexpected

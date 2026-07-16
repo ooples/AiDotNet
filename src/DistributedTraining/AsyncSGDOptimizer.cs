@@ -101,62 +101,21 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
         if (inputData == null)
             throw new ArgumentNullException(nameof(inputData));
 
-        var gradientOptimizer = WrappedOptimizer as IGradientBasedOptimizer<T, TInput, TOutput>;
+        // NO barrier — async SGD deliberately does not synchronize workers (its defining property).
 
-        // Populate InitialSolution from the wrapped optimizer's model if not already supplied,
-        // so we have a concrete pre-step parameter vector to update from.
-        if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
-        {
-            inputData.InitialSolution = baseOptimizer.Model.Clone();
-        }
+        // When cross-rank synchronization is off, fall back to a plain local step.
+        if (!Config.AutoSyncGradients)
+            return RunWrappedOptimizerStep(inputData);
 
-        // NO barrier — async SGD deliberately does not synchronize workers (this is the defining
-        // property that distinguishes it from DDP/synchronous SGD).
-
-        // Save the pre-step parameters so the parameter-server update is applied from the correct base
-        // (the wrapped step below also advances params locally; we re-apply from the saved base to avoid
-        // double-stepping, exactly as DDP does).
-        Vector<T>? savedParameters = null;
-        if (Config.AutoSyncGradients && gradientOptimizer != null && inputData.InitialSolution != null)
-        {
-            savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
-        }
-
-        // Local step computes this worker's gradient (RunWrappedOptimizerStep also engages
-        // IShardingConfiguration.CpuOffloadOptimizer when set: Adam m/v state + step run on CpuEngine).
-        var result = RunWrappedOptimizerStep(inputData);
-
-        // Parameter-server / Downpour async SGD (Dean et al. 2012; Stale-Synchronous Parallel, Ho et al.
-        // 2013): each worker pushes its GRADIENT (not its parameters) to the server, which applies the
-        // combined update. This is gradient-based, NOT parameter averaging (parameter averaging is a
-        // different algorithm — model/EASGD averaging). The asynchrony and the up-to-_maxStaleness stale
-        // reads are a property of the RUNTIME; the synchronous InMemory backend enforces staleness 0, and
-        // async SGD at staleness 0 reduces exactly to synchronous gradient SGD, which is the limit
-        // implemented here. A real async runtime relaxes the collective into non-blocking per-worker pushes
-        // bounded by _maxStaleness.
-        if (Config.AutoSyncGradients && gradientOptimizer != null && savedParameters != null && result.BestSolution != null)
-        {
-            var localGradients = gradientOptimizer.LastComputedGradients;
-
-            if (localGradients != null && localGradients.Length > 0)
-            {
-                // Drain any deferred GPU download so the combine below operates on live CPU values.
-                OffloadGradientsToCpu(localGradients);
-
-                // Combine each worker's gradient (staleness-0 limit of the parameter-server accumulate).
-                Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
-
-                // Apply the combined gradient once, from the saved (pre-step) parameters — the safe
-                // 3-parameter overload prevents double-stepping and works with any optimizer.
-                result.BestSolution = gradientOptimizer.ApplyGradients(savedParameters, localGradients, result.BestSolution);
-            }
-        }
-
-        OffloadParamsToCpu(result.BestSolution);
-
-        // NO barrier at end — continue immediately!
-
-        return result;
+        // Downpour / parameter-server async SGD (Dean et al. 2012; Stale-Synchronous Parallel, Ho et al.
+        // 2013): each worker computes a GRADIENT and pushes it to the server, which applies the combined
+        // update — gradient-based, NOT parameter averaging (parameter averaging is a different algorithm:
+        // EASGD / model averaging). RunDataParallelStep does exactly the per-step version: backward-only
+        // gradient, combine, single update from the original parameters. The asynchrony and the up-to-
+        // MaxStaleness stale reads are a property of the RUNTIME; the synchronous InMemory backend enforces
+        // staleness 0, under which async SGD reduces exactly to synchronous gradient SGD — the limit
+        // implemented here (see ShouldSync for the bounded-staleness barrier a real async runtime applies).
+        return RunDataParallelStep(inputData, ReductionOperation.Average);
     }
 
     /// <inheritdoc/>

@@ -271,6 +271,95 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
     }
 
+    /// <summary>
+    /// Executes one paper-faithful DATA-PARALLEL optimizer step for the pure-replication strategies —
+    /// synchronous DDP (Li et al. 2020, "PyTorch Distributed"), Downpour / parameter-server async SGD
+    /// (Dean et al. 2012), elastic DDP, and gradient-compressed DDP. Unlike <see cref="RunShardedZeroStep"/>
+    /// the parameters are NOT sharded (every rank holds the full vector), so the step is:
+    /// <list type="number">
+    /// <item><b>Backward only</b> — full-vector gradient via
+    /// <see cref="IGradientComputable{T,TInput,TOutput}.ComputeGradients"/>, WITHOUT running the wrapped
+    /// optimizer's full <c>Optimize</c> loop. This is the crux: the wrapped optimizer's Adam m/v state is
+    /// advanced EXACTLY once per global step (in step 3), not once per local inner iteration — so every
+    /// rank stays in lock-step and the reduce is over a single, comparable gradient (true per-step DDP, as
+    /// PyTorch performs in its backward gradient hook, rather than local-SGD-style multi-step drift).</item>
+    /// <item><b>Reduce</b> the full gradient across ranks with <paramref name="reduction"/> (Average = the
+    /// mean gradient of synchronous DDP). Identity at world size 1. CpuOffloadGradients makes the
+    /// communicated buffer CPU-resident before the collective.</item>
+    /// <item><b>Single update</b> — one
+    /// <see cref="IGradientBasedOptimizer{T,TInput,TOutput}.ApplyGradients"/> from the ORIGINAL (pre-step)
+    /// parameters, which is double-step-safe and optimizer-agnostic; the CPU-offload engine swap is scoped
+    /// to this update alone.</item>
+    /// </list>
+    /// Because every rank applies the SAME reduced gradient from the SAME original parameters with a
+    /// fresh-per-step update, all replicas end bit-identical — which is exactly what the two-rank
+    /// data-parallel invariants assert.
+    /// </summary>
+    /// <param name="inputData">Training batch (<c>XTrain</c>/<c>YTrain</c>) plus the model
+    /// (<c>InitialSolution</c>, or the wrapped <see cref="OptimizerBase{T,TInput,TOutput}"/>'s Model).</param>
+    /// <param name="reduction">The cross-rank gradient reduction (<see cref="ReductionOperation.Average"/>
+    /// for the DDP mean gradient).</param>
+    /// <param name="transformGradientBeforeReduce">Optional per-rank transform applied to the gradient
+    /// buffer that is actually COMMUNICATED (e.g. gradient compression / quantization); identity when null.
+    /// Must return a vector matching the parameter count.</param>
+    protected OptimizationResult<T, TInput, TOutput> RunDataParallelStep(
+        OptimizationInputData<T, TInput, TOutput> inputData,
+        ReductionOperation reduction,
+        Func<Vector<T>, Vector<T>>? transformGradientBeforeReduce = null)
+    {
+        if (inputData is null) throw new ArgumentNullException(nameof(inputData));
+
+        var model = inputData.InitialSolution
+            ?? (WrappedOptimizer as OptimizerBase<T, TInput, TOutput>)?.Model?.Clone()
+            ?? throw new InvalidOperationException(
+                "Data-parallel step requires a model to compute gradients from: set " +
+                "OptimizationInputData.InitialSolution, or wrap an OptimizerBase whose Model is set.");
+
+        if (WrappedOptimizer is not IGradientBasedOptimizer<T, TInput, TOutput> gradOpt)
+            throw new InvalidOperationException(
+                $"Data-parallel training requires a gradient-based wrapped optimizer; received {WrappedOptimizer.GetType().Name}.");
+
+        var paramModel = InterfaceGuard.Parameterizable(model);
+        var gradModel = InterfaceGuard.GradientComputable(model);
+
+        var originalParams = paramModel.GetParameters();
+        if (originalParams is null || originalParams.Length == 0)
+            return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
+
+        // 1. Backward only — full gradient WITHOUT advancing optimizer state through a local loop.
+        var gradients = gradModel.ComputeGradients(inputData.XTrain, inputData.YTrain);
+        if (gradients is null || gradients.Length == 0)
+            return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
+        if (gradients.Length != originalParams.Length)
+            throw new InvalidOperationException(
+                $"Data-parallel: gradient length {gradients.Length} does not match parameter count {originalParams.Length}.");
+
+        // Optional per-rank transform on the communicated buffer (e.g. gradient compression).
+        if (transformGradientBeforeReduce is not null)
+        {
+            gradients = transformGradientBeforeReduce(gradients);
+            if (gradients is null || gradients.Length != originalParams.Length)
+                throw new InvalidOperationException(
+                    "Data-parallel: gradient transform must return a non-null vector matching the parameter count.");
+        }
+
+        // 2. Reduce the full gradient across ranks (identity at world size 1). Offload BEFORE the
+        //    collective so CpuOffloadGradients makes the COMMUNICATED buffer CPU-resident.
+        OffloadGradientsToCpu(gradients);
+        if (WorldSize > 1)
+            Config.CommunicationBackend.AllReduce(gradients, reduction);
+
+        // 3. SINGLE update from the ORIGINAL params (no double-step); optimizer engine-swap scoped here.
+        IFullModel<T, TInput, TOutput> updated;
+        using (BeginCpuOffloadScope())
+        {
+            updated = gradOpt.ApplyGradients(originalParams, gradients, model);
+        }
+
+        OffloadParamsToCpu(updated);
+        return new OptimizationResult<T, TInput, TOutput> { BestSolution = updated };
+    }
+
     /// <summary>Returns a length-<paramref name="length"/> copy of <paramref name="source"/>, zero-padding any tail.</summary>
     private Vector<T> PadTo(Vector<T> source, int length)
     {

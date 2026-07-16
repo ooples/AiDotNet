@@ -90,12 +90,17 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
             // IShardingConfiguration.CpuOffloadOptimizer: the Adam m/v state + update run on CpuEngine.
             var result = RunWrappedOptimizerStep(inputData);
 
-            // Each stage updates its own parameters
+            // AUDIT (stage-local, no double-reduce): in pure pipeline parallelism each stage owns a DISJOINT
+            // slice of the parameters, so there is deliberately NO cross-stage gradient or parameter
+            // all-reduce here — adding one would incorrectly mix distinct stages' parameters. The real
+            // micro-batch schedule (GPipe/1F1B/ZB forward-backward interleaving + gradient accumulation) is
+            // implemented and tested in PipelineParallelModel (see PipelineParallelismIntegrationTests'
+            // per-schedule op-count tests); this optimizer only applies the accumulated per-stage update,
+            // which is why numMicroBatches > 1 is rejected in the constructor rather than faked here. (When
+            // pipeline is combined with data parallelism, the data-parallel replica reduction is handled by
+            // the data-parallel wrapper — HybridShardedModel's subgroup reduce — not by this class.)
             if (Config.AutoSyncGradients && result.BestSolution != null)
             {
-                // In pure pipeline parallelism, no cross-stage parameter sync needed
-                // (each stage owns different parameters)
-                // If combined with data parallelism, would sync within data-parallel group
             }
 
             OffloadParamsToCpu(result.BestSolution);

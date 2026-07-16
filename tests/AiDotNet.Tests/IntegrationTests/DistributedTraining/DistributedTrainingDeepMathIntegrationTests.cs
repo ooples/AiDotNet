@@ -559,7 +559,11 @@ public class DistributedTrainingDeepMathIntegrationTests
     /// ColumnParallelLinear -> RowParallelLinear run across TWO ranks (each holding only its weight
     /// shards, communicating via the f/ḡ conjugate operators) produces output bit-identical (to tol) to
     /// the SAME MLP computed non-parallel on the full weights. Proves column-split · row-split + all-reduce
-    /// == full matmul, i.e. the partitioning is mathematically transparent.
+    /// == full matmul, i.e. the partitioning is mathematically transparent. This is also the TENSOR-PARALLEL
+    /// NO-DOUBLE-REDUCE guard: the row-parallel all-reduce runs exactly once (in the ḡ operator). A second,
+    /// redundant reduce (e.g. an all-reduce added in the optimizer wrapper) would scale the reduced term and
+    /// break this bit-identical match — so this test fails loudly if TP gradient/activation sync is ever
+    /// double-counted.
     /// </summary>
     [Fact(Timeout = 120000)]
     public async Task MegatronMLP_TwoRank_ColumnThenRowParallel_EqualsNonParallelMLP()
@@ -812,6 +816,138 @@ public class DistributedTrainingDeepMathIntegrationTests
         for (int rank = 0; rank < 2; rank++)
             for (int i = 0; i < ZeroN; i++)
                 Assert.Equal(rank0Params[i], results[rank][i], ZeroTol);
+    }
+
+    // ---- Pure data-parallel (single-step gradient path) invariants --------------------------------
+    // Every DP optimizer below now performs the paper-faithful per-step gradient hook (backward-only
+    // ComputeGradients -> AllReduce(Average) -> single ApplyGradients from the original params), the SAME
+    // shape the ZeRO tests exercise. So each gets the identical transparency invariant: two ranks with
+    // rank-dependent gradients (scale 1 and 2) reduce to the mean (scale 1.5) and reconstruct the exact
+    // single-rank result at scale 1.5. If the per-step all-reduce were dropped (e.g. reverting to local
+    // parameter/optimize averaging) rank 0 and rank 1 would sit at scales 1/2 and diverge from the 1.5
+    // reference — so these genuinely exercise the gradient synchronization.
+
+    private static async Task<(Vector<double> single, Vector<double>[] ranks)> RunTwoRankVsSingleAtMeanGradient(
+        Func<IShardingConfiguration<double>, ShardedOptimizerBase<double, Vector<double>, Vector<double>>> makeOptimizer)
+    {
+        var refBackend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString());
+        refBackend.Initialize();
+        var refConfig = new ShardingConfiguration<double>(refBackend) { AutoSyncGradients = true };
+        var refModel = NewZeroModel(1.5);
+        makeOptimizer(refConfig).Optimize(ZeroInput(refModel));
+        var single = refModel.GetParameters();
+        refBackend.Shutdown();
+
+        var envId = Guid.NewGuid().ToString();
+        var results = new Vector<double>[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                backend.Initialize();
+                var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+                var model = NewZeroModel(rank + 1);   // rank 0 -> scale 1, rank 1 -> scale 2
+                makeOptimizer(config).Optimize(ZeroInput(model));
+                results[rank] = model.GetParameters();
+                backend.Shutdown();
+            }));
+        }
+        await Task.WhenAll(tasks);
+        return (single, results);
+    }
+
+    private static void AssertTwoRankReconstructsSingle(Vector<double> single, Vector<double>[] ranks)
+    {
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(ranks[0][i], ranks[1][i], ZeroTol);       // both ranks identical
+        for (int i = 0; i < ZeroN; i++)
+            Assert.Equal(single[i], ranks[0][i], ZeroTol);          // == single-rank at the mean gradient
+    }
+
+    /// <summary>
+    /// INVARIANT: true DDP (Li et al. 2020) is the per-step gradient all-reduce — two ranks reconstruct the
+    /// exact single-rank result at the mean gradient. Guards against regressing to local-SGD parameter
+    /// averaging (the class's own docs promise gradient averaging).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task DDP_TwoRanks_PerStepGradientAllReduce_MatchesSingleRankAtMeanGradient()
+    {
+        await Task.Yield();
+        var (single, ranks) = await RunTwoRankVsSingleAtMeanGradient(
+            cfg => new DDPOptimizer<double, Vector<double>, Vector<double>>(NewAdam(), cfg));
+        AssertTwoRankReconstructsSingle(single, ranks);
+    }
+
+    /// <summary>
+    /// INVARIANT: async SGD at staleness 0 (the synchronous InMemory limit) is the gradient-based
+    /// Downpour/parameter-server update (Dean 2012), NOT parameter averaging — two ranks reconstruct the
+    /// single-rank result at the mean gradient. Now testable because the optimizer takes the same
+    /// backward-only single-step path as DDP/ZeRO (no full wrapped-Optimize loop).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task AsyncSGD_TwoRanks_StalenessZero_MatchesSingleRankAtMeanGradient()
+    {
+        await Task.Yield();
+        var (single, ranks) = await RunTwoRankVsSingleAtMeanGradient(
+            cfg => new AsyncSGDOptimizer<double, Vector<double>, Vector<double>>(NewAdam(), cfg, allowStaleness: 0));
+        AssertTwoRankReconstructsSingle(single, ranks);
+    }
+
+    /// <summary>
+    /// INVARIANT: elastic DDP performs the same per-step gradient all-reduce as DDP on every step where the
+    /// worker set is stable — two ranks reconstruct the single-rank result at the mean gradient.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Elastic_TwoRanks_PerStepGradientAllReduce_MatchesSingleRankAtMeanGradient()
+    {
+        await Task.Yield();
+        var (single, ranks) = await RunTwoRankVsSingleAtMeanGradient(
+            cfg => new ElasticOptimizer<double, Vector<double>, Vector<double>>(NewAdam(), cfg, minWorkers: 1, maxWorkers: 8));
+        AssertTwoRankReconstructsSingle(single, ranks);
+    }
+
+    /// <summary>
+    /// INVARIANT: gradient-compressed DDP with compression disabled (no quantization, no sparsification) is
+    /// exactly true DDP — the compress/decompress pipeline is transparent, so two ranks reconstruct the
+    /// single-rank result at the mean gradient. Proves the compression plumbing is wired into the correct
+    /// per-step gradient path (compression WITH loss is validated separately by the compression methods).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task GradientCompression_NoCompression_TwoRanks_MatchesSingleRankAtMeanGradient()
+    {
+        await Task.Yield();
+        var (single, ranks) = await RunTwoRankVsSingleAtMeanGradient(
+            cfg => new GradientCompressionOptimizer<double, Vector<double>, Vector<double>>(
+                NewAdam(), cfg, compressionRatio: 1.0, useQuantization: false, useSparsification: false));
+        AssertTwoRankReconstructsSingle(single, ranks);
+    }
+
+    /// <summary>
+    /// AUDIT INVARIANT (pipeline parallel, honest scope): the pipeline optimizer performs ONLY the
+    /// per-stage parameter update; the micro-batch schedule (GPipe/1F1B/ZB) lives in PipelineParallelModel.
+    /// It must therefore REFUSE to advertise numMicroBatches > 1 rather than silently pretend to schedule
+    /// micro-batches. This guards the stage-local contract that also justifies doing no cross-stage reduce.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task PipelineParallelOptimizer_MultiMicroBatch_RejectedToDeferToModelSchedule()
+    {
+        await Task.Yield();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, Guid.NewGuid().ToString());
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+
+        // numMicroBatches == 1 is the honest per-stage-update contract and must construct fine.
+        var ok = new PipelineParallelOptimizer<double, Vector<double>, Vector<double>>(NewAdam(), config, numMicroBatches: 1);
+        Assert.NotNull(ok);
+
+        // numMicroBatches > 1 would be a false claim at the optimizer level -> rejected.
+        Assert.Throws<NotSupportedException>(() =>
+            new PipelineParallelOptimizer<double, Vector<double>, Vector<double>>(NewAdam(), config, numMicroBatches: 4));
+
+        backend.Shutdown();
     }
 
     private static double[,] DeterministicMatrix(int rows, int cols, int seed)

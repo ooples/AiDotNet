@@ -89,76 +89,28 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        if (inputData == null)
-            throw new ArgumentNullException(nameof(inputData));
-
-        var gradientOptimizer = (IGradientBasedOptimizer<T, TInput, TOutput>)WrappedOptimizer;
-
-        // Populate InitialSolution from wrapped optimizer's model if not already set
-        if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
-        {
-            inputData.InitialSolution = baseOptimizer.Model.Clone();
-        }
-
-        // Barrier to ensure all processes start together
+        // Opening barrier: every rank starts the collective sequence together. Validation is inside the
+        // try so a rank that receives null still reaches the closing barrier and cannot strand peers.
         Config.CommunicationBackend.Barrier();
-
         try
         {
-            // CRITICAL: Save parameters BEFORE local optimization
-            // This allows us to apply averaged gradients from the correct starting point
-            Vector<T>? savedParameters = null;
-            if (Config.AutoSyncGradients && inputData.InitialSolution != null)
-            {
-                savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
-            }
+            if (inputData == null)
+                throw new ArgumentNullException(nameof(inputData));
 
-            // Step 1: Optimize locally to compute gradients (and apply them locally).
-            // RunWrappedOptimizerStep engages IShardingConfiguration.CpuOffloadOptimizer:
-            // Adam m/v state + step run on CpuEngine when the flag is set. DDP
-            // replicates full parameters and doesn't shard state, so
-            // CpuOffloadParams is a no-op here (validated at facade level).
-            var localResult = RunWrappedOptimizerStep(inputData);
+            // When cross-rank synchronization is off, fall back to a plain local step.
+            if (!Config.AutoSyncGradients)
+                return RunWrappedOptimizerStep(inputData);
 
-            // Step 2: Synchronize gradients across all workers
-            if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)
-            {
-                var localGradients = gradientOptimizer.LastComputedGradients;
-
-                if (localGradients != null && localGradients.Length > 0)
-                {
-                    // ZeRO Stage-2 offload: if CpuOffloadGradients is on, force any
-                    // deferred GPU download to drain into the managed backing array
-                    // and drop the GPU cache entry so the AllReduce below reduces
-                    // live CPU values (and the GPU doesn't retain stale gradient
-                    // bytes across steps). No-op when the flag is off.
-                    OffloadGradientsToCpu(localGradients);
-
-                    // Average gradients across all workers (true DDP)
-                    Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
-
-                    // Apply averaged gradients using the safe 3-parameter overload
-                    // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
-                    // Works correctly with ANY optimizer (SGD, Adam, RMSprop, etc.) because we're starting
-                    // from the original parameters, not the locally-updated ones
-                    var finalModel = gradientOptimizer.ApplyGradients(savedParameters, localGradients, localResult.BestSolution);
-
-                    // Update result with model using averaged gradients
-                    localResult.BestSolution = finalModel;
-                }
-            }
-
-            // Optional param offload — DDP replicates params, so this is a
-            // "drop the GPU cache between steps" operation on the full
-            // parameter set. No-op when CpuOffloadParams is off (which is
-            // the recommended DDP configuration).
-            OffloadParamsToCpu(localResult.BestSolution);
-
-            return localResult;
+            // True DDP (Li et al. 2020, "PyTorch Distributed"): the per-step gradient hook. Compute the
+            // full local gradient (backward only — NOT a local optimize loop, which would be Local SGD and
+            // drift the replicas), AllReduce it to the mean gradient, and apply ONE update from the original
+            // parameters. RunDataParallelStep performs exactly this; all replicas therefore stay
+            // bit-identical every step, matching this class's documented contract. CpuOffload flags honored.
+            return RunDataParallelStep(inputData, ReductionOperation.Average);
         }
         finally
         {
-            // Barrier to ensure all processes finish together (always runs even if exception thrown)
+            // Closing barrier always runs (even on exception) so no rank is left waiting.
             Config.CommunicationBackend.Barrier();
         }
     }

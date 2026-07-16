@@ -66,7 +66,14 @@ public class TensorParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<
             // + step run on CpuEngine.
             var result = RunWrappedOptimizerStep(inputData);
 
-            // Synchronize across tensor-parallel group
+            // AUDIT (no double-reduce): this optimizer is the black-box PARAMETER-REPLICATION fallback for
+            // models that cannot be layer-partitioned. It averages PARAMETERS across the tensor-parallel
+            // group — it does NOT reduce gradients — so it cannot double-count against the real Megatron-LM
+            // gradient reduction, which lives at the LAYER level (the f/ḡ conjugate all-reduce inside
+            // ColumnParallelLinear/RowParallelLinear, exercised end-to-end and guarded against a duplicate
+            // reduce by the MegatronMLP_TwoRank == NonParallel invariant). A model built from those layer
+            // primitives already produces correct gradients on the tape and does not need this wrapper;
+            // wrapping it anyway is redundant (averaging already-identical replicas) but not incorrect.
             if (Config.AutoSyncGradients && result.BestSolution != null)
             {
                 SynchronizeParameters(result.BestSolution);

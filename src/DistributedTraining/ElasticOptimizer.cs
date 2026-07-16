@@ -132,19 +132,16 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
                 HandleWorkerChange(inputData);
             }
 
-            // Optimize with current workers. Routes through
-            // RunWrappedOptimizerStep so IShardingConfiguration.CpuOffloadOptimizer
-            // engages: Adam m/v state + step run on CpuEngine.
-            var result = RunWrappedOptimizerStep(inputData);
+            // When cross-rank synchronization is off, fall back to a plain local step.
+            if (!Config.AutoSyncGradients)
+                return RunWrappedOptimizerStep(inputData);
 
-            // Synchronize parameters
-            if (Config.AutoSyncGradients && result.BestSolution != null)
-            {
-                SynchronizeParameters(result.BestSolution);
-            }
-
-            OffloadParamsToCpu(result.BestSolution);
-            return result;
+            // Elastic DDP: on top of the elastic membership handling above, each surviving step is a true
+            // synchronous DDP step (per-step gradient all-reduce). RunDataParallelStep computes the
+            // backward-only gradient, averages it across the CURRENT worker set, and applies one update
+            // from the original parameters — so all replicas stay bit-identical without a separate
+            // parameter-averaging pass (which is why the old SynchronizeParameters call is gone).
+            return RunDataParallelStep(inputData, ReductionOperation.Average);
         }
         finally
         {
