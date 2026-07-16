@@ -288,12 +288,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // run guarantee silently breaks for mixed-generic test runs.
 
     // Self-supervised learning configuration
-    private SelfSupervisedLearning.SSLConfig? _sslConfig;
+    private SelfSupervisedLearning.SSLConfig<T>? _sslConfig;
     // Optional user-supplied pretraining hook invoked BEFORE main training when
     // ConfigureSelfSupervisedLearning is used with the action overload. Receives
-    // the current base model + SSLConfig + cancellation token; returns the model
+    // the current base model + SSLConfig<T> + cancellation token; returns the model
     // that should feed into main training. See #1361.
-    private Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig, CancellationToken,
+    private Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig<T>, CancellationToken,
         Task<IFullModel<T, TInput, TOutput>>>? _sslPretrainAction;
 
     // Federated learning configuration (facade-first: orchestration is internal)

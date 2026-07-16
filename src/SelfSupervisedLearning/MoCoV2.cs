@@ -25,6 +25,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> Chen et al., "Improved Baselines with Momentum Contrastive Learning"
 /// (arXiv 2020)</para>
+///
+/// <para><b>Best for:</b> Better performance than MoCo v1 with similar efficiency.</para>
+/// <para><b>Pros:</b> Combines MoCo efficiency with SimCLR improvements.</para>
+/// <para><b>Cons:</b> Slightly more complex than MoCo v1.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -53,17 +57,16 @@ public class MoCoV2<T> : MoCo<T>
         IProjectorHead<T> projector,
         IProjectorHead<T> momentumProjector,
         int embeddingDim = 128,
-        SSLConfig? config = null)
+        SSLConfig<T>? config = null)
         : base(encoder, momentumEncoder, projector, momentumProjector, embeddingDim,
               config ?? CreateMoCoV2Config())
     {
     }
 
-    private static SSLConfig CreateMoCoV2Config()
+    private static SSLConfig<T> CreateMoCoV2Config()
     {
-        return new SSLConfig
+        return new SSLConfig<T>
         {
-            Method = SSLMethodType.MoCoV2,
             UseCosineDecay = true,
             MoCo = new MoCoConfig { UseMLPProjector = true }
         };

@@ -33,6 +33,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> Chen et al., "A Simple Framework for Contrastive Learning of Visual
 /// Representations" (ICML 2020)</para>
+///
+/// <para><b>Best for:</b> Simple setup, strong performance, research baselines.</para>
+/// <para><b>Pros:</b> Simple architecture, strong performance, well-understood.</para>
+/// <para><b>Cons:</b> Requires large batch sizes for best performance.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -67,8 +71,8 @@ public class SimCLR<T> : SSLMethodBase<T>
     public SimCLR(
         INeuralNetwork<T> encoder,
         IProjectorHead<T> projector,
-        SSLConfig? config = null)
-        : base(encoder, projector, config ?? new SSLConfig { Method = SSLMethodType.SimCLR })
+        SSLConfig<T>? config = null)
+        : base(encoder, projector, config ?? new SSLConfig<T>())
     {
         var temperature = _config.Temperature ?? 0.1;
         _loss = new NTXentLoss<T>(temperature);

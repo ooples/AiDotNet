@@ -33,7 +33,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IExternalClusterMetric<T>? _configuredExternalClusterMetric;
     private ICurriculumScheduler<T>? _configuredCurriculumScheduler;
     private ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T>? _configuredExplorationStrategy;
-    private ISSLMethod<T>? _configuredSSLMethod;
     private IStoppingCriterion<T>? _configuredStoppingCriterion;
     private ITimeSeriesDecomposition<T>? _configuredTimeSeriesDecomposition;
     private IDistillationStrategy<T>? _configuredDistillationStrategy;
@@ -257,7 +256,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureSSLMethod(ISSLMethod<T> method)
     {
-        _configuredSSLMethod = method;
+        if (method is null) throw new ArgumentNullException(nameof(method));
+
+        // Write through to the SSL config so the method reaches the pretraining hook. Create the
+        // config if ConfigureSelfSupervisedLearning has not run yet; that overload reuses this
+        // instance, so the two compose in either call order.
+        (_sslConfig ??= new SelfSupervisedLearning.SSLConfig<T>()).Method = method;
         return this;
     }
 
@@ -376,6 +380,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureEnvironment(IEnvironment<T> environment)
     {
         _configuredEnvironment = environment;
+
+        // Route it to where RL actually reads an environment from. The build gates the RL training
+        // path on RLTrainingOptions.Environment and drives that instance (Reset/Step) from there;
+        // parking the value in a private field meant this method never reached it and configuring an
+        // environment silently fell through to the supervised path. If no RL options exist yet,
+        // configuring an environment is itself the request to train in it, so create them with the
+        // standard loop defaults; otherwise fill in the environment they are missing. Holding the
+        // value in _configuredEnvironment as well is what lets ConfigureReinforcementLearning carry
+        // it over when options arrive later, making the two calls order-independent.
+        if (_rlOptions is null)
+        {
+            _rlOptions = RLTrainingOptions<T>.Default(environment);
+        }
+        else
+        {
+            _rlOptions.Environment = environment;
+        }
+
         return this;
     }
 

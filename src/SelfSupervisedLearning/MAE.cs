@@ -31,6 +31,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> He et al., "Masked Autoencoders Are Scalable Vision Learners"
 /// (CVPR 2022)</para>
+///
+/// <para><b>Best for:</b> Efficient pretraining, generative understanding.</para>
+/// <para><b>Pros:</b> Efficient (only encode visible patches), scalable.</para>
+/// <para><b>Cons:</b> May require fine-tuning for best downstream performance.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -88,8 +92,8 @@ public class MAE<T> : SSLMethodBase<T>
         int patchSize = 16,
         int imageSize = 224,
         double maskRatio = 0.75,
-        SSLConfig? config = null)
-        : base(encoder, null, config ?? new SSLConfig { Method = SSLMethodType.MAE })
+        SSLConfig<T>? config = null)
+        : base(encoder, null, config ?? new SSLConfig<T>())
     {
         _decoder = decoder;
         _patchSize = patchSize;

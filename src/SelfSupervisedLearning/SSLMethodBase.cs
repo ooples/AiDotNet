@@ -43,7 +43,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     /// <summary>
     /// The SSL configuration.
     /// </summary>
-    protected readonly SSLConfig _config;
+    protected readonly SSLConfig<T> _config;
 
     /// <summary>
     /// Whether the method is in training mode.
@@ -100,12 +100,12 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     protected SSLMethodBase(
         INeuralNetwork<T> encoder,
         IProjectorHead<T>? projector,
-        SSLConfig? config)
+        SSLConfig<T>? config)
     {
         Guard.NotNull(encoder);
         _encoder = encoder;
         _projector = projector;
-        _config = config ?? new SSLConfig();
+        _config = config ?? new SSLConfig<T>();
     }
 
     /// <inheritdoc />

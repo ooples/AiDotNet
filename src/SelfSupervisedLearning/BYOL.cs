@@ -36,6 +36,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> Grill et al., "Bootstrap Your Own Latent - A New Approach to
 /// Self-Supervised Learning" (NeurIPS 2020)</para>
+///
+/// <para><b>Best for:</b> Avoiding negative sample mining, asymmetric networks.</para>
+/// <para><b>Pros:</b> No negative samples needed, robust to batch size.</para>
+/// <para><b>Cons:</b> Requires careful design to prevent collapse.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -78,8 +82,8 @@ public class BYOL<T> : SSLMethodBase<T>
         IMomentumEncoder<T> targetEncoder,
         SymmetricProjector<T> onlineProjector,
         SymmetricProjector<T> targetProjector,
-        SSLConfig? config = null)
-        : base(encoder, onlineProjector, config ?? new SSLConfig { Method = SSLMethodType.BYOL })
+        SSLConfig<T>? config = null)
+        : base(encoder, onlineProjector, config ?? new SSLConfig<T>())
     {
         Guard.NotNull(targetEncoder);
         _targetEncoder = targetEncoder;

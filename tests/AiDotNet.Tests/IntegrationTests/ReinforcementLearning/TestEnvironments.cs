@@ -31,9 +31,22 @@ internal sealed class DeterministicBanditEnvironment<T> : IEnvironment<T>
     public int ActionSpaceSize { get; }
     public bool IsContinuousActionSpace => false;
 
+    /// <summary>
+    /// Total Reset() calls over this instance's lifetime (not reset per episode).
+    /// Lets a test prove THIS environment instance was driven by the training loop.
+    /// </summary>
+    public int TotalResets { get; private set; }
+
+    /// <summary>
+    /// Total Step() calls over this instance's lifetime (not reset per episode).
+    /// Lets a test prove THIS environment instance was driven by the training loop.
+    /// </summary>
+    public int TotalSteps { get; private set; }
+
     public Vector<T> Reset()
     {
         _steps = 0;
+        TotalResets++;
         return new Vector<T>(ObservationSpaceDimension);
     }
 
@@ -47,6 +60,7 @@ internal sealed class DeterministicBanditEnvironment<T> : IEnvironment<T>
             throw new ArgumentException("Action index out of range.", nameof(action));
 
         _steps++;
+        TotalSteps++;
 
         var reward = actionIndex == 0 ? _numOps.One : _numOps.Zero;
         var done = _steps >= _maxSteps;

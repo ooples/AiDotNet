@@ -34,7 +34,7 @@ public class SSLSession<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly ISSLMethod<T> _method;
-    private readonly SSLConfig _config;
+    private readonly SSLConfig<T> _config;
     private readonly SSLMetrics<T> _metrics;
     private SSLTrainingHistory<T> _history;
 
@@ -99,11 +99,11 @@ public class SSLSession<T>
     /// </summary>
     /// <param name="method">The SSL method to use.</param>
     /// <param name="config">Training configuration.</param>
-    public SSLSession(ISSLMethod<T> method, SSLConfig? config = null)
+    public SSLSession(ISSLMethod<T> method, SSLConfig<T>? config = null)
     {
         Guard.NotNull(method);
         _method = method;
-        _config = config ?? new SSLConfig();
+        _config = config ?? new SSLConfig<T>();
         _metrics = new SSLMetrics<T>();
         _history = new SSLTrainingHistory<T>();
 
@@ -374,9 +374,11 @@ public class SSLSession<T>
     {
         var elapsed = DateTime.Now - _startTime;
 
+        // Report the method that actually ran, not the one the config names — the session is handed a
+        // constructed method and the two can differ.
         var result = SSLResult<T>.Success(
             _method.GetEncoder(),
-            _config.Method ?? SSLMethodType.SimCLR,
+            _method.Name,
             _config,
             _history);
 
@@ -581,8 +583,8 @@ public class SSLSession<T>
         encoder.UpdateParameters(new Vector<T>(parameters));
 
         // Deserialize config
-        var config = JsonSerializer.Deserialize<SSLConfig>(checkpointData.ConfigJson)
-            ?? new SSLConfig();
+        var config = JsonSerializer.Deserialize<SSLConfig<T>>(checkpointData.ConfigJson)
+            ?? new SSLConfig<T>();
 
         // Create method and session
         var method = methodFactory(encoder);

@@ -25,14 +25,19 @@ public class SSLResult<T>
     public INeuralNetwork<T>? Encoder { get; set; }
 
     /// <summary>
-    /// Gets or sets the SSL method that was used for training.
+    /// Gets or sets the name of the SSL method that was used for training.
     /// </summary>
-    public SSLMethodType Method { get; set; }
+    /// <remarks>
+    /// <para>Taken from <see cref="ISSLMethod{T}.Name"/> of the method that actually ran, so it
+    /// reports custom methods as faithfully as shipped ones.</para>
+    /// <para>Examples: "SimCLR", "MoCo v2", "BYOL", "DINO", "MAE".</para>
+    /// </remarks>
+    public string MethodName { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the training configuration used.
     /// </summary>
-    public SSLConfig? Config { get; set; }
+    public SSLConfig<T>? Config { get; set; }
 
     /// <summary>
     /// Gets or sets the training history.
@@ -94,14 +99,14 @@ public class SSLResult<T>
     /// </summary>
     public static SSLResult<T> Success(
         INeuralNetwork<T> encoder,
-        SSLMethodType method,
-        SSLConfig config,
+        string methodName,
+        SSLConfig<T> config,
         SSLTrainingHistory<T> history)
     {
         return new SSLResult<T>
         {
             Encoder = encoder,
-            Method = method,
+            MethodName = methodName,
             Config = config,
             History = history,
             IsSuccess = true,

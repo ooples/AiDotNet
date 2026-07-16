@@ -32,6 +32,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> Chen et al., "An Empirical Study of Training Self-Supervised Vision
 /// Transformers" (ICCV 2021)</para>
+///
+/// <para><b>Best for:</b> Vision Transformers (ViT), modern architectures.</para>
+/// <para><b>Pros:</b> Optimized for ViT, simpler than MoCo v1/v2.</para>
+/// <para><b>Cons:</b> Best suited for transformer architectures.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -76,7 +80,7 @@ public class MoCoV3<T> : SSLMethodBase<T>
         IProjectorHead<T> projector,
         IProjectorHead<T> momentumProjector,
         IProjectorHead<T>? predictor = null,
-        SSLConfig? config = null)
+        SSLConfig<T>? config = null)
         : base(encoder, projector, config ?? CreateMoCoV3Config())
     {
         Guard.NotNull(momentumEncoder);
@@ -90,11 +94,41 @@ public class MoCoV3<T> : SSLMethodBase<T>
         _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
     }
 
-    private static SSLConfig CreateMoCoV3Config()
+    /// <summary>
+    /// Creates a MoCo v3 instance with default configuration.
+    /// </summary>
+    /// <param name="encoder">The backbone encoder (ViT recommended).</param>
+    /// <param name="createEncoderCopy">Function to create a copy of the encoder for momentum.</param>
+    /// <param name="encoderOutputDim">Output dimension of the encoder.</param>
+    /// <param name="projectionDim">Dimension of the projection space (default: 256).</param>
+    /// <param name="hiddenDim">Hidden dimension of the projector MLP (default: 4096).</param>
+    /// <returns>A configured MoCo v3 instance.</returns>
+    public static MoCoV3<T> Create(
+        INeuralNetwork<T> encoder,
+        Func<INeuralNetwork<T>, INeuralNetwork<T>> createEncoderCopy,
+        int encoderOutputDim,
+        int projectionDim = 256,
+        int hiddenDim = 4096)
     {
-        return new SSLConfig
+        Guard.NotNull(encoder);
+        Guard.NotNull(createEncoderCopy);
+
+        var projector = new MLPProjector<T>(encoderOutputDim, hiddenDim, projectionDim);
+        var momentumProjector = new MLPProjector<T>(encoderOutputDim, hiddenDim, projectionDim);
+        momentumProjector.SetParameters(projector.GetParameters());
+
+        var predictor = new MLPProjector<T>(projectionDim, hiddenDim / 4, projectionDim);
+
+        var encoderCopy = createEncoderCopy(encoder);
+        var momentumEncoder = new MomentumEncoder<T>(encoderCopy, 0.99);
+
+        return new MoCoV3<T>(encoder, momentumEncoder, projector, momentumProjector, predictor);
+    }
+
+    private static SSLConfig<T> CreateMoCoV3Config()
+    {
+        return new SSLConfig<T>
         {
-            Method = SSLMethodType.MoCoV3,
             Temperature = 0.2,
             LearningRate = 1.5e-4, // Lower LR for ViT
             WarmupEpochs = 40,

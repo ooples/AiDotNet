@@ -5,6 +5,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <summary>
 /// Unified configuration for self-supervised learning with industry-standard defaults.
 /// </summary>
+/// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> Self-supervised learning (SSL) learns useful representations
 /// from unlabeled data. This configuration controls how SSL pretraining works, including
@@ -30,25 +31,44 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <code>
 /// builder.ConfigureSelfSupervisedLearning(config =>
 /// {
-///     config.Method = SSLMethodType.MoCo;
+///     config.Method = MoCoV2&lt;double&gt;.Create(encoder, encoderOutputDim, createEncoderCopy);
 ///     config.PretrainingEpochs = 200;
 ///     config.BatchSize = 256;
 ///     config.MoCo = new MoCoConfig { QueueSize = 65536 };
 /// });
 /// </code>
 /// </remarks>
-public class SSLConfig
+public class SSLConfig<T>
 {
     // === Core Settings ===
 
     /// <summary>
     /// Gets or sets the SSL method to use.
     /// </summary>
+    /// <value>
+    /// An SSL method, or <c>null</c> (the default) to use <see cref="SimCLR{T}"/> — the standard
+    /// contrastive baseline, and what this library has always defaulted to.
+    /// </value>
     /// <remarks>
-    /// <para>Default: <c>SSLMethodType.SimCLR</c></para>
-    /// <para>If null, SimCLR is used as the default method.</para>
+    /// <para>
+    /// The library ships <see cref="SimCLR{T}"/>, <see cref="MoCo{T}"/>, <see cref="MoCoV2{T}"/>,
+    /// <see cref="MoCoV3{T}"/>, <see cref="BYOL{T}"/>, <see cref="SimSiam{T}"/>,
+    /// <see cref="BarlowTwins{T}"/>, <see cref="DINO{T}"/>, <see cref="iBOT{T}"/> and
+    /// <see cref="MAE{T}"/>, each with a static <c>Create</c> factory that builds it from an encoder.
+    /// Any other <see cref="ISSLMethod{T}"/> works too.
+    /// </para>
+    /// <para><b>For Beginners:</b> An SSL method is the strategy used to learn from unlabeled data.
+    /// Leave this null to get SimCLR, which is simple and performs well. Pick another when you have a
+    /// reason to: MoCo variants for limited GPU memory, BYOL or SimSiam to avoid negative samples,
+    /// DINO for Vision Transformers, MAE for masked autoencoding.</para>
+    /// <para>
+    /// This holds a live method object that owns the encoder, so it is not part of the JSON
+    /// checkpoint. <see cref="SSLSession{T}.FromCheckpoint"/> already takes a method factory to
+    /// rebuild it; the method's name is still recorded by <see cref="GetConfiguration"/>.
+    /// </para>
     /// </remarks>
-    public SSLMethodType? Method { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ISSLMethod<T>? Method { get; set; }
 
     /// <summary>
     /// Gets or sets the number of pretraining epochs.
@@ -267,6 +287,8 @@ public class SSLConfig
     {
     }
 
+
+
     /// <summary>
     /// Gets the configuration as a dictionary for logging or serialization.
     /// </summary>
@@ -275,7 +297,7 @@ public class SSLConfig
     {
         var config = new Dictionary<string, object>();
 
-        if (Method.HasValue) config["method"] = Method.Value.ToString();
+        if (Method is not null) config["method"] = Method.Name;
         if (PretrainingEpochs.HasValue) config["pretrainingEpochs"] = PretrainingEpochs.Value;
         if (BatchSize.HasValue) config["batchSize"] = BatchSize.Value;
         if (LearningRate.HasValue) config["learningRate"] = LearningRate.Value;

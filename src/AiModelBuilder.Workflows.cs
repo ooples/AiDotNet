@@ -991,6 +991,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options)
     {
         _rlOptions = options;
+
+        // Carry over an environment configured before these options existed, so ConfigureEnvironment
+        // and ConfigureReinforcementLearning work in either order. Options passed here win, since
+        // they are the more specific statement of intent. The assignment above replaces _rlOptions
+        // wholesale, so without this an earlier ConfigureEnvironment would be discarded -- including
+        // on the generated YAML path, which calls the two in exactly this order.
+        if (_configuredEnvironment is not null && _rlOptions.Environment is null)
+        {
+            _rlOptions.Environment = _configuredEnvironment;
+        }
+
         return this;
     }
 
@@ -1860,7 +1871,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///     .ConfigureModel(encoder)
     ///     .ConfigureSelfSupervisedLearning(ssl =>
     ///     {
-    ///         ssl.Method = SSLMethodType.MoCoV3;
+    ///         ssl.Method = MoCoV3&lt;double&gt;.Create(encoder, createEncoderCopy, encoderOutputDim);
     ///         ssl.PretrainingEpochs = 300;
     ///         ssl.Temperature = 0.2;
     ///         ssl.ProjectorOutputDimension = 256;
@@ -1875,16 +1886,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///     .ConfigureModel(encoder)
     ///     .ConfigureSelfSupervisedLearning(ssl =>
     ///     {
-    ///         ssl.Method = SSLMethodType.BYOL;
+    ///         ssl.Method = BYOL&lt;double&gt;.Create(encoder, createEncoderCopy, encoderOutputDim);
     ///         ssl.BYOL = new BYOLConfig { Momentum = 0.996 };
     ///     })
     ///     .Build(unlabeledImages);
     /// </code>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
-        Action<SelfSupervisedLearning.SSLConfig>? configure = null)
+        Action<SelfSupervisedLearning.SSLConfig<T>>? configure = null)
     {
-        _sslConfig = new SelfSupervisedLearning.SSLConfig();
+        // Reuse any config an earlier ConfigureSSLMethod call created, so the two entry points
+        // compose in either order rather than the later one silently clobbering the earlier.
+        _sslConfig ??= new SelfSupervisedLearning.SSLConfig<T>();
         configure?.Invoke(_sslConfig);
         return this;
     }
@@ -1893,10 +1906,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Configures self-supervised learning with a typed pretraining hook
     /// (<see cref="AiDotNet"/>#1361).
     /// </summary>
-    /// <param name="configure">Optional <see cref="SelfSupervisedLearning.SSLConfig"/>
-    /// configurator. When null, a default <c>SSLConfig</c> is used.</param>
+    /// <param name="configure">Optional <see cref="SelfSupervisedLearning.SSLConfig{T}"/>
+    /// configurator. When null, a default <c>SSLConfig&lt;T&gt;</c> is used.</param>
     /// <param name="pretrainAction">User-supplied pretraining hook invoked BEFORE
-    /// main training. Receives the current base model + SSLConfig + cancellation
+    /// main training. Receives the current base model + SSLConfig&lt;T&gt; + cancellation
     /// token; returns the model that should feed into main training (typically the
     /// same model with its encoder updated via <see cref="SelfSupervisedLearning
     /// .ISSLMethod{T}"/>'s TrainStep loop). The configured-but-no-action pattern
@@ -1905,18 +1918,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// The two-argument overload is the wire-up entry point — the single-argument
-    /// overload above stores SSLConfig but does NOT run a pretraining stage (the
+    /// overload above stores SSLConfig&lt;T&gt; but does NOT run a pretraining stage (the
     /// SSL subsystem requires an encoder-shaped <c>INeuralNetwork&lt;T&gt;</c> which
     /// is not interchangeable with arbitrary <c>IFullModel&lt;T, TInput, TOutput&gt;
     /// </c>; the user-supplied action is where the conversion happens).
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
-        Action<SelfSupervisedLearning.SSLConfig>? configure,
-        Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig, CancellationToken,
+        Action<SelfSupervisedLearning.SSLConfig<T>>? configure,
+        Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig<T>, CancellationToken,
             Task<IFullModel<T, TInput, TOutput>>> pretrainAction)
     {
         if (pretrainAction is null) throw new ArgumentNullException(nameof(pretrainAction));
-        _sslConfig = new SelfSupervisedLearning.SSLConfig();
+        // Reuse any config an earlier ConfigureSSLMethod call created (see the overload above).
+        _sslConfig ??= new SelfSupervisedLearning.SSLConfig<T>();
         configure?.Invoke(_sslConfig);
         _sslPretrainAction = pretrainAction;
         return this;

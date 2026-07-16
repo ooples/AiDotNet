@@ -82,8 +82,8 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
         IProjectorHead<T> studentProjector,
         IProjectorHead<T> teacherProjector,
         int outputDim,
-        SSLConfig? config = null)
-        : base(studentEncoder, studentProjector, config ?? new SSLConfig())
+        SSLConfig<T>? config = null)
+        : base(studentEncoder, studentProjector, config ?? new SSLConfig<T>())
     {
         Guard.NotNull(teacherEncoder);
         TeacherEncoder = teacherEncoder;

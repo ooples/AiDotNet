@@ -17,9 +17,12 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Example usage:</b></para>
 /// <code>
-/// var pipeline = new SSLPretrainingPipeline&lt;double&gt;(encoder)
-///     .WithMethod(SSLMethodType.SimCLR)
+/// // Leave the method unset to get SimCLR, the standard contrastive baseline.
+/// var pipeline = new SSLPretrainingPipeline&lt;double&gt;(encoder, encoderOutputDim)
 ///     .WithConfig(config => config.PretrainingEpochs = 100);
+///
+/// // Or name one — including a method the library does not ship.
+/// pipeline.WithMethod(MoCoV2&lt;double&gt;.Create(encoder, createEncoderCopy, encoderOutputDim));
 ///
 /// var result = pipeline.Train(dataLoader);
 /// </code>
@@ -36,9 +39,8 @@ public class SSLPretrainingPipeline<T>
 {
     private readonly INeuralNetwork<T> _encoder;
     private readonly int _encoderOutputDim;
-    private SSLConfig _config;
+    private SSLConfig<T> _config;
     private ISSLMethod<T>? _method;
-    private Func<INeuralNetwork<T>, INeuralNetwork<T>>? _createEncoderCopy;
 
     /// <summary>
     /// Event raised during training for progress updates.
@@ -55,14 +57,20 @@ public class SSLPretrainingPipeline<T>
         Guard.NotNull(encoder);
         _encoder = encoder;
         _encoderOutputDim = encoderOutputDim;
-        _config = new SSLConfig();
+        _config = new SSLConfig<T>();
     }
 
     /// <summary>
     /// Sets the SSL method to use.
     /// </summary>
-    public SSLPretrainingPipeline<T> WithMethod(SSLMethodType method)
+    /// <param name="method">
+    /// The SSL method. Every shipped method has a static <c>Create</c> factory that builds it from an
+    /// encoder; any other <see cref="ISSLMethod{T}"/> works too. Leave this unset to get
+    /// <see cref="SimCLR{T}"/>.
+    /// </param>
+    public SSLPretrainingPipeline<T> WithMethod(ISSLMethod<T> method)
     {
+        Guard.NotNull(method);
         _config.Method = method;
         return this;
     }
@@ -70,19 +78,9 @@ public class SSLPretrainingPipeline<T>
     /// <summary>
     /// Configures the training parameters.
     /// </summary>
-    public SSLPretrainingPipeline<T> WithConfig(Action<SSLConfig> configure)
+    public SSLPretrainingPipeline<T> WithConfig(Action<SSLConfig<T>> configure)
     {
         configure(_config);
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the function to create encoder copies (for momentum methods).
-    /// </summary>
-    public SSLPretrainingPipeline<T> WithEncoderCopyFactory(
-        Func<INeuralNetwork<T>, INeuralNetwork<T>> createCopy)
-    {
-        _createEncoderCopy = createCopy;
         return this;
     }
 
@@ -122,24 +120,9 @@ public class SSLPretrainingPipeline<T>
         return result;
     }
 
-    private ISSLMethod<T> CreateMethod()
-    {
-        var method = _config.Method ?? SSLMethodType.SimCLR;
-
-        return method switch
-        {
-            SSLMethodType.SimCLR => CreateSimCLR(),
-            SSLMethodType.MoCo => CreateMoCo(),
-            SSLMethodType.MoCoV2 => CreateMoCoV2(),
-            SSLMethodType.MoCoV3 => CreateMoCoV3(),
-            SSLMethodType.BYOL => CreateBYOL(),
-            SSLMethodType.SimSiam => CreateSimSiam(),
-            SSLMethodType.BarlowTwins => CreateBarlowTwins(),
-            SSLMethodType.DINO => CreateDINO(),
-            SSLMethodType.MAE => CreateMAE(),
-            _ => CreateSimCLR()
-        };
-    }
+    // Null means the standard method. SimCLR is the standard contrastive baseline and is what this
+    // pipeline defaulted to before, so that is the default here.
+    private ISSLMethod<T> CreateMethod() => _config.Method ?? CreateSimCLR();
 
     private ISSLMethod<T> CreateSimCLR()
     {
@@ -149,125 +132,6 @@ public class SSLPretrainingPipeline<T>
         var projector = new MLPProjector<T>(_encoderOutputDim, hiddenDim, projDim);
 
         return new SimCLR<T>(_encoder, projector, _config);
-    }
-
-    private ISSLMethod<T> CreateMoCo()
-    {
-        var projDim = _config.ProjectorOutputDimension ?? 128;
-
-        if (_createEncoderCopy is null)
-            throw new InvalidOperationException("Encoder copy factory required for MoCo");
-
-        var projector = new LinearProjector<T>(_encoderOutputDim, projDim);
-        var momentumProjector = new LinearProjector<T>(_encoderOutputDim, projDim);
-        momentumProjector.SetParameters(projector.GetParameters());
-
-        var encoderCopy = _createEncoderCopy(_encoder);
-        var momentumEncoder = new MomentumEncoder<T>(encoderCopy, 0.999);
-
-        return new MoCo<T>(_encoder, momentumEncoder, projector, momentumProjector, projDim, _config);
-    }
-
-    private ISSLMethod<T> CreateMoCoV2()
-    {
-        var projDim = _config.ProjectorOutputDimension ?? 128;
-        var hiddenDim = _config.ProjectorHiddenDimension ?? 2048;
-
-        if (_createEncoderCopy is null)
-            throw new InvalidOperationException("Encoder copy factory required for MoCoV2");
-
-        var projector = new MLPProjector<T>(_encoderOutputDim, hiddenDim, projDim);
-        var momentumProjector = new MLPProjector<T>(_encoderOutputDim, hiddenDim, projDim);
-        momentumProjector.SetParameters(projector.GetParameters());
-
-        var encoderCopy = _createEncoderCopy(_encoder);
-        var momentumEncoder = new MomentumEncoder<T>(encoderCopy, 0.999);
-
-        return new MoCoV2<T>(_encoder, momentumEncoder, projector, momentumProjector, projDim, _config);
-    }
-
-    private ISSLMethod<T> CreateMoCoV3()
-    {
-        var projDim = _config.ProjectorOutputDimension ?? 256;
-        var hiddenDim = _config.ProjectorHiddenDimension ?? 4096;
-
-        if (_createEncoderCopy is null)
-            throw new InvalidOperationException("Encoder copy factory required for MoCoV3");
-
-        var projector = new MLPProjector<T>(_encoderOutputDim, hiddenDim, projDim);
-        var momentumProjector = new MLPProjector<T>(_encoderOutputDim, hiddenDim, projDim);
-        momentumProjector.SetParameters(projector.GetParameters());
-
-        var predictor = new MLPProjector<T>(projDim, hiddenDim / 4, projDim);
-
-        var encoderCopy = _createEncoderCopy(_encoder);
-        var momentumEncoder = new MomentumEncoder<T>(encoderCopy, 0.99);
-
-        return new MoCoV3<T>(_encoder, momentumEncoder, projector, momentumProjector, predictor, _config);
-    }
-
-    private ISSLMethod<T> CreateBYOL()
-    {
-        var projDim = _config.ProjectorOutputDimension ?? 256;
-        var hiddenDim = _config.ProjectorHiddenDimension ?? 4096;
-
-        if (_createEncoderCopy is null)
-            throw new InvalidOperationException("Encoder copy factory required for BYOL");
-
-        var onlineProjector = new SymmetricProjector<T>(_encoderOutputDim, hiddenDim, projDim, hiddenDim);
-        var targetProjector = new SymmetricProjector<T>(_encoderOutputDim, hiddenDim, projDim, 0);
-
-        var encoderCopy = _createEncoderCopy(_encoder);
-        var targetEncoder = new MomentumEncoder<T>(encoderCopy, 0.996);
-
-        return new BYOL<T>(_encoder, targetEncoder, onlineProjector, targetProjector, _config);
-    }
-
-    private ISSLMethod<T> CreateSimSiam()
-    {
-        var projDim = _config.ProjectorOutputDimension ?? 2048;
-        var hiddenDim = _config.ProjectorHiddenDimension ?? 2048;
-
-        var projector = new SymmetricProjector<T>(_encoderOutputDim, hiddenDim, projDim, 512);
-
-        return new SimSiam<T>(_encoder, projector, _config);
-    }
-
-    private ISSLMethod<T> CreateBarlowTwins()
-    {
-        var projDim = _config.ProjectorOutputDimension ?? 8192;
-        var hiddenDim = _config.ProjectorHiddenDimension ?? 8192;
-
-        var projector = new MLPProjector<T>(_encoderOutputDim, hiddenDim, projDim, useBatchNormOnOutput: true);
-
-        return new BarlowTwins<T>(_encoder, projector, _config);
-    }
-
-    private ISSLMethod<T> CreateDINO()
-    {
-        var outputDim = 65536;
-        var hiddenDim = _config.ProjectorHiddenDimension ?? 2048;
-
-        if (_createEncoderCopy is null)
-            throw new InvalidOperationException("Encoder copy factory required for DINO");
-
-        var studentProjector = new MLPProjector<T>(_encoderOutputDim, hiddenDim, outputDim, useBatchNormOnOutput: true);
-        var teacherProjector = new MLPProjector<T>(_encoderOutputDim, hiddenDim, outputDim, useBatchNormOnOutput: true);
-        teacherProjector.SetParameters(studentProjector.GetParameters());
-
-        var encoderCopy = _createEncoderCopy(_encoder);
-        var teacherEncoder = new MomentumEncoder<T>(encoderCopy, 0.996);
-
-        return new DINO<T>(_encoder, teacherEncoder, studentProjector, teacherProjector, outputDim, _config);
-    }
-
-    private ISSLMethod<T> CreateMAE()
-    {
-        var maeConfig = _config.MAE ?? new MAEConfig();
-        var patchSize = maeConfig.PatchSize ?? 16;
-        var maskRatio = maeConfig.MaskRatio ?? 0.75;
-
-        return new MAE<T>(_encoder, null, patchSize, 224, maskRatio, _config);
     }
 
     private SSLResult<T> RunFinalEvaluation(

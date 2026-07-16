@@ -35,6 +35,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> Chen and He, "Exploring Simple Siamese Representation Learning"
 /// (CVPR 2021)</para>
+///
+/// <para><b>Best for:</b> Simplicity, understanding non-contrastive learning.</para>
+/// <para><b>Pros:</b> Simplest non-contrastive method, no momentum encoder.</para>
+/// <para><b>Cons:</b> Can be sensitive to hyperparameters.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -74,7 +78,7 @@ public class SimSiam<T> : SSLMethodBase<T>
     public SimSiam(
         INeuralNetwork<T> encoder,
         SymmetricProjector<T> projector,
-        SSLConfig? config = null)
+        SSLConfig<T>? config = null)
         : base(encoder, projector, config ?? CreateSimSiamConfig())
     {
         if (projector is null)
@@ -87,11 +91,10 @@ public class SimSiam<T> : SSLMethodBase<T>
         _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
     }
 
-    private static SSLConfig CreateSimSiamConfig()
+    private static SSLConfig<T> CreateSimSiamConfig()
     {
-        return new SSLConfig
+        return new SSLConfig<T>
         {
-            Method = SSLMethodType.SimSiam,
             LearningRate = 0.05, // SGD with base LR
             UseCosineDecay = true,
             BatchSize = 512 // Works with smaller batches than SimCLR

@@ -1705,7 +1705,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // method (SimCLR / MoCo / BYOL / DINO / MAE / Barlow Twins) over its
         // pretraining batches and returning the model that should feed into main
         // supervised training (typically the same model with its encoder updated).
-        // The single-argument overload (Action<SSLConfig>) stores configuration
+        // The single-argument overload (Action<SSLConfig<T>>) stores configuration
         // without running any pretraining stage — that path is config-only.
         // ============================================================================
         if (_sslPretrainAction is not null)

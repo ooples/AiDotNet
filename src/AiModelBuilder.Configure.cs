@@ -1393,7 +1393,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     /// <summary>
     /// Threads any <see cref="_adversarialRobustnessConfiguration"/> set via
-    /// <see cref="ConfigureAdversarialRobustness"/> into the constructed
+    /// <see cref="ConfigureAdversarialRobustness"/>, and any defense set via
+    /// <see cref="ConfigureAdversarialDefense"/>, into the constructed
     /// <see cref="AiModelResult{T, TInput, TOutput}"/> so the runtime
     /// adversarial-robustness API (<c>PredictWithDefense</c>,
     /// <c>EvaluateRobustness</c>) actually picks up the user's settings.
@@ -1410,19 +1411,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     private void AttachAdversarialRobustness(AiModelResult<T, TInput, TOutput> result)
     {
-        if (_adversarialRobustnessConfiguration is null || !_adversarialRobustnessConfiguration.Enabled)
+        // An explicit ConfigureAdversarialRobustness(Enabled = false) is an opt-out of
+        // adversarial robustness as a whole — including any standalone
+        // ConfigureAdversarialDefense call. Attach nothing.
+        if (_adversarialRobustnessConfiguration is not null && !_adversarialRobustnessConfiguration.Enabled)
         {
             return;
         }
 
-        // Always surface the underlying options so EvaluateRobustness /
-        // PredictWithDefense can read them at inference time even when no
-        // custom defense was supplied.
-        result.SetAdversarialRobustnessOptions(_adversarialRobustnessConfiguration.Options);
+        // A defense named via ConfigureAdversarialDefense is the more specific statement of
+        // intent, so it wins over a configuration's CustomDefense. Prior to this read,
+        // _configuredAdversarialDefense was written by ConfigureAdversarialDefense and read
+        // nowhere in the repository: the method was a total no-op, as was the YAML
+        // "AdversarialDefense" path that routes through it (YamlConfigApplier).
+        var defense = _configuredAdversarialDefense ?? _adversarialRobustnessConfiguration?.CustomDefense;
 
-        if (_adversarialRobustnessConfiguration.CustomDefense is not null)
+        // Surface the underlying options so EvaluateRobustness / PredictWithDefense can read
+        // them at inference time even when no custom defense was supplied. Only when a
+        // configuration actually exists — a standalone defense needs no options object, and
+        // synthesising one would misreport what the caller configured.
+        if (_adversarialRobustnessConfiguration is not null)
         {
-            result.SetAdversarialDefense(_adversarialRobustnessConfiguration.CustomDefense);
+            result.SetAdversarialRobustnessOptions(_adversarialRobustnessConfiguration.Options);
+        }
+
+        if (defense is not null)
+        {
+            result.SetAdversarialDefense(defense);
         }
     }
 

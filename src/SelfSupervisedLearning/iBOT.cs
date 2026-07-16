@@ -30,6 +30,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> Zhou et al., "iBOT: Image BERT Pre-Training with Online Tokenizer"
 /// (ICLR 2022)</para>
+///
+/// <para><b>Best for:</b> Combining generative and discriminative approaches.</para>
+/// <para><b>Pros:</b> Best of both worlds (DINO + MAE-like objectives).</para>
+/// <para><b>Cons:</b> More complex than pure DINO or MAE.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -82,9 +86,9 @@ public class iBOT<T> : TeacherStudentSSL<T>
         int outputDim = 8192,
         double mimWeight = 1.0,
         double maskRatio = 0.4,
-        SSLConfig? config = null)
+        SSLConfig<T>? config = null)
         : base(studentEncoder, teacherEncoder, studentProjector, teacherProjector,
-               outputDim, config ?? new SSLConfig { Method = SSLMethodType.DINO })
+               outputDim, config ?? new SSLConfig<T>())
     {
         _outputDim = outputDim;
         _mimWeight = mimWeight;

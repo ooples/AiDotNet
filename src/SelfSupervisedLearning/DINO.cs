@@ -31,6 +31,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> Caron et al., "Emerging Properties in Self-Supervised Vision
 /// Transformers" (ICCV 2021)</para>
+///
+/// <para><b>Best for:</b> Vision Transformers, emergent attention properties.</para>
+/// <para><b>Pros:</b> Emergent attention maps, strong ViT performance.</para>
+/// <para><b>Cons:</b> Primarily designed for Vision Transformers.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -66,9 +70,9 @@ public class DINO<T> : TeacherStudentSSL<T>
         IProjectorHead<T> studentProjector,
         IProjectorHead<T> teacherProjector,
         int outputDim = 65536,
-        SSLConfig? config = null)
+        SSLConfig<T>? config = null)
         : base(studentEncoder, teacherEncoder, studentProjector, teacherProjector,
-               outputDim, config ?? new SSLConfig { Method = SSLMethodType.DINO })
+               outputDim, config ?? new SSLConfig<T>())
     {
         _outputDim = outputDim;
 
