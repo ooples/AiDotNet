@@ -44,10 +44,15 @@ namespace AiDotNet.DistributedTraining;
 /// - Limitation: Requires fast communication (high overhead on slow networks)
 /// </para>
 /// <para><b>Implementation Note:</b>
-/// This is a production-ready framework implementation. Full tensor parallelism requires
-/// model-specific layer partitioning (column-parallel vs row-parallel strategy for different
-/// layer types). This implementation provides the infrastructure. For production use with
-/// specific models (e.g., transformers), extend this class with layer-aware partitioning.
+/// This wrapper is a PARAMETER-REPLICATION fallback for arbitrary (black-box) models: it shards
+/// parameters for storage but reconstructs the full vector for each forward/backward and averages
+/// gradients within the tensor-parallel group (data-parallel semantics over the TP group). It is
+/// NOT compute-partitioned Megatron tensor parallelism. Genuine tensor parallelism — each rank
+/// computing only its slice of every layer with in-layer AllReduce — is provided by
+/// <see cref="AiDotNet.DistributedTraining.Layers.ColumnParallelLinear{T}"/> and
+/// <see cref="AiDotNet.DistributedTraining.Layers.RowParallelLinear{T}"/> (Shoeybi et al. 2019),
+/// whose f/ḡ conjugate operators carry the collectives on the autodiff tape; build models from
+/// those layers for real TP.
 /// </para>
 /// <para><b>⚠️ IMPORTANT LIMITATION - Memory Efficiency:</b>
 /// This implementation gathers the full parameter vector on every Train() and Predict() call
@@ -354,8 +359,17 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         // 2. Forward: compute partial outputs, then AllReduce or AllGather depending on layer type
         // 3. Backward: similar communication pattern in reverse
 
-        // For this framework implementation, we provide simplified pattern
-        // Production usage would implement layer-specific forward/backward logic
+        // NOTE ON SCOPE — this is a PARAMETER-REPLICATION fallback, not compute-partitioned tensor
+        // parallelism. TensorParallelModel wraps an arbitrary IFullModel whose forward/backward is a
+        // black box, so it cannot partition individual layers' matmuls across ranks. What it DOES do
+        // correctly: every rank holds the full parameters, computes full-model gradients on its own
+        // data, and the gradients are averaged within the tensor-parallel group (SubgroupAllReduce
+        // below) — i.e. data-parallel semantics over the TP group. Genuine Megatron-style tensor
+        // parallelism (each rank computing only its slice of every layer, with in-layer AllReduce) is
+        // provided by building the model from ColumnParallelLinear<T> / RowParallelLinear<T>
+        // (src/DistributedTraining/Layers), whose f/ḡ conjugate operators carry the collectives on the
+        // autodiff tape; use those layers for real TP. CpuOffload here is therefore the same
+        // materialize-and-evict contract as the data-parallel path, applied to the replicated params.
 
         // Gather full parameters before training
         var originalParams = GatherFullParameters();
