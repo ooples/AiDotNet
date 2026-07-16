@@ -26,6 +26,7 @@ public static class CreditRuleFactory<T>
         CreditRule.DRTP => new DrtpCreditRule<T>(seed),
         CreditRule.DFANormalized => new NormalizedDfaCreditRule<T>(seed),
         CreditRule.LocalErrorSignal => new LocalErrorSignalCreditRule<T>(seed),
+        CreditRule.DifferenceTargetPropagation => new DifferenceTargetPropagationCreditRule<T>(seed),
         _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, "Unknown credit rule."),
     };
 }

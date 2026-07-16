@@ -82,4 +82,19 @@ public static class CreditRules
     /// </summary>
     public static ICreditRule<T> LocalErrorSignal<T>(int? seed = null, double classifierLearningRate = 0.05, double weightDecay = 0.0)
         => new LocalErrorSignalCreditRule<T>(seed, classifierLearningRate, weightDecay);
+
+    /// <summary>
+    /// <b>Difference Target Propagation</b> (Lee, Zhang, Fischer &amp; Bengio, 2015): a backprop-free rule that
+    /// propagates difference-corrected <i>targets</i> backward through per-layer <b>learned inverses</b> (each trained
+    /// online to reconstruct its layer's input from its output). The feedback is the learned inverse (≈ <c>W⁺</c>),
+    /// distinct from Feedback Alignment (fixed random) and Kolen-Pollack (<c>Wᵀ</c>-tracking). Requires contiguous
+    /// trainable layers.
+    /// </summary>
+    /// <param name="seed">Optional RNG seed for reproducible inverse initialisation.</param>
+    /// <param name="inverseLearningRate">Step size for the per-layer reconstruction (inverse) learning (default 0.05).</param>
+    /// <param name="weightDecay">L2 decay on the learned inverses (default 0).</param>
+    /// <param name="outputStepSize">The step η taken from the output activation toward the loss-reducing target (default 1.0).</param>
+    public static ICreditRule<T> DifferenceTargetPropagation<T>(
+        int? seed = null, double inverseLearningRate = 0.05, double weightDecay = 0.0, double outputStepSize = 1.0)
+        => new DifferenceTargetPropagationCreditRule<T>(seed, inverseLearningRate, weightDecay, outputStepSize);
 }

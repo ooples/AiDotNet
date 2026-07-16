@@ -89,4 +89,15 @@ public enum CreditRule
     /// strong supervised signal, and the rule applies even when the trainable layers are non-contiguous.
     /// </summary>
     LocalErrorSignal = 8,
+
+    /// <summary>
+    /// <b>Difference Target Propagation</b> — Lee, Zhang, Fischer &amp; Bengio, 2015. A backprop-free rule that
+    /// propagates <i>targets</i> (not gradients) backward through <b>learned inverses</b>: every layer trains an
+    /// approximate inverse of its own forward map (by reconstructing its input from its output), and each hidden
+    /// layer's target is the difference-corrected <c>ĥ_{j−1} = h_{j−1} − g_j(h_j) + g_j(ĥ_j)</c>. Unlike Feedback
+    /// Alignment (fixed random feedback) or Kolen-Pollack (feedback tracks <c>Wᵀ</c>), the feedback here is the
+    /// learned inverse (≈ <c>W⁺</c>). Because targets chain layer-to-layer it requires <b>contiguous</b> trainable
+    /// layers; use <see cref="LocalErrorSignal"/> or Direct Feedback Alignment for non-contiguous stacks.
+    /// </summary>
+    DifferenceTargetPropagation = 9,
 }

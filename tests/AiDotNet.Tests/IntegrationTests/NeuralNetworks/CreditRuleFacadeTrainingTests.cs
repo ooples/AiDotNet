@@ -121,6 +121,7 @@ public class CreditRuleFacadeTrainingTests
     [InlineData(CreditRule.DRTP, 0.60)]
     [InlineData(CreditRule.DFANormalized, 0.60)]
     [InlineData(CreditRule.LocalErrorSignal, 0.60)]
+    [InlineData(CreditRule.DifferenceTargetPropagation, 0.60)]
     public async Task ConfigureCreditRule_TrainsMlp_HeldOutAccuracyBeatsChance(CreditRule rule, double minAccuracy)
     {
         var (trainX, trainY, _) = MakeBlobs(300, seed: 1);
@@ -272,6 +273,7 @@ public class CreditRuleFacadeTrainingTests
             ("DRTP", CreditRule.DRTP),
             ("DFANormalized", CreditRule.DFANormalized),
             ("LocalErrorSignal", CreditRule.LocalErrorSignal),
+            ("DifferenceTargetPropagation", CreditRule.DifferenceTargetPropagation),
         };
 
         _output.WriteLine($"rule                       heldout(top1)   chance={chance:F3}");
