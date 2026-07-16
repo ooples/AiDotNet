@@ -687,6 +687,23 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         => CertifiedRobustness = report;
 
     /// <summary>
+    /// The model-compression audit, or <c>null</c> when no strategy was configured via
+    /// <c>ConfigureModelCompressionStrategy(...)</c> or the model has no compressible parameters.
+    /// </summary>
+    /// <remarks>
+    /// The configured strategy is applied to the trained weights and the decompressed weights are loaded back
+    /// into a rebuilt model that is re-evaluated on the prepared data, so accuracy retention is a real measure
+    /// of predictive fit. The report gives the size-versus-accuracy trade-off at full compression, a
+    /// sensitivity-aware Pareto frontier, weight reconstruction error, and the knee (most compression within a
+    /// retention tolerance).
+    /// </remarks>
+    public AiDotNet.ModelCompression.ModelCompressionReport<T>? ModelCompression { get; private set; }
+
+    /// <summary>Records the model-compression audit. Called by the builder during Build.</summary>
+    internal void SetModelCompressionReport(AiDotNet.ModelCompression.ModelCompressionReport<T> report)
+        => ModelCompression = report;
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>

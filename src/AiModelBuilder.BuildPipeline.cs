@@ -1031,6 +1031,244 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
     }
 
+    /// <summary>
+    /// Applies the configured compression strategy to the trained weights and surfaces the true
+    /// size-versus-accuracy trade-off: a magnitude-ranked Pareto frontier whose every point rebuilds the model
+    /// from decompressed weights and re-evaluates it on the prepared data, plus reconstruction error and the
+    /// knee (most compression within a retention tolerance).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The operating points come from compressing the smallest-magnitude fraction of weights first (the least
+    /// important) and keeping the rest exact — a sensitivity-aware curve computed with only the strategy's
+    /// <c>Compress</c>/<c>Decompress</c> contract, so it works uniformly for every strategy. Accuracy retention
+    /// is measured by loading the decompressed weights back into a rebuilt model and re-running it, not by a
+    /// weight-error proxy. Models with no compressible parameters (e.g. trees, clustering) are skipped, and any
+    /// failure is surfaced as a warning that never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeModelCompression(
+        AiModelResult<T, TInput, TOutput> result, TInput preparedX, TOutput preparedY,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredModelCompressionStrategy is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (optimizationResult.BestSolution is not IFullModel<T, TInput, TOutput> model
+                || model is not IParameterizable<T, TInput, TOutput> parameterizable
+                || parameterizable.ParameterCount <= 0)
+            {
+                return; // nothing to compress (e.g. trees / clustering expose no trainable weights).
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var original = parameterizable.GetParameters();
+            int len = original.Length;
+            if (len == 0)
+            {
+                return;
+            }
+
+            // Baseline predictive loss (RMSE on the prepared data) of the uncompressed, trained model.
+            AiDotNet.Tensors.LinearAlgebra.Vector<T>? targets;
+            try { targets = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY); }
+            catch { targets = null; }
+            if (targets is null || targets.Length == 0)
+            {
+                return; // cannot score retention without comparable targets.
+            }
+
+            double baselineLoss = PredictionRmse(model, preparedX, targets, numOps);
+            if (double.IsNaN(baselineLoss))
+            {
+                return;
+            }
+
+            // Rank weights by magnitude ascending: compress the least important (smallest) first.
+            var order = new int[len];
+            for (int i = 0; i < len; i++) order[i] = i;
+            var magnitude = new double[len];
+            for (int i = 0; i < len; i++) magnitude[i] = Math.Abs(numOps.ToDouble(original[i]));
+            Array.Sort(order, (a, b) => magnitude[a].CompareTo(magnitude[b]));
+
+            int bytesPerElement = typeof(T) == typeof(float) ? 4 : typeof(T) == typeof(decimal) ? 16 : 8;
+            long originalBytes = (long)len * bytesPerElement;
+            double retentionTolerance = 0.95;
+
+            double[] fractions = { 0.25, 0.5, 0.75, 1.0 };
+            var frontier = new List<AiDotNet.ModelCompression.CompressionFrontierPoint<T>>();
+            CompressionOperatingPoint? fullPoint = null;
+
+            foreach (double fraction in fractions)
+            {
+                int k = (int)Math.Round(fraction * len);
+                if (k <= 0) continue;
+                if (k > len) k = len;
+
+                // Gather the k smallest-magnitude weights, compress + decompress just those.
+                var sub = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(k);
+                for (int i = 0; i < k; i++) sub[i] = original[order[i]];
+
+                (AiDotNet.Tensors.LinearAlgebra.Vector<T> compressed, ICompressionMetadata<T> meta) packed;
+                try { packed = _configuredModelCompressionStrategy.Compress(sub); }
+                catch { continue; }
+
+                AiDotNet.Tensors.LinearAlgebra.Vector<T> decompressed;
+                try { decompressed = _configuredModelCompressionStrategy.Decompress(packed.compressed, packed.meta); }
+                catch { continue; }
+                if (decompressed.Length != k) continue;
+
+                // Scatter the decompressed weights back over the compressed positions; keep the rest exact.
+                var mixed = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(len);
+                for (int i = 0; i < len; i++) mixed[i] = original[i];
+                double sqErr = 0;
+                for (int i = 0; i < k; i++)
+                {
+                    int idx = order[i];
+                    mixed[idx] = decompressed[i];
+                    double d = numOps.ToDouble(original[idx]) - numOps.ToDouble(decompressed[i]);
+                    sqErr += d * d;
+                }
+                double reconstructionError = Math.Sqrt(sqErr / len);
+
+                long compressedBytes;
+                try { compressedBytes = _configuredModelCompressionStrategy.GetCompressedSize(packed.compressed, packed.meta); }
+                catch { continue; }
+                compressedBytes += (long)(len - k) * bytesPerElement; // the exact remainder still costs bytes.
+                double ratio = _configuredModelCompressionStrategy.CalculateCompressionRatio(originalBytes, Math.Max(1, compressedBytes));
+
+                // Rebuild the model from the (partially) compressed weights and re-evaluate for real.
+                IFullModel<T, TInput, TOutput> rebuilt;
+                try { rebuilt = parameterizable.WithParameters(mixed); }
+                catch { continue; }
+                double compressedLoss = PredictionRmse(rebuilt, preparedX, targets, numOps);
+                if (double.IsNaN(compressedLoss)) continue;
+
+                double retained = baselineLoss <= 1e-12
+                    ? (compressedLoss <= 1e-12 ? 1.0 : 0.0)
+                    : baselineLoss / Math.Max(compressedLoss, baselineLoss);
+
+                frontier.Add(new AiDotNet.ModelCompression.CompressionFrontierPoint<T>
+                {
+                    Fraction = fraction,
+                    CompressionRatio = ratio,
+                    CompressedSizeBytes = compressedBytes,
+                    AccuracyRetained = retained,
+                    ReconstructionError = reconstructionError,
+                });
+
+                if (Math.Abs(fraction - 1.0) < 1e-9)
+                {
+                    fullPoint = new CompressionOperatingPoint
+                    {
+                        CompressedBytes = compressedBytes,
+                        Ratio = ratio,
+                        Retained = retained,
+                        ReconstructionError = reconstructionError,
+                        CompressedLoss = compressedLoss,
+                    };
+                }
+            }
+
+            if (frontier.Count == 0)
+            {
+                return; // strategy could not compress this model's weights.
+            }
+
+            // Full-compression headline: prefer the p=1.0 point, else the most-compressed point measured.
+            var headline = fullPoint ?? new CompressionOperatingPoint
+            {
+                CompressedBytes = frontier[frontier.Count - 1].CompressedSizeBytes,
+                Ratio = frontier[frontier.Count - 1].CompressionRatio,
+                Retained = frontier[frontier.Count - 1].AccuracyRetained,
+                ReconstructionError = frontier[frontier.Count - 1].ReconstructionError,
+                CompressedLoss = baselineLoss,
+            };
+
+            // Knee: the most compression (highest ratio) that still clears the retention tolerance; if none do,
+            // fall back to the point that retains the most accuracy.
+            AiDotNet.ModelCompression.CompressionFrontierPoint<T>? knee = null;
+            foreach (var p in frontier)
+            {
+                if (p.AccuracyRetained >= retentionTolerance && (knee is null || p.CompressionRatio > knee.CompressionRatio))
+                {
+                    knee = p;
+                }
+            }
+            if (knee is null)
+            {
+                foreach (var p in frontier)
+                {
+                    if (knee is null || p.AccuracyRetained > knee.AccuracyRetained) knee = p;
+                }
+            }
+
+            result.SetModelCompressionReport(new AiDotNet.ModelCompression.ModelCompressionReport<T>
+            {
+                StrategyName = _configuredModelCompressionStrategy.GetType().Name,
+                ParameterCount = parameterizable.ParameterCount,
+                OriginalSizeBytes = originalBytes,
+                CompressedSizeBytes = headline.CompressedBytes,
+                CompressionRatio = headline.Ratio,
+                AccuracyRetained = headline.Retained,
+                ReconstructionError = headline.ReconstructionError,
+                BaselineLoss = baselineLoss,
+                CompressedLoss = headline.CompressedLoss,
+                Frontier = frontier,
+                KneeFraction = knee?.Fraction ?? 0,
+                KneeCompressionRatio = knee?.CompressionRatio ?? 0,
+                KneeAccuracyRetained = knee?.AccuracyRetained ?? 0,
+                RetentionTolerance = retentionTolerance,
+                SweepAvailable = frontier.Count > 1,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Model compression audit could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ModelCompression is null.");
+        }
+    }
+
+    /// <summary>A compressed model's headline metrics at one operating point.</summary>
+    private sealed class CompressionOperatingPoint
+    {
+        public long CompressedBytes { get; init; }
+        public double Ratio { get; init; }
+        public double Retained { get; init; }
+        public double ReconstructionError { get; init; }
+        public double CompressedLoss { get; init; }
+    }
+
+    /// <summary>Root-mean-square error between a model's predictions on <paramref name="preparedX"/> and the targets.</summary>
+    private static double PredictionRmse(
+        IFullModel<T, TInput, TOutput> model, TInput preparedX,
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> targets, INumericOperations<T> numOps)
+    {
+        try
+        {
+            var predictions = model.Predict(preparedX);
+            var predVector = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
+            int m = Math.Min(predVector.Length, targets.Length);
+            if (m == 0) return double.NaN;
+            double sum = 0;
+            for (int i = 0; i < m; i++)
+            {
+                double d = numOps.ToDouble(predVector[i]) - numOps.ToDouble(targets[i]);
+                sum += d * d;
+            }
+            return Math.Sqrt(sum / m);
+        }
+        catch
+        {
+            return double.NaN;
+        }
+    }
+
     private static double FrobeniusNorm(AiDotNet.Tensors.LinearAlgebra.Matrix<T> m, INumericOperations<T> numOps)
     {
         double sum = 0;
@@ -4702,6 +4940,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ComputeExplanationFaithfulness(finalResult, preparedX, optimizationResult);
         ComputeAdversarialRobustness(finalResult, preparedX, preparedY, optimizationResult);
         ComputeCertifiedRobustness(finalResult, preparedX, preparedY, optimizationResult);
+        ComputeModelCompression(finalResult, preparedX, preparedY, optimizationResult);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

@@ -30,7 +30,11 @@ Tracking issue: #1876. Related PR: #1875.
 
 - **AdversarialAttack** — runs the configured attack against the trained model and surfaces an empirical robustness report on `AiModelResult.AdversarialRobustness`: an accuracy-vs-perturbation-budget **curve** (not a single number) + robust-accuracy AUC + clean-vs-robust gap + attack success rate + robustness margin (mean perturbation to fool), falling back cleanly to a single point.
 
-Remaining Tier 4/6: CertifiedDefense, ModelCompressionStrategy, AudioEffect, AudioEnhancer, TimeSeriesDecomposition, Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
+- **CertifiedDefense** — runs the configured certified defense over the prepared data and surfaces certified accuracy on `AiModelResult.CertifiedRobustness`; when an adversarial attack is also configured it certifies at the attack's own epsilon and reports the **certified-vs-empirical sandwich** (guaranteed lower bound vs attack upper bound + the proven-vs-unproven gap) — beyond tools that give one bound or the other.
+
+- **ModelCompressionStrategy** — compresses the trained weights, decompresses, **rebuilds the model via `WithParameters` and re-evaluates it on the prepared data**, surfacing the true size-vs-accuracy trade-off on `AiModelResult.ModelCompression`: a magnitude-ranked (least-important-first) Pareto **frontier**, weight reconstruction error, and the **knee** (most compression within a retention tolerance). Most toolkits report a compression ratio in isolation; accuracy retention here is real predictive fit, not a proxy. Skips models with no compressible parameters.
+
+Remaining Tier 4/6: AudioEffect, AudioEnhancer, TimeSeriesDecomposition, Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
 
 ---
 
