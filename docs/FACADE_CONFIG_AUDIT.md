@@ -17,8 +17,9 @@ Tracking issue: #1876. Related PR: #1875.
 - **DriftDetection** — wired to a two-lens `DriftMonitor` that attributes drift to concept (error stream) vs covariate (prediction distribution) in one pass; `AiModelResult.DriftReport` + live `DriftMonitor`.
 - **ActiveLearning + QueryStrategy** — wired to BADGE-style diversity-aware batch selection (uncertainty × diversity, three-tier representation cascade: gradient embeddings → model representation → input features); `AiModelResult.ActiveLearningSelection`. Added opt-in `ISupportsRepresentation<T, TInput>`.
 - **DataTransformer** — was already removed as a strict duplicate of the fully-wired `ConfigurePreprocessing`.
+- **DistillationStrategy** — already reconciled onto the KD options in both call orderings during the KD work; now also engages the KD path (failing clearly on a missing teacher) when configured alone, instead of being silently ignored.
 
-Remaining: Tier 3 (ContinualLearning, SSLMethod, DistillationStrategy, ExplorationStrategy, Environment), Tier 4/6 domain + robustness/tooling methods, and the `PARTIAL` federated/hyperparameter/pipeline fields.
+Remaining: Tier 3 (ContinualLearning, SSLMethod, ExplorationStrategy, Environment), Tier 4/6 domain + robustness/tooling methods, and the `PARTIAL` federated/hyperparameter/pipeline fields.
 
 ---
 
