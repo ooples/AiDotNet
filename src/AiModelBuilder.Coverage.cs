@@ -224,6 +224,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureExplorationStrategy(ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T> strategy)
     {
         _configuredExplorationStrategy = strategy;
+
+        // Route it to where RL training actually reads the exploration override from. If RL options
+        // already exist, fill in their ExplorationStrategy (unless the options set one explicitly).
+        // If they don't exist yet, BuildRLInternalAsync falls back to _configuredExplorationStrategy,
+        // so the two calls are order-independent either way.
+        if (_rlOptions is not null && _rlOptions.ExplorationStrategy is null)
+        {
+            _rlOptions.ExplorationStrategy = strategy;
+        }
+
         return this;
     }
 
@@ -297,6 +307,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDistillationStrategy(IDistillationStrategy<T> strategy)
     {
         _configuredDistillationStrategy = strategy;
+        // The strategy IS the distillation parameter — flow it onto the KD options so it reaches
+        // training (and round-trips onto AiModelResult.KnowledgeDistillationOptions). Handles the
+        // case where ConfigureKnowledgeDistillation was called first; the reverse ordering is
+        // reconciled in ConfigureKnowledgeDistillation.
+        if (_knowledgeDistillationOptions is not null)
+        {
+            _knowledgeDistillationOptions.Strategy = strategy;
+        }
         return this;
     }
 

@@ -20,7 +20,7 @@ namespace AiDotNet.Models.Options;
 /// var options = new KnowledgeDistillationOptions&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
 /// {
 ///     TeacherModelType = TeacherModelType.NeuralNetwork,
-///     StrategyType = DistillationStrategyType.ResponseBased,
+///     Strategy = null,    // null =&gt; response-based (standard Hinton) default
 ///     Temperature = 3.0,  // Soft predictions
 ///     Alpha = 0.3,        // 30% hard labels, 70% teacher
 ///     Epochs = 20,
@@ -41,17 +41,6 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput> : ModelOptions
     /// - Self: Model teaches itself (no separate teacher needed)</para>
     /// </remarks>
     public TeacherModelType TeacherModelType { get; set; } = TeacherModelType.NeuralNetwork;
-
-    /// <summary>
-    /// Gets or sets the distillation strategy type.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The strategy determines what knowledge to transfer:
-    /// - ResponseBased: Match final outputs (most common)
-    /// - FeatureBased: Match intermediate layers
-    /// - AttentionBased: Match attention patterns (for transformers)</para>
-    /// </remarks>
-    public DistillationStrategyType StrategyType { get; set; } = DistillationStrategyType.ResponseBased;
 
     /// <summary>
     /// Gets or sets the teacher model instance (if using pre-instantiated teacher).
@@ -113,11 +102,17 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput> : ModelOptions
     public Vector<double>? EnsembleWeights { get; set; }
 
     /// <summary>
-    /// Gets or sets the distillation strategy instance (if using custom strategy).
+    /// Gets or sets the distillation strategy. The strategy IS the parameter that selects the
+    /// distillation method.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Advanced Users:</b> Provide a custom distillation strategy.
-    /// If null, one will be created based on StrategyType.</para>
+    /// <para><b>What to pass:</b> a strategy instance from
+    /// <see cref="AiDotNet.KnowledgeDistillation.DistillationStrategyFactory{T}"/> (e.g.
+    /// <c>CreateResponseBasedStrategy()</c>, <c>CreateAttentionBasedStrategy()</c>,
+    /// <c>CreateHybridStrategy()</c>) or your own <see cref="IDistillationStrategy{T}"/>.</para>
+    /// <para><b>Default:</b> when null, response-based distillation (standard Hinton) is used —
+    /// the industry-standard default (see
+    /// <see cref="AiDotNet.KnowledgeDistillation.DistillationStrategyFactory{T}.ResolveStrategy"/>).</para>
     /// </remarks>
     public IDistillationStrategy<T>? Strategy { get; set; }
 

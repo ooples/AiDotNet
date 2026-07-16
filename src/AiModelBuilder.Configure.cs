@@ -2136,11 +2136,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             Console.WriteLine();
         }
 
+        // Resolve the exploration-strategy override. RLTrainingOptions.ExplorationStrategy and the
+        // fluent ConfigureExplorationStrategy() feed the same seam; options win when both are set.
+        // When present it REPLACES the agent's built-in exploration: the agent produces a greedy
+        // action and the strategy decides the exploratory action (mirrors each policy taking an
+        // IExplorationStrategy<T> and calling GetExplorationAction on its greedy choice). When null,
+        // the agent's own SelectAction(explore: true) exploration is used, so default behaviour is
+        // unchanged. Applying it here — where the facade owns action selection — is the only place
+        // the value can actually reach training, since IRLAgent<T> exposes no policy object to inject
+        // into and each agent implements exploration internally.
+        var explorationStrategy = _rlOptions.ExplorationStrategy ?? _configuredExplorationStrategy;
+        Random? explorationRng = explorationStrategy is null
+            ? null
+            : (_rlOptions.Seed.HasValue ? new Random(_rlOptions.Seed.Value) : new Random());
+
         // Training loop
         for (int episode = 0; episode < episodes; episode++)
         {
             var state = _rlOptions.Environment.Reset();
             rlAgent.ResetEpisode();
+            explorationStrategy?.Reset();
 
             T episodeReward = numOps.Zero;
             int steps = 0;
@@ -2149,8 +2164,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // Episode loop
             while (!done && steps < _rlOptions.MaxStepsPerEpisode)
             {
-                // Select action
-                var action = rlAgent.SelectAction(state, explore: true);
+                // Select action. When an exploration strategy is configured it overrides the agent's
+                // internal exploration: take the greedy (exploit) action and let the strategy inject
+                // exploration. Otherwise use the agent's own exploration path.
+                Vector<T> action;
+                if (explorationStrategy is not null)
+                {
+                    var greedyAction = rlAgent.SelectAction(state, explore: false);
+                    action = explorationStrategy.GetExplorationAction(
+                        state, greedyAction, greedyAction.Length, explorationRng!);
+                }
+                else
+                {
+                    action = rlAgent.SelectAction(state, explore: true);
+                }
 
                 // Take step in environment
                 var (nextState, reward, isDone, info) = _rlOptions.Environment.Step(action);
@@ -2165,6 +2192,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 {
                     losses.Add(loss);
                 }
+
+                // Advance the exploration schedule (e.g. epsilon/noise decay) once per environment step.
+                explorationStrategy?.Update();
 
                 // Update for next step
                 state = nextState;

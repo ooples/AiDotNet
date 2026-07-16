@@ -136,6 +136,87 @@ public class RLTrainingIntegrationTests
         Assert.Equal(environment.ActionSpaceSize, action.Length);
     }
 
+    /// <summary>
+    /// A configured exploration strategy must actually drive action selection during RL training,
+    /// not merely land in an unread field. This stub forces a fixed arm and records every call, so
+    /// the assertions prove the training loop consulted it for each action (and ran its Reset/Update
+    /// schedule). Without the wiring in BuildRLInternalAsync the agent's own exploration is used and
+    /// the stub is never called, so GetExplorationAction stays at 0 and this test fails.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ExplorationStrategyInOptions_DrivesActionSelectionDuringTraining()
+    {
+        var environment = new DeterministicBanditEnvironment<double>(
+            actionSpaceSize: 2,
+            observationSpaceDimension: 1,
+            maxSteps: 2);
+
+        // Arm 0 yields reward 1, arm 1 yields reward 0. Force arm 1 so a non-zero episode reward
+        // would only be possible if the forced action were ignored.
+        var strategy = new RecordingExplorationStrategy<double>(forcedActionIndex: 1, actionSpaceSize: 2);
+
+        double lastEpisodeReward = double.NaN;
+
+        var rlOptions = new RLTrainingOptions<double>
+        {
+            Environment = environment,
+            Episodes = 3,
+            MaxStepsPerEpisode = 2,
+            LogFrequency = 0,
+            ExplorationStrategy = strategy,
+            OnEpisodeComplete = m => lastEpisodeReward = m.TotalReward
+        };
+
+        var result = await new AiModelBuilder<double, Vector<double>, Vector<double>>()
+            .ConfigureReinforcementLearning(rlOptions)
+            .ConfigureModel(CreateBanditAgent(environment))
+            .BuildAsync();
+
+        Assert.NotNull(result);
+        // 3 episodes x 2 steps = 6 action selections, each routed through the strategy.
+        Assert.Equal(6, strategy.GetExplorationActionCalls);
+        Assert.Equal(6, strategy.UpdateCalls);       // decay advanced once per step
+        Assert.Equal(3, strategy.ResetCalls);        // reset once per episode
+        Assert.Equal(6, environment.TotalSteps);
+        Assert.All(strategy.ObservedActionSpaceSizes, s => Assert.Equal(2, s)); // greedy action length wired through
+        // Forced arm 1 -> reward 0 every step -> episode reward exactly 0.
+        Assert.Equal(0.0, lastEpisodeReward);
+    }
+
+    /// <summary>
+    /// The same override delivered via the fluent ConfigureExplorationStrategy() rather than through
+    /// the options object must reach training identically. Pins the ConfigureExplorationStrategy wiring.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ConfigureExplorationStrategy_DrivesActionSelectionDuringTraining()
+    {
+        var environment = new DeterministicBanditEnvironment<double>(
+            actionSpaceSize: 2,
+            observationSpaceDimension: 1,
+            maxSteps: 2);
+
+        var strategy = new RecordingExplorationStrategy<double>(forcedActionIndex: 1, actionSpaceSize: 2);
+
+        var rlOptions = new RLTrainingOptions<double>
+        {
+            Environment = environment,
+            Episodes = 2,
+            MaxStepsPerEpisode = 2,
+            LogFrequency = 0
+        };
+
+        var result = await new AiModelBuilder<double, Vector<double>, Vector<double>>()
+            .ConfigureReinforcementLearning(rlOptions)
+            .ConfigureExplorationStrategy(strategy)
+            .ConfigureModel(CreateBanditAgent(environment))
+            .BuildAsync();
+
+        Assert.NotNull(result);
+        Assert.Equal(4, strategy.GetExplorationActionCalls); // 2 episodes x 2 steps
+        Assert.Equal(2, strategy.ResetCalls);
+        Assert.Equal(4, environment.TotalSteps);
+    }
+
     private static DQNAgent<double> CreateBanditAgent(DeterministicBanditEnvironment<double> environment)
     {
         return new DQNAgent<double>(new DQNOptions<double>

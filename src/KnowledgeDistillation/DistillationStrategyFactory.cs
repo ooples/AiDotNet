@@ -1,5 +1,4 @@
 using System.Linq;
-using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation.Strategies;
 using AiDotNet.LinearAlgebra;
@@ -8,66 +7,52 @@ using ContrastiveMode = AiDotNet.KnowledgeDistillation.Strategies.ContrastiveMod
 namespace AiDotNet.KnowledgeDistillation;
 
 /// <summary>
-/// Factory for creating distillation strategies from enums and configurations.
+/// Factory of named knowledge-distillation strategies.
 /// </summary>
+/// <remarks>
+/// <para>Each named strategy is a public factory method returning an
+/// <see cref="IDistillationStrategy{T}"/>. The strategy IS the parameter: callers pass a
+/// strategy instance directly (e.g. via <c>KnowledgeDistillationOptions.Strategy</c> or
+/// <c>ConfigureDistillationStrategy</c>). When no strategy is supplied, response-based
+/// distillation (Hinton et al., 2015) is the industry-standard default — see
+/// <see cref="ResolveStrategy"/>.</para>
+/// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public static class DistillationStrategyFactory<T>
 {
     /// <summary>
-    /// Creates a distillation strategy from the specified type and parameters.
+    /// Returns <paramref name="strategy"/> when non-null, otherwise the response-based default
+    /// (standard Hinton distillation) configured with the supplied temperature and alpha.
     /// </summary>
-    /// <param name="strategyType">The type of strategy to create.</param>
-    /// <param name="temperature">Softmax temperature (default 3.0).</param>
-    /// <param name="alpha">Weight for hard loss vs soft loss (default 0.3).</param>
-    /// <param name="featureWeight">Weight for feature matching loss (for feature-based strategies).</param>
-    /// <param name="attentionWeight">Weight for attention matching loss (for attention-based strategies).</param>
-    /// <param name="contrastiveMode">Mode for contrastive loss (for contrastive strategies).</param>
-    /// <param name="featureLayerPairs">Layer pairs for feature matching (for feature-based).</param>
-    /// <param name="attentionLayers">Attention layers to match (for attention-based).</param>
-    /// <param name="strategies">Vector of strategies to combine (for hybrid).</param>
-    /// <param name="strategyWeights">Weights for combined strategies (for hybrid).</param>
-    /// <returns>A configured distillation strategy.</returns>
-    public static IDistillationStrategy<T> CreateStrategy(
-        DistillationStrategyType strategyType,
+    /// <param name="strategy">The caller-supplied strategy, or null for the default.</param>
+    /// <param name="temperature">Softmax temperature used for the default (default 3.0).</param>
+    /// <param name="alpha">Hard/soft loss weight used for the default (default 0.3).</param>
+    public static IDistillationStrategy<T> ResolveStrategy(
+        IDistillationStrategy<T>? strategy,
         double temperature = 3.0,
-        double alpha = 0.3,
-        double? featureWeight = null,
-        double? attentionWeight = null,
-        ContrastiveMode? contrastiveMode = null,
-        Vector<string>? featureLayerPairs = null,
-        Vector<string>? attentionLayers = null,
-        Vector<IDistillationStrategy<T>>? strategies = null,
-        Vector<double>? strategyWeights = null)
+        double alpha = 0.3)
     {
-        return strategyType switch
-        {
-            DistillationStrategyType.ResponseBased => CreateResponseBasedStrategy(temperature, alpha),
-            DistillationStrategyType.FeatureBased => CreateFeatureBasedStrategy(featureLayerPairs, featureWeight ?? 0.5),
-            DistillationStrategyType.AttentionBased => CreateAttentionBasedStrategy(attentionLayers, temperature, alpha, attentionWeight ?? 0.3),
-            DistillationStrategyType.RelationBased => CreateRelationBasedStrategy(temperature, alpha),
-            DistillationStrategyType.ContrastiveBased => CreateContrastiveStrategy(temperature, alpha, contrastiveMode ?? ContrastiveMode.InfoNCE),
-            DistillationStrategyType.SimilarityPreserving => CreateSimilarityPreservingStrategy(temperature, alpha),
-            DistillationStrategyType.FlowBased => CreateFlowBasedStrategy(temperature, alpha), // FSP - Flow of Solution Procedure
-            DistillationStrategyType.ProbabilisticTransfer => CreateProbabilisticStrategy(temperature, alpha),
-            DistillationStrategyType.VariationalInformation => CreateVariationalStrategy(temperature, alpha),
-            DistillationStrategyType.FactorTransfer => CreateFactorTransferStrategy(temperature, alpha),
-            DistillationStrategyType.NeuronSelectivity => CreateNeuronSelectivityStrategy(temperature, alpha),
-            DistillationStrategyType.SelfDistillation => CreateResponseBasedStrategy(temperature, alpha), // Self uses response-based
-            DistillationStrategyType.Hybrid => CreateHybridStrategy(temperature, alpha, strategies, strategyWeights),
-            _ => throw new ArgumentException($"Unknown strategy type: {strategyType}", nameof(strategyType))
-        };
+        return strategy ?? CreateResponseBasedStrategy(temperature, alpha);
     }
 
-    private static IDistillationStrategy<T> CreateResponseBasedStrategy(
-        double temperature,
-        double alpha)
+    /// <summary>
+    /// Response-based distillation (Hinton et al., 2015) — the industry-standard default.
+    /// Matches the teacher's temperature-scaled softmax outputs.
+    /// </summary>
+    public static IDistillationStrategy<T> CreateResponseBasedStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3)
     {
         return new DistillationLoss<T>(temperature, alpha);
     }
 
-    private static IDistillationStrategy<T> CreateFeatureBasedStrategy(
-        Vector<string>? layerPairs,
-        double featureWeight)
+    /// <summary>
+    /// Feature-based / FitNets distillation (Romero et al., 2014). Not available through the
+    /// factory — construct <c>FeatureDistillationStrategy&lt;T&gt;</c> directly with layer pairs.
+    /// </summary>
+    public static IDistillationStrategy<T> CreateFeatureBasedStrategy(
+        Vector<string>? layerPairs = null,
+        double featureWeight = 0.5)
     {
         // FeatureDistillationStrategy doesn't implement IDistillationStrategy
         // It's a separate utility class that computes feature loss
@@ -76,11 +61,14 @@ public static class DistillationStrategyFactory<T>
             "through the factory. Create it directly: new FeatureDistillationStrategy<T>(layerPairs, featureWeight)");
     }
 
-    private static IDistillationStrategy<T> CreateAttentionBasedStrategy(
-        Vector<string>? attentionLayers,
-        double temperature,
-        double alpha,
-        double attentionWeight)
+    /// <summary>
+    /// Attention-transfer distillation (Zagoruyko &amp; Komodakis, 2017), for transformer models.
+    /// </summary>
+    public static IDistillationStrategy<T> CreateAttentionBasedStrategy(
+        Vector<string>? attentionLayers = null,
+        double temperature = 3.0,
+        double alpha = 0.3,
+        double attentionWeight = 0.3)
     {
         // Provide default attention layers if none specified
         var defaultLayers = new[] { "layer.0.attention", "layer.1.attention", "layer.2.attention" };
@@ -96,9 +84,12 @@ public static class DistillationStrategyFactory<T>
             matchingMode: AttentionMatchingMode.MSE);
     }
 
-    private static IDistillationStrategy<T> CreateRelationBasedStrategy(
-        double temperature,
-        double alpha)
+    /// <summary>
+    /// Relational Knowledge Distillation / RKD (Park et al., 2019). Preserves distances and angles.
+    /// </summary>
+    public static IDistillationStrategy<T> CreateRelationBasedStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3)
     {
         // Use constructor defaults for distanceWeight and angleWeight
         return new RelationalDistillationStrategy<T>(
@@ -106,10 +97,13 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T> CreateContrastiveStrategy(
-        double temperature,
-        double alpha,
-        ContrastiveMode mode)
+    /// <summary>
+    /// Contrastive Representation Distillation / CRD (Tian et al., 2020).
+    /// </summary>
+    public static IDistillationStrategy<T> CreateContrastiveStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3,
+        ContrastiveMode mode = ContrastiveMode.InfoNCE)
     {
         // Use constructor defaults for contrastiveWeight and negativesSampleSize
         return new ContrastiveDistillationStrategy<T>(
@@ -118,9 +112,12 @@ public static class DistillationStrategyFactory<T>
             mode: mode);
     }
 
-    private static IDistillationStrategy<T> CreateSimilarityPreservingStrategy(
-        double temperature,
-        double alpha)
+    /// <summary>
+    /// Similarity-Preserving Distillation / SP (Tung &amp; Mori, 2019).
+    /// </summary>
+    public static IDistillationStrategy<T> CreateSimilarityPreservingStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3)
     {
         // Use constructor defaults for similarityWeight
         return new SimilarityPreservingStrategy<T>(
@@ -128,9 +125,12 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T> CreateProbabilisticStrategy(
-        double temperature,
-        double alpha)
+    /// <summary>
+    /// Probabilistic Knowledge Transfer / PKT (Passalis &amp; Tefas, 2018).
+    /// </summary>
+    public static IDistillationStrategy<T> CreateProbabilisticStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3)
     {
         // Use constructor defaults for distributionWeight, mode, and mmdBandwidth
         return new ProbabilisticDistillationStrategy<T>(
@@ -138,9 +138,12 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T> CreateVariationalStrategy(
-        double temperature,
-        double alpha)
+    /// <summary>
+    /// Variational Information Distillation / VID (Ahn et al., 2019).
+    /// </summary>
+    public static IDistillationStrategy<T> CreateVariationalStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3)
     {
         // Use constructor defaults for variationalWeight, mode, and betaIB
         return new VariationalDistillationStrategy<T>(
@@ -148,9 +151,12 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T> CreateFactorTransferStrategy(
-        double temperature,
-        double alpha)
+    /// <summary>
+    /// Factor Transfer (Kim et al., 2018).
+    /// </summary>
+    public static IDistillationStrategy<T> CreateFactorTransferStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3)
     {
         // Use constructor defaults for factorWeight, mode, numFactors, and normalizeFactors
         return new FactorTransferDistillationStrategy<T>(
@@ -158,9 +164,12 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T> CreateNeuronSelectivityStrategy(
-        double temperature,
-        double alpha)
+    /// <summary>
+    /// Neuron Selectivity Transfer / NST (Huang &amp; Wang, 2017).
+    /// </summary>
+    public static IDistillationStrategy<T> CreateNeuronSelectivityStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3)
     {
         // Use constructor defaults for selectivityWeight and metric
         return new NeuronSelectivityDistillationStrategy<T>(
@@ -168,20 +177,27 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T> CreateFlowBasedStrategy(
-        double temperature,
-        double alpha)
+    /// <summary>
+    /// Flow of Solution Procedure / FSP (Yim et al., 2017).
+    /// </summary>
+    public static IDistillationStrategy<T> CreateFlowBasedStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3)
     {
         return new FlowBasedDistillationStrategy<T>(
             temperature: temperature,
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T> CreateHybridStrategy(
-        double temperature,
-        double alpha,
-        Vector<IDistillationStrategy<T>>? strategies,
-        Vector<double>? strategyWeights)
+    /// <summary>
+    /// Combined/hybrid distillation. When no strategies are supplied, combines response-based and
+    /// relational with equal weight.
+    /// </summary>
+    public static IDistillationStrategy<T> CreateHybridStrategy(
+        double temperature = 3.0,
+        double alpha = 0.3,
+        Vector<IDistillationStrategy<T>>? strategies = null,
+        Vector<double>? strategyWeights = null)
     {
         // Create tuple array from strategies and weights
         (IDistillationStrategy<T> Strategy, double Weight)[] strategyTuples;
@@ -221,101 +237,5 @@ public static class DistillationStrategyFactory<T>
         }
 
         return new HybridDistillationStrategy<T>(strategyTuples, temperature, alpha);
-    }
-
-    /// <summary>
-    /// Creates a strategy with custom parameters using a fluent builder pattern.
-    /// </summary>
-    public static StrategyBuilder Configure(DistillationStrategyType strategyType)
-    {
-        return new StrategyBuilder(strategyType);
-    }
-
-    /// <summary>
-    /// Fluent builder for configuring distillation strategies with custom parameters.
-    /// </summary>
-    public class StrategyBuilder
-    {
-        private readonly DistillationStrategyType _strategyType;
-        private double _temperature = 3.0;
-        private double _alpha = 0.3;
-        private double? _featureWeight;
-        private double? _attentionWeight;
-        private ContrastiveMode? _contrastiveMode;
-        private Vector<string>? _featureLayerPairs;
-        private Vector<string>? _attentionLayers;
-        private Vector<IDistillationStrategy<T>>? _strategies;
-        private Vector<double>? _strategyWeights;
-
-        internal StrategyBuilder(DistillationStrategyType strategyType)
-        {
-            _strategyType = strategyType;
-        }
-
-        public StrategyBuilder WithTemperature(double temperature)
-        {
-            _temperature = temperature;
-            return this;
-        }
-
-        public StrategyBuilder WithAlpha(double alpha)
-        {
-            _alpha = alpha;
-            return this;
-        }
-
-        public StrategyBuilder WithFeatureWeight(double weight)
-        {
-            _featureWeight = weight;
-            return this;
-        }
-
-        public StrategyBuilder WithAttentionWeight(double weight)
-        {
-            _attentionWeight = weight;
-            return this;
-        }
-
-        public StrategyBuilder WithContrastiveMode(ContrastiveMode mode)
-        {
-            _contrastiveMode = mode;
-            return this;
-        }
-
-        public StrategyBuilder WithFeatureLayerPairs(Vector<string> layerPairs)
-        {
-            _featureLayerPairs = layerPairs;
-            return this;
-        }
-
-        public StrategyBuilder WithAttentionLayers(Vector<string> layers)
-        {
-            _attentionLayers = layers;
-            return this;
-        }
-
-        public StrategyBuilder WithStrategies(
-            Vector<IDistillationStrategy<T>> strategies,
-            Vector<double>? weights = null)
-        {
-            _strategies = strategies;
-            _strategyWeights = weights;
-            return this;
-        }
-
-        public IDistillationStrategy<T> Build()
-        {
-            return CreateStrategy(
-                _strategyType,
-                _temperature,
-                _alpha,
-                _featureWeight,
-                _attentionWeight,
-                _contrastiveMode,
-                _featureLayerPairs,
-                _attentionLayers,
-                _strategies,
-                _strategyWeights);
-        }
     }
 }

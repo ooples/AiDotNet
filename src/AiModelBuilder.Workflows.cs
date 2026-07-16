@@ -1002,6 +1002,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             _rlOptions.Environment = _configuredEnvironment;
         }
 
+        // Same carry-over for an exploration strategy configured before these options existed.
+        // Options passed here win when they set their own ExplorationStrategy.
+        if (_configuredExplorationStrategy is not null && _rlOptions.ExplorationStrategy is null)
+        {
+            _rlOptions.ExplorationStrategy = _configuredExplorationStrategy;
+        }
+
         return this;
     }
 
@@ -1034,7 +1041,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// var distillationOptions = new KnowledgeDistillationOptions&lt;Vector&lt;double&gt;, Vector&lt;double&gt;, double&gt;
     /// {
     ///     TeacherModelType = TeacherModelType.NeuralNetwork,
-    ///     StrategyType = DistillationStrategyType.ResponseBased,
+    ///     Strategy = null,        // null =&gt; response-based (standard Hinton) default
     ///     Temperature = 3.0,      // Soften predictions (2-5 typical)
     ///     Alpha = 0.3,            // 30% hard labels, 70% teacher knowledge
     ///     Epochs = 20,
@@ -1078,6 +1085,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         KnowledgeDistillationOptions<T, TInput, TOutput>? options = null)
     {
         _knowledgeDistillationOptions = options ?? new KnowledgeDistillationOptions<T, TInput, TOutput>();
+        // Reconcile with a strategy set via ConfigureDistillationStrategy (either call ordering):
+        // the explicitly-configured strategy wins over an unset options.Strategy so the selected
+        // distillation method actually reaches training.
+        if (_configuredDistillationStrategy is not null && _knowledgeDistillationOptions.Strategy is null)
+        {
+            _knowledgeDistillationOptions.Strategy = _configuredDistillationStrategy;
+        }
         return this;
     }
 
