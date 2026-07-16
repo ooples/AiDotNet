@@ -22,7 +22,13 @@ Tracking issue: #1876. Related PR: #1875.
 - **SelfSupervisedLearningMethod** (was SSLMethod) — a method configured alone now runs a default pretraining loop over the unlabeled inputs with representation-collapse detection and a linear-probe quality estimate, surfaced on `AiModelResult.SelfSupervisedLearningPretrainingResult`. Also renamed the whole SSL type hierarchy to `SelfSupervisedLearning*` (no abbreviations).
 - **ExplorationStrategy + Environment (RL pair)** — already wired (ConfigureEnvironment bootstraps the RL path; ConfigureExplorationStrategy reconciles both orderings). Added the exceed-industry lever they lacked: **ConfigureCuriosity** with a Random Network Distillation intrinsic-reward default for sparse-reward exploration; the novelty bonus is added per RL step and the mean intrinsic reward is surfaced.
 
-**Tier 3 is complete.** Remaining: Tier 4/6 domain + robustness/tooling methods (AudioEffect, AudioEnhancer, TimeSeriesDecomposition, ModelExplainer, AdversarialAttack/Defense, CertifiedDefense, ModelCompressionStrategy, Tool) and the `PARTIAL` federated/hyperparameter/pipeline fields.
+**Tier 3 is complete.**
+
+## Tier 4/6 (in progress)
+
+- **ModelExplainer** — surfaces the configured explainer on the result AND auto-audits explanation **faithfulness** (deletion/insertion AUC + ERASER comprehensiveness/sufficiency against the trained model — the trust check shap/lime/captum omit). Added `IFeatureAttribution<T>` (common accessor on all 9 attribution explanation types) and `IGlobalAttributionExplainer<T>` (on 6 explainers). Surfaced on `AiModelResult.ExplanationFaithfulness`.
+
+Remaining Tier 4/6: AdversarialAttack, CertifiedDefense, ModelCompressionStrategy, AudioEffect, AudioEnhancer, TimeSeriesDecomposition, Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
 
 ---
 
