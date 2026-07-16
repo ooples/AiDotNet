@@ -29,20 +29,32 @@ Result: **54 INERT, 3 PARTIAL, 57 WIRED.**
 
 ---
 
-# Tier 1 — Training-critical (correctness bugs)
+# Tier 1 — Training-critical (correctness bugs) — **RESOLVED**
 
-These change what the model *learns*. A user configures them and training silently ignores them.
+These change what the model *learns*. A user configured them and training silently ignored them.
 
-| method | file:line | status |
-|---|---|---|
-| `ConfigureLossFunction` | `AiModelBuilder.CoreML.cs:44` | INERT — **wrong training result** |
-| `ConfigureLearningRateScheduler` | `AiModelBuilder.CoreML.cs:205` | INERT — **wrong convergence** |
-| `ConfigureStoppingCriterion` | `AiModelBuilder.Coverage.cs:299` | INERT |
-| `ConfigureDataSplitter` | `AiModelBuilder.Coverage.cs:98` | INERT — **leakage risk** |
-| `ConfigureCrossValidation` | `AiModelBuilder.Workflows.cs:544` | INERT |
-| `ConfigureActivationFunction` | `AiModelBuilder.CoreML.cs:60` | INERT — recommend **throw** |
-| `ConfigureModelOptions` | `AiModelBuilder.Coverage.cs:65` | INERT |
-| `ConfigureCurriculumScheduler` | `AiModelBuilder.Coverage.cs:248` | INERT |
+| method | resolution |
+|---|---|
+| `ConfigureLossFunction` | **wired** — set on the model so `OnModelChanged` carries it to the optimizer |
+| `ConfigureDataSplitter` | **wired** — unlocks ~58 splitters incl. purged; nested inner split for validation |
+| `ConfigureCrossValidation` | **wired** + new `PurgedWalkForwardCrossValidator` |
+| `ConfigureLearningRateScheduler` | **wired** into optimizer options; adaptive rule unified into `AdaptiveFitnessScheduler` |
+| `ConfigureStoppingCriterion` | **wired** at `InvokeTrainingEpoch` |
+| `ConfigureRegressionMetric` / `ConfigureClassificationMetric` | **wired** → `AiModelResult.ConfiguredMetrics` |
+| `ConfigureCurriculumScheduler` | **wired** → `CurriculumLearningOptions.CustomScheduler`, order-independent |
+| `ConfigureActivationFunction` | **removed** — activation is a per-layer constructor parameter |
+| `ConfigureModelOptions` | **removed** — options are a model constructor parameter |
+
+## What tier 1 proved
+
+**The dead config surface was hiding broken implementations underneath it.** Two of these were not merely unwired — the code they should have reached was itself broken, and nobody could find out:
+
+- **Cross-validation could not have worked for anyone.** `CrossValidatorBase.PerformCrossValidation` built *empty* test data for every fold and handed it to the optimizer; `ValidationHelper` rejects that outright (`"Test matrix cannot be empty"`), so every optimizer that validates its input threw before a single fold trained. In k-fold there is no third partition — the held-out fold *is* the test set.
+- **The purged fold geometry was sized by the wrong dimension.** `GetInputSize` returns the *feature* count, so a 300×3 matrix was handed to the splitter as "3 samples". It surfaced only because the error message quoted its own input.
+
+**Test-suite failures blamed on "flakiness" were real defects too.** Five `ResourceMonitor` tests slept a fixed 100–200ms and assumed a thread-pool timer had fired — measuring scheduling latency, not the monitor (which works: 300ms → 7 snapshots). `ClearHistory` asserted empty-after-clear, which passed whether or not anything was ever collected — it would have kept passing if `ClearHistory` were deleted. A perf test timed eager then compiled back-to-back, charging any intervening load entirely to the second.
+
+Rule of thumb this yields: **wiring a dead knob is the cheap part — the expensive part is what you find behind it.**
 
 ## 1.1 `ConfigureLossFunction` — dead at three layers
 
