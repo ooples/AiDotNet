@@ -659,28 +659,12 @@ public class Cutie<T> : NeuralNetworkBase<T>
     }
 
     private Tensor<T> Upsample2x(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channels, height * 2, width * 2]);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        T val = input[b, c, h, w];
-                        output[b, c, h * 2, w * 2] = val;
-                        output[b, c, h * 2, w * 2 + 1] = val;
-                        output[b, c, h * 2 + 1, w * 2] = val;
-                        output[b, c, h * 2 + 1, w * 2 + 1] = val;
-                    }
-
-        return output;
-    }
+        // Nearest-neighbor 2x upsample via the vectorized, tape-tracked Engine op (the same call
+        // UpsamplingLayer uses). The previous scalar b*c*h*w loop with rank-4 indexers
+        // (output[b,c,h*2,w*2] = ...) heap-allocated an int[4] per element access and, called
+        // repeatedly across the mask decoder's upsampling ladder, made a single [3,32,32] forward
+        // take ~46 s and time out Training. Engine.Upsample is a single vectorized kernel.
+        => Engine.Upsample(input, 2, 2);
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
