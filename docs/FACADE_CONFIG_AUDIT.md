@@ -14,8 +14,11 @@ Tracking issue: #1876. Related PR: #1875.
 - **Model-ctor-param methods (11) removed** — `KernelFunction`, `LinkFunction`, `MatrixDecomposition`, `RadialBasisFunction`, `WaveletFunction`, `WindowFunction`, `Layer`, `Interpolation`, `Interpolation2D`, `PDESpecification`, `NoiseScheduler`. Each is a constructor parameter of the consuming model; options is the door.
 - **IFullModel migration** — `IGaussianProcess` and `IAnomalyDetector` now derive from `IFullModel<T, Matrix<T>, Vector<T>>` (their bases already implement it via `ModelBase`); their inert Configure methods removed — `ConfigureModel` covers them. See `IFULLMODEL_MIGRATION_AUDIT.md` for the full migration surface (mostly already IFullModel transitively).
 - **EmbeddingModel** — surfaced on the result as a preprocessing/transform component (`AiModelResult.EmbeddingModel`), not forced into the model contract.
+- **DriftDetection** — wired to a two-lens `DriftMonitor` that attributes drift to concept (error stream) vs covariate (prediction distribution) in one pass; `AiModelResult.DriftReport` + live `DriftMonitor`.
+- **ActiveLearning + QueryStrategy** — wired to BADGE-style diversity-aware batch selection (uncertainty × diversity, three-tier representation cascade: gradient embeddings → model representation → input features); `AiModelResult.ActiveLearningSelection`. Added opt-in `ISupportsRepresentation<T, TInput>`.
+- **DataTransformer** — was already removed as a strict duplicate of the fully-wired `ConfigurePreprocessing`.
 
-Remaining: Tier 3 learning workflows (ActiveLearning, ContinualLearning, DriftDetection, QueryStrategy, SSLMethod, DistillationStrategy, ExplorationStrategy, Environment, DataTransformer), Tier 4/6 domain + robustness/tooling methods, and the `PARTIAL` federated/hyperparameter/pipeline fields.
+Remaining: Tier 3 (ContinualLearning, SSLMethod, DistillationStrategy, ExplorationStrategy, Environment), Tier 4/6 domain + robustness/tooling methods, and the `PARTIAL` federated/hyperparameter/pipeline fields.
 
 ---
 
