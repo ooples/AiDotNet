@@ -672,6 +672,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         => AdversarialRobustness = report;
 
     /// <summary>
+    /// The certified-robustness audit, or <c>null</c> when no certified defense was configured via
+    /// <c>ConfigureCertifiedDefense(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Certified accuracy (a guaranteed lower bound on robustness) with mean/median certified radius, and
+    /// — when an adversarial attack is also configured — the certified-vs-empirical sandwich bounding the
+    /// true robustness at the same perturbation budget.
+    /// </remarks>
+    public AdversarialRobustness.CertifiedRobustnessReport<T>? CertifiedRobustness { get; private set; }
+
+    /// <summary>Records the certified-robustness audit. Called by the builder during Build.</summary>
+    internal void SetCertifiedRobustnessReport(AdversarialRobustness.CertifiedRobustnessReport<T> report)
+        => CertifiedRobustness = report;
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>

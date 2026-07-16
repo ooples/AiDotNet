@@ -593,10 +593,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 targets = null;
             }
 
+            var method = config.Method;
+            if (method is null)
+            {
+                return null;
+            }
+
             int epochs = config.PretrainingEpochs ?? 5;
             int batchSize = config.BatchSize ?? 32;
             return SelfSupervisedLearning.SelfSupervisedLearningPretrainer.Run(
-                config.Method!, data, targets, epochs, batchSize);
+                method, data, targets, epochs, batchSize);
         }
         catch (Exception ex)
         {
@@ -883,7 +889,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 int correct = 0, flipped = 0;
                 for (int i = 0; i < n; i++)
                 {
-                    var adv = (AiDotNet.Tensors.LinearAlgebra.Matrix<T>)(object)adversarial[i]!;
+                    var advInput = adversarial[i];
+                    if (advInput is null) continue;
+                    var adv = (AiDotNet.Tensors.LinearAlgebra.Matrix<T>)(object)advInput;
                     bool advCorrect = Math.Abs(PredictScalar(adv) - numOps.ToDouble(labelVector[i])) <= tolerance;
                     if (advCorrect) correct++;
                     if (Math.Abs(mult - 1.0) < 1e-9)
@@ -891,10 +899,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         if (cleanCorrect[i] && !advCorrect)
                         {
                             flipped++;
-                            var perturbation = (AiDotNet.Tensors.LinearAlgebra.Matrix<T>)(object)
-                                _configuredAdversarialAttack.CalculatePerturbation(inputs[i], adversarial[i])!;
-                            perturbSum += FrobeniusNorm(perturbation, numOps);
-                            perturbCount++;
+                            if (_configuredAdversarialAttack.CalculatePerturbation(inputs[i], advInput)
+                                is AiDotNet.Tensors.LinearAlgebra.Matrix<T> perturbation)
+                            {
+                                perturbSum += FrobeniusNorm(perturbation, numOps);
+                                perturbCount++;
+                            }
                         }
                     }
                 }
@@ -936,6 +946,88 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             System.Diagnostics.Trace.TraceWarning(
                 $"Adversarial robustness could not be computed: {ex.Message}. The trained model is " +
                 "unaffected; AiModelResult.AdversarialRobustness is null.");
+        }
+    }
+
+    /// <summary>
+    /// Runs the configured certified defense over the test data and surfaces certified accuracy plus, when
+    /// an adversarial attack is also configured, the certified-vs-empirical robustness sandwich.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Certifies at the same perturbation budget the empirical attack uses (its epsilon), so certified
+    /// accuracy (guaranteed lower bound) and empirical robust accuracy (attack upper bound) sandwich the
+    /// true robustness like-for-like. Covers tabular models; a failure is surfaced as a warning and never
+    /// discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeCertifiedRobustness(
+        AiModelResult<T, TInput, TOutput> result, TInput preparedX, TOutput preparedY,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredCertifiedDefense is null)
+        {
+            return;
+        }
+
+        try
+        {
+            AiDotNet.Tensors.LinearAlgebra.Matrix<T>? dataMatrix = null;
+            AiDotNet.Tensors.LinearAlgebra.Vector<T>? labelVector = null;
+            try
+            {
+                dataMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX);
+                labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY);
+            }
+            catch { dataMatrix = null; }
+
+            if (optimizationResult.BestSolution is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
+                || dataMatrix is null || labelVector is null || dataMatrix.Rows == 0
+                || labelVector.Length != dataMatrix.Rows)
+            {
+                return;
+            }
+
+            int n = dataMatrix.Rows;
+            var inputs = new TInput[n];
+            var labels = new TOutput[n];
+            for (int i = 0; i < n; i++)
+            {
+                var sample = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, dataMatrix.Columns);
+                for (int j = 0; j < dataMatrix.Columns; j++) sample[0, j] = dataMatrix[i, j];
+                inputs[i] = (TInput)(object)sample;
+                labels[i] = (TOutput)(object)new AiDotNet.Tensors.LinearAlgebra.Vector<T>(1) { [0] = labelVector[i] };
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            // Certify at the empirical attack's budget so the two bounds are comparable; else a default.
+            double radius = _configuredAdversarialAttack is not null && _configuredAdversarialAttack.GetOptions().Epsilon > 0
+                ? _configuredAdversarialAttack.GetOptions().Epsilon
+                : 0.1;
+
+            var certModel = (IFullModel<T, TInput, TOutput>)(object)tabularModel;
+            var metrics = _configuredCertifiedDefense.EvaluateCertifiedAccuracy(inputs, labels, certModel, numOps.FromDouble(radius));
+
+            // Sandwich: certified accuracy (lower bound) vs the empirical robust accuracy (upper bound) at
+            // the same budget, when the adversarial attack audit is available.
+            double? empirical = result.AdversarialRobustness?.RobustAccuracy;
+            bool sandwich = empirical.HasValue;
+
+            result.SetCertifiedRobustnessReport(new AdversarialRobustness.CertifiedRobustnessReport<T>
+            {
+                DefenseName = _configuredCertifiedDefense.GetType().Name,
+                RadiusUsed = radius,
+                Metrics = metrics,
+                EmpiricalRobustAccuracy = empirical,
+                CertifiedEmpiricalGap = empirical.HasValue ? empirical.Value - metrics.CertifiedAccuracy : (double?)null,
+                SandwichAvailable = sandwich,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Certified robustness could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.CertifiedRobustness is null.");
         }
     }
 
@@ -4609,6 +4701,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         ComputeExplanationFaithfulness(finalResult, preparedX, optimizationResult);
         ComputeAdversarialRobustness(finalResult, preparedX, preparedY, optimizationResult);
+        ComputeCertifiedRobustness(finalResult, preparedX, preparedY, optimizationResult);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);
