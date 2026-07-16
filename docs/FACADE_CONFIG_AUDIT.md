@@ -34,7 +34,9 @@ Tracking issue: #1876. Related PR: #1875.
 
 - **ModelCompressionStrategy** — compresses the trained weights, decompresses, **rebuilds the model via `WithParameters` and re-evaluates it on the prepared data**, surfacing the true size-vs-accuracy trade-off on `AiModelResult.ModelCompression`: a magnitude-ranked (least-important-first) Pareto **frontier**, weight reconstruction error, and the **knee** (most compression within a retention tolerance). Most toolkits report a compression ratio in isolation; accuracy retention here is real predictive fit, not a proxy. Skips models with no compressible parameters.
 
-Remaining Tier 4/6: AudioEffect, AudioEnhancer, TimeSeriesDecomposition, Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
+- **TimeSeriesDecomposition** — grades the configured decomposition rather than only returning components, surfaced on `AiModelResult.TimeSeriesDecomposition`. Re-decomposes the model's **training target** (best-effort re-instantiation; falls back to the configured instance and reports which via an analyzed-series source), then reports trend strength F_T and seasonal strength F_S (Wang/Hyndman), residual whiteness (leftover lag-1 autocorrelation vs the white-noise band = "the decomposition missed structure"), additive reconstruction fidelity, and a **held-out forecast-skill** comparison of decomposition-based forecasting (trend extrapolation + seasonal-naive) against a random-walk baseline — so the user learns whether decomposing the series is worth it.
+
+Remaining Tier 4/6: AudioEffect, AudioEnhancer, Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
 
 ---
 

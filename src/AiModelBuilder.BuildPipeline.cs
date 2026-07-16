@@ -1269,6 +1269,291 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
     }
 
+    /// <summary>
+    /// Grades the configured time-series decomposition and surfaces it on <c>AiModelResult.TimeSeriesDecomposition</c>:
+    /// trend/seasonal strength, residual whiteness, additive reconstruction fidelity, and a held-out forecast-skill
+    /// comparison of decomposition-based forecasting against a random-walk baseline.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Re-decomposes the model's actual training target when the configured method can be re-instantiated on a new
+    /// series; otherwise it grades the configured instance's own components and says so via the analyzed-series
+    /// source. Any failure is surfaced as a warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeTimeSeriesDecomposition(
+        AiModelResult<T, TInput, TOutput> result, TOutput preparedY)
+    {
+        if (_configuredTimeSeriesDecomposition is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            // Prefer re-decomposing the model's own target series; fall back to the configured instance.
+            var source = DecompositionMethods.TimeSeriesDecomposition.DecompositionAnalysisSource.ConfiguredInstance;
+            ITimeSeriesDecomposition<T> decomposition = _configuredTimeSeriesDecomposition;
+            AiDotNet.Tensors.LinearAlgebra.Vector<T>? target = null;
+            try { target = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY); }
+            catch { target = null; }
+            if (target is not null && target.Length >= 8)
+            {
+                var redecomposed = TryRedecompose(_configuredTimeSeriesDecomposition, target);
+                if (redecomposed is not null)
+                {
+                    decomposition = redecomposed;
+                    source = DecompositionMethods.TimeSeriesDecomposition.DecompositionAnalysisSource.TargetSeries;
+                }
+            }
+
+            var series = ToDoubleArray(decomposition.TimeSeries, numOps);
+            int n = series.Length;
+            if (n < 4)
+            {
+                return;
+            }
+
+            var present = new List<DecompositionComponentType>();
+            foreach (var kv in decomposition.GetComponents())
+            {
+                if (kv.Value is AiDotNet.Tensors.LinearAlgebra.Vector<T> cv && cv.Length == n) present.Add(kv.Key);
+            }
+
+            double[]? trend = GetComponentArray(decomposition, numOps, n, DecompositionComponentType.Trend, DecompositionComponentType.TrendCycle);
+            double[]? seasonal = GetComponentArray(decomposition, numOps, n, DecompositionComponentType.Seasonal);
+            double[]? residual = GetComponentArray(decomposition, numOps, n, DecompositionComponentType.Residual, DecompositionComponentType.Irregular);
+
+            bool residualPresent = residual is not null;
+            // Derive a residual for the strength measures when the method did not expose one.
+            if (residual is null)
+            {
+                residual = new double[n];
+                for (int i = 0; i < n; i++)
+                {
+                    double t = trend?[i] ?? 0;
+                    double s = seasonal?[i] ?? 0;
+                    residual[i] = series[i] - t - s;
+                }
+            }
+
+            double varR = VarianceD(residual);
+            double trendStrength = 0, seasonalStrength = 0;
+            if (trend is not null)
+            {
+                var tr = new double[n];
+                for (int i = 0; i < n; i++) tr[i] = trend[i] + residual[i];
+                double v = VarianceD(tr);
+                trendStrength = v <= 1e-12 ? 0 : Math.Max(0, 1 - varR / v);
+            }
+            if (seasonal is not null)
+            {
+                var sr = new double[n];
+                for (int i = 0; i < n; i++) sr[i] = seasonal[i] + residual[i];
+                double v = VarianceD(sr);
+                seasonalStrength = v <= 1e-12 ? 0 : Math.Max(0, 1 - varR / v);
+            }
+
+            double residualAcf1 = Acf1D(residual);
+            double whiteBand = 2.0 / Math.Sqrt(n);
+            bool residualHasStructure = Math.Abs(residualAcf1) > whiteBand;
+
+            // Reconstruction fidelity only means something when the method exposed a real residual (else it is
+            // tautologically exact because we derived the residual from the series).
+            double reconstructionError = 0;
+            bool reconstructionAvailable = residualPresent && trend is not null;
+            if (reconstructionAvailable && trend is not null)
+            {
+                double sq = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    double recon = trend[i] + (seasonal?[i] ?? 0) + residual[i];
+                    double d = series[i] - recon;
+                    sq += d * d;
+                }
+                reconstructionError = Math.Sqrt(sq / n);
+            }
+
+            // Held-out forecast value: decomposition-based forecast vs a random-walk baseline on a tail.
+            int horizon = Math.Max(1, Math.Min(n / 5, 24));
+            int trainEnd = n - horizon;
+            bool forecastEvaluated = false;
+            double decompRmse = 0, naiveRmse = 0, forecastSkill = 0;
+            if (trainEnd >= 4)
+            {
+                int period = DetectPeriod(seasonal ?? series, trainEnd);
+                // Linear trend extrapolation from the tail of the training region.
+                double[] trendSource = trend ?? series;
+                int fitLen = Math.Min(trainEnd, Math.Max(2 * period, 10));
+                (double slope, double intercept) = FitLine(trendSource, trainEnd - fitLen, fitLen);
+
+                double sqD = 0, sqN = 0;
+                double lastTrain = series[trainEnd - 1];
+                for (int i = 0; i < horizon; i++)
+                {
+                    double trendPred = slope * (fitLen + i) + intercept;
+                    double seasonalPred = 0;
+                    if (seasonal is not null && period >= 1)
+                    {
+                        int idx = trainEnd - period + (i % period);
+                        if (idx >= 0 && idx < n) seasonalPred = seasonal[idx];
+                    }
+                    double actual = series[trainEnd + i];
+                    double dPred = trendPred + seasonalPred;
+                    sqD += (actual - dPred) * (actual - dPred);
+                    sqN += (actual - lastTrain) * (actual - lastTrain);
+                }
+                decompRmse = Math.Sqrt(sqD / horizon);
+                naiveRmse = Math.Sqrt(sqN / horizon);
+                forecastSkill = naiveRmse <= 1e-12 ? 0 : 1 - decompRmse / naiveRmse;
+                forecastEvaluated = true;
+            }
+
+            result.SetTimeSeriesDecompositionReport(new DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionReport<T>
+            {
+                MethodName = _configuredTimeSeriesDecomposition.GetType().Name,
+                SeriesLength = n,
+                AnalyzedSeries = source,
+                ComponentsPresent = present,
+                TrendStrength = trendStrength,
+                SeasonalStrength = seasonalStrength,
+                ResidualAutocorrelation = residualAcf1,
+                ResidualHasStructure = residualHasStructure,
+                ReconstructionError = reconstructionError,
+                ReconstructionAvailable = reconstructionAvailable,
+                ForecastHorizon = forecastEvaluated ? horizon : 0,
+                DecompositionForecastRmse = decompRmse,
+                NaiveForecastRmse = naiveRmse,
+                ForecastSkill = forecastSkill,
+                ForecastEvaluated = forecastEvaluated,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Time-series decomposition audit could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.TimeSeriesDecomposition is null.");
+        }
+    }
+
+    /// <summary>Re-instantiates a decomposition of the same concrete type over a new series, or null if not possible.</summary>
+    private static ITimeSeriesDecomposition<T>? TryRedecompose(
+        ITimeSeriesDecomposition<T> template, AiDotNet.Tensors.LinearAlgebra.Vector<T> series)
+    {
+        var type = template.GetType();
+        var ctors = type.GetConstructors();
+        Array.Sort(ctors, (a, b) => a.GetParameters().Length.CompareTo(b.GetParameters().Length));
+        foreach (var ctor in ctors)
+        {
+            var ps = ctor.GetParameters();
+            if (ps.Length == 0 || ps[0].ParameterType != typeof(AiDotNet.Tensors.LinearAlgebra.Vector<T>)) continue;
+
+            var args = new object?[ps.Length];
+            args[0] = series;
+            bool ok = true;
+            for (int i = 1; i < ps.Length; i++)
+            {
+                if (ps[i].HasDefaultValue) args[i] = ps[i].DefaultValue;
+                else { ok = false; break; }
+            }
+            if (!ok) continue;
+            try { return ctor.Invoke(args) as ITimeSeriesDecomposition<T>; }
+            catch { }
+        }
+
+        return null;
+    }
+
+    private static double[]? GetComponentArray(
+        ITimeSeriesDecomposition<T> d, INumericOperations<T> numOps, int n, params DecompositionComponentType[] types)
+    {
+        foreach (var t in types)
+        {
+            if (d.GetComponent(t) is AiDotNet.Tensors.LinearAlgebra.Vector<T> v && v.Length == n)
+                return ToDoubleArray(v, numOps);
+        }
+
+        return null;
+    }
+
+    private static double[] ToDoubleArray(AiDotNet.Tensors.LinearAlgebra.Vector<T> v, INumericOperations<T> numOps)
+    {
+        var a = new double[v.Length];
+        for (int i = 0; i < v.Length; i++) a[i] = numOps.ToDouble(v[i]);
+        return a;
+    }
+
+    private static double VarianceD(double[] x)
+    {
+        if (x.Length < 2) return 0;
+        double mean = 0;
+        for (int i = 0; i < x.Length; i++) mean += x[i];
+        mean /= x.Length;
+        double s = 0;
+        for (int i = 0; i < x.Length; i++) { double d = x[i] - mean; s += d * d; }
+        return s / (x.Length - 1);
+    }
+
+    private static double Acf1D(double[] x)
+    {
+        int n = x.Length;
+        if (n < 2) return 0;
+        double mean = 0;
+        for (int i = 0; i < n; i++) mean += x[i];
+        mean /= n;
+        double num = 0, den = 0;
+        for (int i = 0; i < n; i++) { double d = x[i] - mean; den += d * d; }
+        for (int i = 1; i < n; i++) num += (x[i] - mean) * (x[i - 1] - mean);
+        return den <= 1e-12 ? 0 : num / den;
+    }
+
+    private static double AcfLagD(double[] x, int lag, int count)
+    {
+        if (count <= lag + 1) return 0;
+        double mean = 0;
+        for (int i = 0; i < count; i++) mean += x[i];
+        mean /= count;
+        double num = 0, den = 0;
+        for (int i = 0; i < count; i++) { double d = x[i] - mean; den += d * d; }
+        for (int i = lag; i < count; i++) num += (x[i] - mean) * (x[i - lag] - mean);
+        return den <= 1e-12 ? 0 : num / den;
+    }
+
+    /// <summary>Estimates the seasonal period as the lag (2..count/2) of strongest autocorrelation, else 1.</summary>
+    private static int DetectPeriod(double[] x, int count)
+    {
+        int best = 1;
+        double bestAcf = 0.2; // require meaningful periodicity to claim a season.
+        int maxLag = count / 2;
+        for (int lag = 2; lag <= maxLag; lag++)
+        {
+            double a = AcfLagD(x, lag, count);
+            if (a > bestAcf) { bestAcf = a; best = lag; }
+        }
+
+        return best;
+    }
+
+    /// <summary>Least-squares line (slope, intercept) over <paramref name="len"/> points of <paramref name="x"/> from <paramref name="start"/>, with local index 0..len-1.</summary>
+    private static (double slope, double intercept) FitLine(double[] x, int start, int len)
+    {
+        if (len < 2) return (0, len == 1 ? x[start] : 0);
+        double sx = 0, sy = 0, sxy = 0, sxx = 0;
+        for (int i = 0; i < len; i++)
+        {
+            double xi = i;
+            double yi = x[start + i];
+            sx += xi; sy += yi; sxy += xi * yi; sxx += xi * xi;
+        }
+        double denom = len * sxx - sx * sx;
+        if (Math.Abs(denom) < 1e-12) return (0, sy / len);
+        double slope = (len * sxy - sx * sy) / denom;
+        double intercept = (sy - slope * sx) / len;
+        return (slope, intercept);
+    }
+
     private static double FrobeniusNorm(AiDotNet.Tensors.LinearAlgebra.Matrix<T> m, INumericOperations<T> numOps)
     {
         double sum = 0;
@@ -4941,6 +5226,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ComputeAdversarialRobustness(finalResult, preparedX, preparedY, optimizationResult);
         ComputeCertifiedRobustness(finalResult, preparedX, preparedY, optimizationResult);
         ComputeModelCompression(finalResult, preparedX, preparedY, optimizationResult);
+        ComputeTimeSeriesDecomposition(finalResult, preparedY);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

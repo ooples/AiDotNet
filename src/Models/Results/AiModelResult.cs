@@ -704,6 +704,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         => ModelCompression = report;
 
     /// <summary>
+    /// The time-series decomposition audit, or <c>null</c> when no decomposition was configured via
+    /// <c>ConfigureTimeSeriesDecomposition(...)</c> or the target could not be analyzed.
+    /// </summary>
+    /// <remarks>
+    /// Grades the configured decomposition rather than only returning components: trend and seasonal strength,
+    /// whether the residual still carries structure the decomposition missed, additive reconstruction fidelity,
+    /// and a held-out forecast-skill comparison of decomposition-based forecasting against a random-walk baseline.
+    /// </remarks>
+    public DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionReport<T>? TimeSeriesDecomposition { get; private set; }
+
+    /// <summary>Records the time-series decomposition audit. Called by the builder during Build.</summary>
+    internal void SetTimeSeriesDecompositionReport(DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionReport<T> report)
+        => TimeSeriesDecomposition = report;
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>
