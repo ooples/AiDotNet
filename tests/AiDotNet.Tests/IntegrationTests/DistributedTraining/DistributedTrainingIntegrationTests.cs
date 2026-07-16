@@ -2143,7 +2143,8 @@ public class DistributedTrainingIntegrationTests
     /// and require the closed type to advertise IParameterizable.
     /// </summary>
     private class MockDistributedModel : IFullModel<double, Vector<double>, Vector<double>>,
-        IParameterizable<double, Vector<double>, Vector<double>>
+        IParameterizable<double, Vector<double>, Vector<double>>,
+        IGradientComputable<double, Vector<double>, Vector<double>>
     {
         private Vector<double> _parameters;
         private Vector<double>? _gradients;
