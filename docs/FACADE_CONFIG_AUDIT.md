@@ -6,6 +6,19 @@ Tracking issue: #1876. Related PR: #1875.
 
 ---
 
+## Resolved (this PR)
+
+- **Tier 1** — RESOLVED (loss / LR scheduler / stopping criterion / data splitter / cross-validation; activation → `NotSupportedException`).
+- **Knowledge distillation** — integrated with the tape training flow (surrogate-loss adapter); loss-decrease test.
+- **Tier 2 metrics** — `ClusterMetric`/`ExternalClusterMetric` wired: every clustering model is auto-evaluated with cluster-validity indices (`AiModelResult.ClusteringEvaluation`), configured metrics extend the default set. `DistanceMetric`/`SimilarityMetric` auto-evaluated (predicted-vs-target under the metric). `Benchmark` and `ScoringRule` **removed** (post-build action / model options is the door).
+- **Model-ctor-param methods (11) removed** — `KernelFunction`, `LinkFunction`, `MatrixDecomposition`, `RadialBasisFunction`, `WaveletFunction`, `WindowFunction`, `Layer`, `Interpolation`, `Interpolation2D`, `PDESpecification`, `NoiseScheduler`. Each is a constructor parameter of the consuming model; options is the door.
+- **IFullModel migration** — `IGaussianProcess` and `IAnomalyDetector` now derive from `IFullModel<T, Matrix<T>, Vector<T>>` (their bases already implement it via `ModelBase`); their inert Configure methods removed — `ConfigureModel` covers them. See `IFULLMODEL_MIGRATION_AUDIT.md` for the full migration surface (mostly already IFullModel transitively).
+- **EmbeddingModel** — surfaced on the result as a preprocessing/transform component (`AiModelResult.EmbeddingModel`), not forced into the model contract.
+
+Remaining: Tier 3 learning workflows (ActiveLearning, ContinualLearning, DriftDetection, QueryStrategy, SSLMethod, DistillationStrategy, ExplorationStrategy, Environment, DataTransformer), Tier 4/6 domain + robustness/tooling methods, and the `PARTIAL` federated/hyperparameter/pipeline fields.
+
+---
+
 ## How this was measured
 
 ```
