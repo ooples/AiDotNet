@@ -28,7 +28,9 @@ Tracking issue: #1876. Related PR: #1875.
 
 - **ModelExplainer** — surfaces the configured explainer on the result AND auto-audits explanation **faithfulness** (deletion/insertion AUC + ERASER comprehensiveness/sufficiency against the trained model — the trust check shap/lime/captum omit). Added `IFeatureAttribution<T>` (common accessor on all 9 attribution explanation types) and `IGlobalAttributionExplainer<T>` (on 6 explainers). Surfaced on `AiModelResult.ExplanationFaithfulness`.
 
-Remaining Tier 4/6: AdversarialAttack, CertifiedDefense, ModelCompressionStrategy, AudioEffect, AudioEnhancer, TimeSeriesDecomposition, Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
+- **AdversarialAttack** — runs the configured attack against the trained model and surfaces an empirical robustness report on `AiModelResult.AdversarialRobustness`: an accuracy-vs-perturbation-budget **curve** (not a single number) + robust-accuracy AUC + clean-vs-robust gap + attack success rate + robustness margin (mean perturbation to fool), falling back cleanly to a single point.
+
+Remaining Tier 4/6: CertifiedDefense, ModelCompressionStrategy, AudioEffect, AudioEnhancer, TimeSeriesDecomposition, Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
 
 ---
 
