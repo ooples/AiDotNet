@@ -468,6 +468,18 @@ public class Cutie<T> : NeuralNetworkBase<T>
         }
     }
 
+    /// <summary>
+    /// Training forward. Routes through the SAME grouped forward as inference (image encoder ->
+    /// memory attention -> mask decoder via <see cref="SegmentFrame"/>), NOT the base sequential walk
+    /// over ALL <c>Layers</c>. Cutie's layers are used in GROUPS (encoder 0-4, object encoder 5-6,
+    /// memory attention 10-13, mask decoder 14+), so a naive sequential walk optimizes a graph
+    /// inference never runs — the trained weights then leave the real forward degenerate
+    /// (DifferentInputs / ScaledInput collapse post-training). Sharing SegmentFrame keeps the train
+    /// and inference graphs identical, and (with the scalar loops removed) fully tape-tracked.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => SegmentFrame(input);
+
     #endregion
 
     #region Private Methods
@@ -589,18 +601,18 @@ public class Cutie<T> : NeuralNetworkBase<T>
 
     private Tensor<T> DecodeMask(Tensor<T> features)
     {
-        // Use decoder layers (indices 14+)
+        // Mask decoder (layers 14+). The decoder stack ALREADY interleaves its own UpsamplingLayer(2)
+        // between conv blocks (see CreateDefaultCutieLayers), so it upsamples the feature map back
+        // toward the input resolution on its own. The previous code ALSO called Upsample2x before each
+        // decoder layer — doubling on top of the layer's own doubling (x4 per upsampling block) — which
+        // exploded the spatial size to hundreds of pixels, ran the convs at that blown-up resolution
+        // (~80 s per forward) and produced a wrong-size, degenerate mask. Just walk the decoder layers.
         var decoded = features;
         for (int i = 14; i < Layers.Count; i++)
-        {
-            if (i < Layers.Count - 1)
-            {
-                decoded = Upsample2x(decoded);
-            }
             decoded = Layers[i].Forward(decoded);
-        }
 
-        // Final upsampling if needed
+        // The decoder's strided upsampling may land a power-of-two short of the input resolution;
+        // finish with vectorized 2x nearest upsamples until it reaches the target.
         while (decoded.Shape[2] < _inputHeight || decoded.Shape[3] < _inputWidth)
             decoded = Upsample2x(decoded);
 
@@ -666,19 +678,14 @@ public class Cutie<T> : NeuralNetworkBase<T>
         // take ~46 s and time out Training. Engine.Upsample is a single vectorized kernel.
         => Engine.Upsample(input, 2, 2);
 
+    // Tape-tracked reshapes (Engine.Reshape), NOT raw Data.Span copies into a fresh Tensor: the copy
+    // produced a tensor with no GradFn, severing the autograd tape at the batch-axis add/remove so no
+    // gradient flowed back into the encoder/decoder during training.
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
+        => Engine.Reshape(tensor, new[] { 1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2] });
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([tensor.Shape[1], tensor.Shape[2], tensor.Shape[3]]);
-        tensor.Data.Span.Slice(0, result.Data.Length).CopyTo(result.Data.Span);
-        return result;
-    }
+        => Engine.Reshape(tensor, new[] { tensor.Shape[1], tensor.Shape[2], tensor.Shape[3] });
 
     #endregion
 
