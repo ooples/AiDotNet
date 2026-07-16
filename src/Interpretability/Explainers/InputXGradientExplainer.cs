@@ -42,7 +42,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - For debugging (if Input×Gradient and SHAP disagree dramatically, investigate)
 /// </para>
 /// </remarks>
-public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExplanation<T>>, IGPUAcceleratedExplainer<T>
+public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExplanation<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -194,6 +194,10 @@ public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExpla
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc />
+    public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
+        => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
+
     public InputXGradientExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new InputXGradientExplanation<T>[instances.Rows];
@@ -300,7 +304,7 @@ public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExpla
 /// Result of Input × Gradient attribution.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class InputXGradientExplanation<T>
+public class InputXGradientExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -314,6 +318,9 @@ public class InputXGradientExplanation<T>
     /// </para>
     /// </remarks>
     public Vector<T> Attributions { get; set; } = new Vector<T>(0);
+
+    /// <inheritdoc />
+    public Vector<T> GetFeatureAttributions() => Attributions;
 
     /// <summary>
     /// Gets or sets the raw gradients for each feature.

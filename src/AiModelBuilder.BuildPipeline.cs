@@ -607,6 +607,196 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
     }
 
+    /// <summary>
+    /// Surfaces the configured model explainer on the result and auto-audits explanation faithfulness —
+    /// whether the features the explanation highlights actually drive the model's output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The audit (see <see cref="Interpretability.FaithfulnessAuditor{T}"/>) runs deletion/insertion and
+    /// comprehensiveness/sufficiency perturbation tests against the TRAINED model, which mainstream
+    /// explainability libraries omit. It covers tabular models (Matrix input, Vector output): the
+    /// configured explainer's global attributions are audited when it implements
+    /// <see cref="Interpretability.IGlobalAttributionExplainer{T}"/>, and the model's own feature
+    /// importances are audited when they align to the inputs. A failure is surfaced as a warning and never
+    /// discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeExplanationFaithfulness(
+        AiModelResult<T, TInput, TOutput> result,
+        TInput preparedX,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredModelExplainer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // Full-feature training inputs are the audit data; the score function reduces each row to the
+            // model's selected features before predicting (perturbing a dropped feature then correctly
+            // shows no effect). The test partition (TestResult.X) is not always populated for tabular
+            // models, so prepared training data is the reliable source.
+            AiDotNet.Tensors.LinearAlgebra.Matrix<T>? testMatrix = null;
+            try { testMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX); } catch { testMatrix = null; }
+
+            // Use the TRAINED model (the optimizer's best solution), not the possibly-untrained _model.
+            if (optimizationResult.BestSolution is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
+                || testMatrix is null || testMatrix.Rows == 0)
+            {
+                // Non-tabular models: surface the explainer for on-demand use; no uniform audit path.
+                result.SetExplainability(_configuredModelExplainer, null);
+                return;
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            // Find the input width the model's Predict actually accepts (models differ in whether they
+            // expect the raw features, a selected subset, or an intercept-augmented matrix). Probe widths
+            // from the full column count downward using the first columns of a row; skip gracefully if
+            // none work.
+            int width = -1;
+            var probeRow = GetRow(testMatrix, 0);
+            for (int w = testMatrix.Columns; w >= 1; w--)
+            {
+                try
+                {
+                    var pm = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, w);
+                    for (int j = 0; j < w; j++) pm[0, j] = probeRow[j];
+                    _ = tabularModel.Predict(pm);
+                    width = w;
+                    break;
+                }
+                catch { /* try a narrower width */ }
+            }
+
+            if (width < 0)
+            {
+                result.SetExplainability(_configuredModelExplainer, null);
+                return;
+            }
+
+            int scoreWidth = width;
+            double Score(AiDotNet.Tensors.LinearAlgebra.Vector<T> row)
+            {
+                var m = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, scoreWidth);
+                for (int j = 0; j < scoreWidth; j++) m[0, j] = row[j];
+                var output = tabularModel.Predict(m);
+                return output.Length > 0 ? numOps.ToDouble(output[0]) : 0.0;
+            }
+
+            // Reduce the audit data and attributions to the model's accepted input width, so perturbations,
+            // predictions, and attributions all live in the same feature space.
+            var auditMatrix = FirstColumns(testMatrix, width);
+            var auditor = new Interpretability.FaithfulnessAuditor<T>();
+
+            Interpretability.FaithfulnessReport<T>? explainerFaithfulness = null;
+            if (_configuredModelExplainer is Interpretability.IGlobalAttributionExplainer<T> globalExplainer)
+            {
+                var attributions = globalExplainer.ComputeGlobalAttributions(testMatrix);
+                if (attributions.Length >= width)
+                {
+                    explainerFaithfulness = auditor.Audit(Score, auditMatrix, FirstElements(attributions, width, numOps));
+                }
+            }
+
+            Interpretability.FaithfulnessReport<T>? modelImportanceFaithfulness = null;
+            var importance = TryGetAlignedFeatureImportance(tabularModel, width, numOps);
+            if (importance is not null)
+            {
+                modelImportanceFaithfulness = auditor.Audit(Score, auditMatrix, importance);
+            }
+
+            result.SetExplainability(_configuredModelExplainer, new Interpretability.ExplanationFaithfulnessReport<T>
+            {
+                ExplainerFaithfulness = explainerFaithfulness,
+                ExplainerName = _configuredModelExplainer.GetType().Name,
+                ModelImportanceFaithfulness = modelImportanceFaithfulness,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Explanation faithfulness could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ExplanationFaithfulness is null.");
+            result.SetExplainability(_configuredModelExplainer, null);
+        }
+    }
+
+    /// <summary>
+    /// Builds a feature-importance vector aligned to the input columns from the model's built-in
+    /// <c>GetFeatureImportance()</c>, or <c>null</c> when it does not line up.
+    /// </summary>
+    private static AiDotNet.Tensors.LinearAlgebra.Vector<T>? TryGetAlignedFeatureImportance(
+        IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> model,
+        int columns, INumericOperations<T> numOps)
+    {
+        try
+        {
+            var importance = model.GetFeatureImportance();
+            if (importance is null || importance.Count != columns) return null;
+
+            // Prefer "feature_i"/"i"-style names to place values in column order; otherwise use insertion order.
+            var vector = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(columns);
+            int idx = 0;
+            bool placedByIndex = true;
+            foreach (var kv in importance)
+            {
+                int col = ExtractTrailingIndex(kv.Key);
+                if (col >= 0 && col < columns) vector[col] = kv.Value;
+                else { placedByIndex = false; break; }
+            }
+
+            if (placedByIndex) return vector;
+
+            var fallback = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(columns);
+            foreach (var kv in importance)
+            {
+                if (idx >= columns) break;
+                fallback[idx++] = kv.Value;
+            }
+
+            return fallback;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static int ExtractTrailingIndex(string name)
+    {
+        int i = name.Length - 1;
+        while (i >= 0 && char.IsDigit(name[i])) i--;
+        return i < name.Length - 1 && int.TryParse(name.Substring(i + 1), out int idx) ? idx : -1;
+    }
+
+    private static AiDotNet.Tensors.LinearAlgebra.Vector<T> GetRow(AiDotNet.Tensors.LinearAlgebra.Matrix<T> m, int row)
+    {
+        var v = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(m.Columns);
+        for (int j = 0; j < m.Columns; j++) v[j] = m[row, j];
+        return v;
+    }
+
+    private static AiDotNet.Tensors.LinearAlgebra.Matrix<T> FirstColumns(AiDotNet.Tensors.LinearAlgebra.Matrix<T> m, int width)
+    {
+        if (width >= m.Columns) return m;
+        var reduced = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(m.Rows, width);
+        for (int i = 0; i < m.Rows; i++)
+            for (int j = 0; j < width; j++) reduced[i, j] = m[i, j];
+        return reduced;
+    }
+
+    private static AiDotNet.Tensors.LinearAlgebra.Vector<T> FirstElements(
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> v, int width, INumericOperations<T> numOps)
+    {
+        if (v.Length == width) return v;
+        var reduced = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(width);
+        for (int j = 0; j < width && j < v.Length; j++) reduced[j] = v[j];
+        return reduced;
+    }
+
     /// <summary>Extracts a single row of a 2-D tensor as a [1, features] tensor.</summary>
     private static Tensor<T> RowTensor(Tensor<T> matrix, int row)
     {
@@ -4242,6 +4432,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             finalResult.SetSelfSupervisedLearningPretrainingResult(_selfSupervisedLearningPretrainingResult);
         }
+        ComputeExplanationFaithfulness(finalResult, preparedX, optimizationResult);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

@@ -633,6 +633,30 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         => SelfSupervisedLearningPretrainingResult = result;
 
     /// <summary>
+    /// The model explainer configured via <c>ConfigureModelExplainer(...)</c>, or <c>null</c> when none
+    /// was. Bound to the model, so callers can run per-instance explanations (SHAP, integrated gradients,
+    /// …) on demand.
+    /// </summary>
+    [JsonIgnore]
+    public Interfaces.IModelExplainer<T>? ModelExplainer { get; private set; }
+
+    /// <summary>
+    /// The auto-audit of explanation faithfulness, or <c>null</c> when no model explainer was configured.
+    /// Reports whether the highlighted features actually drive the model's output — the trust check
+    /// mainstream explainability libraries omit.
+    /// </summary>
+    public Interpretability.ExplanationFaithfulnessReport<T>? ExplanationFaithfulness { get; private set; }
+
+    /// <summary>Records the explainability artifacts. Called by the builder during Build.</summary>
+    internal void SetExplainability(
+        Interfaces.IModelExplainer<T>? explainer,
+        Interpretability.ExplanationFaithfulnessReport<T>? faithfulness)
+    {
+        ModelExplainer = explainer;
+        ExplanationFaithfulness = faithfulness;
+    }
+
+    /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
     /// </summary>
     /// <remarks>
