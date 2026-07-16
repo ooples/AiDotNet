@@ -27,7 +27,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IRadialBasisFunction<T>? _configuredRadialBasisFunction;
     private IDistanceMetric<T>? _configuredDistanceMetric;
     private IEmbeddingModel<T>? _configuredEmbeddingModel;
-    private IScoringRule<T>? _configuredScoringRule;
     private IModelExplainer<T>? _configuredModelExplainer;
 
     /// <summary>
@@ -155,17 +154,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <param name="scorer">The scoring rule implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Scoring rules evaluate how good probabilistic predictions are.
-    /// Unlike simple accuracy, they assess whether predicted probabilities are well-calibrated.
-    /// Common scoring rules include Brier Score, Log Loss, and CRPS (Continuous Ranked
-    /// Probability Score).</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureScoringRule(IScoringRule<T> scorer)
-    {
-        _configuredScoringRule = scorer;
-        return this;
-    }
+    // ConfigureScoringRule was removed: the scoring rule is configured on the model's options
+    // (NGBoostRegressionOptions<T>.ScoringRule, a nullable IScoringRule<T>), which is the one door.
+    // A builder-level setter could not reach an already-constructed model whose rule is read in its
+    // constructor.
 
     /// <summary>
     /// Configures a model explainer for understanding model predictions.

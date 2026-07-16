@@ -2191,18 +2191,9 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureEmbeddingModel(IEmbeddingModel<T> embeddingModel);
 
-    /// <summary>
-    /// Configures a scoring rule for evaluating probabilistic predictions.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Scoring rules evaluate how good probabilistic predictions are.
-    /// Unlike simple accuracy, they assess whether predicted probabilities are well-calibrated.
-    /// Common scoring rules include Brier Score, Log Loss, and CRPS (Continuous Ranked
-    /// Probability Score).</para>
-    /// </remarks>
-    /// <param name="scorer">The scoring rule implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureScoringRule(Scoring.IScoringRule<T> scorer);
+    // ConfigureScoringRule removed: set the scoring rule on the model's options
+    // (NGBoostRegressionOptions<T>.ScoringRule, nullable IScoringRule<T>) — the one door. A
+    // builder-level setter could not reach an already-constructed model whose rule is read in its ctor.
 
     /// <summary>
     /// Configures a model explainer for understanding model predictions.
@@ -2272,12 +2263,9 @@ public interface IAiModelBuilder<T, TInput, TOutput>
 
     // ConfigureDocumentStore removed: pass the store via ConfigureRetrievalAugmentedGeneration(documentStore: ...), which consumes it (HybridGraphRetriever).
 
-    /// <summary>
-    /// Configures a benchmark for evaluating and comparing model performance.
-    /// </summary>
-    /// <param name="benchmark">The benchmark implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmark(IBenchmark<T> benchmark);
+    // ConfigureBenchmark removed: benchmarking is a post-build action. Call
+    // AiModelResult.EvaluateBenchmarkAsync(benchmark, ...); its generic score type is independent of
+    // the model's numeric type, which a builder-stored IBenchmark<T> could not express.
 
     // ── Extended Coverage: Physics, Clustering Evaluation, Curriculum Learning ──
 

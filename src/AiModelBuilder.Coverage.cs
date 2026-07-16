@@ -26,7 +26,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IClassificationMetric<T>? _configuredClassificationMetric;
     private IRegressionMetric<T>? _configuredRegressionMetric;
     private ITextVectorizer<T>? _configuredTextVectorizer;
-    private IBenchmark<T>? _configuredBenchmark;
     private PhysicsInformed.Interfaces.IPDESpecification<T>? _configuredPDESpecification;
     private IClusterMetric<T>? _configuredClusterMetric;
     private IExternalClusterMetric<T>? _configuredExternalClusterMetric;
@@ -115,21 +114,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     // ConfigureDocumentStore removed: pass the store via ConfigureRetrievalAugmentedGeneration(documentStore: ...), which consumes it (HybridGraphRetriever).
 
-    /// <summary>
-    /// Configures a benchmark for evaluating and comparing model performance systematically.
-    /// </summary>
-    /// <param name="benchmark">The benchmark implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Benchmarks provide standardized tests for comparing models.
-    /// They measure aspects like accuracy, speed, memory usage, and robustness across different
-    /// datasets and scenarios, helping you choose the best model for your needs.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmark(IBenchmark<T> benchmark)
-    {
-        _configuredBenchmark = benchmark;
-        return this;
-    }
+    // ConfigureBenchmark removed: benchmarking is a post-build action, not a build input. Call
+    // AiModelResult.EvaluateBenchmarkAsync(...) on the trained result.
 
     /// <summary>
     /// Configures a PDE specification for physics-informed neural network training.
