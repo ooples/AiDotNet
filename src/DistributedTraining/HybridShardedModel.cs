@@ -309,6 +309,10 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
 
         if (Config.AutoSyncGradients)
         {
+            // ZeRO Stage-2 offload: bring gradients to CPU and drop the GPU
+            // cache entry before any subgroup reduction runs inside
+            // SynchronizeGradients. No-op when CpuOffloadGradients is off.
+            OffloadGradientsToCpu(_computedGradients);
             // Synchronize gradients (throws NotSupportedException if _dataParallelSize > 1)
             SynchronizeGradients();
 
@@ -332,6 +336,11 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         }
         // Note: Cache is already invalidated by UpdateLocalShardFromFull.
         // If AutoSyncGradients is false, subsequent predictions benefit from cached parameters.
+
+        // ZeRO Stage-3 param offload: drop GPU-cached params so the next
+        // forward re-uploads from the just-updated CPU-resident values.
+        // No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu();
     }
 
     /// <inheritdoc/>

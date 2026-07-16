@@ -754,6 +754,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 accumulatedGradients[i] = NumOps.Divide(accumulatedGradients[i], microBatchCount);
             }
 
+            // ZeRO Stage-2 offload for the accumulated gradient — bring the
+            // micro-batch-averaged grads to CPU and drop the GPU cache
+            // entry before ApplyGradients (which uses whatever engine is
+            // current). No-op when CpuOffloadGradients is off.
+            OffloadGradientsToCpu(accumulatedGradients);
             InterfaceGuard.Parameterizable(WrappedModel).SetParameters(parametersBefore);
             InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(accumulatedGradients, Config.LearningRate);
         }
@@ -773,6 +778,10 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             SynchronizeGradients();
         }
+
+        // ZeRO Stage-3 param offload: drop GPU-cached params so the next
+        // stage forward re-uploads. No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu();
     }
 
     /// <summary>

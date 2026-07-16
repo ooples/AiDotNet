@@ -139,14 +139,25 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
                 savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
             }
 
-            // Step 1: Optimize locally to compute gradients and get locally-updated model
-            var localResult = WrappedOptimizer.Optimize(inputData);
+            // Step 1: Optimize locally. RunWrappedOptimizerStep engages
+            // IShardingConfiguration.CpuOffloadOptimizer so Adam m/v state +
+            // step run on CpuEngine.
+            var localResult = RunWrappedOptimizerStep(inputData);
 
             // Step 2: Get the gradients that were computed during optimization
             var localGradients = gradientOptimizer.LastComputedGradients;
 
             if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null && localGradients != null && localGradients.Length > 0)
             {
+                // ZeRO Stage-2 offload: bring gradients to CPU and drop GPU
+                // cache entries. Note that gradient COMPRESSION happens on
+                // whatever engine is current — CpuOffloadOptimizer's scope
+                // has already exited by the time we get here, so if the
+                // outer engine was GPU the compress runs on GPU. That's
+                // fine; the CpuOffloadGradients contract is "on CPU during
+                // the reduce", which this achieves.
+                OffloadGradientsToCpu(localGradients);
+
                 // Step 3: Compress local gradients
                 var compressedGradients = CompressGradients(localGradients);
 
@@ -165,6 +176,7 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
                 localResult.BestSolution = finalModel;
             }
 
+            OffloadParamsToCpu(localResult.BestSolution);
             return localResult;
         }
         finally

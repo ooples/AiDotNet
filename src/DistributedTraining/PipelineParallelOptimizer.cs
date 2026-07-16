@@ -70,8 +70,10 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
             // 3. Update parameters once all micro-batches complete
             // 4. Synchronize across pipeline stages if using data parallelism
 
-            // For this framework implementation, we provide simplified pattern
-            var result = WrappedOptimizer.Optimize(inputData);
+            // For this framework implementation, we provide simplified pattern.
+            // RunWrappedOptimizerStep engages IShardingConfiguration.CpuOffloadOptimizer:
+            // Adam m/v state + step run on CpuEngine.
+            var result = RunWrappedOptimizerStep(inputData);
 
             // Each stage updates its own parameters
             if (Config.AutoSyncGradients && result.BestSolution != null)
@@ -81,6 +83,7 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
                 // If combined with data parallelism, would sync within data-parallel group
             }
 
+            OffloadParamsToCpu(result.BestSolution);
             return result;
         }
         finally

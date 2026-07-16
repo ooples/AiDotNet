@@ -365,6 +365,11 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         // This provides accurate gradients before optimizer updates are applied
         var gradVec = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
 
+        // ZeRO Stage-2 offload: bring gradients to CPU + drop the GPU cache
+        // entry before either the subgroup reduce or ApplyGradients runs.
+        // No-op when CpuOffloadGradients is off.
+        OffloadGradientsToCpu(gradVec);
+
         // Synchronize gradients across tensor-parallel group
         if (Config.AutoSyncGradients)
         {
@@ -383,6 +388,10 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         // Extract shard from final parameters
         UpdateLocalShardFromFull(updatedParams);
         InvalidateCache();
+
+        // ZeRO Stage-3 param offload: drop GPU-cached params so the next
+        // forward re-uploads. No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu();
     }
 
     /// <inheritdoc/>

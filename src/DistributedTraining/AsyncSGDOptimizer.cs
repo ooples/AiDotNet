@@ -93,8 +93,12 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
 
         // NO barrier at start - async operation!
 
-        // Optimize locally without waiting
-        var result = WrappedOptimizer.Optimize(inputData);
+        // Optimize locally without waiting. RunWrappedOptimizerStep engages
+        // IShardingConfiguration.CpuOffloadOptimizer when set: Adam m/v state +
+        // step run on CpuEngine. Async SGD has no synchronous reduce, so
+        // gradient-offload is a no-op here — the CpuOffloadGradients flag
+        // has no observable effect on this strategy (documented on the flag).
+        var result = RunWrappedOptimizerStep(inputData);
 
         // Asynchronous parameter update
         if (Config.AutoSyncGradients && result.BestSolution != null)

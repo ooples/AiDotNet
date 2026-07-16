@@ -334,8 +334,10 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
                 savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
             }
 
-            // Step 1: Optimize locally to compute gradients
-            var localResult = WrappedOptimizer.Optimize(inputData);
+            // Step 1: Optimize locally. Routes through RunWrappedOptimizerStep
+            // so IShardingConfiguration.CpuOffloadOptimizer engages the CpuEngine
+            // swap for the Adam m/v update.
+            var localResult = RunWrappedOptimizerStep(inputData);
 
             // Step 2: Synchronize gradients across 3D parallelism dimensions
             if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null && gradientOptimizer != null)
@@ -344,6 +346,10 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
 
                 if (localGradients != null && localGradients.Length > 0)
                 {
+                    // ZeRO Stage-2 offload: bring gradients to CPU + drop GPU
+                    // cache entry before either subgroup reduction runs.
+                    OffloadGradientsToCpu(localGradients);
+
                     // 3D parallelism gradient synchronization:
                     // 1. First reduce within tensor-parallel group (sum partial tensor results)
                     // 2. Then reduce across data-parallel replicas (average gradients)
@@ -372,6 +378,7 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
                 }
             }
 
+            OffloadParamsToCpu(localResult.BestSolution);
             return localResult;
         }
         finally

@@ -132,8 +132,10 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
                 HandleWorkerChange();
             }
 
-            // Optimize with current workers
-            var result = WrappedOptimizer.Optimize(inputData);
+            // Optimize with current workers. Routes through
+            // RunWrappedOptimizerStep so IShardingConfiguration.CpuOffloadOptimizer
+            // engages: Adam m/v state + step run on CpuEngine.
+            var result = RunWrappedOptimizerStep(inputData);
 
             // Synchronize parameters
             if (Config.AutoSyncGradients && result.BestSolution != null)
@@ -141,6 +143,7 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
                 SynchronizeParameters(result.BestSolution);
             }
 
+            OffloadParamsToCpu(result.BestSolution);
             return result;
         }
         finally

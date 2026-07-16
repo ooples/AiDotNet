@@ -54,8 +54,10 @@ public class TensorParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<
 
         Config.CommunicationBackend.Barrier();
 
-        // Optimize on local tensor-parallel shard
-        var result = WrappedOptimizer.Optimize(inputData);
+        // Optimize on local tensor-parallel shard. RunWrappedOptimizerStep
+        // engages IShardingConfiguration.CpuOffloadOptimizer: Adam m/v state
+        // + step run on CpuEngine.
+        var result = RunWrappedOptimizerStep(inputData);
 
         // Synchronize across tensor-parallel group
         if (Config.AutoSyncGradients && result.BestSolution != null)
@@ -63,6 +65,7 @@ public class TensorParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<
             SynchronizeParameters(result.BestSolution);
         }
 
+        OffloadParamsToCpu(result.BestSolution);
         Config.CommunicationBackend.Barrier();
 
         return result;
