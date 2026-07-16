@@ -115,7 +115,7 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
         // Structure mismatch ⇒ custom architecture/predictor/VAE the default clone can't reproduce;
         // rebuild faithfully from this instance's configuration so the clone is observationally
         // identical instead of throwing on a parameter-count mismatch.
-        return new StyDiffModel<T>(
+        var rebuilt = new StyDiffModel<T>(
             architecture: Architecture,
             options: (DiffusionModelOptions<T>)Options,
             scheduler: Scheduler,
@@ -123,6 +123,13 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             seed: null);
+        // Force BIT-EXACT weights. The sub-model Clone()s are not guaranteed to reproduce every
+        // parameter bit-for-bit (a re-init/round-trip can land a float32 weight 1 ULP off), which made
+        // clone.Predict diverge from the original by ~1 ULP and fail the exact-equality
+        // Clone_ShouldProduceIdenticalOutput contract on the CI runner. Copying the parent's flattened
+        // parameters over the rebuilt clone guarantees identical weights -> identical output.
+        rebuilt.SetParameters(GetParameters());
+        return rebuilt;
     }
 
     public override ModelMetadata<T> GetModelMetadata()
