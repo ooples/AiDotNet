@@ -1601,6 +1601,54 @@ public class DistributedTrainingIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task DDPModel_Train_WithCpuOffloadGradients_RunsWithoutError()
+    {
+        // End-to-end integration for the CpuOffloadGradients runtime path.
+        // The Train() call routes through DDPModel.SynchronizeGradients, which
+        // calls OffloadGradientsToCpu(_computedGradients) before AllReduce.
+        // If the wiring is right, training completes; if the offload throws
+        // (missing InternalsVisibleTo, wrong namespace, null-guard bug, etc.),
+        // this test fails at the callsite.
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend)
+        {
+            AutoSyncGradients = true,
+            CpuOffloadGradients = true,
+        };
+        var model = new MockDistributedModel(8);
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var target = new Vector<double>(new double[] { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 });
+        // A no-throw call proves the offload wiring reached AllReduce cleanly.
+        ddpModel.Train(input, target);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_Train_WithCpuOffloadFull_RunsWithoutError()
+    {
+        // End-to-end integration for Stage-3-full (all three flags on).
+        // FSDPModel.Train hits both OffloadGradientsToCpu (before AllReduce)
+        // and OffloadParamsToCpu (after the update).
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = ShardingConfiguration<double>.CreateForZeROOffloadFull(backend);
+        var model = new MockDistributedModel(8);
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var target = new Vector<double>(new double[] { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 });
+        fsdpModel.Train(input, target);
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task DDPModel_WithParameters_CreatesNewModel()
     {
         var envId = Guid.NewGuid().ToString();
