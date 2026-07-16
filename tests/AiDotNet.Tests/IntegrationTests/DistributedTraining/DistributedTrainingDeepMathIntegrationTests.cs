@@ -531,9 +531,126 @@ public class DistributedTrainingDeepMathIntegrationTests
         // The data-parallel subgroup reduction must run to completion on both ranks (previously threw).
         Assert.True(errors[0] is null, "rank 0: " + errors[0]);
         Assert.True(errors[1] is null, "rank 1: " + errors[1]);
-        // Both data-parallel replicas hold identical parameters after the averaged update.
+        // (assertions continue below)
+        AssertHybridConsistent(results);
+    }
+
+    private static void AssertHybridConsistent(Vector<double>[] results)
+    {
         Assert.Equal(results[0].Length, results[1].Length);
         for (int i = 0; i < results[0].Length; i++)
             Assert.Equal(results[0][i], results[1][i], ZeroTol);
+    }
+
+    /// <summary>
+    /// INVARIANT (Megatron-LM tensor parallelism, Shoeybi et al. 2019 §3): the canonical two-layer MLP
+    /// ColumnParallelLinear -> RowParallelLinear run across TWO ranks (each holding only its weight
+    /// shards, communicating via the f/ḡ conjugate operators) produces output bit-identical (to tol) to
+    /// the SAME MLP computed non-parallel on the full weights. Proves column-split · row-split + all-reduce
+    /// == full matmul, i.e. the partitioning is mathematically transparent.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task MegatronMLP_TwoRank_ColumnThenRowParallel_EqualsNonParallelMLP()
+    {
+        const int batch = 2, inputSize = 4, ffn = 8, outputSize = 3;
+        var A = DeterministicMatrix(ffn, inputSize, 1);      // [ffn, inputSize]
+        var aBias = DeterministicVector(ffn, 2);
+        var B = DeterministicMatrix(outputSize, ffn, 3);     // [outputSize, ffn]
+        var bBias = DeterministicVector(outputSize, 4);
+        var X = DeterministicMatrix(batch, inputSize, 5);    // [batch, inputSize]
+
+        // Non-parallel reference (hand-computed): Y = (X·Aᵀ + aBias)·Bᵀ + bBias.
+        var yRef = new double[batch, outputSize];
+        for (int b = 0; b < batch; b++)
+        {
+            var h = new double[ffn];
+            for (int f = 0; f < ffn; f++)
+            {
+                double acc = aBias[f];
+                for (int i = 0; i < inputSize; i++) acc += X[b, i] * A[f, i];
+                h[f] = acc;
+            }
+            for (int o = 0; o < outputSize; o++)
+            {
+                double acc = bBias[o];
+                for (int f = 0; f < ffn; f++) acc += h[f] * B[o, f];
+                yRef[b, o] = acc;
+            }
+        }
+
+        var Xt = MatrixToTensor(X, batch, inputSize);
+        var At = MatrixToTensor(A, ffn, inputSize);
+        var aBt = VectorToTensor(aBias);
+        var Bt = MatrixToTensor(B, outputSize, ffn);
+        var bBt = VectorToTensor(bBias);
+
+        var envId = System.Guid.NewGuid().ToString();
+        var results = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>[2];
+        var errors = new Exception?[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                    backend.Initialize();
+                    var col = new AiDotNet.DistributedTraining.Layers.ColumnParallelLinear<double>(backend, inputSize, ffn);
+                    col.SetFromFullWeights(At, aBt);
+                    var row = new AiDotNet.DistributedTraining.Layers.RowParallelLinear<double>(backend, ffn, outputSize);
+                    row.SetFromFullWeights(Bt, bBt);
+
+                    var h = col.Forward(Xt);   // [batch, ffn/2] (split, no forward comm)
+                    var y = row.Forward(h);    // [batch, outputSize] after ḡ all-reduce of the partials
+                    results[rank] = y;
+                    backend.Shutdown();
+                }
+                catch (Exception ex) { errors[rank] = ex; }
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        Assert.True(errors[0] is null, "rank 0: " + errors[0]);
+        Assert.True(errors[1] is null, "rank 1: " + errors[1]);
+        for (int rr = 0; rr < 2; rr++)
+            for (int b = 0; b < batch; b++)
+                for (int o = 0; o < outputSize; o++)
+                    Assert.Equal(yRef[b, o], results[rr][b, o], 9);
+    }
+
+    private static double[,] DeterministicMatrix(int rows, int cols, int seed)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        var m = new double[rows, cols];
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                m[i, j] = rng.NextDouble() * 2 - 1;
+        return m;
+    }
+
+    private static double[] DeterministicVector(int n, int seed)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        var v = new double[n];
+        for (int i = 0; i < n; i++) v[i] = rng.NextDouble() * 2 - 1;
+        return v;
+    }
+
+    private static AiDotNet.Tensors.LinearAlgebra.Tensor<double> MatrixToTensor(double[,] m, int rows, int cols)
+    {
+        var t = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { rows, cols });
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                t[i, j] = m[i, j];
+        return t;
+    }
+
+    private static AiDotNet.Tensors.LinearAlgebra.Tensor<double> VectorToTensor(double[] v)
+    {
+        var t = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { v.Length });
+        for (int i = 0; i < v.Length; i++) t[i] = v[i];
+        return t;
     }
 }
