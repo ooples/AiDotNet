@@ -46,6 +46,24 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
         int numMicroBatches = 1)
         : base(wrappedOptimizer, config)
     {
+        if (numMicroBatches < 1)
+            throw new ArgumentOutOfRangeException(nameof(numMicroBatches),
+                numMicroBatches, "numMicroBatches must be >= 1.");
+
+        // Micro-batch PIPELINE SCHEDULING (splitting a batch into micro-batches and interleaving
+        // their forward/backward across pipeline stages with gradient accumulation) is a MODEL-level
+        // concern: it requires per-stage layer execution and inter-stage activation exchange, which is
+        // implemented in PipelineParallelModel (GPipe, 1F1B, ZB-H1/H2, ZB-V, Interleaved-1F1B, Looped-BFS
+        // — Huang et al. 2019 and follow-ups). This OPTIMIZER only performs the per-stage PARAMETER
+        // UPDATE after the model has produced the (accumulated) gradients, so it cannot itself schedule
+        // micro-batches. Advertising numMicroBatches > 1 here would be a false claim; reject it and
+        // direct the caller to the model that actually implements the schedules.
+        if (numMicroBatches > 1)
+            throw new NotSupportedException(
+                "PipelineParallelOptimizer performs only the per-stage optimizer update; micro-batch " +
+                "pipeline scheduling and gradient accumulation are implemented in PipelineParallelModel " +
+                $"(configure microBatchCount there and choose a schedule). Got numMicroBatches={numMicroBatches}.");
+
         _numMicroBatches = numMicroBatches;
     }
 
@@ -64,15 +82,12 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
             if (inputData == null)
                 throw new ArgumentNullException(nameof(inputData));
 
-            // Pipeline parallel optimization requires:
-            // 1. Process micro-batches through the pipeline
-            // 2. Accumulate gradients across micro-batches
-            // 3. Update parameters once all micro-batches complete
-            // 4. Synchronize across pipeline stages if using data parallelism
-
-            // For this framework implementation, we provide simplified pattern.
-            // RunWrappedOptimizerStep engages IShardingConfiguration.CpuOffloadOptimizer:
-            // Adam m/v state + step run on CpuEngine.
+            // The micro-batch pipeline schedule (per-stage forward/backward interleaving + gradient
+            // accumulation across micro-batches) runs in PipelineParallelModel; by the time control
+            // reaches this optimizer the stage's gradients are already accumulated. This optimizer
+            // therefore performs exactly the per-stage PARAMETER UPDATE — the numMicroBatches=1
+            // contract enforced in the constructor. RunWrappedOptimizerStep engages
+            // IShardingConfiguration.CpuOffloadOptimizer: the Adam m/v state + update run on CpuEngine.
             var result = RunWrappedOptimizerStep(inputData);
 
             // Each stage updates its own parameters

@@ -16,6 +16,11 @@ namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 /// InMemoryCommunicationBackend (construction, rank/worldSize, initialization, collective ops),
 /// RecomputeStrategy enum.
 /// </summary>
+// Serialized: the ZeRO/hybrid math invariants below spin up multi-rank (multi-thread)
+// simulations over the shared-static InMemoryCommunicationBackend, whose point-to-point
+// Send/Receive is timing-sensitive under the full suite's heavy parallelism. Running this class
+// in the non-parallel phase gives those simulations dedicated CPU without changing their math.
+[Collection("ConvergenceSensitive")]
 public class DistributedTrainingDeepMathIntegrationTests
 {
     // ============================
@@ -482,5 +487,53 @@ public class DistributedTrainingDeepMathIntegrationTests
                 $"param[{i}] must decrease under a positive gradient: before={before[i]}, after={after[i]}");
 
         backend.Shutdown();
+    }
+
+    /// <summary>
+    /// INVARIANT: HybridShardedModel now reduces gradients within the DATA-PARALLEL subgroup instead of
+    /// throwing NotSupportedException. With pipeline=1, tensor=1, dataParallelSize=2 the two ranks are
+    /// pure data replicas; each runs Train (which averages gradients across the subgroup via Send/Recv)
+    /// and both must (a) complete without throwing or deadlocking and (b) end with identical parameters.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Hybrid_DataParallelSubgroup_ReducesGradientsWithoutThrowing_AndStaysConsistent()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var results = new Vector<double>[2];
+        var errors = new Exception?[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                    backend.Initialize();
+                    var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+                    var model = NewZeroModel();
+                    // pipeline=1, tensor=1 => the two ranks form a single data-parallel group of size 2.
+                    var hybrid = new HybridShardedModel<double, Vector<double>, Vector<double>>(model, config, 1, 1, 2);
+                    hybrid.Train(new Vector<double>(new double[ZeroN]), new Vector<double>(new double[ZeroN]));
+                    // Read the wrapped model's LOCAL parameters (no collective) — with pipeline=1/tensor=1
+                    // there is no parameter sharding, so the wrapped model holds the full updated vector.
+                    // (Calling the collective hybrid.GetParameters() here would desync the two ranks,
+                    // which are no longer in lockstep after Train.)
+                    results[rank] = model.GetParameters();
+                    backend.Shutdown();
+                }
+                catch (Exception ex) { errors[rank] = ex; }
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        // The data-parallel subgroup reduction must run to completion on both ranks (previously threw).
+        Assert.True(errors[0] is null, "rank 0: " + errors[0]);
+        Assert.True(errors[1] is null, "rank 1: " + errors[1]);
+        // Both data-parallel replicas hold identical parameters after the averaged update.
+        Assert.Equal(results[0].Length, results[1].Length);
+        for (int i = 0; i < results[0].Length; i++)
+            Assert.Equal(results[0][i], results[1][i], ZeroTol);
     }
 }

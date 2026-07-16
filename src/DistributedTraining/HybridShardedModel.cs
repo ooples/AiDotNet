@@ -263,24 +263,62 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         // 2. AllReduce within data-parallel group (average gradients across data replicas that share same pipeline/tensor position)
         // 3. Pipeline parallel stages handle their own gradient accumulation
 
-        // Guard against full-world AllReduce when data-parallel size > 1
+        // Average gradients across the DATA-PARALLEL replica group ONLY — the ranks sharing this
+        // rank's pipeline+tensor position, which hold REPLICATED parameters but processed different
+        // data batches (so their gradients genuinely differ and must be averaged). The tensor- and
+        // pipeline-parallel neighbours own DIFFERENT parameter shards, so a full-world AllReduce would
+        // sum unrelated gradients and corrupt those shards; we reduce strictly within the data-parallel
+        // subgroup [groupStart, groupStart + _dataParallelSize).
         if (_dataParallelSize > 1)
         {
-            throw new NotSupportedException(
-                "HybridShardedModel needs subgroup AllReduce over the data-parallel replica set; " +
-                "reducing across the full world corrupts tensor/pipeline shards. " +
-                "Implement subgroup-aware collectives that sync only within the data-parallel group (ranks sharing same pipeline/tensor position), " +
-                "or use a data-parallel subgroup communicator for correct gradient averaging.");
+            _computedGradients = AverageGradientsAcrossDataParallelGroup(_computedGradients);
+        }
+        // With a single data-parallel replica there is nothing to average across; each tensor/pipeline
+        // position keeps its own gradients (handled by its own shard update).
+        CachedFullParameters = null;
+    }
+
+    /// <summary>
+    /// Averages a gradient vector across this rank's data-parallel replica group (a subgroup AllReduce
+    /// with Average). The 3D layout is [pipeline][tensor][data], so the data-parallel replicas of a
+    /// given (pipeline, tensor) position are the <c>_dataParallelSize</c> CONSECUTIVE ranks
+    /// [groupStart, groupStart + _dataParallelSize), with
+    /// <c>groupStart = pipelineRank·(tensor·data) + tensorRank·data</c>. The communication backend
+    /// exposes only world-wide collectives, so the subgroup reduction is built from point-to-point
+    /// Send/Receive: every non-leader sends its gradient to the group leader (the lowest rank in the
+    /// group), the leader sums all contributions, divides by the group size, and sends the average
+    /// back. This reduces ONLY within the data-parallel group and never touches the tensor/pipeline
+    /// neighbours' distinct parameter shards.
+    /// </summary>
+    private Vector<T> AverageGradientsAcrossDataParallelGroup(Vector<T> gradients)
+    {
+        var backend = Config.CommunicationBackend;
+        int rank = backend.Rank;
+        int tensorGroupSize = _tensorParallelSize * _dataParallelSize;
+        int groupStart = (rank / tensorGroupSize) * tensorGroupSize + _tensorRank * _dataParallelSize;
+        int leader = groupStart;
+        int n = gradients.Length;
+        const int TagToLeader = 0x5D0;
+        const int TagFromLeader = 0x5D1;
+
+        if (rank == leader)
+        {
+            var sum = gradients.ToArray(); // leader's own contribution
+            for (int d = 1; d < _dataParallelSize; d++)
+            {
+                var recv = backend.Receive(groupStart + d, n, TagToLeader);
+                for (int i = 0; i < n; i++) sum[i] = NumOps.Add(sum[i], recv[i]);
+            }
+            var invCount = NumOps.FromDouble(1.0 / _dataParallelSize);
+            for (int i = 0; i < n; i++) sum[i] = NumOps.Multiply(sum[i], invCount);
+            var averaged = new Vector<T>(sum);
+            for (int d = 1; d < _dataParallelSize; d++)
+                backend.Send(averaged, groupStart + d, TagFromLeader);
+            return averaged;
         }
 
-        // Single data-parallel replica mode (no data parallelism)
-        // In this case, AllReduce is a no-op or only syncs within tensor/pipeline groups
-        if (_dataParallelSize <= 1)
-        {
-            // No data-parallel sync needed
-            CachedFullParameters = null;
-            return;
-        }
+        backend.Send(gradients, leader, TagToLeader);
+        return backend.Receive(leader, n, TagFromLeader);
     }
 
     /// <inheritdoc/>
