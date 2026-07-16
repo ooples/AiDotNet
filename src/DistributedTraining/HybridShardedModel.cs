@@ -100,6 +100,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     private int _pipelineRank;
     private int _tensorRank;
     private int _dataRank;
+    private int _fullParamCount;
 
     /// <summary>
     /// Creates a new 3D Parallel (Hybrid Sharded) model.
@@ -221,6 +222,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     {
         var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         int totalParams = fullParameters.Length;
+        _fullParamCount = totalParams;
 
         // Apply pipeline partitioning first (depth-wise)
         int pipelineShardSize = totalParams / _pipelineParallelSize;
@@ -321,6 +323,70 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
 
         backend.Send(gradients, leader, TagToLeader);
         return backend.Receive(leader, n, TagFromLeader);
+    }
+
+    /// <summary>
+    /// Gathers the full parameter vector for the 3D-parallel layout, DE-DUPLICATING data-parallel replicas.
+    /// </summary>
+    /// <remarks>
+    /// The inherited <see cref="ShardedModelBase{T,TInput,TOutput}.GatherFullParameters"/> AllGathers every
+    /// world rank's <c>LocalShard</c> and concatenates them. That is correct only when every rank owns a
+    /// DISTINCT shard. Here data-parallel replicas hold the SAME (pipeline, tensor) shard, so a plain
+    /// concatenation would repeat each distinct shard <c>_dataParallelSize</c> times and produce an
+    /// oversized, misordered vector. Instead we AllGather all shards and PLACE each rank's shard back at its
+    /// <c>ShardStartIndex</c>: data-parallel replicas map to the same destination region and write identical
+    /// data (idempotent), so the reconstructed vector is exactly the wrapped model's full parameters.
+    /// </remarks>
+    public override Vector<T> GatherFullParameters()
+    {
+        EnsureShardingInitialized();
+        if (CachedFullParameters != null)
+            return CachedFullParameters;
+
+        var gathered = Config.CommunicationBackend.AllGather(LocalShard);   // rank-ordered concatenation
+        int worldSize = Config.CommunicationBackend.WorldSize;
+
+        var full = new T[_fullParamCount];
+        int concatOffset = 0;
+        for (int r = 0; r < worldSize; r++)
+        {
+            var (startR, sizeR) = ShardLayoutForRank(r);
+            // Copy rank r's shard (found at concatOffset in the AllGather output) to its logical position.
+            for (int i = 0; i < sizeR; i++)
+                full[startR + i] = gathered[concatOffset + i];
+            concatOffset += sizeR;
+        }
+
+        var result = new Vector<T>(full);
+        CachedFullParameters = result;
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the (start index, size) of an ARBITRARY rank's parameter shard from the same
+    /// pipeline-then-tensor partitioning math as <c>InitializeSharding</c>, given the
+    /// <c>[pipeline][tensor][data]</c> rank layout. Data-parallel replicas of a (pipeline, tensor) position
+    /// return the identical (start, size).
+    /// </summary>
+    private (int start, int size) ShardLayoutForRank(int rank)
+    {
+        int tensorGroupSize = _tensorParallelSize * _dataParallelSize;
+        int pipelineRank = rank / tensorGroupSize;
+        int tensorRank = (rank % tensorGroupSize) / _dataParallelSize;
+
+        // Pipeline partition (depth-wise) over the full parameter vector.
+        int pipelineShardSize = _fullParamCount / _pipelineParallelSize;
+        int pipelineRemainder = _fullParamCount % _pipelineParallelSize;
+        int myPipelineSize = pipelineShardSize + (pipelineRank < pipelineRemainder ? 1 : 0);
+        int myPipelineStart = pipelineRank * pipelineShardSize + Math.Min(pipelineRank, pipelineRemainder);
+
+        // Tensor partition (width-wise) within the pipeline stage.
+        int tensorShardSize = myPipelineSize / _tensorParallelSize;
+        int tensorRemainder = myPipelineSize % _tensorParallelSize;
+        int size = tensorShardSize + (tensorRank < tensorRemainder ? 1 : 0);
+        int tensorOffset = tensorRank * tensorShardSize + Math.Min(tensorRank, tensorRemainder);
+
+        return (myPipelineStart + tensorOffset, size);
     }
 
     /// <inheritdoc/>

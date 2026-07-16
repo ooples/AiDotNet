@@ -729,42 +729,66 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
 
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Writes ONE checkpoint file PER RANK, suffixed <c>.rank{Rank}</c>. This is required for correctness:
+    /// the sharded strategies (ZeRO-1/2/3, FSDP) give every rank a DISTINCT optimizer-state shard (its
+    /// slice of Adam's m/v), so a single shared file would persist only one rank's shard — and because the
+    /// ZeRO/FSDP payload is rank-stamped, the other ranks would even fail to reload it. Per-rank files
+    /// round-trip every rank's own state; the replicated strategies (DDP / async / gradient-compression)
+    /// simply write identical per-rank files, which is harmless.
+    /// </remarks>
     public virtual void SaveModel(string filePath)
     {
-        // Only rank 0 saves to avoid conflicts
-        if (Rank == 0)
+        Config.CommunicationBackend.Barrier();
+        try
         {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
+
+            string rankPath = $"{Path.GetFullPath(filePath.Trim())}.rank{Rank}";
             Helpers.ModelPersistenceGuard.EnforceBeforeSave();
             using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
                 var data = Serialize();
                 byte[] envelopedData = ModelFileHeader.WrapWithHeader(
                     data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-                File.WriteAllBytes(filePath, envelopedData);
+                File.WriteAllBytes(rankPath, envelopedData);
             }
         }
-
-        // Wait for rank 0 to finish writing
-        Config.CommunicationBackend.Barrier();
+        finally
+        {
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
+    /// <remarks>Each rank loads its own <c>.rank{Rank}</c> shard file written by <see cref="SaveModel"/>.</remarks>
     public virtual void LoadModel(string filePath)
     {
-        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-
-        // All processes read the same file
-        var data = File.ReadAllBytes(filePath);
-
-        // Extract payload from AIMF envelope
-        data = ModelFileHeader.ExtractPayload(data);
-
-        using (Helpers.ModelPersistenceGuard.InternalOperation())
-        {
-            Deserialize(data);
-        }
-
-        // Ensure all processes finish loading
         Config.CommunicationBackend.Barrier();
+        try
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
+
+            string rankPath = $"{Path.GetFullPath(filePath.Trim())}.rank{Rank}";
+            if (!File.Exists(rankPath))
+                throw new FileNotFoundException($"Checkpoint file not found for rank {Rank}.", rankPath);
+
+            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+            var fileData = File.ReadAllBytes(rankPath);
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                // Extract from the AIMF envelope, with a legacy raw-bytes fallback.
+                var payload = ModelFileHeader.HasHeader(fileData)
+                    ? ModelFileHeader.ExtractPayload(fileData)
+                    : fileData;
+                Deserialize(payload);
+            }
+        }
+        finally
+        {
+            Config.CommunicationBackend.Barrier();
+        }
     }
 }

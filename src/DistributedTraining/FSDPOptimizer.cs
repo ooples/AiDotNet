@@ -222,71 +222,7 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
         WrappedOptimizer.Deserialize(optimizerData);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// FSDP saves per-rank checkpoint files with rank suffix (e.g., "model.bin.rank0").
-    /// Each rank saves its own shard for correct round-trip across distributed workers.
-    /// </remarks>
-    public override void SaveModel(string filePath)
-    {
-        Config.CommunicationBackend.Barrier();
-
-        try
-        {
-            // Validate and normalize filePath
-            if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
-
-            string normalizedPath = Path.GetFullPath(filePath.Trim());
-
-            // Each rank saves its own shard for correct round-trip
-            string rankPath = $"{normalizedPath}.rank{Rank}";
-            Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-            using (Helpers.ModelPersistenceGuard.InternalOperation())
-            {
-                var data = Serialize();
-                var envelopedData = ModelFileHeader.WrapWithHeader(
-                    data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-                File.WriteAllBytes(rankPath, envelopedData);
-            }
-        }
-        finally
-        {
-            Config.CommunicationBackend.Barrier();
-        }
-    }
-
-    /// <inheritdoc/>
-    public override void LoadModel(string filePath)
-    {
-        Config.CommunicationBackend.Barrier();
-
-        try
-        {
-            // Validate and normalize filePath
-            if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
-
-            string normalizedPath = Path.GetFullPath(filePath.Trim());
-
-            // Each rank loads its own shard
-            string rankPath = $"{normalizedPath}.rank{Rank}";
-            if (!File.Exists(rankPath))
-                throw new FileNotFoundException($"Checkpoint file not found for rank {Rank}.", rankPath);
-            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-            var fileData = File.ReadAllBytes(rankPath);
-            using (Helpers.ModelPersistenceGuard.InternalOperation())
-            {
-                // Extract from AIMF envelope, with legacy raw-bytes fallback
-                var payload = ModelFileHeader.HasHeader(fileData)
-                    ? ModelFileHeader.ExtractPayload(fileData)
-                    : fileData;
-                Deserialize(payload);
-            }
-        }
-        finally
-        {
-            Config.CommunicationBackend.Barrier();
-        }
-    }
+    // SaveModel/LoadModel are inherited from ShardedOptimizerBase, which now writes one .rank{Rank}
+    // checkpoint file per rank — exactly the per-shard round-trip FSDP requires (this override used to
+    // provide it, but the behavior is now the shared base default for all sharded strategies).
 }
