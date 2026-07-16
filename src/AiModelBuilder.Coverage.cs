@@ -26,7 +26,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IClassificationMetric<T>? _configuredClassificationMetric;
     private IRegressionMetric<T>? _configuredRegressionMetric;
     private ITextVectorizer<T>? _configuredTextVectorizer;
-    private PhysicsInformed.Interfaces.IPDESpecification<T>? _configuredPDESpecification;
     private IClusterMetric<T>? _configuredClusterMetric;
     private IExternalClusterMetric<T>? _configuredExternalClusterMetric;
     private ICurriculumScheduler<T>? _configuredCurriculumScheduler;
@@ -36,7 +35,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IDistillationStrategy<T>? _configuredDistillationStrategy;
     private IModelCompressionStrategy<T>? _configuredModelCompressionStrategy;
     private IAgentTool? _configuredTool;
-    private INoiseScheduler<T>? _configuredNoiseScheduler;
     private IEnvironment<T>? _configuredEnvironment;
     private IAdversarialAttack<T, TInput, TOutput>? _configuredAdversarialAttack;
     private IAdversarialDefense<T, TInput, TOutput>? _configuredAdversarialDefense;
@@ -117,22 +115,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     // ConfigureBenchmark removed: benchmarking is a post-build action, not a build input. Call
     // AiModelResult.EvaluateBenchmarkAsync(...) on the trained result.
 
-    /// <summary>
-    /// Configures a PDE specification for physics-informed neural network training.
-    /// </summary>
-    /// <param name="specification">The PDE specification implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> PDE (Partial Differential Equation) specifications define the
-    /// physical laws that physics-informed neural networks must respect. Examples include the
-    /// heat equation, wave equation, Navier-Stokes equations, and Maxwell's equations. The neural
-    /// network learns to satisfy these equations while fitting observed data.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigurePDESpecification(PhysicsInformed.Interfaces.IPDESpecification<T> specification)
-    {
-        _configuredPDESpecification = specification;
-        return this;
-    }
+    // ConfigurePDESpecification removed: the PDE a physics-informed model must satisfy is a
+    // constructor parameter of that model. Set it on the model's options — the one door.
 
     /// <summary>
     /// Configures an internal cluster metric for evaluating clustering quality without ground truth labels.
@@ -338,22 +322,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Configures a noise scheduler for diffusion model training and sampling.
-    /// </summary>
-    /// <param name="scheduler">The noise scheduler implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Noise schedulers control how noise is added and removed during
-    /// diffusion model training and generation. They define the noise schedule (how quickly noise
-    /// increases), which affects generation quality and speed. Common schedulers include DDPM,
-    /// DDIM, Euler, DPM-Solver, and PNDM.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureNoiseScheduler(INoiseScheduler<T> scheduler)
-    {
-        _configuredNoiseScheduler = scheduler;
-        return this;
-    }
+    // ConfigureNoiseScheduler removed: the noise schedule is a constructor parameter of the diffusion
+    // model that uses it. Set it on that model's options — the one door.
 
     /// <summary>
     /// Configures a reinforcement learning environment for agent training.

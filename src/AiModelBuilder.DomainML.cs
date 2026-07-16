@@ -24,7 +24,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IActiveLearningStrategy<T>? _configuredActiveLearningStrategy;
     private IContinualLearner<T, TInput, TOutput>? _configuredContinualLearner;
     private AiDotNet.DriftDetection.IDriftDetector<T>? _configuredDriftDetector;
-    private IRadialBasisFunction<T>? _configuredRadialBasisFunction;
     private IDistanceMetric<T>? _configuredDistanceMetric;
     private IEmbeddingModel<T>? _configuredEmbeddingModel;
     private IModelExplainer<T>? _configuredModelExplainer;
@@ -100,22 +99,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     // ConfigureDocumentModel removed: IDocumentModel<T> : IFullModel; use ConfigureModel(...).
     // ConfigureFinancialModel removed: IFinancialModel<T> : IFullModel; use ConfigureModel(...).
 
-    /// <summary>
-    /// Configures a radial basis function for RBF networks and interpolation.
-    /// </summary>
-    /// <param name="rbf">The radial basis function implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Radial basis functions measure the distance from a center point
-    /// and produce a response that depends only on that distance. They are used in RBF neural networks
-    /// for function approximation and in scattered data interpolation. Common types include
-    /// Gaussian, Multiquadric, and Thin Plate Spline.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureRadialBasisFunction(IRadialBasisFunction<T> rbf)
-    {
-        _configuredRadialBasisFunction = rbf;
-        return this;
-    }
+    // ConfigureRadialBasisFunction removed: an RBF is a constructor parameter of the RBF network /
+    // interpolator that uses it. Set it on that model's options — the one door.
 
     /// <summary>
     /// Configures a distance metric for measuring similarity between data points.

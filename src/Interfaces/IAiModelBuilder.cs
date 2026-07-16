@@ -1959,31 +1959,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     // than exposing one knob. It accepted a value and silently discarded it; removing it turns that
     // runtime no-op into a compile error that names the problem.
 
-    /// <summary>
-    /// Configures the kernel function for kernel-based methods (SVM, Gaussian processes, etc.).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Kernel functions measure similarity between data points in a
-    /// higher-dimensional space. They enable algorithms like SVM to find complex decision boundaries
-    /// without explicitly computing the high-dimensional transformation.</para>
-    /// </remarks>
-    /// <param name="kernelFunction">The kernel function implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureKernelFunction(IKernelFunction<T> kernelFunction);
+    // ConfigureKernelFunction removed: a kernel is a constructor parameter of the specific kernel-based
+    // model (SVM, GP, etc.). Set it on that model's options — the one door.
 
     // ConfigureClustering removed: IClustering<T> IS an IFullModel; pass it via ConfigureModel(...).
 
-    /// <summary>
-    /// Configures a neural network layer for building custom network architectures.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Layers are the building blocks of neural networks. Each layer
-    /// transforms data in a specific way. Common types include Dense (fully connected), Convolutional
-    /// (for images), LSTM/GRU (for sequences), and Attention layers (for transformers).</para>
-    /// </remarks>
-    /// <param name="layer">The layer implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureLayer(ILayer<T> layer);
+    // ConfigureLayer removed: a layer is a constructor input to a NeuralNetworkArchitecture the model
+    // is built from. Compose the architecture and pass the model via ConfigureModel(...).
 
     /// <summary>
     /// Configures an anomaly detection algorithm for identifying unusual data points.
@@ -1997,53 +1979,16 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureAnomalyDetector(IAnomalyDetector<T> anomalyDetector);
 
-    /// <summary>
-    /// Configures a 1D interpolation method for estimating values between known data points.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Interpolation estimates values between known data points.
-    /// For example, if you know temperatures at noon and 2pm, interpolation can estimate
-    /// the temperature at 1pm. Methods include Linear, Cubic Spline, and Polynomial interpolation.</para>
-    /// </remarks>
-    /// <param name="interpolation">The interpolation implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureInterpolation(IInterpolation<T> interpolation);
+    // ConfigureInterpolation removed: an interpolation method is a constructor parameter of the
+    // consuming model/estimator. Set it on that model's options — the one door.
 
-    /// <summary>
-    /// Configures a 2D interpolation method for estimating values on a surface between known data points.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> 2D interpolation estimates values across a surface (two dimensions).
-    /// For example, estimating elevation at any point on a map given known elevation measurements
-    /// at specific locations. Methods include Bilinear and Bicubic interpolation.</para>
-    /// </remarks>
-    /// <param name="interpolation">The 2D interpolation implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureInterpolation2D(I2DInterpolation<T> interpolation);
+    // ConfigureInterpolation2D removed: same as ConfigureInterpolation, for the 2D case.
 
-    /// <summary>
-    /// Configures a window function for signal processing and spectral analysis.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Window functions shape a signal before frequency analysis (FFT),
-    /// reducing spectral leakage and improving frequency resolution. Common choices include
-    /// Hamming, Hanning, Blackman, and Kaiser windows.</para>
-    /// </remarks>
-    /// <param name="windowFunction">The window function implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureWindowFunction(IWindowFunction<T> windowFunction);
+    // ConfigureWindowFunction removed: a window function is a constructor parameter of the consuming
+    // spectral/signal model. Set it on that model's options — the one door.
 
-    /// <summary>
-    /// Configures a wavelet function for time-frequency analysis and signal decomposition.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Wavelets decompose signals into components at different scales,
-    /// capturing both time and frequency information. They're useful for denoising, compression,
-    /// and feature extraction. Common wavelets include Haar, Daubechies, and Morlet.</para>
-    /// </remarks>
-    /// <param name="waveletFunction">The wavelet function implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureWaveletFunction(IWaveletFunction<T> waveletFunction);
+    // ConfigureWaveletFunction removed: a wavelet is a constructor parameter of the consuming
+    // wavelet-transform model. Set it on that model's options — the one door.
 
     /// <summary>
     /// Configures a learning rate scheduler that adjusts the learning rate during training.
@@ -2058,29 +2003,11 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureLearningRateScheduler(LearningRateSchedulers.ILearningRateScheduler scheduler);
 
-    /// <summary>
-    /// Configures a link function for generalized linear models (GLMs).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Link functions connect the linear predictor in a GLM to the
-    /// expected response. For example, the Logit link transforms probabilities to the real line
-    /// for logistic regression, while the Log link is used for count data (Poisson regression).</para>
-    /// </remarks>
-    /// <param name="linkFunction">The link function implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureLinkFunction(ILinkFunction<T> linkFunction);
+    // ConfigureLinkFunction removed: a link function is a constructor parameter of the GLM that uses
+    // it. Set it on that model's options — the one door.
 
-    /// <summary>
-    /// Configures a matrix decomposition method for linear algebra operations.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Matrix decomposition breaks a matrix into simpler components,
-    /// enabling efficient solutions to linear systems, dimensionality reduction, and data compression.
-    /// Common methods include SVD, QR, LU, and Cholesky decomposition.</para>
-    /// </remarks>
-    /// <param name="decomposition">The matrix decomposition implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureMatrixDecomposition(IMatrixDecomposition<T> decomposition);
+    // ConfigureMatrixDecomposition removed: a decomposition is a constructor parameter of the consuming
+    // linear-algebra model/solver. Set it on that model's options — the one door.
 
     /// <summary>
     /// Configures a Gaussian process model for probabilistic predictions with uncertainty estimates.
@@ -2154,18 +2081,8 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     // ConfigureDocumentModel removed: IDocumentModel<T> : IFullModel; use ConfigureModel(...).
     // ConfigureFinancialModel removed: IFinancialModel<T> : IFullModel; use ConfigureModel(...).
 
-    /// <summary>
-    /// Configures a radial basis function for RBF networks and interpolation.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Radial basis functions measure the distance from a center point
-    /// and produce a response that depends only on that distance. They are used in RBF neural networks
-    /// for function approximation and in scattered data interpolation. Common types include
-    /// Gaussian, Multiquadric, and Thin Plate Spline.</para>
-    /// </remarks>
-    /// <param name="rbf">The radial basis function implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureRadialBasisFunction(IRadialBasisFunction<T> rbf);
+    // ConfigureRadialBasisFunction removed: an RBF is a constructor parameter of the RBF network /
+    // interpolator that uses it. Set it on that model's options — the one door.
 
     /// <summary>
     /// Configures a distance metric for measuring similarity between data points.
@@ -2269,12 +2186,8 @@ public interface IAiModelBuilder<T, TInput, TOutput>
 
     // ── Extended Coverage: Physics, Clustering Evaluation, Curriculum Learning ──
 
-    /// <summary>
-    /// Configures a PDE specification for physics-informed neural network training.
-    /// </summary>
-    /// <param name="specification">The PDE specification implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigurePDESpecification(PhysicsInformed.Interfaces.IPDESpecification<T> specification);
+    // ConfigurePDESpecification removed: the PDE a physics-informed model must satisfy is a constructor
+    // parameter of that model. Set it on the model's options — the one door.
 
     /// <summary>
     /// Configures an internal cluster metric for evaluating clustering quality without ground truth labels.
@@ -2352,12 +2265,8 @@ public interface IAiModelBuilder<T, TInput, TOutput>
 
     // ── Extended Coverage: Diffusion, RL Environments, Adversarial, Audio, Similarity ──
 
-    /// <summary>
-    /// Configures a noise scheduler for diffusion model training and sampling.
-    /// </summary>
-    /// <param name="scheduler">The noise scheduler implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureNoiseScheduler(INoiseScheduler<T> scheduler);
+    // ConfigureNoiseScheduler removed: the noise schedule is a constructor parameter of the diffusion
+    // model that uses it. Set it on that model's options — the one door.
 
     /// <summary>
     /// Configures a reinforcement learning environment for agent training.
