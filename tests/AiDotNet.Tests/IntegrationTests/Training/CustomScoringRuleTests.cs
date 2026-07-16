@@ -29,29 +29,38 @@ public class CustomScoringRuleTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task NoCustomRule_KeepsTheEnumDefault()
+    public async Task NullScoringRule_UsesTheIndustryStandardDefault()
     {
-        // The migration must not change behaviour for callers who never asked for an interface.
-        var model = new NGBoostRegression<double>(new NGBoostRegressionOptions<double>
-        {
-            ScoringRule = NGBoostScoringRuleType.CRPS,
-        });
+        // The parameter is nullable and defaults to the standard rule, so callers who do not care
+        // are not forced to name one.
+        var model = new NGBoostRegression<double>(new NGBoostRegressionOptions<double>());
 
-        Assert.NotNull(model);
+        Assert.Equal("LogScore", model.GetModelMetadata().AdditionalInfo["ScoringRule"]);
         await Task.CompletedTask;
     }
 
     [Fact(Timeout = 60000)]
-    public async Task CustomRule_OverridesTheEnum()
+    public async Task ShippedRule_IsUsedWhenSupplied()
     {
-        var custom = new SentinelScoringRule();
         var model = new NGBoostRegression<double>(new NGBoostRegressionOptions<double>
         {
-            ScoringRule = NGBoostScoringRuleType.LogScore,
-            CustomScoringRule = custom,
+            ScoringRule = new CRPSScore<double>(),
         });
 
-        Assert.NotNull(model);
+        Assert.Equal("CRPS", model.GetModelMetadata().AdditionalInfo["ScoringRule"]);
+        await Task.CompletedTask;
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CustomRule_TheLibraryDoesNotShip_IsAccepted()
+    {
+        // The point of replacing the enum: a closed enum could only ever name the rules we ship.
+        var model = new NGBoostRegression<double>(new NGBoostRegressionOptions<double>
+        {
+            ScoringRule = new SentinelScoringRule(),
+        });
+
+        Assert.Equal("sentinel", model.GetModelMetadata().AdditionalInfo["ScoringRule"]);
         await Task.CompletedTask;
     }
 }

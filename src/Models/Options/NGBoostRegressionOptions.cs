@@ -101,35 +101,24 @@ public class NGBoostRegressionOptions<T> : DecisionTreeOptions
     public NGBoostDistributionType DistributionType { get; set; } = NGBoostDistributionType.Normal;
 
     /// <summary>
-    /// Gets or sets the type of scoring rule used for optimization.
-    /// </summary>
-    /// <value>Default is LogScore.</value>
-    /// <remarks>
-    /// <para>
-    /// The scoring rule defines how to evaluate probabilistic predictions:
-    /// - LogScore (NLL): Most common, optimizes negative log likelihood
-    /// - CRPS: More robust to outliers, has same units as target variable
-    /// </para>
-    /// </remarks>
-    public NGBoostScoringRuleType ScoringRule { get; set; } = NGBoostScoringRuleType.LogScore;
-
-    /// <summary>
-    /// Gets or sets a custom scoring rule, overriding <see cref="ScoringRule"/>.
+    /// Gets or sets the scoring rule used for optimization.
     /// </summary>
     /// <value>
-    /// A scoring rule implementation, or <c>null</c> (the default) to use the built-in rule named by
-    /// <see cref="ScoringRule"/>.
+    /// A scoring rule, or <c>null</c> (the default) to use <see cref="LogScore{T}"/> — the standard
+    /// choice, and what NGBoost optimizes by default in the reference implementation.
     /// </value>
     /// <remarks>
     /// <para>
-    /// The enum names the rules the library ships; this accepts any <see cref="IScoringRule{T}"/>,
-    /// including one you write. It is nullable and defaults to null so callers who do not supply one
-    /// keep the standard rule the enum selects — the enum is the default, not a competing mechanism.
+    /// The scoring rule defines how a probabilistic prediction is evaluated. The library ships
+    /// <see cref="LogScore{T}"/> (negative log likelihood; the usual choice) and
+    /// <see cref="CRPSScore{T}"/> (continuous ranked probability score; more robust to outliers and
+    /// in the same units as the target). Any other <see cref="IScoringRule{T}"/> works too.
     /// </para>
-    /// <para><b>For Beginners:</b> A scoring rule measures how good a probabilistic prediction is.
-    /// Leave this unset to use LogScore or CRPS; set it only if you have a rule of your own.</para>
+    /// <para><b>For Beginners:</b> Leave this null and you get the standard rule. Set it only if you
+    /// want a different one — e.g. <c>new CRPSScore&lt;double&gt;()</c> — or one of your own.</para>
     /// </remarks>
-    public IScoringRule<T>? CustomScoringRule { get; set; }
+    public IScoringRule<T>? ScoringRule { get; set; }
+
 
     /// <summary>
     /// Gets or sets whether to use natural gradients.
@@ -221,18 +210,3 @@ public enum NGBoostDistributionType
     Gamma
 }
 
-/// <summary>
-/// Types of scoring rules supported by NGBoost.
-/// </summary>
-public enum NGBoostScoringRuleType
-{
-    /// <summary>
-    /// Logarithmic score (negative log likelihood).
-    /// </summary>
-    LogScore,
-
-    /// <summary>
-    /// Continuous Ranked Probability Score.
-    /// </summary>
-    CRPS
-}
