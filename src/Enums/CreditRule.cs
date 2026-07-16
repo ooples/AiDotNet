@@ -79,4 +79,14 @@ public enum CreditRule
     /// error's per-sample magnitude). This is the DFA variant intended to train deep / Transformer networks.
     /// </summary>
     DFANormalized = 7,
+
+    /// <summary>
+    /// <b>Local Error Signals</b> — Nøkland &amp; Eidnes, 2019 ("Training Neural Networks with Local Error
+    /// Signals"). A backprop-free <i>supervised</i> rule: every hidden layer carries its own learned linear
+    /// classifier to the labels and is trained by the gradient of <b>its own</b> cross-entropy against the target
+    /// (no backward chain, no privileged intermediate target). Because each layer talks directly to the labels
+    /// rather than to its neighbours, deep routing layers (e.g. attention) far from the readout still receive a
+    /// strong supervised signal, and the rule applies even when the trainable layers are non-contiguous.
+    /// </summary>
+    LocalErrorSignal = 8,
 }

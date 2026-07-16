@@ -25,6 +25,7 @@ public static class CreditRuleFactory<T>
         CreditRule.DirectKolenPollack => new DirectKolenPollackCreditRule<T>(seed),
         CreditRule.DRTP => new DrtpCreditRule<T>(seed),
         CreditRule.DFANormalized => new NormalizedDfaCreditRule<T>(seed),
+        CreditRule.LocalErrorSignal => new LocalErrorSignalCreditRule<T>(seed),
         _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, "Unknown credit rule."),
     };
 }

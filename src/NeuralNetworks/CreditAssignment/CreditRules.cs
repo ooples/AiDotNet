@@ -73,4 +73,13 @@ public static class CreditRules
     /// </summary>
     /// <param name="seed">Optional RNG seed for the fixed feedback matrices (reproducibility).</param>
     public static ICreditRule<T> DFANormalized<T>(int? seed = null) => new NormalizedDfaCreditRule<T>(seed);
+
+    /// <summary>
+    /// <b>Local Error Signals</b> (Nøkland &amp; Eidnes, 2019): a backprop-free supervised rule where every hidden
+    /// layer carries its own learned linear classifier to the labels and is trained by the gradient of its own
+    /// cross-entropy. Deep routing layers (e.g. attention) far from the readout still receive a strong supervised
+    /// signal, and the rule applies to non-contiguous trainable layers.
+    /// </summary>
+    public static ICreditRule<T> LocalErrorSignal<T>(int? seed = null, double classifierLearningRate = 0.05, double weightDecay = 0.0)
+        => new LocalErrorSignalCreditRule<T>(seed, classifierLearningRate, weightDecay);
 }
