@@ -18,7 +18,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private ILossFunction<T>? _configuredLossFunction;
     private IKernelFunction<T>? _configuredKernelFunction;
-    private IClustering<T>? _configuredClustering;
     private ILayer<T>? _configuredLayer;
     private IAnomalyDetector<T>? _configuredAnomalyDetector;
     private IInterpolation<T>? _configuredInterpolation;
@@ -63,21 +62,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Configures a clustering algorithm for grouping similar data points together.
-    /// </summary>
-    /// <param name="clustering">The clustering implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Clustering finds natural groups in your data without needing
-    /// labeled examples. For instance, it can group customers by purchasing behavior or
-    /// documents by topic. Popular algorithms include K-Means, DBSCAN, and Hierarchical Clustering.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureClustering(IClustering<T> clustering)
-    {
-        _configuredClustering = clustering;
-        return this;
-    }
+    // ConfigureClustering removed: IClustering<T> IS an IFullModel; pass it via ConfigureModel(...).
 
     /// <summary>
     /// Configures a neural network layer for building custom network architectures.

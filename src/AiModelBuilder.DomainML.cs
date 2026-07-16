@@ -24,10 +24,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IActiveLearningStrategy<T>? _configuredActiveLearningStrategy;
     private IContinualLearner<T, TInput, TOutput>? _configuredContinualLearner;
     private AiDotNet.DriftDetection.IDriftDetector<T>? _configuredDriftDetector;
-    private IVideoModel<T>? _configuredVideoModel;
-    private IPointCloudModel<T>? _configuredPointCloudModel;
-    private IDocumentModel<T>? _configuredDocumentModel;
-    private IFinancialModel<T>? _configuredFinancialModel;
     private IRadialBasisFunction<T>? _configuredRadialBasisFunction;
     private IDistanceMetric<T>? _configuredDistanceMetric;
     private IEmbeddingModel<T>? _configuredEmbeddingModel;
@@ -100,69 +96,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Configures a video model for video understanding and generation tasks.
-    /// </summary>
-    /// <param name="videoModel">The video model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Video models process sequences of frames for tasks like
-    /// action recognition, video classification, temporal segmentation, and video generation.
-    /// They capture both spatial (within-frame) and temporal (across-frame) information.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureVideoModel(IVideoModel<T> videoModel)
-    {
-        _configuredVideoModel = videoModel;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a point cloud model for 3D data processing.
-    /// </summary>
-    /// <param name="model">The point cloud model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Point cloud models process 3D data represented as collections of
-    /// points in space (from LiDAR, depth cameras, etc.). They enable tasks like 3D object detection,
-    /// segmentation, and scene understanding for autonomous driving and robotics.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigurePointCloudModel(IPointCloudModel<T> model)
-    {
-        _configuredPointCloudModel = model;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a document model for document understanding and processing.
-    /// </summary>
-    /// <param name="documentModel">The document model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Document models understand the layout and content of documents
-    /// (PDFs, forms, invoices). They combine text understanding with spatial layout information
-    /// to extract structured data, classify documents, and answer questions about document content.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureDocumentModel(IDocumentModel<T> documentModel)
-    {
-        _configuredDocumentModel = documentModel;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a financial model for quantitative finance and risk analysis.
-    /// </summary>
-    /// <param name="financialModel">The financial model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Financial models apply ML to finance tasks such as portfolio
-    /// optimization, risk assessment, option pricing, credit scoring, and algorithmic trading.
-    /// They handle specialized requirements like time-series data and risk-adjusted metrics.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureFinancialModel(IFinancialModel<T> financialModel)
-    {
-        _configuredFinancialModel = financialModel;
-        return this;
-    }
+    // ConfigureVideoModel removed: IVideoModel<T> : IFullModel; use ConfigureModel(...).
+    // ConfigurePointCloudModel removed: IPointCloudModel<T> -> INeuralNetwork<T> -> IFullModel; use ConfigureModel(...).
+    // ConfigureDocumentModel removed: IDocumentModel<T> : IFullModel; use ConfigureModel(...).
+    // ConfigureFinancialModel removed: IFinancialModel<T> : IFullModel; use ConfigureModel(...).
 
     /// <summary>
     /// Configures a radial basis function for RBF networks and interpolation.

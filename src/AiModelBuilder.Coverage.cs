@@ -26,7 +26,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IClassificationMetric<T>? _configuredClassificationMetric;
     private IRegressionMetric<T>? _configuredRegressionMetric;
     private ITextVectorizer<T>? _configuredTextVectorizer;
-    private IDocumentStore<T>? _configuredDocumentStore;
     private IBenchmark<T>? _configuredBenchmark;
     private PhysicsInformed.Interfaces.IPDESpecification<T>? _configuredPDESpecification;
     private IClusterMetric<T>? _configuredClusterMetric;
@@ -114,22 +113,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Configures a document store for persisting and retrieving documents with vector similarity search.
-    /// </summary>
-    /// <param name="store">The document store implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Document stores save and retrieve documents along with their vector
-    /// embeddings, enabling similarity search. They are a core component of Retrieval-Augmented
-    /// Generation (RAG) systems. Available stores include in-memory, file-based, and database-backed
-    /// implementations.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureDocumentStore(IDocumentStore<T> store)
-    {
-        _configuredDocumentStore = store;
-        return this;
-    }
+    // ConfigureDocumentStore removed: pass the store via ConfigureRetrievalAugmentedGeneration(documentStore: ...), which consumes it (HybridGraphRetriever).
 
     /// <summary>
     /// Configures a benchmark for evaluating and comparing model performance systematically.

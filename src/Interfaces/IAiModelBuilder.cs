@@ -982,7 +982,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// var distillationOptions = new KnowledgeDistillationOptions&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
     /// {
     ///     TeacherModelType = TeacherModelType.NeuralNetwork,
-    ///     StrategyType = DistillationStrategyType.ResponseBased,
     ///     Temperature = 3.0,
     ///     Alpha = 0.3,
     ///     Epochs = 20,
@@ -1972,17 +1971,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureKernelFunction(IKernelFunction<T> kernelFunction);
 
-    /// <summary>
-    /// Configures a clustering algorithm for grouping similar data points together.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Clustering finds natural groups in your data without needing
-    /// labeled examples. For instance, it can group customers by purchasing behavior or
-    /// documents by topic. Popular algorithms include K-Means, DBSCAN, and Hierarchical Clustering.</para>
-    /// </remarks>
-    /// <param name="clustering">The clustering implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureClustering(IClustering<T> clustering);
+    // ConfigureClustering removed: IClustering<T> IS an IFullModel; pass it via ConfigureModel(...).
 
     /// <summary>
     /// Configures a neural network layer for building custom network architectures.
@@ -2160,53 +2149,10 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureDriftDetection(DriftDetection.IDriftDetector<T> driftDetector);
 
-    /// <summary>
-    /// Configures a video model for video understanding and generation tasks.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Video models process sequences of frames for tasks like
-    /// action recognition, video classification, temporal segmentation, and video generation.
-    /// They capture both spatial (within-frame) and temporal (across-frame) information.</para>
-    /// </remarks>
-    /// <param name="videoModel">The video model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureVideoModel(Video.Interfaces.IVideoModel<T> videoModel);
-
-    /// <summary>
-    /// Configures a point cloud model for 3D data processing.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Point cloud models process 3D data represented as collections of
-    /// points in space (from LiDAR, depth cameras, etc.). They enable tasks like 3D object detection,
-    /// segmentation, and scene understanding for autonomous driving and robotics.</para>
-    /// </remarks>
-    /// <param name="model">The point cloud model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigurePointCloudModel(PointCloud.Interfaces.IPointCloudModel<T> model);
-
-    /// <summary>
-    /// Configures a document model for document understanding and processing.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Document models understand the layout and content of documents
-    /// (PDFs, forms, invoices). They combine text understanding with spatial layout information
-    /// to extract structured data, classify documents, and answer questions about document content.</para>
-    /// </remarks>
-    /// <param name="documentModel">The document model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureDocumentModel(Document.Interfaces.IDocumentModel<T> documentModel);
-
-    /// <summary>
-    /// Configures a financial model for quantitative finance and risk analysis.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Financial models apply ML to finance tasks such as portfolio
-    /// optimization, risk assessment, option pricing, credit scoring, and algorithmic trading.
-    /// They handle specialized requirements like time-series data and risk-adjusted metrics.</para>
-    /// </remarks>
-    /// <param name="financialModel">The financial model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureFinancialModel(Finance.Interfaces.IFinancialModel<T> financialModel);
+    // ConfigureVideoModel removed: IVideoModel<T> : IFullModel; use ConfigureModel(...).
+    // ConfigurePointCloudModel removed: IPointCloudModel<T> -> INeuralNetwork<T> -> IFullModel; use ConfigureModel(...).
+    // ConfigureDocumentModel removed: IDocumentModel<T> : IFullModel; use ConfigureModel(...).
+    // ConfigureFinancialModel removed: IFinancialModel<T> : IFullModel; use ConfigureModel(...).
 
     /// <summary>
     /// Configures a radial basis function for RBF networks and interpolation.
@@ -2324,12 +2270,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTextVectorizer(ITextVectorizer<T> vectorizer);
 
-    /// <summary>
-    /// Configures a document store for persisting and retrieving documents with vector similarity search.
-    /// </summary>
-    /// <param name="store">The document store implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureDocumentStore(IDocumentStore<T> store);
+    // ConfigureDocumentStore removed: pass the store via ConfigureRetrievalAugmentedGeneration(documentStore: ...), which consumes it (HybridGraphRetriever).
 
     /// <summary>
     /// Configures a benchmark for evaluating and comparing model performance.
