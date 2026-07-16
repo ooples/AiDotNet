@@ -125,7 +125,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         AiModelResult<T, TInput, TOutput> result,
         OptimizationResult<T, TInput, TOutput>.DatasetResult testResult)
     {
-        if (_configuredRegressionMetric is null && _configuredClassificationMetric is null)
+        if (_configuredRegressionMetric is null && _configuredClassificationMetric is null
+            && _configuredDistanceMetric is null && _configuredSimilarityMetric is null)
         {
             return;
         }
@@ -156,6 +157,23 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 result.SetConfiguredMetric(
                     _configuredClassificationMetric.Name,
                     _configuredClassificationMetric.Compute(p, a));
+            }
+
+            // A distance/similarity metric reports how far predictions sit from targets under that
+            // metric — the configured distance between the prediction and target vectors. Auto-computed
+            // whenever one is configured, alongside the regression/classification metrics.
+            if (_configuredDistanceMetric is not null)
+            {
+                result.SetConfiguredMetric(
+                    _configuredDistanceMetric.Name,
+                    _configuredDistanceMetric.Compute(predicted, actual));
+            }
+
+            if (_configuredSimilarityMetric is not null)
+            {
+                result.SetConfiguredMetric(
+                    _configuredSimilarityMetric.GetType().Name,
+                    _configuredSimilarityMetric.Calculate(predicted, actual));
             }
         }
         catch (Exception ex)
