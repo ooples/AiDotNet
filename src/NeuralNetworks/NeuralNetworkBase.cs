@@ -6264,6 +6264,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
+        // matches the loss actually optimized.
+        _hasBeenTrained = true;
+
         // Fresh step: no parameter has been mutated yet, so an OOM during the forward/backward
         // (allocation) phase is safe to retry. MarkTrainMutationStarted() flips this true the moment
         // any in-place weight/moment write begins, after which the OOM-retry below stands down.
@@ -9170,6 +9174,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private bool _trainMutationStarted;
 
     /// <summary>
+    /// Whether <see cref="Train"/> has been invoked on this instance. Once set, <see cref="SetLossFunction"/>
+    /// refuses to swap the loss so reported metrics cannot diverge from the objective actually optimized.
+    /// </summary>
+    private bool _hasBeenTrained;
+
+    /// <summary>
     /// Marks that an in-place training write (optimizer.Step / streaming Apply / legacy UpdateParameters) is
     /// about to begin, so a subsequent OOM is rethrown rather than retried from partially-mutated state.
     /// See <see cref="_trainMutationStarted"/>.
@@ -11511,6 +11521,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentNullException(nameof(lossFunction));
         }
 
+        // Parity with TimeSeriesModelBase.ApplyLossFunction: the loss is locked once training has begun, so
+        // it cannot be swapped mid- or post-training (which would make reported metrics disagree with the
+        // objective actually optimized).
+        if (_hasBeenTrained)
+        {
+            throw new InvalidOperationException(
+                "The loss function cannot be changed after training has begun; construct a new model instead.");
+        }
+
         if (lossFunction is not LossFunctions.LossFunctionBase<T>)
         {
             throw new ArgumentException(
@@ -11520,7 +11539,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 nameof(lossFunction));
         }
 
+        // Architecture-specific gate: models whose objective is intrinsic (a specific likelihood or a
+        // fixed-shape output head) override this to reject an incompatible loss up front rather than failing
+        // deep inside training.
+        ValidateLossFunctionOverride(lossFunction);
+
         LossFunction = lossFunction;
+    }
+
+    /// <summary>
+    /// Validates a caller-supplied loss against any architecture-specific contract before it is adopted.
+    /// The default accepts any <see cref="LossFunctions.LossFunctionBase{T}"/>; models with an intrinsic
+    /// objective override this to throw for incompatible losses.
+    /// </summary>
+    /// <param name="lossFunction">The candidate loss (already validated as a <c>LossFunctionBase&lt;T&gt;</c>).</param>
+    protected virtual void ValidateLossFunctionOverride(ILossFunction<T> lossFunction)
+    {
     }
 
     /// <summary>

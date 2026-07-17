@@ -118,15 +118,23 @@ public class PurgedWalkForwardSplitter<T> : DataSplitterBase<T>
             embargo: _embargo,
             expanding: _expanding);
 
+        // Skip degenerate folds (empty train or test index sets) before exposing them: on short series the
+        // purge/embargo can empty out the leading folds, and yielding one would fail downstream even though
+        // valid folds remain. PurgedWalkForwardCrossValidator.CreateFolds already filters these; match it here.
+        var usableFolds = folds
+            .Select(fold => (Train: fold.TrainIndices.ToArray(), Test: fold.TestIndices.ToArray()))
+            .Where(fold => fold.Train.Length > 0 && fold.Test.Length > 0)
+            .ToList();
+
         int foldIndex = 0;
-        foreach (var fold in folds)
+        foreach (var fold in usableFolds)
         {
             yield return BuildResult(
                 X, y,
-                trainIndices: fold.TrainIndices.ToArray(),
-                testIndices: fold.TestIndices.ToArray(),
+                trainIndices: fold.Train,
+                testIndices: fold.Test,
                 foldIndex: foldIndex++,
-                totalFolds: folds.Count);
+                totalFolds: usableFolds.Count);
         }
     }
 }

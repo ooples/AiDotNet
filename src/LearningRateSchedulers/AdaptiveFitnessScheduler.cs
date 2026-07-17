@@ -56,17 +56,35 @@ public class AdaptiveFitnessScheduler : LearningRateSchedulerBase
         bool higherIsBetter = false)
         : base(baseLearningRate, minLearningRate)
     {
-        if (decay <= 0 || decay >= 1)
+        if (!double.IsFinite(baseLearningRate))
         {
-            throw new ArgumentOutOfRangeException(nameof(decay), decay,
-                "Decay must be in (0, 1): it shrinks the rate on improvement and is inverted to grow " +
-                "it on stagnation, so a value >= 1 would reverse the rule.");
+            throw new ArgumentOutOfRangeException(nameof(baseLearningRate), baseLearningRate,
+                "Base learning rate must be a finite number.");
         }
 
-        if (maxLearningRate <= minLearningRate)
+        if (!double.IsFinite(decay) || decay <= 0 || decay >= 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(decay), decay,
+                "Decay must be a finite value in (0, 1): it shrinks the rate on improvement and is inverted " +
+                "to grow it on stagnation, so a value >= 1 would reverse the rule.");
+        }
+
+        if (!double.IsFinite(minLearningRate) || minLearningRate < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minLearningRate), minLearningRate,
+                "Minimum learning rate must be a finite, non-negative number.");
+        }
+
+        if (!double.IsFinite(maxLearningRate) || maxLearningRate <= minLearningRate)
         {
             throw new ArgumentOutOfRangeException(nameof(maxLearningRate), maxLearningRate,
-                $"Maximum learning rate must exceed the minimum ({minLearningRate}).");
+                $"Maximum learning rate must be a finite value exceeding the minimum ({minLearningRate}).");
+        }
+
+        if (baseLearningRate < minLearningRate || baseLearningRate > maxLearningRate)
+        {
+            throw new ArgumentOutOfRangeException(nameof(baseLearningRate), baseLearningRate,
+                $"Base learning rate must lie within the clamp range [{minLearningRate}, {maxLearningRate}].");
         }
 
         _decay = decay;
@@ -80,8 +98,16 @@ public class AdaptiveFitnessScheduler : LearningRateSchedulerBase
     {
         _currentStep++;
 
-        // A non-finite metric satisfies neither comparison, so a diverged run counts as stagnant —
-        // matching the inline rule, whose fitness comparison also failed for NaN.
+        // A non-finite metric (NaN or +/-Infinity) is a diverged/invalid observation. Treat it as
+        // non-improving WITHOUT recording it as the best value: +Infinity would otherwise register as an
+        // improvement under one metric direction and permanently poison the comparison history.
+        if (!double.IsFinite(metric))
+        {
+            _currentLearningRate /= _decay;
+            _currentLearningRate = Math.Max(_minLearningRate, Math.Min(_maxLearningRate, _currentLearningRate));
+            return _currentLearningRate;
+        }
+
         bool improved = _higherIsBetter ? metric > _bestMetric : metric < _bestMetric;
         if (improved)
         {
@@ -120,5 +146,27 @@ public class AdaptiveFitnessScheduler : LearningRateSchedulerBase
     {
         base.Reset();
         _bestMetric = _higherIsBetter ? double.NegativeInfinity : double.PositiveInfinity;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Extends the base rate/step state with the tracked best metric, so a scheduler restored from a
+    /// checkpoint does not forget its improvement history and treat the next observation as the first.
+    /// </remarks>
+    public override Dictionary<string, object> GetState()
+    {
+        var state = base.GetState();
+        state["best_metric"] = _bestMetric;
+        return state;
+    }
+
+    /// <inheritdoc />
+    public override void LoadState(Dictionary<string, object> state)
+    {
+        base.LoadState(state);
+        if (state.TryGetValue("best_metric", out var bestMetric))
+        {
+            _bestMetric = Convert.ToDouble(bestMetric);
+        }
     }
 }

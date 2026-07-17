@@ -29,12 +29,15 @@ namespace AiDotNet.Interfaces;
 /// doing nothing.
 /// </para>
 /// </remarks>
-public interface ISupportsLossFunction<T>
+internal interface ISupportsLossFunction<T>
 {
     /// <summary>
     /// Replaces the loss function this model trains against.
     /// </summary>
     /// <param name="lossFunction">The loss to use. Must not be null.</param>
-    /// <exception cref="InvalidOperationException">Thrown if called while training is in progress.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown once the model has been trained — the loss is locked after training so that the loss reported in
+    /// metrics matches the loss actually optimized; construct a new model to train against a different loss.
+    /// </exception>
     void SetLossFunction(ILossFunction<T> lossFunction);
 }

@@ -238,6 +238,10 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// Guards against a loss that keeps creeping down by negligible amounts registering as real
     /// progress and so never triggering the patience counter.
     /// </para>
+    /// <para><b>For Beginners:</b> Training loss almost always drops by a tiny amount every epoch,
+    /// even when the model has effectively stopped learning. This is the smallest drop that still
+    /// counts as "getting better" — anything smaller is treated as no improvement, so training can
+    /// actually stop. Bigger values stop sooner; smaller values keep training longer.</para>
     /// </remarks>
     private double _earlyStoppingMinDelta = 1e-4;
 
@@ -250,4 +254,37 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
             : value;
     }
 
+    /// <summary>Initializes a new instance with default settings.</summary>
+    public TimeSeriesRegressionOptions() { }
+
+    /// <summary>
+    /// Creates a deep copy of an existing <see cref="TimeSeriesRegressionOptions{T}"/>, including the
+    /// early-stopping settings that a shallow clone would otherwise reset to their defaults.
+    /// </summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public TimeSeriesRegressionOptions(TimeSeriesRegressionOptions<T> other)
+    {
+        if (other is null) { throw new System.ArgumentNullException(nameof(other)); }
+
+        // Inherited settings (RegressionOptions<T> / ModelOptions have no copy constructor).
+        MaxTrainingTimeSeconds = other.MaxTrainingTimeSeconds;
+        DecompositionMethod = other.DecompositionMethod;
+        UseIntercept = other.UseIntercept;
+        Seed = other.Seed;
+
+        // Time-series settings.
+        LagOrder = other.LagOrder;
+        IncludeTrend = other.IncludeTrend;
+        SeasonalPeriod = other.SeasonalPeriod;
+        AutocorrelationCorrection = other.AutocorrelationCorrection;
+        ModelType = other.ModelType;
+        LossFunction = other.LossFunction;
+        MaxPredictionAbsValue = other.MaxPredictionAbsValue;
+
+        // Early-stopping settings (the fields this copy constructor exists to preserve).
+        UseEarlyStopping = other.UseEarlyStopping;
+        EarlyStoppingPatience = other.EarlyStoppingPatience;
+        EarlyStoppingMinDelta = other.EarlyStoppingMinDelta;
+    }
 }
