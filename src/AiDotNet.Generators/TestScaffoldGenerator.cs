@@ -664,6 +664,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // training invariant running on CI; the DocumentNN family branch emits no iteration overrides so
         // this fires exactly once. float + this cap is the same combination ViLBERT/GLaMM use.
         "SVTR",
+        // RAFT (Teed & Deng 2020): optical flow. Even at the CI-smoke ctor scale (32x32, 8 features, 2
+        // iterations) its all-pairs correlation is O(pixels^2), so the 50+200-iter MoreData probe still
+        // overruns 120 s. The universal smoke-cap trims MoreData (1+2 iters) and keeps the other training
+        // invariants running on CI; the OpticalFlow family branch emits no iteration overrides so this
+        // fires exactly once.
+        "RAFT",
         // ViT-family encoders (Dosovitskiy et al. 2021) sharing CreateDefaultViTLayers. Restoring the
         // paper's residual transformer blocks (TransformerEncoderLayer) fixed their correctness
         // failures (DifferentInputs collapse / GradientFlow / Clone) but the 12-layer residual
@@ -3331,7 +3337,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "scaleFactor: 2, numFeatures: 8, numResidualBlocks: 1, " +
                     "numPropagations: 1, learningRate: 1e-2)";
             }
-            else if (model.HasParameterlessConstructor)
+            // RAFT is excluded here even though it has a public parameterless ctor: that ctor builds the
+            // paper-default model (256 features, 4 correlation levels, radius 4, 12 GRU iterations), whose
+            // training invariants time out. This generic fallback would shadow RAFT's CI-smoke constructor
+            // branch further down, so let RAFT fall through to it. (RVRT/RealisVSR/DAMVSR/etc. have no
+            // parameterless ctor, so they already skip this branch and reach their own overrides.)
+            else if (model.HasParameterlessConstructor && model.ClassName != "RAFT")
             {
                 // Zero-arg constructor: simple instantiation
                 if (model.TypeParameterCount == 0)
@@ -3439,6 +3450,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
                     "new AiDotNet.Video.Options.RealisVSROptions { NumFeatures = 8, NumResBlocks = 1, " +
                     "ScaleFactor = 2, NumDenoisingSteps = 2 })";
+            }
+            else if (model.ClassName == "RAFT" && model.TypeParameterCount == 1)
+            {
+                // RAFT (Teed & Deng 2020) — recurrent all-pairs field transform. With the paper defaults
+                // (256 features, 4 correlation levels, radius 4, 12 GRU refinement iterations — what the
+                // parameterless ctor builds) a single Train() step is seconds and every training invariant
+                // times out. Build the SAME architecture (feature + context encoders -> correlation
+                // pyramid -> GRU refinement) at CI-smoke scale: 8 features, 2 correlation levels/radius,
+                // 2 refinement iterations. The two-frame InputShape branch feeds [1,6,64,64] (RAFT derives
+                // its feature/flow resolution from the actual input, so the arch size below is only a
+                // fallback); measured ~95 ms per double-precision Train() step at this scale. Only the
+                // scale shrinks — the recurrent all-pairs pipeline is unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
+                    "numFeatures: 8, correlationLevels: 2, correlationRadius: 2, numIterations: 2)";
             }
             else if (model.ClassName == "FlashVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
