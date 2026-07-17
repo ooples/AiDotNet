@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Engine;
 
@@ -28,11 +29,17 @@ public static class ServingRunnerFactory
     }
 
     /// <summary>
-    /// Selects a runner for <paramref name="model"/>. A model advertising the paged fast path
-    /// (<see cref="ICausalLmRunner{T}"/>) is driven incrementally; any <see cref="ICausalLmModel{T}"/> is driven
-    /// by the recompute fallback. Throws a clear error for models that are not text generators.
+    /// Selects a runner for <paramref name="model"/>. Preference order: the paged fast path
+    /// (<see cref="ICausalLmRunner{T}"/>), then the recompute fallback over <see cref="ICausalLmModel{T}"/>, then
+    /// — when <paramref name="vocabularySize"/> is supplied — a Predict-based adapter over any
+    /// <see cref="IFullModel{T, TInput, TOutput}"/> whose forward output is vocabulary-width. Throws a clear
+    /// error for models that are not text generators.
     /// </summary>
-    public static Selection<T> Create<T>(object model)
+    /// <param name="model">The model to serve.</param>
+    /// <param name="vocabularySize">Vocabulary size, enabling the Predict-adapter fallback for models that do
+    /// not implement <see cref="ICausalLmModel{T}"/>. Ignored when the model implements a capability directly.</param>
+    /// <param name="eosTokenId">EOS token id for the Predict-adapter fallback.</param>
+    public static Selection<T> Create<T>(object model, int? vocabularySize = null, int? eosTokenId = null)
     {
         if (model is null) throw new ArgumentNullException(nameof(model));
 
@@ -42,11 +49,19 @@ public static class ServingRunnerFactory
         if (model is ICausalLmModel<T> lm)
             return new Selection<T>(new RecomputeModelRunner<T>(lm), lm.EosTokenId);
 
+        // Predict-adapter fallback: any full model whose forward produces vocab-width logits, given its vocab.
+        if (vocabularySize is { } vocab && model is IFullModel<T, Tensor<T>, Tensor<T>> full)
+        {
+            var adapter = new PredictCausalLmAdapter<T>(full.Predict, vocab, eosTokenId);
+            return new Selection<T>(new RecomputeModelRunner<T>(adapter), eosTokenId);
+        }
+
         throw new NotSupportedException(
             $"Model type '{model.GetType().Name}' cannot generate text: it implements neither the paged " +
             $"ICausalLmRunner<{typeof(T).Name}> fast path nor the ICausalLmModel<{typeof(T).Name}> capability. " +
-            "Implement ICausalLmModel (expose VocabularySize, EosTokenId, and ForwardLogits) to enable " +
-            "Generate()/Serve().");
+            $"Implement ICausalLmModel (VocabularySize, EosTokenId, ForwardLogits), or — if it is an " +
+            $"IFullModel<{typeof(T).Name}, Tensor, Tensor> that outputs vocab-width logits — supply a vocabulary " +
+            "size to use the Predict-based adapter.");
     }
 
     // The paged fast path carries EOS on the model side, not the runner; a model can implement both. When it
