@@ -1466,6 +1466,37 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureMemoryManagement(Training.Memory.TrainingMemoryConfig? configuration = null);
 
+    /// <summary>Configures a runtime profiling pass over the build/inference path.</summary>
+    /// <param name="config">The profiling configuration; <c>null</c> applies the defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null);
+
+    /// <summary>Configures model interpretability (feature attribution, explanations) on the built result.</summary>
+    /// <param name="options">The interpretability options; <c>null</c> applies the defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureInterpretability(InterpretabilityOptions? options = null);
+
+    /// <summary>Configures the preprocessing pipeline directly from a prebuilt <see cref="PreprocessingPipeline{T,TInput,TInput}"/>.</summary>
+    /// <param name="pipeline">The preprocessing pipeline; <c>null</c> applies the defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(PreprocessingPipeline<T, TInput, TInput>? pipeline = null);
+
+    /// <summary>Configures training-time data augmentation with a type-parameterized augmentation config.</summary>
+    /// <param name="config">The augmentation configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(global::AiDotNet.Augmentation.AugmentationConfig<T, TInput>? config);
+
+    /// <summary>Configures AutoML with a caller-supplied AutoML model implementation.</summary>
+    /// <param name="autoMLModel">The AutoML model that drives architecture/hyperparameter search.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+
+    /// <summary>Configures the Neural Radiance Field image/pixel data loader (NeRF pipelines).</summary>
+    /// <param name="dataLoader">The image-view / pixel-batch data loader.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataLoader(
+        IDataLoader<global::AiDotNet.NeuralRadianceFields.Data.ImageView<T>, global::AiDotNet.NeuralRadianceFields.Data.PixelBatch<T>> dataLoader);
+
     /// <summary>
     /// Configures advanced reasoning capabilities for the model using Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency strategies.
     /// </summary>
