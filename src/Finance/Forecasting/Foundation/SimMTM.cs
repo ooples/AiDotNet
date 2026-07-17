@@ -166,11 +166,14 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
             { InitialLearningRate = 1e-4, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
-        // Drive the base tape-training loop through this conservative optimizer instead of the default
-        // 1e-3 Adam. Time-series forecasters fine-tune at a small LR (the paper uses ~1e-4 with weight
-        // decay); at 1e-3 the reconstruction->forecast head overshoots the fixed-pair objective and the
-        // loss climbs (observed 0.29 -> 1.28) rather than descending. 1e-4 + gradient clipping keeps it
-        // monotonically decreasing while still moving the parameters within the smoke-iteration budget.
+        // This optimizer is the model's DEFAULT training optimizer, wired into the base tape-training
+        // loop; it is fully overridable — pass your own `optimizer` to the ctor (or configure one via
+        // the builder, which runs after construction) and that is used instead. The default LR is 1e-4
+        // because time-series foundation models fine-tune at a small LR (the SimMTM paper uses ~1e-4 with
+        // weight decay); the framework default 1e-3 overshoots the reconstruction->forecast head on the
+        // fixed-pair objective (loss climbed 0.29 -> 1.28 rather than descending). Gradient clipping is
+        // already on by default (base maxGradNorm = 1.0) but is a near-no-op under Adam — a uniform clip
+        // cancels in the per-parameter m/sqrt(v) update — so the LR, not clipping, is the effective lever.
         SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
