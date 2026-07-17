@@ -1117,6 +1117,63 @@ public class DistributedTrainingDeepMathIntegrationTests
         return new AiDotNet.NeuralNetworks.NeuralNetwork<double>(arch);
     }
 
+    /// <summary>
+    /// INVARIANT (activation recompute, honest scope): PipelineParallelModel now ACCEPTS Selective/Full
+    /// activation-recompute when the wrapped model is layer-introspectable (its stage forward runs through
+    /// GradientCheckpointing over the layer segments), and still REJECTS it for a black-box model (which
+    /// cannot be decomposed). And recompute is transparent to the result: training a layered stage with
+    /// Selective recompute yields the SAME parameter update as training with RecomputeStrategy.None.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task PipelineActivationRecompute_LayeredAllowedAndTransparent_BlackBoxRejected()
+    {
+        await Task.Yield();
+        const int inputSize = 4, ffn = 8, outputSize = 3, batch = 2;
+        var combined = new Vector<double>(DeterministicVector(ffn * inputSize + ffn + outputSize * ffn + outputSize, 31));
+        var X = MatrixToTensor(DeterministicMatrix(batch, inputSize, 32), batch, inputSize);
+        var Y = MatrixToTensor(DeterministicMatrix(batch, outputSize, 33), batch, outputSize);
+
+        // Black-box (non-layered) model + recompute -> rejected at construction.
+        {
+            var backend = new InMemoryCommunicationBackend<double>(0, 1, System.Guid.NewGuid().ToString());
+            backend.Initialize();
+            var cfg = new ShardingConfiguration<double>(backend);
+            var blackBox = new DistributedTrainingIntegrationTests.MockDistributedModel(inputSize);
+            Assert.Throws<NotSupportedException>(() =>
+                new PipelineParallelModel<double, Vector<double>, Vector<double>>(
+                    blackBox, cfg, microBatchCount: 1,
+                    checkpointConfig: new ActivationCheckpointConfig { Enabled = true, RecomputeStrategy = RecomputeStrategy.Selective }));
+            backend.Shutdown();
+        }
+
+        // Layered model + recompute -> allowed, and transparent (same result as None).
+        var paramsNone = TrainOnePipelineStep(combined, X, Y, inputSize, ffn, outputSize, RecomputeStrategy.None);
+        var paramsSelective = TrainOnePipelineStep(combined, X, Y, inputSize, ffn, outputSize, RecomputeStrategy.Selective);
+        Assert.Equal(paramsNone.Length, paramsSelective.Length);
+        for (int i = 0; i < paramsNone.Length; i++)
+            Assert.Equal(paramsNone[i], paramsSelective[i], 9);
+    }
+
+    private static Vector<double> TrainOnePipelineStep(
+        Vector<double> combined, AiDotNet.Tensors.LinearAlgebra.Tensor<double> X, AiDotNet.Tensors.LinearAlgebra.Tensor<double> Y,
+        int inputSize, int ffn, int outputSize, RecomputeStrategy strategy)
+    {
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, System.Guid.NewGuid().ToString());
+        backend.Initialize();
+        var cfg = new ShardingConfiguration<double>(backend);
+        var nn = BuildMlpNetwork(inputSize, ffn, outputSize);
+        nn.SetParameters(combined);
+        var ckpt = strategy == RecomputeStrategy.None
+            ? new ActivationCheckpointConfig { Enabled = false }
+            : new ActivationCheckpointConfig { Enabled = true, RecomputeStrategy = strategy, CheckpointEveryNLayers = 1 };
+        var pipe = new PipelineParallelModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(
+            nn, cfg, microBatchCount: 1, checkpointConfig: ckpt);
+        pipe.Train(X, Y);
+        var p = pipe.GetParameters();
+        backend.Shutdown();
+        return p;
+    }
+
     private static double[,] DeterministicMatrix(int rows, int cols, int seed)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
