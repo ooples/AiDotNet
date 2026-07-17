@@ -11,7 +11,14 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// frame interpolation, optical flow). Inherits all NN invariant tests and adds video-specific
 /// invariants: temporal dimension preservation, single-frame handling, and temporal smoothness.
 /// </summary>
-public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
+/// <remarks>
+/// Generic over the numeric type <typeparamref name="T"/> so a heavy video model whose &lt;double&gt;
+/// training/forward overruns the CI timeout can be generated as a &lt;float&gt; scaffold (via
+/// <c>Fp32TestClassNames</c>) — the same enabling pattern used by DocumentNNModelTestBase /
+/// FinancialModelTestBase. The non-generic <see cref="VideoNNModelTestBase"/> alias keeps every
+/// existing &lt;double&gt; video model unchanged.
+/// </remarks>
+public abstract class VideoNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // VIDEO INVARIANT: Temporal Dimension Preserved
@@ -59,7 +66,8 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
             "Video model produced empty output for single-frame input.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(!double.IsNaN(output[i]) && !double.IsInfinity(output[i]),
+            double o = ConvertToDouble(output[i]);
+            Assert.True(!double.IsNaN(o) && !double.IsInfinity(o),
                 $"Output[{i}] is not finite for single-frame input.");
         }
     }
@@ -81,9 +89,10 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
 
         var frame1 = CreateRandomTensor(InputShape, rng);
         // Frame 2: small perturbation of frame 1
-        var frame2 = new Tensor<double>(InputShape);
+        var frame2 = new Tensor<T>(InputShape);
+        var eps = NumOps.FromDouble(0.01);
         for (int i = 0; i < frame1.Length; i++)
-            frame2[i] = frame1[i] + 0.01;
+            frame2[i] = NumOps.Add(frame1[i], eps);
 
         var out1 = network.Predict(frame1);
         var out2 = network.Predict(frame2);
@@ -93,9 +102,11 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
         int minLen = Math.Min(out1.Length, out2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            dot += out1[i] * out2[i];
-            norm1 += out1[i] * out1[i];
-            norm2 += out2[i] * out2[i];
+            double a = ConvertToDouble(out1[i]);
+            double b = ConvertToDouble(out2[i]);
+            dot += a * b;
+            norm1 += a * a;
+            norm2 += b * b;
         }
 
         if (norm1 > 1e-15 && norm2 > 1e-15)
@@ -107,3 +118,6 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
         }
     }
 }
+
+/// <summary>Non-generic &lt;double&gt; alias — the default for video models that are not floated.</summary>
+public abstract class VideoNNModelTestBase : VideoNNModelTestBase<double> { }

@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// and adds forecasting-specific: temporal ordering preserved, horizon consistency,
 /// and trend sensitivity.
 /// </summary>
-public abstract class ForecastingModelTestBase : FinancialModelTestBase
+public abstract class ForecastingModelTestBase<T> : FinancialModelTestBase<T>
 {
     [Fact(Timeout = 60000)]
     public async Task ForecastHorizon_ShouldProduceOutput()
@@ -41,7 +41,7 @@ public abstract class ForecastingModelTestBase : FinancialModelTestBase
         int minLen = Math.Min(forecast1.Length, forecast2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(forecast1[i] - forecast2[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(forecast1[i]) - ConvertToDouble(forecast2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -51,3 +51,6 @@ public abstract class ForecastingModelTestBase : FinancialModelTestBase
             "Forecasting model produces identical forecasts for different histories — ignoring input.");
     }
 }
+
+/// <summary>Non-generic &lt;double&gt; alias — the default for forecasting models that are not floated.</summary>
+public abstract class ForecastingModelTestBase : ForecastingModelTestBase<double> { }

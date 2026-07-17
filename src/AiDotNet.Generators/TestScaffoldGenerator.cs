@@ -480,6 +480,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // the 10-step DifferentInputs_AfterTraining invariants overran the 120 s gate. <float> halves
         // per-step cost while preserving the self-relative training invariants and the architecture.
         "SVTR",
+        // --- Q-S generated shard: every remaining failure in this shard is a "Test execution timed out
+        // after 120000/180000 ms", not an assertion — the models are correct but heavy at <double> once
+        // training became a real tape+Adam step. Apply <float> FIRST (halves per-step compute + memory,
+        // preserves the self-relative training invariants and the paper architecture); audio/TTS members
+        // additionally pick up their family branch's smoke-iteration caps automatically. Re-verified per
+        // model; any that still overrun get a family-appropriate cap afterwards. ---
+        "RAFT",               // optical-flow recurrent GRU update — TemporalDim / ScaledInput timeout
+        "SeedASR",            // LLM-integrated ASR — OptimizerStep / DifferentInputs timeout
+        "SpikingFullSubNet",  // spiking speech enhancement — Clone / DifferentInputs timeout
+        "Qwen3VL",            // instruction-tuned VLM — TrainingError / GradientFlow timeout
+        "SimMTM",             // masked time-series foundation model — DifferentInputs / Predict timeout
+        "StepAudio",          // multimodal TTS — Training_ShouldReduceLoss timeout
+        "SEEM",               // segment-everything transformer — GradientFlow timeout
+        "RVRT",               // recurrent video restoration transformer — LossStrictlyDecreases / ScaledInput timeout
+        "Squeezeformer",      // Conformer-variant ASR — Training_ShouldReduceLoss 180 s timeout
+        "QueryMeldNet",       // OptimizerStep / OutputDimension timeout
+        "SpeakerDiarizedASR", // diarized ASR — DifferentInputs timeout
+        "StyleTTSZS",         // zero-shot style TTS — DifferentInputs / Metadata timeout
+        "SceneLLM",           // 3D scene LLM — LossStrictlyDecreases timeout
+        "RealisVSR",          // realistic video super-resolution — ScaledInput timeout
         // Foundation self-supervised ASR family on CreateDefaultFoundationASRLayers (12-layer / 768-dim
         // wav2vec-2/HuBERT-style encoder + CTC head). Restoring the paper's RESIDUAL transformer blocks
         // fixed their uniform-output training collapse (DifferentInputs L2 ~= 1e-12), but the 12-layer
