@@ -737,7 +737,17 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
             }
 
             if (epochStepCount > 0)
-                _lastRunEpochLosses.Add(epochLossSum / epochStepCount);
+            {
+                double epochLoss = epochLossSum / epochStepCount;
+                _lastRunEpochLosses.Add(epochLoss);
+
+                // Surface the resident epoch to facade callbacks / early stopping; break on veto (the
+                // post-loop baseline gate still decides whether to keep the resident attempt).
+                if (!ReportEpoch(epoch, _options.Epochs, NumOps.FromDouble(epochLoss)))
+                {
+                    break;
+                }
+            }
         }
 
         // Correctness gate. On Tensors >= 0.112.0 the fused plan trains N-BEATS faithfully (verified:

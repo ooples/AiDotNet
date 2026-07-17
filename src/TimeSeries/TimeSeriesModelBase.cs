@@ -597,7 +597,17 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             return false;
         }
 
-        return !TrainingCancellationToken.IsCancellationRequested;
+        // A wall-clock/caller cancellation also stops the run before its epoch budget; record why so
+        // TrainingStopReason honours its "null only if it ran to completion" contract.
+        if (TrainingCancellationToken.IsCancellationRequested)
+        {
+            TrainingStopReason ??=
+                $"training stopped at epoch {epoch}: cancellation requested (e.g. MaxTrainingTimeSeconds " +
+                "elapsed or caller cancellation)";
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>

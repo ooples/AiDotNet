@@ -174,8 +174,11 @@ public class DLinearModel<T> : TimeSeriesModelBase<T>
                 _bTrend -= lr * gbT * inv;
             }
 
-            if (epochSamples > 0 &&
-                !ReportEpoch(epoch, _options.Epochs, NumOps.FromDouble(epochSquaredError / epochSamples)))
+            // Report every epoch, including a fully diverged one (no finite sample): a non-finite loss counts
+            // as non-improving, so the training callback and patience-based early stopping still fire for the
+            // worst-case divergence this feature is meant to guard against.
+            double epochLoss = epochSamples > 0 ? epochSquaredError / epochSamples : double.PositiveInfinity;
+            if (!ReportEpoch(epoch, _options.Epochs, NumOps.FromDouble(epochLoss)))
             {
                 break;
             }

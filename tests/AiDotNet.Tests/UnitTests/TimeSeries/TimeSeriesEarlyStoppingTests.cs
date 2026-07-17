@@ -190,10 +190,9 @@ public class TimeSeriesEarlyStoppingTests
             .BuildAsync();
 
         // Before the fix this saw exactly one epoch, reported after training had finished — so a
-        // caller could neither watch progress nor implement early stopping through the facade.
-        Assert.True(
-            losses.Count > 1,
-            $"facade observed {losses.Count} epoch(s); expected one per training epoch");
+        // caller could neither watch progress nor implement early stopping through the facade. The model is
+        // configured for exactly 10 epochs with early stopping off, so the facade must observe all 10.
+        Assert.Equal(10, losses.Count);
     }
 
     [Fact(Timeout = 120000)]

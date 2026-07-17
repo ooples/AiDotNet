@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.IntegrationTests.Training;
 /// <remarks>
 /// Neural networks reach training through the optimizer path, which already drives the facade's
 /// per-epoch seam (OptimizerBase.SetEpochProgressCallback -> InvokeTrainingEpoch). TimeSeries models
-/// instead own their epoch loop inside Train(), which the facade calls once — so their callbacks fired
+/// instead own their epoch loop inside Train(), which the facade calls once ï¿½ so their callbacks fired
 /// a single synthetic epoch after training had finished, and no veto could take effect. These tests
 /// assert the neural side genuinely works, so that the two families cannot silently diverge again.
 /// </remarks>
@@ -44,10 +44,8 @@ public class TrainingContractParityTests
         return new NeuralNetwork<double>(architecture);
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task NeuralNetwork_ConfigureTrainingCallback_ObservesRealEpochs()
+    private static (Tensor<double> X, Tensor<double> Y) BuildSineData(int rows, int cols)
     {
-        const int rows = 48, cols = 4;
         var x = new Tensor<double>([rows, cols]);
         var y = new Tensor<double>([rows, 1]);
         for (int i = 0; i < rows; i++)
@@ -55,6 +53,15 @@ public class TrainingContractParityTests
             for (int j = 0; j < cols; j++) x[i, j] = Math.Sin((i + j) * 0.2);
             y[i, 0] = Math.Sin((i + cols) * 0.2);
         }
+
+        return (x, y);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetwork_ConfigureTrainingCallback_ObservesRealEpochs()
+    {
+        const int rows = 48, cols = 4;
+        var (x, y) = BuildSineData(rows, cols);
 
         var adam = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(
             null,
@@ -82,13 +89,7 @@ public class TrainingContractParityTests
     public async Task NeuralNetwork_CallbackReturningFalse_StopsTrainingEarly()
     {
         const int rows = 48, cols = 4;
-        var x = new Tensor<double>([rows, cols]);
-        var y = new Tensor<double>([rows, 1]);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++) x[i, j] = Math.Sin((i + j) * 0.2);
-            y[i, 0] = Math.Sin((i + cols) * 0.2);
-        }
+        var (x, y) = BuildSineData(rows, cols);
 
         var adam = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(
             null,

@@ -35,15 +35,16 @@ public class PurgedWalkForwardSplitterTests
     [Fact(Timeout = 60000)]
     public async Task IsAnIDataSplitter_SoTheFacadeCanAcceptIt()
     {
+        await Task.Yield();
         // The whole point of reshaping the static validator: it must satisfy the contract the
         // builder's ConfigureDataSplitter takes.
         Assert.True(typeof(IDataSplitter<double>).IsAssignableFrom(typeof(PurgedWalkForwardSplitter<double>)));
-        await Task.CompletedTask;
     }
 
     [Fact(Timeout = 60000)]
     public async Task TrainAndTestIndicesNeverOverlap()
     {
+        await Task.Yield();
         var splitter = new PurgedWalkForwardSplitter<double>(labelHorizon: 5, nSplits: 3, embargo: 2);
 
         foreach (var fold in splitter.GetSplits(BuildMatrix(120)))
@@ -51,12 +52,12 @@ public class PurgedWalkForwardSplitterTests
             Assert.Empty(fold.TrainIndices.Intersect(fold.TestIndices));
         }
 
-        await Task.CompletedTask;
     }
 
     [Fact(Timeout = 60000)]
     public async Task PurgesTrainingRowsWhoseLabelWindowReachesTheTestFold()
     {
+        await Task.Yield();
         // This is the leak a plain chronological split leaves behind: with a 10-step label horizon,
         // a training row at testStart-3 has a label derived from rows inside the test fold.
         const int labelHorizon = 10;
@@ -75,12 +76,12 @@ public class PurgedWalkForwardSplitterTests
             }
         }
 
-        await Task.CompletedTask;
     }
 
     [Fact(Timeout = 60000)]
     public async Task EmbargoWidensTheGapAfterTheTestFold()
     {
+        await Task.Yield();
         var noEmbargo = new PurgedWalkForwardSplitter<double>(labelHorizon: 5, nSplits: 3, embargo: 0);
         var withEmbargo = new PurgedWalkForwardSplitter<double>(labelHorizon: 5, nSplits: 3, embargo: 10);
 
@@ -91,24 +92,24 @@ public class PurgedWalkForwardSplitterTests
         Assert.True(
             trainRowsWith < trainRowsWithout,
             $"embargo removed no training rows ({trainRowsWith} vs {trainRowsWithout})");
-        await Task.CompletedTask;
     }
 
     [Fact(Timeout = 60000)]
     public async Task RejectsGeometryThatCannotPurge()
     {
+        await Task.Yield();
         // A label horizon below 1 means "no forward window", which makes purging meaningless — the
         // parameter would be silently useless rather than merely wrong.
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new PurgedWalkForwardSplitter<double>(labelHorizon: 0));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new PurgedWalkForwardSplitter<double>(labelHorizon: 5, embargo: -1));
-        await Task.CompletedTask;
     }
 
     [Fact(Timeout = 60000)]
     public async Task FoldsAreChronological()
     {
+        await Task.Yield();
         var splitter = new PurgedWalkForwardSplitter<double>(labelHorizon: 5, nSplits: 3, embargo: 1);
 
         foreach (var fold in splitter.GetSplits(BuildMatrix(120)))
@@ -118,6 +119,5 @@ public class PurgedWalkForwardSplitterTests
             Assert.True(fold.TrainIndices.Max() < fold.TestIndices.Min());
         }
 
-        await Task.CompletedTask;
     }
 }

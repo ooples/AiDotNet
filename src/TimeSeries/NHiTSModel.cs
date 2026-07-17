@@ -403,16 +403,22 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
             // would measure a mix of intra-epoch weight states, not the snapshot, so
             // a late-diverging epoch (good early batches, bad end weights) could be
             // wrongly selected as best. The extra pass is forward-only (no backprop).
-            if (epochSampleCount > 0)
+            double epochLoss = epochSampleCount > 0
+                ? ValidationMse(checkpointWindows, yNorm, lookback, horizon)
+                : double.PositiveInfinity;
+            if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
             {
-                double epochLoss = ValidationMse(checkpointWindows, yNorm, lookback, horizon);
-                if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
-                {
-                    bestLoss = epochLoss;
-                    bestSnapshot = new List<Vector<T>>(_stacks.Count);
-                    foreach (var stack in _stacks)
-                        bestSnapshot.Add(stack.GetParameters());
-                }
+                bestLoss = epochLoss;
+                bestSnapshot = new List<Vector<T>>(_stacks.Count);
+                foreach (var stack in _stacks)
+                    bestSnapshot.Add(stack.GetParameters());
+            }
+
+            // Surface the epoch to facade callbacks / patience-based early stopping (a diverged epoch reports
+            // a non-finite loss, which counts as non-improving). Break on a callback/early-stopping veto.
+            if (!ReportEpoch(epoch, timeBounded ? 0 : _options.Epochs, NumOps.FromDouble(epochLoss)))
+            {
+                break;
             }
         }
 
@@ -557,6 +563,9 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
             var order = trainWindows.OrderBy(_ => random.Next()).ToList();
             int fullBatches = order.Count / batchSize;
 
+            double epochLossSum = 0;
+            int epochBatchCount = 0;
+
             for (int b = 0; b < fullBatches; b++)
             {
                 TrainingCancellationToken.ThrowIfCancellationRequested();
@@ -597,6 +606,17 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
                     diverged = true;
                     break;
                 }
+
+                epochLossSum += stepLossD;
+                epochBatchCount++;
+            }
+
+            // Surface the resident epoch to facade callbacks / early stopping; break on veto (the post-loop
+            // baseline validation still decides whether to keep the resident attempt).
+            if (!diverged && epochBatchCount > 0 &&
+                !ReportEpoch(epoch, _options.Epochs, NumOps.FromDouble(epochLossSum / epochBatchCount)))
+            {
+                break;
             }
         }
 

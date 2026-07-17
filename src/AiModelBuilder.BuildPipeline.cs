@@ -76,13 +76,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         /// Drives one completed epoch. Returns true to continue, false to request an abort.
         /// Suitable as the delegate passed to <c>OptimizerBase.SetEpochProgressCallback</c>.
         /// </summary>
-        public bool OnEpoch(int epoch, T epochLoss)
+        public bool OnEpoch(int epoch, T epochLoss) => OnEpoch(epoch, 0, epochLoss);
+
+        /// <summary>
+        /// Drives one completed epoch, using the reporter's own epoch budget. A real epoch reporter knows its
+        /// total (e.g. a time-series model's configured <c>Epochs</c>); the optimizer-derived <c>_totalEpochs</c>
+        /// is meaningless on the direct-training path, so forward the reporter's value when it supplies one.
+        /// </summary>
+        /// <param name="epoch">The completed epoch index.</param>
+        /// <param name="totalEpochs">The reporter's epoch budget, or 0 when unknown (falls back to the seeded total).</param>
+        /// <param name="epochLoss">The epoch's monitored loss.</param>
+        public bool OnEpoch(int epoch, int totalEpochs, T epochLoss)
         {
             LastEpoch = epoch;
             LastLoss = epochLoss;
             EpochsObserved++;
+            int effectiveTotal = totalEpochs > 0 ? totalEpochs : _totalEpochs;
             bool shouldContinue = _owner.InvokeTrainingEpoch(
-                epoch, _totalEpochs, epochLoss, _monitorSessionId, Elapsed, _cancellationToken, out var reason);
+                epoch, effectiveTotal, epochLoss, _monitorSessionId, Elapsed, _cancellationToken, out var reason);
             if (!shouldContinue)
             {
                 EarlyStopTriggered = true;
@@ -2987,6 +2998,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         // SUPERVISED TRAINING PATH
 
+        // Reset per-run stopping state so a second BuildAsync() on the same builder does not evaluate a
+        // configured stopping criterion against loss history left over from the previous run.
+        _stoppingLossHistory.Clear();
+
         // Create profiler session if profiling is enabled
         var profilerSession = CreateProfilerSession();
         using var _ = profilerSession?.Scope("BuildSupervisedInternalAsync");
@@ -4420,10 +4435,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // a callback returning false actually stops training — rather than being handed one
             // synthetic epoch after training has already finished, which no veto can affect.
             var epochReporter = model as ITrainingEpochReporter<T>;
+            Func<TrainingProgress<T>, bool>? previousEpochCallback = null;
+            bool bridgedEpochCallback = false;
             if (epochReporter is not null && epochBridge is not null)
             {
+                previousEpochCallback = epochReporter.TrainingEpochCallback;
+                // Forward the reporter's own epoch budget (progress.TotalEpochs) so the reported total reflects
+                // the model's configured epochs, not the optimizer's unrelated MaxIterations.
                 epochReporter.TrainingEpochCallback =
-                    progress => epochBridge.OnEpoch(progress.Epoch, progress.Loss);
+                    progress => epochBridge.OnEpoch(progress.Epoch, progress.TotalEpochs, progress.Loss);
+                bridgedEpochCallback = true;
             }
 
             try
@@ -4432,10 +4453,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
             finally
             {
-                // Don't leave the builder's bridge attached to a model the caller still holds.
-                if (epochReporter is not null)
+                // Only touch the callback if THIS build attached the bridge, and restore whatever the caller
+                // had set — nulling unconditionally would wipe a callback the caller attached directly to a
+                // model instance they still hold and then ran through the builder without configuring one.
+                if (bridgedEpochCallback && epochReporter is not null)
                 {
-                    epochReporter.TrainingEpochCallback = null;
+                    epochReporter.TrainingEpochCallback = previousEpochCallback;
                 }
             }
 

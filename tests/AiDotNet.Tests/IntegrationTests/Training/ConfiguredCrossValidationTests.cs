@@ -39,6 +39,7 @@ public class ConfiguredCrossValidationTests
     [Fact(Timeout = 120000)]
     public async Task ConfiguredCrossValidator_IsActuallyRun_AndItsResultSurfaced()
     {
+        await Task.Yield();
         var (x, y) = BuildData();
 
         var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -51,27 +52,26 @@ public class ConfiguredCrossValidationTests
         // Before the fix this was always null — the documented meaning of which is
         // "cross-validation was not performed".
         Assert.NotNull(result.CrossValidationResult);
-        await Task.CompletedTask;
     }
 
     [Fact(Timeout = 60000)]
     public async Task PurgedCrossValidator_IsAnICrossValidator_SoTheFacadeAcceptsIt()
     {
+        await Task.Yield();
         // Until now no ICrossValidator implemented purge/embargo at all, so wiring
         // ConfigureCrossValidation would have left nothing purged to pass it.
         Assert.True(typeof(ICrossValidator<double, Matrix<double>, Vector<double>>)
             .IsAssignableFrom(typeof(PurgedWalkForwardCrossValidator<double, Matrix<double>, Vector<double>>)));
-        await Task.CompletedTask;
     }
 
     [Fact(Timeout = 60000)]
     public async Task PurgedCrossValidator_RejectsGeometryThatCannotPurge()
     {
+        await Task.Yield();
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new PurgedWalkForwardCrossValidator<double, Matrix<double>, Vector<double>>(labelHorizon: 0));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new PurgedWalkForwardCrossValidator<double, Matrix<double>, Vector<double>>(
                 labelHorizon: 5, embargo: -1));
-        await Task.CompletedTask;
     }
 }
