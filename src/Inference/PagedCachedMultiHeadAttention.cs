@@ -178,7 +178,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         }
 
         // Single-sequence legacy path: use the instance's SequenceId/position and advance it.
-        var legacyOutput = ComputePagedAttention(input, new[] { SequenceId }, new[] { _currentPosition });
+        var legacyOutput = ComputePagedAttention(input, new[] { SequenceId }, new[] { _currentPosition }, rowLengths: null);
         _currentPosition += input.Shape[1];
         _lastOutput = legacyOutput;
         return legacyOutput;
@@ -200,12 +200,12 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         // across many sequences); otherwise a single sequence occupies the whole (batch=1) input.
         if (ctx.SequenceIds is { } batchSeqIds && ctx.Positions is { } batchPositions)
         {
-            return ComputePagedAttention(input, batchSeqIds, batchPositions);
+            return ComputePagedAttention(input, batchSeqIds, batchPositions, ctx.RowLengths);
         }
-        return ComputePagedAttention(input, new[] { ctx.SequenceId }, new[] { ctx.Position });
+        return ComputePagedAttention(input, new[] { ctx.SequenceId }, new[] { ctx.Position }, rowLengths: null);
     }
 
-    private Tensor<T> ComputePagedAttention(Tensor<T> input, long[] seqIds, int[] basePositions)
+    private Tensor<T> ComputePagedAttention(Tensor<T> input, long[] seqIds, int[] basePositions, int[]? rowLengths)
     {
         // Inference mode: update cache and compute attention token-by-token. Supports both prefill
         // (seqLen>1 for one sequence) and BATCHED decode: batch row b belongs to seqIds[b] starting at
@@ -229,6 +229,11 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         {
             throw new ArgumentException(
                 $"seqIds/basePositions length must equal batch size {batchSize} (got {seqIds.Length}/{basePositions.Length}).");
+        }
+        if (rowLengths is not null && rowLengths.Length != batchSize)
+        {
+            throw new ArgumentException(
+                $"rowLengths length must equal batch size {batchSize} (got {rowLengths.Length}).");
         }
 
         var output = new Tensor<T>([batchSize, seqLen, embDim]);
@@ -320,7 +325,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
                 {
                 long sequenceId = seqIds[b];
                 int position = basePositions[b];
-                for (int t = 0; t < seqLen; t++)
+                // Right-padded batched prefill: process only this row's valid tokens; the padded tail
+                // (t >= rowLen) is skipped — no KV written, output stays zero, and its logits are unread.
+                int rowLen = rowLengths is not null ? rowLengths[b] : seqLen;
+                for (int t = 0; t < rowLen; t++)
                 {
                     for (int d = 0; d < embDim; d++)
                     {

@@ -316,13 +316,31 @@ internal class ContinuousBatcher<T> : IDisposable
         var prefillSequences = batch.Where(s => !s.PrefillComplete).ToList();
         var decodeSequences = batch.Where(s => s.PrefillComplete).ToList();
 
-        // Run prefill for new sequences and account for the first generated token.
-        foreach (var seq in prefillSequences)
+        // Run prefill for new sequences and account for the first generated token. On the paged path with
+        // more than one new (non-empty) sequence, prefill them ALL in ONE right-padded batched forward
+        // (Phase 2); fall back to per-sequence prefill otherwise or if the batched attempt can't allocate.
+        bool batchedPrefillDone = false;
+        if (UsePagedPath && prefillSequences.Count > 1)
         {
-            int? firstToken = RunPrefill(seq);
-            if (firstToken.HasValue)
+            var batchedPrefill = RunBatchedPagedPrefill(prefillSequences);
+            if (batchedPrefill is not null)
             {
-                tokensGenerated += AccountForToken(seq, firstToken.Value, useSpeculation);
+                foreach (var (seq, token) in batchedPrefill)
+                {
+                    tokensGenerated += AccountForToken(seq, token, useSpeculation);
+                }
+                batchedPrefillDone = true;
+            }
+        }
+        if (!batchedPrefillDone)
+        {
+            foreach (var seq in prefillSequences)
+            {
+                int? firstToken = RunPrefill(seq);
+                if (firstToken.HasValue)
+                {
+                    tokensGenerated += AccountForToken(seq, firstToken.Value, useSpeculation);
+                }
             }
         }
 
@@ -531,6 +549,70 @@ internal class ContinuousBatcher<T> : IDisposable
         int nextToken = SampleFromLogits(logits, sequence);
         sequence.AppendToken(nextToken);
         return nextToken;
+    }
+
+    /// <summary>
+    /// Batched paged prefill (Phase 2): prefill MULTIPLE new sequences in ONE right-padded forward
+    /// (<c>[batch, maxPromptLen]</c> input; per-row lengths mask the padded tail), then sample each
+    /// sequence's first token from its own last real position. Prefix reuse is skipped for the batched
+    /// group (whole prompts are forwarded), which keeps positions uniform (all start at 0). Returns null
+    /// when it cannot batch (a cache allocation failed) so the caller falls back to per-sequence prefill.
+    /// Per-row output is identical to a single-sequence prefill (verified).
+    /// </summary>
+    private List<(SequenceState<T> Sequence, int Token)>? RunBatchedPagedPrefill(List<SequenceState<T>> sequences)
+    {
+        if (_pagedCache is not { } cache || _incrementalModel is not { } model) return null;
+        int batch = sequences.Count;
+        if (batch == 0) return null;
+
+        // Allocate a fresh cache sequence per row; on any failure, roll back and signal a per-seq fallback.
+        var seqIds = new long[batch];
+        var promptLens = new int[batch];
+        int maxLen = 0;
+        for (int i = 0; i < batch; i++)
+        {
+            int promptLen = sequences[i].TokenIds.Count;
+            if (promptLen <= 0) { for (int j = 0; j < i; j++) cache.FreeSequence(seqIds[j]); return null; }
+            long seqId = sequences[i].SequenceId;
+            if (!cache.AllocateSequence(seqId, 0))
+            {
+                for (int j = 0; j < i; j++) cache.FreeSequence(seqIds[j]);
+                return null;
+            }
+            seqIds[i] = seqId;
+            promptLens[i] = promptLen;
+            if (promptLen > maxLen) maxLen = promptLen;
+        }
+
+        var positions = new int[batch]; // fresh prefill: every row starts at position 0
+        var input = new Tensor<T>([batch, maxLen]);
+        for (int i = 0; i < batch; i++)
+        {
+            var seq = sequences[i];
+            seq.Status = SequenceStatus.Prefilling;
+            seq.GenerationStartedAt = DateTime.UtcNow;
+            var toks = seq.TokenIds;
+            for (int t = 0; t < promptLens[i]; t++) input[[i, t]] = ConvertToT(toks[t]);
+            // Right-padded tail (t >= promptLens[i]) stays 0 and is masked out by RowLengths.
+        }
+
+        var ctx = new InferenceForwardContext(seqIds, positions) { RowLengths = promptLens };
+        var logits = model.PredictWithContext(input, ctx);
+
+        var results = new List<(SequenceState<T>, int)>(batch);
+        for (int i = 0; i < batch; i++)
+        {
+            var seq = sequences[i];
+            _pagedPositions[seq.SequenceId] = promptLens[i];
+            // Register the prompt (TokenIds still holds exactly the prompt) as a reusable prefix.
+            _prefixCache?.Register(seq.TokenIds, seq.SequenceId);
+            int nextToken = SampleFromLogits(logits, seq, batchIndex: i, lastPositionOverride: promptLens[i] - 1);
+            seq.AppendToken(nextToken);
+            seq.PrefillComplete = true;
+            seq.Status = SequenceStatus.Generating;
+            results.Add((seq, nextToken));
+        }
+        return results;
     }
 
     private IReadOnlyList<int> RunDecodeStep(SequenceState<T> sequence)
@@ -1087,14 +1169,18 @@ internal class ContinuousBatcher<T> : IDisposable
         return MathHelper.GetNumericOperations<T>().FromDouble(value);
     }
 
-    private int SampleFromLogits(Tensor<T> logits, SequenceState<T> sequence, int batchIndex = 0)
+    private int SampleFromLogits(Tensor<T> logits, SequenceState<T> sequence, int batchIndex = 0, int lastPositionOverride = -1)
     {
         var request = sequence.Request;
 
         // Get last position logits (shape is typically [batch, seq, vocab]). batchIndex selects the row for
-        // a BATCHED decode forward ([B, seq, vocab] / [B, vocab]); it is 0 for a single-sequence forward.
+        // a BATCHED forward ([B, seq, vocab] / [B, vocab]); it is 0 for a single-sequence forward.
+        // lastPositionOverride (>= 0) picks a specific position instead of the last — used by batched
+        // prefill, where each right-padded row's real final token is at rowLength-1, not maxLen-1.
         int vocabSize = logits.Shape[^1];
-        int lastPos = logits.Shape.Length > 2 ? logits.Shape[^2] - 1 : 0;
+        int lastPos = logits.Shape.Length > 2
+            ? (lastPositionOverride >= 0 ? lastPositionOverride : logits.Shape[^2] - 1)
+            : 0;
 
         // Extract logits for sampling
         var lastLogits = new float[vocabSize];

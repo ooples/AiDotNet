@@ -41,6 +41,14 @@ internal sealed class InferenceForwardContext
     /// <summary>Per-row start positions, parallel to <see cref="SequenceIds"/>. Null in single-sequence mode.</summary>
     public int[]? Positions { get; }
 
+    /// <summary>
+    /// Per-row VALID token counts for a batched forward whose rows have different lengths (batched prefill:
+    /// prompts differ in length, so a <c>[batch, maxLen, dim]</c> input is right-padded). Row b's attention
+    /// processes only its first <c>RowLengths[b]</c> tokens; the padded tail is skipped (its KV is never
+    /// written and its output stays zero). Null => every row uses the full seqLen (batched decode, seqLen==1).
+    /// </summary>
+    public int[]? RowLengths { get; set; }
+
     /// <summary>True when this context addresses one sequence per batch row (batched decode).</summary>
     public bool IsBatched => SequenceIds is not null;
 
