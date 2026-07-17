@@ -4680,8 +4680,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // before it descends (the same behaviour the HeavyTrainingTimeoutClassNames branch
                     // handles for deep seg decoders with a 15-step budget). Give it that same budget so the
                     // test clears the hump and sees the genuine net decrease; 15 float steps stay well under
-                    // the 180 s timeout.
-                    sb.AppendLine(model.ClassName == "HuBERTSER"
+                    // the 180 s timeout. SpikingFullSubNet (surrogate-gradient spiking sub-band enhancer)
+                    // shows the same first-step hump (memorization loss 0.1251 -> 0.1268 at step 2 then
+                    // descends), so it gets the same 15-step budget.
+                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet"
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
