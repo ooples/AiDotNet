@@ -20,4 +20,7 @@ public sealed class ServeOptions
 
     /// <summary>Sampling used when a request omits parameters. Defaults to greedy, 128 tokens.</summary>
     public SamplingParameters? DefaultSampling { get; init; }
+
+    /// <summary>Chat template rendering <c>/v1/chat/completions</c> messages to a prompt. Defaults to a generic template.</summary>
+    public IChatTemplate? ChatTemplate { get; init; }
 }

@@ -33,6 +33,7 @@ public sealed class InferenceServer<T> : IAsyncDisposable, IDisposable
     private readonly IGenerationTokenizer _tokenizer;
     private readonly string _modelName;
     private readonly SamplingParameters _defaultSampling;
+    private readonly IChatTemplate _chatTemplate;
     private bool _disposed;
 
     internal InferenceServer(
@@ -40,12 +41,14 @@ public sealed class InferenceServer<T> : IAsyncDisposable, IDisposable
         IGenerationTokenizer tokenizer,
         string modelName,
         SamplingParameters defaultSampling,
-        string[] urls)
+        string[] urls,
+        IChatTemplate? chatTemplate = null)
     {
         _host = host;
         _tokenizer = tokenizer;
         _modelName = modelName;
         _defaultSampling = defaultSampling;
+        _chatTemplate = chatTemplate ?? new DefaultChatTemplate();
 
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls(urls);
@@ -72,6 +75,127 @@ public sealed class InferenceServer<T> : IAsyncDisposable, IDisposable
         }));
 
         app.MapPost("/v1/completions", HandleCompletionAsync);
+        app.MapPost("/v1/chat/completions", HandleChatCompletionAsync);
+    }
+
+    private async Task HandleChatCompletionAsync(HttpContext context)
+    {
+        OpenAiChatRequest? request;
+        try
+        {
+            using var reader = new System.IO.StreamReader(context.Request.Body);
+            request = JsonConvert.DeserializeObject<OpenAiChatRequest>(await reader.ReadToEndAsync().ConfigureAwait(false));
+        }
+        catch (JsonException)
+        {
+            await WriteErrorAsync(context, StatusCodes.Status400BadRequest, "Invalid JSON body.").ConfigureAwait(false);
+            return;
+        }
+
+        if (request is null || request.Messages is null || request.Messages.Count == 0)
+        {
+            await WriteErrorAsync(context, StatusCodes.Status400BadRequest, "A non-empty 'messages' array is required.").ConfigureAwait(false);
+            return;
+        }
+
+        string prompt = _chatTemplate.Render(request.Messages);
+
+        SamplingParameters sampling;
+        IReadOnlyList<int> promptIds;
+        try
+        {
+            sampling = ToSamplingParameters(request.Temperature, request.TopP, request.TopK,
+                request.PresencePenalty, request.FrequencyPenalty, request.Seed, request.MaxTokens);
+            sampling.Validate();
+            promptIds = _tokenizer.Encode(prompt);
+            if (promptIds.Count == 0) throw new ArgumentException("Rendered chat prompt tokenized to zero tokens.");
+        }
+        catch (ArgumentException ex)
+        {
+            await WriteErrorAsync(context, StatusCodes.Status400BadRequest, ex.Message).ConfigureAwait(false);
+            return;
+        }
+
+        string id = "chatcmpl-" + Guid.NewGuid().ToString("N");
+        long created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        if (request.Stream)
+            await StreamChatAsync(context, id, created, promptIds, sampling).ConfigureAwait(false);
+        else
+            await WriteChatAsync(context, id, created, promptIds, sampling).ConfigureAwait(false);
+    }
+
+    private async Task WriteChatAsync(
+        HttpContext context, string id, long created, IReadOnlyList<int> promptIds, SamplingParameters sampling)
+    {
+        var generated = await _host.GenerateAsync(promptIds, sampling, context.RequestAborted).ConfigureAwait(false);
+        string text = _tokenizer.Decode(generated);
+
+        var response = new OpenAiChatResponse
+        {
+            Id = id,
+            Created = created,
+            Model = _modelName,
+            Choices = new[]
+            {
+                new OpenAiChatChoice
+                {
+                    Index = 0,
+                    Message = new ChatChoiceMessage { Role = "assistant", Content = text },
+                    FinishReason = "stop",
+                },
+            },
+            Usage = new OpenAiUsage
+            {
+                PromptTokens = promptIds.Count,
+                CompletionTokens = generated.Count,
+                TotalTokens = promptIds.Count + generated.Count,
+            },
+        };
+
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync(JsonConvert.SerializeObject(response), context.RequestAborted).ConfigureAwait(false);
+    }
+
+    private async Task StreamChatAsync(
+        HttpContext context, string id, long created, IReadOnlyList<int> promptIds, SamplingParameters sampling)
+    {
+        context.Response.ContentType = "text/event-stream";
+        context.Response.Headers["Cache-Control"] = "no-cache";
+
+        // First chunk announces the assistant role.
+        await WriteChatChunkAsync(context, id, created, new ChatChoiceDelta { Role = "assistant" }, null).ConfigureAwait(false);
+
+        string previousText = string.Empty;
+        await foreach (var update in _host.StreamAsync(promptIds, sampling, context.RequestAborted).ConfigureAwait(false))
+        {
+            string fullText = _tokenizer.Decode(update.TokenIds);
+            string delta = fullText.StartsWith(previousText, StringComparison.Ordinal)
+                ? fullText.Substring(previousText.Length)
+                : fullText;
+            previousText = fullText;
+
+            await WriteChatChunkAsync(context, id, created, new ChatChoiceDelta { Content = delta },
+                update.IsFinished ? (update.FinishReason ?? "stop") : null).ConfigureAwait(false);
+        }
+
+        await context.Response.WriteAsync("data: [DONE]\n\n", context.RequestAborted).ConfigureAwait(false);
+        await context.Response.Body.FlushAsync(context.RequestAborted).ConfigureAwait(false);
+    }
+
+    private async Task WriteChatChunkAsync(
+        HttpContext context, string id, long created, ChatChoiceDelta delta, string? finishReason)
+    {
+        var chunk = new OpenAiChatResponse
+        {
+            Id = id,
+            Object = "chat.completion.chunk",
+            Created = created,
+            Model = _modelName,
+            Choices = new[] { new OpenAiChatChoice { Index = 0, Delta = delta, FinishReason = finishReason } },
+        };
+        await context.Response.WriteAsync($"data: {JsonConvert.SerializeObject(chunk)}\n\n", context.RequestAborted).ConfigureAwait(false);
+        await context.Response.Body.FlushAsync(context.RequestAborted).ConfigureAwait(false);
     }
 
     private async Task HandleCompletionAsync(HttpContext context)
@@ -186,17 +310,21 @@ public sealed class InferenceServer<T> : IAsyncDisposable, IDisposable
         await context.Response.Body.FlushAsync(context.RequestAborted).ConfigureAwait(false);
     }
 
-    private SamplingParameters ToSamplingParameters(OpenAiCompletionRequest r) => new()
+    private SamplingParameters ToSamplingParameters(OpenAiCompletionRequest r)
+        => ToSamplingParameters(r.Temperature, r.TopP, r.TopK, r.PresencePenalty, r.FrequencyPenalty, r.Seed, r.MaxTokens);
+
+    private SamplingParameters ToSamplingParameters(
+        double temperature, double topP, int topK, double presencePenalty, double frequencyPenalty, int? seed, int maxTokens) => new()
     {
-        Temperature = r.Temperature,
+        Temperature = temperature,
         // OpenAI clients may send top_p = 0 meaning "unused"; our engine treats (0,1] as the valid nucleus, so
         // map a non-positive value to the disabled default of 1.0.
-        TopP = r.TopP <= 0 ? 1.0 : r.TopP,
-        TopK = r.TopK,
-        PresencePenalty = r.PresencePenalty,
-        FrequencyPenalty = r.FrequencyPenalty,
-        Seed = r.Seed,
-        MaxTokens = r.MaxTokens < 1 ? _defaultSampling.MaxTokens : r.MaxTokens,
+        TopP = topP <= 0 ? 1.0 : topP,
+        TopK = topK,
+        PresencePenalty = presencePenalty,
+        FrequencyPenalty = frequencyPenalty,
+        Seed = seed,
+        MaxTokens = maxTokens < 1 ? _defaultSampling.MaxTokens : maxTokens,
     };
 
     private static Task WriteErrorAsync(HttpContext context, int status, string message)

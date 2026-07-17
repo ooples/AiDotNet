@@ -128,4 +128,54 @@ public class InferenceServerHttpTests
         var response = await client.PostAsync("/v1/completions", body);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task ChatCompletions_NonStreaming_ReturnsAssistantMessage()
+    {
+        using var server = StartServer();
+        using var client = new HttpClient { BaseAddress = new Uri(server.Urls[0]) };
+
+        // The default chat template renders the messages and ends with "<|assistant|>\n"; the last char fed to
+        // the counter model is '\n' (10) -> 11,12,13 = chars 0x0B,0x0C,0x0D. We only assert structure + length.
+        var body = new StringContent(
+            "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":3,\"temperature\":0}",
+            Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/v1/chat/completions", body);
+        response.EnsureSuccessStatusCode();
+
+        var json = JObject.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("chat.completion", (string?)json["object"]);
+        Assert.Equal("assistant", (string?)json["choices"]![0]!["message"]!["role"]);
+        Assert.Equal("stop", (string?)json["choices"]![0]!["finish_reason"]);
+        Assert.Equal(3, (int)json["usage"]!["completion_tokens"]!);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ChatCompletions_Streaming_EmitsRoleThenDeltasThenDone()
+    {
+        using var server = StartServer();
+        using var client = new HttpClient { BaseAddress = new Uri(server.Urls[0]) };
+
+        var body = new StringContent(
+            "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":3,\"temperature\":0,\"stream\":true}",
+            Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/v1/chat/completions", body);
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("text/event-stream", response.Content.Headers.ContentType!.ToString());
+
+        string sse = await response.Content.ReadAsStringAsync();
+        Assert.Contains("data: [DONE]", sse);
+        Assert.Contains("chat.completion.chunk", sse);
+        Assert.Contains("\"role\":\"assistant\"", sse); // first chunk announces the role
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ChatCompletions_MissingMessages_Returns400()
+    {
+        using var server = StartServer();
+        using var client = new HttpClient { BaseAddress = new Uri(server.Urls[0]) };
+        var body = new StringContent("{\"messages\":[]}", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/v1/chat/completions", body);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

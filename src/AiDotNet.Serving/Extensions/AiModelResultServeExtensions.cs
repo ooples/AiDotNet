@@ -49,7 +49,7 @@ public static class AiModelResultServeExtensions
         var engine = new ContinuousBatchingEngine<T>(selection.Runner, engineOptions);
         var host = new AsyncEngineHost<T>(engine);
 
-        return new InferenceServer<T>(host, resolvedTokenizer, opts.ModelName, defaultSampling, opts.Urls);
+        return new InferenceServer<T>(host, resolvedTokenizer, opts.ModelName, defaultSampling, opts.Urls, opts.ChatTemplate);
     }
 
     private static EngineOptions ApplyEos(EngineOptions o, int? eos)
