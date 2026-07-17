@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>adnbench</AssemblyName>
+    <RootNamespace>AiDotNet.Serving.Benchmarks</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <!-- Self-contained load generator: no project references, no external packages.
+         Uses only the shared framework (System.Net.Http, System.Text.Json). -->
+  </PropertyGroup>
+
+</Project>
