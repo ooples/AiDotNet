@@ -233,6 +233,51 @@ public class ContinuousBatcherPagedEquivalenceTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task PagedBatcher_BatchedSpeculation_MatchesGreedy_AndAccepts()
+    {
+        await Task.Yield();
+        var wrapper = BuildWrapper();
+        var model = wrapper.IncrementalModel;
+        var cache = wrapper.IncrementalCache;
+        if (model is null || cache is null)
+        {
+            Assert.Fail("wrapper must expose the incremental model + paged cache");
+            return;
+        }
+
+        // Two identical prompts decoded together with speculation ON must co-batch their speculative
+        // verify (same draft length) and produce output byte-identical to plain greedy, with drafts accepted.
+        var prompt = new[] { 1, 2, 3 };
+        const int maxNew = 12;
+
+        int[] refA = ModelGreedy(wrapper, prompt, maxNew);
+        int[] refB = ModelGreedy(wrapper, prompt, maxNew);
+
+        var config = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EosTokenId = 999,
+            EnableSpeculativeDecoding = true,
+            SpeculationDepth = 4,
+            SpeculationPolicy = AiDotNet.Configuration.SpeculationPolicy.ForceOn
+        };
+        using var batcher = new ContinuousBatcher<float>(config, model, cache);
+        var reqA = GreedyRequest(prompt, maxNew);
+        var reqB = GreedyRequest(prompt, maxNew);
+        var taskA = batcher.GenerateAsync(reqA);
+        var taskB = batcher.GenerateAsync(reqB);
+
+        int guard = maxNew * 2 + 40;
+        while ((!taskA.IsCompleted || !taskB.IsCompleted) && guard-- > 0) batcher.Step();
+
+        Assert.True(taskA.IsCompleted && taskB.IsCompleted, "both sequences should complete");
+        Assert.Equal(refA, (await taskA).GeneratedTokens.ToArray());
+        Assert.Equal(refB, (await taskB).GeneratedTokens.ToArray());
+        Assert.True(batcher.SpeculationAcceptanceRate is > 0.0,
+            $"batched speculation should accept some drafts (acceptance={batcher.SpeculationAcceptanceRate}).");
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task PagedBatcher_ChunkedPrefill_MatchesWholePromptPrefill()
     {
         await Task.Yield();

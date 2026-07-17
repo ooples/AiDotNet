@@ -349,11 +349,17 @@ internal class ContinuousBatcher<T> : IDisposable
         // batched forward (true continuous batching) instead of one forward per sequence — the Phase 2
         // throughput win. Otherwise decode per sequence (speculation, single-sequence, or stateless path).
         var generating = decodeSequences.Where(s => s.Status == SequenceStatus.Generating).ToList();
-        if (UsePagedPath && !useSpeculation && generating.Count > 1)
+        if (UsePagedPath && generating.Count > 1)
         {
-            foreach (var (seq, token) in RunBatchedPagedDecodeStep(generating))
+            // One batched forward serves the whole decode batch: plain batched decode when speculation is
+            // off, and batched speculative verify (grouped by draft length) when it is on.
+            foreach (var (seq, tokens) in RunPagedDecodeBatch(generating, useSpeculation))
             {
-                tokensGenerated += AccountForToken(seq, token, useSpeculation);
+                foreach (var token in tokens)
+                {
+                    tokensGenerated += AccountForToken(seq, token, useSpeculation);
+                    if (seq.Status == SequenceStatus.Completed) break;
+                }
             }
         }
         else
@@ -768,18 +774,36 @@ internal class ContinuousBatcher<T> : IDisposable
             CreateInputTensor(draft), new InferenceForwardContext(seqId, p + 1));
         _pagedDraftedTokens += draft.Count;
 
-        // 4) Accept the longest greedy-matching prefix: expected_0 = greedy; expected_{j+1} = argmax(row j).
+        // 4-6) Accept the longest greedy-matching prefix, roll back rejected KV, emit the correction.
+        return EmitSpeculativeRow(sequence, greedy, draft, p, verifyLogits, batchRow: 0);
+    }
+
+    /// <summary>
+    /// Steps 4-6 of greedy-exact speculative decode for ONE sequence, shared by the per-sequence and
+    /// batched paths: accept the longest prefix where draft[j] == the target's greedy token
+    /// (expected_0 = <paramref name="greedy"/>, expected_{j+1} = argmax of verify row j), emit the accepted
+    /// drafts (capped by remaining budget / EOS), roll the paged KV back over the rejected drafts
+    /// (<see cref="PagedKVCache{T}.TruncateSequence"/>), and emit the correction. <paramref name="batchRow"/>
+    /// selects this sequence's row in a batched verify tensor (0 for a single-sequence forward).
+    /// </summary>
+    private List<int> EmitSpeculativeRow(
+        SequenceState<T> sequence, int greedy, List<int> draft, int p, Tensor<T> verifyLogits, int batchRow)
+    {
+        long seqId = sequence.SequenceId;
+        int eos = sequence.Request.EosTokenId ?? _config.EosTokenId;
+        int remaining = sequence.MaxNewTokens - sequence.GeneratedLength;
+        var emitted = new List<int>(draft.Count + 1);
+
         int expected = greedy;
         int nAccept = 0;
         for (int j = 0; j < draft.Count; j++)
         {
             if (draft[j] != expected) break;
             nAccept++;
-            expected = ArgMaxAtPosition(verifyLogits, j);
+            expected = ArgMaxAtBatchPosition(verifyLogits, batchRow, j);
         }
         _pagedAcceptedTokens += nAccept;
 
-        // 5) Emit accepted drafts (KV at p+1..p+nAccept is correct), capped by the remaining budget / EOS.
         for (int j = 0; j < nAccept; j++)
         {
             if (draft[j] == eos) { FinalizePagedSpeculation(seqId, p + 1 + j, sequence, emitted, draft[j]); return emitted; }
@@ -793,7 +817,6 @@ internal class ContinuousBatcher<T> : IDisposable
             }
         }
 
-        // 6) Drop rejected drafts' KV (positions p+1+nAccept..p+K) and emit the correction.
         _pagedCache?.TruncateSequence(seqId, p + 1 + nAccept);
         _pagedPositions[seqId] = p + 1 + nAccept;
         if (expected != eos)
@@ -802,6 +825,109 @@ internal class ContinuousBatcher<T> : IDisposable
             sequence.AppendToken(expected);
         }
         return emitted;
+    }
+
+    /// <summary>
+    /// Batched greedy-exact speculative decode for a group of sequences that all drafted the SAME number of
+    /// tokens K &gt; 0: forward every sequence's last token in ONE batched pass (greedy), verify all K-token
+    /// drafts in ONE batched pass, then per-row accept/roll-back/emit. Byte-identical to per-sequence
+    /// speculation, which is itself identical to plain greedy — batching only changes the forward count.
+    /// </summary>
+    private List<(SequenceState<T> Sequence, IReadOnlyList<int> Tokens)> RunBatchedPagedSpeculativeStep(
+        List<SequenceState<T>> group, List<List<int>> drafts)
+    {
+        var results = new List<(SequenceState<T>, IReadOnlyList<int>)>(group.Count);
+        if (_incrementalModel is not { } model || group.Count == 0) return results;
+
+        int b = group.Count;
+        int k = drafts[0].Count;
+        var seqIds = new long[b];
+        var greedyPos = new int[b];
+        var greedyInput = new Tensor<T>([b, 1]);
+        for (int i = 0; i < b; i++)
+        {
+            var seq = group[i];
+            long seqId = seq.SequenceId;
+            int p = _pagedPositions.TryGetValue(seqId, out var pp) ? pp : seq.PromptLength;
+            seqIds[i] = seqId;
+            greedyPos[i] = p;
+            greedyInput[[i, 0]] = ConvertToT(seq.TokenIds[seq.TokenIds.Count - 1]);
+        }
+
+        // 1) Batched greedy forward (last token of each @ its own position).
+        var greedyLogits = model.PredictWithContext(greedyInput, new InferenceForwardContext(seqIds, greedyPos));
+
+        // 2) Batched verify forward (K drafts of each @ position+1).
+        var verifyPos = new int[b];
+        var verifyInput = new Tensor<T>([b, k]);
+        for (int i = 0; i < b; i++)
+        {
+            verifyPos[i] = greedyPos[i] + 1;
+            for (int j = 0; j < k; j++) verifyInput[[i, j]] = ConvertToT(drafts[i][j]);
+        }
+        var verifyLogits = model.PredictWithContext(verifyInput, new InferenceForwardContext(seqIds, verifyPos));
+        _pagedDraftedTokens += (long)b * k;
+
+        // 3) Per-row accept + emit.
+        for (int i = 0; i < b; i++)
+        {
+            int greedy = ArgMaxAtBatchPosition(greedyLogits, i, 0); // [b,1,vocab]: row i, position 0
+            var emitted = EmitSpeculativeRow(group[i], greedy, drafts[i], greedyPos[i], verifyLogits, batchRow: i);
+            results.Add((group[i], emitted));
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Multi-sequence paged decode step. Without speculation, one batched decode forward serves all
+    /// sequences. With speculation, sequences are drafted (prompt-lookup) and partitioned: those with no
+    /// draft decode via one batched forward, and those with a draft are grouped by draft length and each
+    /// same-length group is verified in one batched speculative forward (singletons decode per-sequence).
+    /// </summary>
+    private List<(SequenceState<T> Sequence, IReadOnlyList<int> Tokens)> RunPagedDecodeBatch(
+        List<SequenceState<T>> generating, bool useSpeculation)
+    {
+        var results = new List<(SequenceState<T>, IReadOnlyList<int>)>(generating.Count);
+
+        if (!useSpeculation)
+        {
+            foreach (var (seq, token) in RunBatchedPagedDecodeStep(generating)) results.Add((seq, new[] { token }));
+            return results;
+        }
+
+        // Speculation on: draft each eligible sequence; batch no-draft/ineligible ones as plain decode, and
+        // group drafted ones by draft length for a batched speculative verify.
+        var plain = new List<SequenceState<T>>();
+        var groups = new Dictionary<int, (List<SequenceState<T>> Seqs, List<List<int>> Drafts)>();
+        foreach (var seq in generating)
+        {
+            int depth = seq.Request.SpeculationDepth ?? _config.SpeculationDepth;
+            bool eligible = seq.Request.Temperature <= 0f && _config.SupportsBatchedPrefill && depth > 0
+                            && (seq.MaxNewTokens - seq.GeneratedLength) > 0;
+            if (!eligible) { plain.Add(seq); continue; }
+            var draft = PromptLookupDraft(seq.TokenIds, Math.Max(1, depth));
+            if (draft.Count == 0) { plain.Add(seq); continue; }
+            if (!groups.TryGetValue(draft.Count, out var g)) { g = (new List<SequenceState<T>>(), new List<List<int>>()); groups[draft.Count] = g; }
+            g.Seqs.Add(seq);
+            g.Drafts.Add(draft);
+        }
+
+        if (plain.Count > 1)
+        {
+            foreach (var (seq, token) in RunBatchedPagedDecodeStep(plain)) results.Add((seq, new[] { token }));
+        }
+        else if (plain.Count == 1)
+        {
+            results.Add((plain[0], RunPagedDecodeStep(plain[0])));
+        }
+
+        foreach (var kv in groups)
+        {
+            var g = kv.Value;
+            if (g.Seqs.Count > 1) results.AddRange(RunBatchedPagedSpeculativeStep(g.Seqs, g.Drafts));
+            else results.Add((g.Seqs[0], RunPagedDecodeStepSpeculative(g.Seqs[0])));
+        }
+        return results;
     }
 
     // Appends the EOS token and returns; its KV position is irrelevant (generation stops here).
@@ -858,13 +984,15 @@ internal class ContinuousBatcher<T> : IDisposable
         return best;
     }
 
-    // Argmax over vocab at output position posIndex of a per-position logits tensor ([1,positions,vocab] or [positions,vocab]).
-    private static int ArgMaxAtPosition(Tensor<T> logits, int posIndex)
+    // Argmax over vocab at (batch row, output position) of a per-position logits tensor
+    // ([batch, positions, vocab]; batchRow 0 and rank-2 [positions, vocab] also handled).
+    private static int ArgMaxAtBatchPosition(Tensor<T> logits, int batchRow, int posIndex)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         int rank = logits.Shape.Length;
         int vocab = logits.Shape[rank - 1];
-        int baseOffset = posIndex * vocab;
+        int seq = rank >= 3 ? logits.Shape[rank - 2] : 1;
+        int baseOffset = (batchRow * seq + posIndex) * vocab;
         var flat = logits.AsSpan();
         int best = 0;
         T bestVal = flat[baseOffset];
