@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AiDotNet.Agentic.Models.Local;
+using AiDotNet.Configuration;
 using AiDotNet.Models.Results;
 using AiDotNet.Serving.Engine;
 
@@ -28,12 +29,13 @@ public static class AiModelResultGenerationExtensions
         this AiModelResult<T, TInput, TOutput> result,
         IGenerationTokenizer? tokenizer = null,
         EngineOptions? options = null,
-        SamplingParameters? defaultSampling = null)
+        SamplingParameters? defaultSampling = null,
+        InferenceOptimizationConfig? config = null)
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
         var model = result.Model
             ?? throw new InvalidOperationException("The model has not been trained/initialized; cannot generate.");
-        return new TextGenerator<T>(model, tokenizer, options, defaultSampling);
+        return new TextGenerator<T>(model, tokenizer, options, defaultSampling, config);
     }
 
     /// <summary>Generates a continuation for a tokenized prompt, returning the generated token ids.</summary>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using AiDotNet.Agentic.Models.Local;
+using AiDotNet.Configuration;
 
 namespace AiDotNet.Serving.Engine;
 
@@ -33,22 +34,26 @@ public sealed class TextGenerator<T> : IDisposable
     /// <param name="options">Optional engine tuning. Its <see cref="EngineOptions.EosTokenId"/> is filled from
     /// the model/tokenizer when not set.</param>
     /// <param name="defaultSampling">Sampling used when a call passes none. Defaults to greedy, 128 tokens.</param>
+    /// <param name="config">Optional inference-optimization config. When <paramref name="options"/> is null,
+    /// engine options are derived from it (or from <see cref="InferenceOptimizationConfig.Default"/>).</param>
     public TextGenerator(
         object model,
         IGenerationTokenizer? tokenizer = null,
         EngineOptions? options = null,
-        SamplingParameters? defaultSampling = null)
+        SamplingParameters? defaultSampling = null,
+        InferenceOptimizationConfig? config = null)
     {
         if (model is null) throw new ArgumentNullException(nameof(model));
-        _tokenizer = tokenizer;
+        // Auto-resolve a tokenizer the model carries, so string generation needs no explicit tokenizer.
+        _tokenizer = tokenizer ?? (model as IProvidesGenerationTokenizer)?.GetGenerationTokenizer();
         _defaultSampling = defaultSampling ?? new SamplingParameters { Temperature = 0.0, MaxTokens = 128 };
         _defaultSampling.Validate();
 
         var selection = ServingRunnerFactory.Create<T>(model);
         int? eos = selection.EosTokenId
-            ?? (tokenizer is not null && tokenizer.EosTokenId >= 0 ? tokenizer.EosTokenId : (int?)null);
+            ?? (_tokenizer is not null && _tokenizer.EosTokenId >= 0 ? _tokenizer.EosTokenId : (int?)null);
 
-        var opts = options ?? new EngineOptions();
+        var opts = options ?? ServingConfigMapper.ToEngineOptions(config, eos);
         if (opts.EosTokenId is null && eos is not null)
             opts = CloneWithEos(opts, eos);
 

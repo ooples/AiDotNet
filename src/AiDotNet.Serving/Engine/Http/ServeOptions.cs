@@ -12,8 +12,11 @@ public sealed class ServeOptions
     /// <summary>The model id reported at <c>/v1/models</c> and echoed in responses. Default "aidotnet-model".</summary>
     public string ModelName { get; init; } = "aidotnet-model";
 
-    /// <summary>Engine tuning (KV pool, batch limits). Defaults are derived automatically when null.</summary>
+    /// <summary>Engine tuning (KV pool, batch limits). Derived from <see cref="InferenceConfig"/> when null.</summary>
     public EngineOptions? EngineOptions { get; init; }
+
+    /// <summary>Inference-optimization config used to derive <see cref="EngineOptions"/> when it is null.</summary>
+    public AiDotNet.Configuration.InferenceOptimizationConfig? InferenceConfig { get; init; }
 
     /// <summary>Sampling used when a request omits parameters. Defaults to greedy, 128 tokens.</summary>
     public SamplingParameters? DefaultSampling { get; init; }

@@ -19,31 +19,37 @@ public static class AiModelResultServeExtensions
     /// server to stop it and free resources.
     /// </summary>
     /// <param name="result">The built model.</param>
-    /// <param name="tokenizer">Tokenizer used to encode prompts and decode outputs for the HTTP text API.</param>
+    /// <param name="tokenizer">Tokenizer for the HTTP text API. May be null when the model carries its own
+    /// via <see cref="IProvidesGenerationTokenizer"/>.</param>
     /// <param name="options">Optional serving options (URLs, model name, engine tuning). Sensible defaults.</param>
     public static InferenceServer<T> Serve<T, TInput, TOutput>(
         this AiModelResult<T, TInput, TOutput> result,
-        IGenerationTokenizer tokenizer,
+        IGenerationTokenizer? tokenizer = null,
         ServeOptions? options = null)
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
-        if (tokenizer is null) throw new ArgumentNullException(nameof(tokenizer));
 
         var model = result.Model
             ?? throw new InvalidOperationException("The model has not been trained/initialized; cannot serve.");
+
+        var resolvedTokenizer = tokenizer ?? (model as IProvidesGenerationTokenizer)?.GetGenerationTokenizer()
+            ?? throw new InvalidOperationException(
+                "Serve() needs a tokenizer for its HTTP text API: pass one, or have the model implement " +
+                "IProvidesGenerationTokenizer.");
 
         var opts = options ?? new ServeOptions();
         var defaultSampling = opts.DefaultSampling ?? new SamplingParameters { Temperature = 0.0, MaxTokens = 128 };
         defaultSampling.Validate();
 
         var selection = ServingRunnerFactory.Create<T>(model);
-        int? eos = selection.EosTokenId ?? (tokenizer.EosTokenId >= 0 ? tokenizer.EosTokenId : (int?)null);
+        int? eos = selection.EosTokenId ?? (resolvedTokenizer.EosTokenId >= 0 ? resolvedTokenizer.EosTokenId : (int?)null);
 
-        var engineOptions = ApplyEos(opts.EngineOptions ?? new EngineOptions(), eos);
+        var engineOptions = opts.EngineOptions ?? ServingConfigMapper.ToEngineOptions(opts.InferenceConfig, eos);
+        engineOptions = ApplyEos(engineOptions, eos);
         var engine = new ContinuousBatchingEngine<T>(selection.Runner, engineOptions);
         var host = new AsyncEngineHost<T>(engine);
 
-        return new InferenceServer<T>(host, tokenizer, opts.ModelName, defaultSampling, opts.Urls);
+        return new InferenceServer<T>(host, resolvedTokenizer, opts.ModelName, defaultSampling, opts.Urls);
     }
 
     private static EngineOptions ApplyEos(EngineOptions o, int? eos)
