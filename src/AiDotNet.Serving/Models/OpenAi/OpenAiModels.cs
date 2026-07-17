@@ -17,6 +17,7 @@ public sealed class ChatCompletionRequest
     [JsonProperty("temperature")] public double? Temperature { get; set; }
     [JsonProperty("top_p")] public double? TopP { get; set; }
     [JsonProperty("top_k")] public int? TopK { get; set; }
+    [JsonProperty("min_p")] public double? MinP { get; set; }
     [JsonProperty("stream")] public bool Stream { get; set; }
     [JsonProperty("stop")] public JToken? Stop { get; set; }
     [JsonProperty("n")] public int? N { get; set; }
@@ -48,6 +49,7 @@ public sealed class CompletionRequest
     [JsonProperty("temperature")] public double? Temperature { get; set; }
     [JsonProperty("top_p")] public double? TopP { get; set; }
     [JsonProperty("top_k")] public int? TopK { get; set; }
+    [JsonProperty("min_p")] public double? MinP { get; set; }
     [JsonProperty("stream")] public bool Stream { get; set; }
     [JsonProperty("stop")] public JToken? Stop { get; set; }
     [JsonProperty("seed")] public int? Seed { get; set; }

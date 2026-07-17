@@ -103,6 +103,7 @@ public sealed class TextGenerationService : ITextGenerationService
         double temperature = request.Temperature;
         double topP = request.TopP;
         int topK = request.TopK;
+        double minP = request.MinP;
         // Seeded per request id when present so greedy stays deterministic and sampling is reproducible.
         var rng = new Random(request.RequestId?.GetHashCode() ?? 0);
 
@@ -134,7 +135,7 @@ public sealed class TextGenerationService : ITextGenerationService
             for (int step = 0; step < request.MaxNewTokens; step++)
             {
                 if (ct.IsCancellationRequested) yield break;
-                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, rng);
+                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, minP, rng);
                 if (next == eosTokenId) yield break;
                 yield return next;
                 logits = session.Forward(TokensToTensor<T>(new[] { next }));
@@ -148,7 +149,7 @@ public sealed class TextGenerationService : ITextGenerationService
             {
                 if (ct.IsCancellationRequested) yield break;
                 var logits = gm.Forward(TokensToTensor<T>(context));
-                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, rng);
+                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, minP, rng);
                 if (next == eosTokenId) yield break;
                 yield return next;
                 context.Add(next);
@@ -181,7 +182,7 @@ public sealed class TextGenerationService : ITextGenerationService
     /// Samples a token id from a logits row. Greedy (argmax) when <paramref name="temperature"/> ≤ 0,
     /// otherwise temperature-scaled softmax with optional top-k and nucleus (top-p) filtering.
     /// </summary>
-    private static int SampleToken(double[] logits, double temperature, double topP, int topK, Random rng)
+    private static int SampleToken(double[] logits, double temperature, double topP, int topK, double minP, Random rng)
     {
         int n = logits.Length;
         if (n == 0) return 0;
@@ -208,6 +209,25 @@ public sealed class TextGenerationService : ITextGenerationService
             sum += p;
         }
         for (int j = 0; j < limit; j++) probs[j] /= sum;
+
+        // Min-p: drop tokens below minP × the top token's probability (probs are sorted descending), then
+        // renormalize. Applied before top-p, matching the common vLLM/HF ordering.
+        if (minP > 0.0 && limit > 1)
+        {
+            double threshold = minP * probs[0];
+            int cut = limit;
+            for (int j = 1; j < limit; j++)
+            {
+                if (probs[j] < threshold) { cut = j; break; }
+            }
+            if (cut < limit)
+            {
+                limit = cut;
+                double s = 0.0;
+                for (int j = 0; j < limit; j++) s += probs[j];
+                if (s > 0) for (int j = 0; j < limit; j++) probs[j] /= s;
+            }
+        }
 
         // Nucleus (top-p): keep the smallest prefix whose cumulative prob ≥ topP, then renormalize.
         if (topP > 0.0 && topP < 1.0)

@@ -45,6 +45,12 @@ public class SpeculativeDecodingRequest
     public int TopK { get; set; }
 
     /// <summary>
+    /// Gets or sets the min-p sampling threshold: drop tokens whose probability is below this fraction of the
+    /// top token's probability. 0 disables. Only applied by the streaming generation path.
+    /// </summary>
+    public double MinP { get; set; }
+
+    /// <summary>
     /// Gets or sets the end-of-sequence token ID. Generation stops when this token is produced.
     /// </summary>
     public int? EosTokenId { get; set; }

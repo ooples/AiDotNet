@@ -88,7 +88,7 @@ public sealed class OpenAiController : ControllerBase
 
         string prompt = ChatTemplate.Render(request.Messages.Select(m => (m.Role, m.TextContent())));
         var sdr = BuildRequest(ctx, prompt, request.ResolveMaxTokens(DefaultMaxTokens),
-            request.Temperature, request.TopP, request.TopK);
+            request.Temperature, request.TopP, request.TopK, request.MinP);
         var stops = request.ResolveStop();
         string id = "chatcmpl-" + Guid.NewGuid().ToString("N");
         long created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -167,7 +167,7 @@ public sealed class OpenAiController : ControllerBase
             return error!;
 
         var sdr = BuildRequest(ctx, request.PromptText(), request.ResolveMaxTokens(DefaultMaxTokens),
-            request.Temperature, request.TopP, request.TopK);
+            request.Temperature, request.TopP, request.TopK, request.MinP);
         var stops = request.ResolveStop();
         string id = "cmpl-" + Guid.NewGuid().ToString("N");
         long created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -277,7 +277,7 @@ public sealed class OpenAiController : ControllerBase
     }
 
     /// <summary>Encodes the prompt and builds the engine request.</summary>
-    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK)
+    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK, double? minP)
     {
         ctx.PromptTokenIds = ctx.Tokenizer.Encode(prompt).TokenIds.ToArray();
         return new SpeculativeDecodingRequest
@@ -287,6 +287,7 @@ public sealed class OpenAiController : ControllerBase
             Temperature = temperature ?? 1.0,
             TopP = topP ?? 1.0,
             TopK = topK ?? 0,
+            MinP = minP ?? 0.0,
             EosTokenId = ctx.EosTokenId,
         };
     }
