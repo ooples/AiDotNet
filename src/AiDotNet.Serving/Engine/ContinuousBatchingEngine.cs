@@ -308,9 +308,10 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
         bool wasPrefill = seq.NumComputedTokens == 0;
         seq.NumComputedTokens = lengthBefore; // all current tokens now have cached KV
 
-        // The prompt owner just finished prefill: fork its now-computed prompt KV to any deferred siblings.
+        // The prompt owner just finished prefill: fork its now-computed prompt KV to any deferred siblings,
+        // which sample their first token from these same final-position logits (prompt computed once).
         if (wasPrefill && seq.SequenceIndex == 0)
-            SpawnDeferredSiblings(seq);
+            SpawnDeferredSiblings(seq, logits);
 
         int tokenId = LogitsSampler.Sample(logits, seq.Request.SamplingParameters, seq.TokenIds, _rngBySequence[seq.SequenceId]);
         // The KV slot for this token was already reserved at schedule time; appending the token now keeps the
@@ -327,23 +328,41 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
         }
     }
 
-    private void SpawnDeferredSiblings(Sequence owner)
+    private void SpawnDeferredSiblings(Sequence owner, Vector<T> promptFinalLogits)
     {
         if (!_deferredSiblings.TryGetValue(owner.Request.RequestId, out var siblings)) return;
         _deferredSiblings.Remove(owner.Request.RequestId);
 
         int promptLen = owner.PromptLength;
-        // Clean sharing needs the prompt to fill whole blocks, so the shared blocks contain exactly the prompt
-        // (the owner's just-generated token lives in a fresh block beyond them). Otherwise fall back to giving
+        // Clean sharing needs the prompt to fill whole blocks, so the shared blocks hold exactly the prompt and
+        // the first generated token lands in a fresh block (no copy-on-write). Otherwise fall back to giving
         // each sibling its own prompt allocation (independent prefill via the waiting queue).
         bool blockAligned = promptLen % _options.BlockSize == 0;
 
         foreach (var sibling in siblings)
         {
-            if (blockAligned)
+            // The shared prompt costs no new blocks; the sibling's first generated token needs one slot.
+            if (blockAligned && _blocks.NumFreeBlocks >= 1)
             {
-                _blocks.ForkPrefix(owner.SequenceId, sibling.SequenceId, promptLen); // shares KV, no new blocks
-                sibling.NumComputedTokens = promptLen; // prompt KV already computed (shared) — skip re-prefill
+                _blocks.ForkPrefix(owner.SequenceId, sibling.SequenceId, promptLen); // shares prompt KV
+
+                // Sample the sibling's first token from the SAME prompt-final logits (prompt computed once);
+                // greedy ⇒ same as the owner, stochastic ⇒ independent via the sibling's own RNG.
+                int firstToken = LogitsSampler.Sample(
+                    promptFinalLogits, sibling.Request.SamplingParameters, sibling.TokenIds, _rngBySequence[sibling.SequenceId]);
+                sibling.AppendToken(firstToken);
+
+                var (finished, terminalState, reason) = EvaluateStop(sibling, firstToken);
+                if (finished)
+                {
+                    _blocks.Free(sibling.SequenceId);
+                    _rngBySequence.Remove(sibling.SequenceId);
+                    sibling.Finish(terminalState, reason);
+                    continue;
+                }
+
+                _blocks.Append(sibling.SequenceId, 1);  // reserve the first generated token's KV slot
+                sibling.NumComputedTokens = promptLen;  // prompt KV cached (shared); the new token computes next step
                 sibling.State = SequenceState.Running;
                 _running.Add(sibling);
             }
