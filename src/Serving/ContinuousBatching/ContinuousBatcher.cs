@@ -52,6 +52,9 @@ internal class ContinuousBatcher<T> : IDisposable
     // a model cannot build the paged path.
     private readonly NeuralNetworkBase<T>? _incrementalModel;
     private readonly PagedKVCache<T>? _pagedCache;
+    // RadixAttention prompt-prefix sharing over the shared paged cache (built with the paged path). New
+    // prompts fork the longest registered strict prefix copy-on-write and forward only the suffix.
+    private readonly RadixPrefixCache<T>? _prefixCache;
     // Number of tokens whose KV is already cached for each active sequence (the next ForwardWithContext
     // position), keyed by SequenceState.SequenceId.
     private readonly ConcurrentDictionary<long, int> _pagedPositions = new();
@@ -70,6 +73,10 @@ internal class ContinuousBatcher<T> : IDisposable
     internal bool LastStepUsedSpeculation { get; private set; }
     internal int LastStepSpeculationTokens { get; private set; }
     internal string LastStepSpeculationReason { get; private set; } = string.Empty;
+
+    // Number of leading prompt tokens whose KV was reused from a registered RadixAttention prefix on the
+    // most recent paged prefill (0 => no prefix reused). Exposed for prefix-sharing tests/telemetry.
+    internal int LastPrefillReusedPrefixTokens { get; private set; }
 
     /// <summary>
     /// Fraction of drafted tokens accepted by the target model, or null when speculative
@@ -162,6 +169,7 @@ internal class ContinuousBatcher<T> : IDisposable
         _config = config;
         _incrementalModel = incrementalModel;
         _pagedCache = pagedCache;
+        _prefixCache = new RadixPrefixCache<T>(pagedCache);
         _draftModelOverride = draftModel;
 
         _scheduler = new BatchScheduler<T>(config.SchedulerConfig);
@@ -443,12 +451,44 @@ internal class ContinuousBatcher<T> : IDisposable
         if (_pagedCache is not { } cache || _incrementalModel is not { } model) return null;
 
         long seqId = sequence.SequenceId;
-        int promptLen = sequence.TokenIds.Count;
-        cache.AllocateSequence(seqId, promptLen);
+        var prompt = sequence.TokenIds;
+        int promptLen = prompt.Count;
 
-        var input = CreateInputTensor(sequence.TokenIds);
-        var logits = model.PredictWithContext(input, new InferenceForwardContext(seqId, 0));
+        // Allocate this sequence's own cache slot (0 initial tokens; the prefix fork / prefill fills it).
+        if (!cache.AllocateSequence(seqId, 0)) return null; // cache exhausted / id in use
+
+        // RadixAttention prefix reuse: fork the longest registered STRICT prefix (copy-on-write) into this
+        // sequence, then forward only the remaining suffix from that position. cached == 0 => no reusable
+        // prefix, forward the whole prompt. Only a strict prefix is reused, so cached < promptLen always.
+        int cached = _prefixCache is { } prefixCache ? prefixCache.TryForkLongestPrefix(prompt, seqId) : 0;
+        if (cached >= promptLen) cached = promptLen - 1; // defensive: never reuse the whole prompt
+        LastPrefillReusedPrefixTokens = cached;
+
+        Tensor<T> logits;
+        if (cached > 0)
+        {
+            // Forward the suffix ONE token at a time from the forked position. This is the proven
+            // prefix-transparent path (identical output whether or not a prefix was reused). A single
+            // multi-token forward at a non-zero offset over forked KV is NOT yet validated (the cached
+            // attention's position handling for offset multi-token inputs — see the batched-prefill /
+            // ComputeBatchedAttention work) and diverges, so it is intentionally not used here.
+            logits = model.PredictWithContext(
+                CreateInputTensor(new List<int> { prompt[cached] }), new InferenceForwardContext(seqId, cached));
+            for (int i = cached + 1; i < promptLen; i++)
+            {
+                logits = model.PredictWithContext(
+                    CreateInputTensor(new List<int> { prompt[i] }), new InferenceForwardContext(seqId, i));
+            }
+        }
+        else
+        {
+            logits = model.PredictWithContext(CreateInputTensor(prompt), new InferenceForwardContext(seqId, 0));
+        }
         _pagedPositions[seqId] = promptLen;
+
+        // Register this prompt as a reusable prefix (its KV now holds exactly the prompt) so later prompts
+        // that extend it can fork. Best-effort; a failed fork or duplicate key is a no-op.
+        _prefixCache?.Register(prompt, seqId);
 
         int nextToken = SampleFromLogits(logits, sequence);
         sequence.AppendToken(nextToken);

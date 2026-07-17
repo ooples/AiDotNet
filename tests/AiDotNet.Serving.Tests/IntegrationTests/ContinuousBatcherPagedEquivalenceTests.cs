@@ -141,6 +141,59 @@ public class ContinuousBatcherPagedEquivalenceTests
         Assert.Equal(first, second);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task PagedBatcher_PrefixSharing_IsTransparent_AndReused()
+    {
+        await Task.Yield();
+        var extended = new[] { 1, 2, 3, 4, 5, 6 };
+        var strictPrefix = new[] { 1, 2, 3, 4 };
+        const int maxNew = 6;
+
+        // Everything runs on ONE batcher over ONE model + ONE cache, so the comparison isolates prefix
+        // sharing (no cross-wrapper nondeterminism from two independent InferenceOptimizer builds, and no
+        // session/batcher sequence-id collision on a shared cache).
+        var wrapper = BuildWrapper();
+        var model = wrapper.IncrementalModel;
+        var cache = wrapper.IncrementalCache;
+        if (model is null || cache is null)
+        {
+            Assert.Fail("wrapper must expose the incremental model + paged cache");
+            return;
+        }
+        var config = new ContinuousBatcherConfig { AutoStart = false, EosTokenId = 999 };
+        using var batcher = new ContinuousBatcher<float>(config, model, cache);
+
+        // 1) First run of the extended prompt: nothing registered yet -> reuses 0 (the no-prefix
+        //    reference), forwards the whole prompt from position 0.
+        int[] noPrefix = DriveGreedy(batcher, extended, maxNew);
+        Assert.Equal(0, batcher.LastPrefillReusedPrefixTokens);
+
+        // 2) Register the strict prefix [1,2,3,4] by running it.
+        _ = DriveGreedy(batcher, strictPrefix, maxNew);
+
+        // 3) Second run of the extended prompt: now [1,2,3,4] is a registered STRICT prefix, so it forks
+        //    4 cached tokens and forwards only the [5,6] suffix.
+        int[] withPrefix = DriveGreedy(batcher, extended, maxNew);
+        Assert.Equal(4, batcher.LastPrefillReusedPrefixTokens); // prefix was actually forked
+
+        // Prefix sharing must be transparent: identical output whether or not the prefix was reused.
+        Assert.Equal(maxNew, withPrefix.Length);
+        Assert.Equal(noPrefix, withPrefix);
+    }
+
+    // Drives one greedy sequence on an existing batcher to completion and returns its generated tokens.
+    private static int[] DriveGreedy(ContinuousBatcher<float> batcher, int[] prompt, int maxNew)
+    {
+        var task = batcher.GenerateAsync(GreedyRequest(prompt, maxNew));
+        int guard = maxNew + prompt.Length + 8;
+        while (!task.IsCompleted && guard-- > 0)
+        {
+            batcher.Step();
+        }
+        Assert.True(task.IsCompleted, "sequence should complete within the step budget");
+        return task.GetAwaiter().GetResult().GeneratedTokens.ToArray();
+    }
+
     // --- helpers -----------------------------------------------------------------------------------
 
     private static GenerationRequest<float> GreedyRequest(int[] prompt, int maxNew) => new()
