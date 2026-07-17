@@ -48,45 +48,49 @@ public class ZeRO1Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        if (inputData == null)
-            throw new ArgumentNullException(nameof(inputData));
-
+        // Opening barrier: every rank starts the collective sequence together. Validation happens AFTER
+        // it (and inside the try) so a rank that receives null still reaches the closing barrier and
+        // cannot strand its peers.
         Config.CommunicationBackend.Barrier();
-
-        // Optimize on local data
-        var result = WrappedOptimizer.Optimize(inputData);
-
-        // Synchronize parameters (AllReduce like DDP)
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        try
         {
-            SynchronizeParameters(result.BestSolution);
+            if (inputData == null)
+                throw new ArgumentNullException(nameof(inputData));
+
+            // When cross-rank synchronization is off, fall back to a plain local step (equivalent
+            // to non-distributed training on this rank).
+            if (!Config.AutoSyncGradients)
+                return RunWrappedOptimizerStep(inputData);
+
+            // ZeRO Stage-1 (Rajbhandari et al. 2020): gradients stay REPLICATED (AllReduce), while the
+            // optimizer state (Adam m/v) AND the parameter update are PARTITIONED — each rank updates
+            // only its parameter shard with the wrapped optimizer, so that optimizer's persistent state
+            // is sized to the shard. RunShardedZeroStep computes gradients backward-only, AllReduces
+            // them, applies the sharded update (with CpuOffloadOptimizer scoped to the update), and
+            // AllGathers the updated shards back into the full parameter vector.
+            return RunShardedZeroStep(inputData, shardGradients: false);
         }
-
-        // Synchronize sharded optimizer state
-        SynchronizeOptimizerState();
-
-        Config.CommunicationBackend.Barrier();
-
-        return result;
+        finally
+        {
+            // Closing barrier always runs (even on exception) so no rank is left waiting on a peer.
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported for ZeRO-1: optimizer state is PARTITIONED, not replicated. Each rank calls the wrapped
+    /// optimizer's UpdateParameters with ONLY its parameter shard, so the Adam m/v state is allocated and
+    /// advanced solely for that shard — no rank ever holds another rank's state. There is therefore no
+    /// replicated cross-rank state to synchronize; returning silently would mislead a caller into believing
+    /// a synchronization occurred. (Persisting the full optimizer state for a checkpoint is a serialization
+    /// concern — each rank saves its own shard state — not a hot-path synchronization.)
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // In ZeRO-1, optimizer states are sharded across processes
-        // Each process owns a partition of the optimizer state
-        // When updating parameters, we need to AllGather the relevant state slices
-
-        // For this framework implementation, this is a placeholder
-        // Full implementation would:
-        // 1. Partition optimizer state by parameter index
-        // 2. Each rank owns state for parameters [start:end]
-        // 3. During update, AllGather state as needed
-        // 4. Apply updates using gathered state
-
-        // This requires deeper integration with optimizer internals
-        // which varies by optimizer type (Adam, SGD, RMSprop, etc.)
-    }
+        => throw new NotSupportedException(
+            "ZeRO-1 optimizer state is partitioned across ranks (each rank owns only its shard's Adam " +
+            "state); there is no replicated state to synchronize, so explicit state synchronization is " +
+            "neither required nor supported.");
 
     /// <inheritdoc/>
     public override byte[] Serialize()

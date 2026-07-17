@@ -100,6 +100,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     private int _pipelineRank;
     private int _tensorRank;
     private int _dataRank;
+    private int _fullParamCount;
 
     /// <summary>
     /// Creates a new 3D Parallel (Hybrid Sharded) model.
@@ -221,6 +222,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     {
         var fullParameters = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         int totalParams = fullParameters.Length;
+        _fullParamCount = totalParams;
 
         // Apply pipeline partitioning first (depth-wise)
         int pipelineShardSize = totalParams / _pipelineParallelSize;
@@ -253,34 +255,145 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
                 "Gradients have not been computed. Call Train() before SynchronizeGradients().");
         }
 
-        // In 3D parallelism (hybrid sharding), gradient synchronization is complex:
-        // - Tensor-parallel: Need to reduce partial gradients within tensor group
-        // - Data-parallel: Need to average gradients across data replicas
-        // - Pipeline-parallel: Each stage handles its own gradients
-        //
-        // Correct synchronization requires:
-        // 1. AllReduce within tensor-parallel group (sum partial gradients from same pipeline stage)
-        // 2. AllReduce within data-parallel group (average gradients across data replicas that share same pipeline/tensor position)
-        // 3. Pipeline parallel stages handle their own gradient accumulation
+        // Synchronization scope for THIS (parameter-sharding) hybrid model: this wrapper gathers the
+        // full parameters and computes the FULL-model gradient on every rank (the wrapped model's
+        // compute is a black box that cannot be layer-partitioned). Therefore:
+        // - Tensor- and pipeline-parallel neighbours own DIFFERENT parameter shards of that full
+        //   gradient — there are NO partial-sum contributions to reduce across them (partial-sum
+        //   tensor-parallel gradients arise only in COMPUTE-partitioned Megatron TP, which is provided
+        //   separately by ColumnParallelLinear/RowParallelLinear whose ḡ operator carries the in-layer
+        //   AllReduce). So no cross-tensor/pipeline gradient reduction is required or correct here.
+        // - Data-parallel replicas share the same parameter shard but may process different data, so
+        //   THEIR gradients must be averaged. That data-parallel subgroup average is the complete and
+        //   correct gradient synchronization for this model; it is performed below.
 
-        // Guard against full-world AllReduce when data-parallel size > 1
+        // Average gradients across the DATA-PARALLEL replica group ONLY — the ranks sharing this
+        // rank's pipeline+tensor position, which hold REPLICATED parameters but processed different
+        // data batches (so their gradients genuinely differ and must be averaged). The tensor- and
+        // pipeline-parallel neighbours own DIFFERENT parameter shards, so a full-world AllReduce would
+        // sum unrelated gradients and corrupt those shards; we reduce strictly within the data-parallel
+        // subgroup [groupStart, groupStart + _dataParallelSize).
         if (_dataParallelSize > 1)
         {
-            throw new NotSupportedException(
-                "HybridShardedModel needs subgroup AllReduce over the data-parallel replica set; " +
-                "reducing across the full world corrupts tensor/pipeline shards. " +
-                "Implement subgroup-aware collectives that sync only within the data-parallel group (ranks sharing same pipeline/tensor position), " +
-                "or use a data-parallel subgroup communicator for correct gradient averaging.");
+            _computedGradients = AverageGradientsAcrossDataParallelGroup(_computedGradients);
+        }
+        // With a single data-parallel replica there is nothing to average across; each tensor/pipeline
+        // position keeps its own gradients (handled by its own shard update).
+        CachedFullParameters = null;
+    }
+
+    /// <summary>
+    /// Averages a gradient vector across this rank's data-parallel replica group (a subgroup AllReduce
+    /// with Average). The 3D layout is [pipeline][tensor][data], so the data-parallel replicas of a
+    /// given (pipeline, tensor) position are the <c>_dataParallelSize</c> CONSECUTIVE ranks
+    /// [groupStart, groupStart + _dataParallelSize), with
+    /// <c>groupStart = pipelineRank·(tensor·data) + tensorRank·data</c>. The communication backend
+    /// exposes only world-wide collectives, so the subgroup reduction is built from point-to-point
+    /// Send/Receive: every non-leader sends its gradient to the group leader (the lowest rank in the
+    /// group), the leader sums all contributions, divides by the group size, and sends the average
+    /// back. This reduces ONLY within the data-parallel group and never touches the tensor/pipeline
+    /// neighbours' distinct parameter shards.
+    /// </summary>
+    private Vector<T> AverageGradientsAcrossDataParallelGroup(Vector<T> gradients)
+    {
+        var backend = Config.CommunicationBackend;
+        int rank = backend.Rank;
+        int tensorGroupSize = _tensorParallelSize * _dataParallelSize;
+        int groupStart = (rank / tensorGroupSize) * tensorGroupSize + _tensorRank * _dataParallelSize;
+        int leader = groupStart;
+        int n = gradients.Length;
+        const int TagToLeader = 0x5D0;
+        const int TagFromLeader = 0x5D1;
+
+        if (rank == leader)
+        {
+            var sum = gradients.ToArray(); // leader's own contribution
+            for (int d = 1; d < _dataParallelSize; d++)
+            {
+                var recv = backend.Receive(groupStart + d, n, TagToLeader);
+                for (int i = 0; i < n; i++) sum[i] = NumOps.Add(sum[i], recv[i]);
+            }
+            var invCount = NumOps.FromDouble(1.0 / _dataParallelSize);
+            for (int i = 0; i < n; i++) sum[i] = NumOps.Multiply(sum[i], invCount);
+            var averaged = new Vector<T>(sum);
+            for (int d = 1; d < _dataParallelSize; d++)
+                backend.Send(averaged, groupStart + d, TagFromLeader);
+            return averaged;
         }
 
-        // Single data-parallel replica mode (no data parallelism)
-        // In this case, AllReduce is a no-op or only syncs within tensor/pipeline groups
-        if (_dataParallelSize <= 1)
+        backend.Send(gradients, leader, TagToLeader);
+        return backend.Receive(leader, n, TagFromLeader);
+    }
+
+    /// <summary>
+    /// Gathers the full parameter vector for the 3D-parallel layout, DE-DUPLICATING data-parallel replicas.
+    /// </summary>
+    /// <remarks>
+    /// The inherited <see cref="ShardedModelBase{T,TInput,TOutput}.GatherFullParameters"/> AllGathers every
+    /// world rank's <c>LocalShard</c> and concatenates them. That is correct only when every rank owns a
+    /// DISTINCT shard. Here data-parallel replicas hold the SAME (pipeline, tensor) shard, so a plain
+    /// concatenation would repeat each distinct shard <c>_dataParallelSize</c> times and produce an
+    /// oversized, misordered vector. Instead we AllGather all shards and PLACE each rank's shard back at its
+    /// <c>ShardStartIndex</c>: data-parallel replicas map to the same destination region and write identical
+    /// data (idempotent), so the reconstructed vector is exactly the wrapped model's full parameters.
+    /// </remarks>
+    public override Vector<T> GatherFullParameters()
+    {
+        EnsureShardingInitialized();
+        if (CachedFullParameters != null)
+            return CachedFullParameters;
+
+        var gathered = Config.CommunicationBackend.AllGather(LocalShard);   // rank-ordered concatenation
+        int worldSize = Config.CommunicationBackend.WorldSize;
+
+        var full = new T[_fullParamCount];
+        int concatOffset = 0;
+        for (int r = 0; r < worldSize; r++)
         {
-            // No data-parallel sync needed
-            CachedFullParameters = null;
-            return;
+            var (startR, sizeR) = ShardLayoutForRank(r);
+            // Reconstruct only THIS rank's data-parallel replica. Data-parallel replicas of the same
+            // (pipeline, tensor) position share a destination region, but when AutoSyncGradients is off they
+            // may legitimately DIVERGE — copying every replica into the same region would let the
+            // highest-ranked replica silently overwrite this rank's parameters. Copy only shards whose
+            // data-parallel coordinate matches this rank's _dataRank; advance the concat offset for all.
+            if (r % _dataParallelSize == _dataRank)
+            {
+                for (int i = 0; i < sizeR; i++)
+                    full[startR + i] = gathered[concatOffset + i];
+            }
+            concatOffset += sizeR;
         }
+
+        var result = new Vector<T>(full);
+        CachedFullParameters = result;
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the (start index, size) of an ARBITRARY rank's parameter shard from the same
+    /// pipeline-then-tensor partitioning math as <c>InitializeSharding</c>, given the
+    /// <c>[pipeline][tensor][data]</c> rank layout. Data-parallel replicas of a (pipeline, tensor) position
+    /// return the identical (start, size).
+    /// </summary>
+    private (int start, int size) ShardLayoutForRank(int rank)
+    {
+        int tensorGroupSize = _tensorParallelSize * _dataParallelSize;
+        int pipelineRank = rank / tensorGroupSize;
+        int tensorRank = (rank % tensorGroupSize) / _dataParallelSize;
+
+        // Pipeline partition (depth-wise) over the full parameter vector.
+        int pipelineShardSize = _fullParamCount / _pipelineParallelSize;
+        int pipelineRemainder = _fullParamCount % _pipelineParallelSize;
+        int myPipelineSize = pipelineShardSize + (pipelineRank < pipelineRemainder ? 1 : 0);
+        int myPipelineStart = pipelineRank * pipelineShardSize + Math.Min(pipelineRank, pipelineRemainder);
+
+        // Tensor partition (width-wise) within the pipeline stage.
+        int tensorShardSize = myPipelineSize / _tensorParallelSize;
+        int tensorRemainder = myPipelineSize % _tensorParallelSize;
+        int size = tensorShardSize + (tensorRank < tensorRemainder ? 1 : 0);
+        int tensorOffset = tensorRank * tensorShardSize + Math.Min(tensorRank, tensorRemainder);
+
+        return (myPipelineStart + tensorOffset, size);
     }
 
     /// <inheritdoc/>
@@ -293,12 +406,15 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         //   4. ApplyGradients: Update parameters using synchronized gradients
         //   5. UpdateShards: Extract local shard from updated parameters
         //
-        // Note: Full 3D parallelism is complex and requires:
-        // - Pipeline: forward/backward through stages with microbatching
-        // - Tensor: partial computation within each layer with all-reduce
-        // - Data: different batches on data-parallel replicas
-        //
-        // This framework provides the foundation with simplified implementation.
+        // Synchronization model for THIS parameter-sharded hybrid wrapper (see SynchronizeGradients for
+        // the full rationale): the wrapped model is a black box whose compute cannot be layer-partitioned,
+        // so every rank gathers the full parameters and computes the FULL-model gradient. Data-parallel
+        // replicas therefore hold replicated parameters but process different batches and MUST be averaged
+        // (done in SynchronizeGradients); tensor/pipeline neighbours own DISJOINT parameter shards of that
+        // full gradient, so there is nothing to reduce across them. Compute-partitioned tensor parallelism
+        // (partial per-layer matmuls + in-layer all-reduce) is provided separately by the Megatron layer
+        // primitives (ColumnParallelLinear/RowParallelLinear); a model built from those does not need this
+        // black-box wrapper.
 
         // Gather full parameters
         var fullParams = GatherFullParameters();
@@ -309,7 +425,11 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
 
         if (Config.AutoSyncGradients)
         {
-            // Synchronize gradients (throws NotSupportedException if _dataParallelSize > 1)
+            // ZeRO Stage-2 offload: bring gradients to CPU and drop the GPU
+            // cache entry before any subgroup reduction runs inside
+            // SynchronizeGradients. No-op when CpuOffloadGradients is off.
+            OffloadGradientsToCpu(_computedGradients);
+            // Average gradients within the data-parallel replica subgroup (no-op at _dataParallelSize == 1).
             SynchronizeGradients();
 
             // Apply the synchronized gradients to update parameters
@@ -332,6 +452,11 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         }
         // Note: Cache is already invalidated by UpdateLocalShardFromFull.
         // If AutoSyncGradients is false, subsequent predictions benefit from cached parameters.
+
+        // ZeRO Stage-3 param offload: drop GPU-cached params so the next
+        // forward re-uploads from the just-updated CPU-resident values.
+        // No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu();
     }
 
     /// <inheritdoc/>

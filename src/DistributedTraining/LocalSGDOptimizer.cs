@@ -69,14 +69,18 @@ public class LocalSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
         // Barrier to ensure all processes start together
         Config.CommunicationBackend.Barrier();
 
-        // Each process optimizes on its local data
-        var result = WrappedOptimizer.Optimize(inputData);
+        // Each process optimizes on its local data. RunWrappedOptimizerStep
+        // engages IShardingConfiguration.CpuOffloadOptimizer: Adam m/v
+        // state + step run on CpuEngine.
+        var result = RunWrappedOptimizerStep(inputData);
 
         // Synchronize parameters (average across all processes)
         if (Config.AutoSyncGradients && result.BestSolution != null)
         {
             SynchronizeParameters(result.BestSolution);
         }
+
+        OffloadParamsToCpu(result.BestSolution);
 
         // Barrier to ensure all processes finish together
         Config.CommunicationBackend.Barrier();

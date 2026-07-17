@@ -334,8 +334,10 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
                 savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
             }
 
-            // Step 1: Optimize locally to compute gradients
-            var localResult = WrappedOptimizer.Optimize(inputData);
+            // Step 1: Optimize locally. Routes through RunWrappedOptimizerStep
+            // so IShardingConfiguration.CpuOffloadOptimizer engages the CpuEngine
+            // swap for the Adam m/v update.
+            var localResult = RunWrappedOptimizerStep(inputData);
 
             // Step 2: Synchronize gradients across 3D parallelism dimensions
             if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null && gradientOptimizer != null)
@@ -344,6 +346,10 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
 
                 if (localGradients != null && localGradients.Length > 0)
                 {
+                    // ZeRO Stage-2 offload: bring gradients to CPU + drop GPU
+                    // cache entry before either subgroup reduction runs.
+                    OffloadGradientsToCpu(localGradients);
+
                     // 3D parallelism gradient synchronization:
                     // 1. First reduce within tensor-parallel group (sum partial tensor results)
                     // 2. Then reduce across data-parallel replicas (average gradients)
@@ -372,6 +378,7 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
                 }
             }
 
+            OffloadParamsToCpu(localResult.BestSolution);
             return localResult;
         }
         finally
@@ -383,16 +390,20 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported as a standalone call. All required synchronization is performed INLINE in Optimize via
+    /// the two subgroup reductions — SubgroupAllReduce(SUM) within the tensor-parallel group and
+    /// SubgroupAllReduce(AVERAGE) within the data-parallel group — followed by the wrapped optimizer's
+    /// ApplyGradients (which owns its per-rank Adam m/v state). Pipeline stages own independent state, and
+    /// tensor/data neighbours' optimizer state is either partitioned with their parameter shard or updated
+    /// identically from the reduced gradient, so there is no additional per-step state exchange to perform.
+    /// This method therefore throws rather than silently reporting success for a no-op.
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // In 3D parallelism, optimizer state management is complex:
-        // - Pipeline stages: independent states (no sync)
-        // - Tensor parallel: states partitioned by layer slice (sync within group)
-        // - Data parallel: states replicated (no sync needed)
-
-        // Full implementation would use process groups for each dimension
-        // Framework placeholder
-    }
+        => throw new NotSupportedException(
+            "HybridShardedOptimizer performs all required state synchronization inline in Optimize (subgroup " +
+            "tensor/data reductions + per-rank ApplyGradients); there is no standalone optimizer-state " +
+            "synchronization to perform.");
 
     /// <inheritdoc/>
     public override byte[] Serialize()
