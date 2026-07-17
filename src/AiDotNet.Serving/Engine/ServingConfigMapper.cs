@@ -39,6 +39,11 @@ public static class ServingConfigMapper
         int blocksPerSequence = (maxContextTokens + blockSize - 1) / blockSize + 1;
         int numKvBlocks = Math.Max(blocksPerSequence, checked(maxSequences * blocksPerSequence));
 
+        // Quantized KV takes less memory per token, so the same budget holds more blocks (higher concurrency /
+        // longer contexts). Int8 ≈ half the bytes of fp16 ⇒ ~2× the block capacity.
+        int quantFactor = c.KVCacheQuantization == KVCacheQuantizationMode.Int8 ? 2 : 1;
+        numKvBlocks = checked(numKvBlocks * quantFactor);
+
         // Per-step compute budget: enough for one full-context prefill, or one decode token per running seq.
         int maxBatchedTokens = Math.Max(maxContextTokens, maxSequences);
 
@@ -49,6 +54,7 @@ public static class ServingConfigMapper
             NumKvBlocks = numKvBlocks,
             MaxBatchedTokens = maxBatchedTokens,
             EosTokenId = eosTokenId,
+            KvCacheQuantization = c.KVCacheQuantization,
         };
     }
 
