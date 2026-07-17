@@ -121,51 +121,60 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
                 $"GradientCompressionOptimizer requires a gradient-based optimizer, but received {WrappedOptimizer.GetType().Name}");
         }
 
-        // Populate InitialSolution from wrapped optimizer's model if not already set
-        if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
-        {
-            inputData.InitialSolution = baseOptimizer.Model.Clone();
-        }
-
         Config.CommunicationBackend.Barrier();
 
         try
         {
-            // CRITICAL: Save parameters BEFORE local optimization
-            // This allows us to apply averaged compressed gradients from the correct starting point
-            Vector<T>? savedParameters = null;
-            if (Config.AutoSyncGradients && inputData.InitialSolution != null)
-            {
-                savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
-            }
+            // When cross-rank synchronization is off, fall back to a plain local step.
+            if (!Config.AutoSyncGradients)
+                return RunWrappedOptimizerStep(inputData);
 
-            // Step 1: Optimize locally to compute gradients and get locally-updated model
-            var localResult = WrappedOptimizer.Optimize(inputData);
+            // Gradient-compressed DDP (Deep Gradient Compression, Lin et al. 2017; 1-bit SGD, Seide et al.
+            // 2014): the same true-DDP per-step gradient hook as DDPOptimizer, but the COMMUNICATED buffer
+            // is compressed. Backward only (NOT a local optimize loop, which would drift the replicas),
+            // compress, reduce the compressed buffer, decompress, then one update from the original params.
+            var model = inputData.InitialSolution
+                ?? (WrappedOptimizer as OptimizerBase<T, TInput, TOutput>)?.Model?.Clone()
+                ?? throw new InvalidOperationException(
+                    "Gradient-compressed step requires a model to compute gradients from: set " +
+                    "OptimizationInputData.InitialSolution, or wrap an OptimizerBase whose Model is set.");
 
-            // Step 2: Get the gradients that were computed during optimization
-            var localGradients = gradientOptimizer.LastComputedGradients;
+            var paramModel = InterfaceGuard.Parameterizable(model);
+            var gradModel = InterfaceGuard.GradientComputable(model);
 
-            if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null && localGradients != null && localGradients.Length > 0)
-            {
-                // Step 3: Compress local gradients
-                var compressedGradients = CompressGradients(localGradients);
+            var originalParams = paramModel.GetParameters();
+            if (originalParams == null || originalParams.Length == 0)
+                return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
 
-                // Step 4: Synchronize compressed gradients across all ranks and average them
+            // Backward only — full gradient without advancing optimizer state through a local loop.
+            var localGradients = gradModel.ComputeGradients(inputData.XTrain, inputData.YTrain);
+            if (localGradients == null || localGradients.Length == 0)
+                return new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
+
+            // Compress the gradient — this is the buffer that is actually communicated.
+            var compressedGradients = CompressGradients(localGradients);
+
+            // Offload the COMPRESSED buffer (the vector handed to the collective) so CpuOffloadGradients
+            // makes what is communicated CPU-resident during the reduce.
+            OffloadGradientsToCpu(compressedGradients);
+
+            // Reduce (average) the compressed gradients across ranks; identity at world size 1.
+            if (WorldSize > 1)
                 Config.CommunicationBackend.AllReduce(compressedGradients, ReductionOperation.Average);
 
-                // Step 5: Decompress to get averaged gradients
-                var averagedGradients = DecompressGradients(compressedGradients, localGradients.Length);
+            // Decompress back to the full dense gradient (identity for top-k / quantization).
+            var averagedGradients = DecompressGradients(compressedGradients, localGradients.Length);
 
-                // Step 6: Apply averaged compressed gradients using the safe 3-parameter overload
-                // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
-                // Works correctly with ANY optimizer (SGD, Adam, RMSprop, etc.)
-                var finalModel = gradientOptimizer.ApplyGradients(savedParameters, averagedGradients, localResult.BestSolution);
-
-                // Step 7: Return result with model updated using averaged compressed gradients
-                localResult.BestSolution = finalModel;
+            // Single update from the ORIGINAL (pre-step) parameters — double-step-safe, optimizer-agnostic;
+            // the CPU-offload engine swap is scoped to this update alone.
+            IFullModel<T, TInput, TOutput> updated;
+            using (BeginCpuOffloadScope())
+            {
+                updated = gradientOptimizer.ApplyGradients(originalParams, averagedGradients, model);
             }
 
-            return localResult;
+            OffloadParamsToCpu(updated);
+            return new OptimizationResult<T, TInput, TOutput> { BestSolution = updated };
         }
         finally
         {

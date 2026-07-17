@@ -29,7 +29,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("AnomalyDetector")]
-public interface IAnomalyDetector<T>
+public interface IAnomalyDetector<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Trains the anomaly detector on the provided data.
@@ -47,27 +47,9 @@ public interface IAnomalyDetector<T>
     /// </remarks>
     void Fit(Matrix<T> X);
 
-    /// <summary>
-    /// Predicts whether each sample is an inlier (normal) or outlier (anomaly).
-    /// </summary>
-    /// <param name="X">
-    /// The data matrix to predict on, where each row is a sample.
-    /// </param>
-    /// <returns>
-    /// A vector where each element is:
-    /// <list type="bullet">
-    /// <item><description>1 for inliers (normal points)</description></item>
-    /// <item><description>-1 for outliers (anomalies)</description></item>
-    /// </list>
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> After training with <see cref="Fit"/>, use this method to check
-    /// if new data points are normal (1) or anomalies (-1). Think of it as asking
-    /// "does this data point look similar to what I learned?"
-    /// </para>
-    /// </remarks>
-    Vector<T> Predict(Matrix<T> X);
+    // Predict(Matrix<T>) is inherited from IFullModel/IModel. For an anomaly detector each returned
+    // element is 1 for an inlier (normal) and -1 for an outlier (anomaly): after Fit, it answers
+    // "does this point look like what I learned?".
 
     /// <summary>
     /// Computes the anomaly score for each sample.

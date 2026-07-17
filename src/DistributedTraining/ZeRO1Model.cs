@@ -104,6 +104,9 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
                 "Gradients have not been computed. Call Train() before SynchronizeGradients().");
         }
 
+        // ZeRO Stage-2 offload: bring gradients to CPU + drop GPU cache
+        // entry before the reduce. No-op when CpuOffloadGradients is off.
+        OffloadGradientsToCpu(_computedGradients);
         // Same as DDP - AllReduce all gradients
         Config.CommunicationBackend.AllReduce(_computedGradients, ReductionOperation.Average);
         CachedFullParameters = null;
@@ -149,6 +152,11 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         }
         // Note: Cache not invalidated if AutoSyncGradients is false,
         // allowing multiple predictions to benefit from cached full parameters
+
+        // ZeRO Stage-3 param offload: drop GPU-cached params so the next
+        // forward re-uploads from the updated CPU-resident values. No-op
+        // when CpuOffloadParams is off.
+        OffloadParamsToCpu();
     }
 
     /// <inheritdoc/>

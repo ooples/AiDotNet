@@ -122,6 +122,19 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ITextVectorizer<T>? TextVectorizer { get; private set; }
 
     /// <summary>
+    /// The embedding model configured via <c>ConfigureEmbeddingModel(...)</c>, or <c>null</c> when none was.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An embedding model turns text into dense vectors — a preprocessing/transform step, not a trainable
+    /// predictive model. The result surfaces it so callers can embed new text at inference time
+    /// (<c>Embed</c>/<c>EmbedBatch</c>) consistently with how features were prepared.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public Interfaces.IEmbeddingModel<T>? EmbeddingModel { get; private set; }
+
+    /// <summary>
     /// Gets the options used to create this model result.
     /// </summary>
     /// <remarks>
@@ -463,6 +476,255 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </para>
     /// </remarks>
     public CrossValidationResult<T, TInput, TOutput>? CrossValidationResult { get; internal set; }
+
+    /// <summary>
+    /// The error that occurred if a configured cross-validation ran but failed, or <c>null</c> when
+    /// cross-validation succeeded or was never configured. Lets callers tell a genuine "not performed"
+    /// (<see cref="CrossValidationResult"/> null and this null) apart from a failed run (this non-null),
+    /// rather than reading both as "not performed".
+    /// </summary>
+    public Exception? CrossValidationError { get; internal set; }
+
+    /// <summary>
+    /// Values of the metrics supplied to <c>ConfigureRegressionMetric</c> /
+    /// <c>ConfigureClassificationMetric</c>, keyed by metric name.
+    /// </summary>
+    /// <value>
+    /// One entry per configured metric, computed on the held-out test partition. Empty when no
+    /// metric was configured.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Separate from the built-in <c>ErrorStats</c>/<c>PredictionStats</c>, which are a fixed set
+    /// computed for every run. These are the metrics the caller explicitly asked for.
+    /// </para>
+    /// <para>
+    /// Computed on the TEST partition, not the training data — a metric read off the data the model
+    /// fit is a measure of memorization, not of the generalization the caller is asking about.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you called <c>ConfigureRegressionMetric(new MeanAbsoluteError…)</c>,
+    /// this is where its value lands, under that metric's name.</para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, T> ConfiguredMetrics => _configuredMetrics;
+
+    private readonly Dictionary<string, T> _configuredMetrics = new();
+
+    /// <summary>Records a configured metric's value. Called by the builder during Build.</summary>
+    internal void SetConfiguredMetric(string name, T value) => _configuredMetrics[name] = value;
+
+    /// <summary>
+    /// Gets the clustering evaluation for this model, or <c>null</c> when the built model is not a
+    /// clustering model.
+    /// </summary>
+    /// <value>
+    /// The internal cluster-validity indices (Silhouette, Davies-Bouldin, Calinski-Harabasz, Dunn,
+    /// Connectivity) computed on the training data and its learned cluster assignments, plus external
+    /// indices (Adjusted Rand, NMI, V-Measure, Fowlkes-Mallows) when ground-truth labels were supplied,
+    /// plus cluster count and sizes. <c>null</c> for non-clustering models.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Every clustering model is auto-evaluated: the standard internal indices run without any
+    /// configuration. <c>ConfigureClusterMetric</c> / <c>ConfigureExternalClusterMetric</c> add custom
+    /// indices to that set rather than replacing it. The same values are also mirrored, by name, into
+    /// <see cref="ConfiguredMetrics"/> for uniform access.
+    /// </para>
+    /// <para>
+    /// Cluster validity is intrinsically an in-sample measure — it scores the geometry of the
+    /// assignments the model produced — so unlike <see cref="ConfiguredMetrics"/> for supervised models
+    /// this is computed on the fitted data, not a held-out partition.
+    /// </para>
+    /// </remarks>
+    public Clustering.Evaluation.ClusteringEvaluationResult? ClusteringEvaluation { get; private set; }
+
+    /// <summary>Records the clustering evaluation. Called by the builder during Build.</summary>
+    internal void SetClusteringEvaluation(Clustering.Evaluation.ClusteringEvaluationResult evaluation)
+        => ClusteringEvaluation = evaluation;
+
+    /// <summary>
+    /// The attributed drift assessment computed on the held-out test stream, or <c>null</c> when no drift
+    /// detector was configured via <c>ConfigureDriftDetection(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The monitor is calibrated on the training residuals, then the test residuals and predictions are
+    /// streamed through it. The report says whether the held-out stream already drifts from what the
+    /// model learned, and attributes it to <b>concept</b> drift (errors shifting) or <b>covariate</b>
+    /// drift (prediction distribution shifting). See <see cref="DriftMonitor"/> for the live handle.
+    /// </para>
+    /// </remarks>
+    public DriftDetection.DriftReport? DriftReport { get; private set; }
+
+    /// <summary>
+    /// The drift monitor calibrated during Build, or <c>null</c> when no drift detector was configured.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Surfaced so production code can keep streaming live <c>(predicted, actual)</c> pairs through the
+    /// same monitor (<c>Observe</c>) that was calibrated on this model's training data, continuing the
+    /// concept/covariate attribution past deployment.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public DriftDetection.DriftMonitor<T>? DriftMonitor { get; private set; }
+
+    /// <summary>Records the drift monitoring artifacts. Called by the builder during Build.</summary>
+    internal void SetDriftMonitoring(DriftDetection.DriftReport report, DriftDetection.DriftMonitor<T> monitor)
+    {
+        DriftReport = report;
+        DriftMonitor = monitor;
+    }
+
+    /// <summary>
+    /// The active-learning ranking and selected batch, or <c>null</c> when no active-learning strategy was
+    /// configured via <c>ConfigureActiveLearning(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The configured strategy scores the unlabeled pool by informativeness; the batch is then chosen with
+    /// a diversity/redundancy penalty (BADGE / facility-location style) measured in the strongest available
+    /// space (gradient embeddings, a model representation, or input features) so it covers the pool rather
+    /// than collecting near-duplicate uncertain samples.
+    /// </para>
+    /// </remarks>
+    public ActiveLearning.ActiveLearningSelection? ActiveLearningSelection { get; private set; }
+
+    /// <summary>Records the active-learning selection. Called by the builder during Build.</summary>
+    internal void SetActiveLearningSelection(ActiveLearning.ActiveLearningSelection selection)
+        => ActiveLearningSelection = selection;
+
+    /// <summary>
+    /// The outcome of learning this task under continual learning, or <c>null</c> when
+    /// <c>ConfigureContinualLearning(...)</c> was not used.
+    /// </summary>
+    /// <remarks>Training loss/accuracy for the current task plus its regularization history and, once
+    /// prior tasks exist, the average accuracy retained on them.</remarks>
+    public ContinualLearning.Results.ContinualLearningResult<T>? ContinualLearningResult { get; private set; }
+
+    /// <summary>
+    /// The continual-learning retention report across all tasks learned so far, or <c>null</c> when
+    /// continual learning was not used.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// After learning the current task, every task seen so far is re-evaluated: per-task retained
+    /// accuracy, average accuracy, average forgetting, and forward/backward transfer. Surfacing this by
+    /// default is what makes the facade's continual learning more actionable than libraries that only
+    /// train — you can see whether prior knowledge was preserved.
+    /// </para>
+    /// </remarks>
+    public ContinualLearning.Results.ContinualEvaluationResult<T>? ContinualLearningReport { get; private set; }
+
+    /// <summary>Records the continual-learning artifacts. Called by the builder during Build.</summary>
+    internal void SetContinualLearning(
+        ContinualLearning.Results.ContinualLearningResult<T> result,
+        ContinualLearning.Results.ContinualEvaluationResult<T>? report)
+    {
+        ContinualLearningResult = result;
+        ContinualLearningReport = report;
+    }
+
+    /// <summary>
+    /// The self-supervised pretraining report, or <c>null</c> when no SSL method was configured (or an
+    /// explicit pretrain action was used instead of the default loop).
+    /// </summary>
+    /// <remarks>
+    /// The loss trajectory, a representation-collapse check (the classic BYOL/SimSiam failure a falling
+    /// loss can hide), and — when labels are available — a linear-probe quality estimate of the learned
+    /// representations.
+    /// </remarks>
+    public SelfSupervisedLearning.SelfSupervisedLearningPretrainingResult<T>? SelfSupervisedLearningPretrainingResult { get; private set; }
+
+    /// <summary>Records the self-supervised pretraining report. Called by the builder during Build.</summary>
+    internal void SetSelfSupervisedLearningPretrainingResult(
+        SelfSupervisedLearning.SelfSupervisedLearningPretrainingResult<T> result)
+        => SelfSupervisedLearningPretrainingResult = result;
+
+    /// <summary>
+    /// The model explainer configured via <c>ConfigureModelExplainer(...)</c>, or <c>null</c> when none
+    /// was. Bound to the model, so callers can run per-instance explanations (SHAP, integrated gradients,
+    /// …) on demand.
+    /// </summary>
+    [JsonIgnore]
+    public Interfaces.IModelExplainer<T>? ModelExplainer { get; private set; }
+
+    /// <summary>
+    /// The auto-audit of explanation faithfulness, or <c>null</c> when no model explainer was configured.
+    /// Reports whether the highlighted features actually drive the model's output — the trust check
+    /// mainstream explainability libraries omit.
+    /// </summary>
+    public Interpretability.ExplanationFaithfulnessReport<T>? ExplanationFaithfulness { get; private set; }
+
+    /// <summary>Records the explainability artifacts. Called by the builder during Build.</summary>
+    internal void SetExplainability(
+        Interfaces.IModelExplainer<T>? explainer,
+        Interpretability.ExplanationFaithfulnessReport<T>? faithfulness)
+    {
+        ModelExplainer = explainer;
+        ExplanationFaithfulness = faithfulness;
+    }
+
+    /// <summary>
+    /// The empirical adversarial-robustness audit, or <c>null</c> when no attack was configured via
+    /// <c>ConfigureAdversarialAttack(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// The configured attack is run against the trained model over a sweep of perturbation budgets; the
+    /// report gives an accuracy-versus-budget robustness curve, the robustness margin (mean perturbation
+    /// needed to fool the model), and the clean-versus-robust accuracy gap.
+    /// </remarks>
+    public AdversarialRobustness.AdversarialRobustnessReport<T>? AdversarialRobustness { get; private set; }
+
+    /// <summary>Records the adversarial-robustness audit. Called by the builder during Build.</summary>
+    internal void SetAdversarialRobustnessReport(AdversarialRobustness.AdversarialRobustnessReport<T> report)
+        => AdversarialRobustness = report;
+
+    /// <summary>
+    /// The certified-robustness audit, or <c>null</c> when no certified defense was configured via
+    /// <c>ConfigureCertifiedDefense(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Certified accuracy (a guaranteed lower bound on robustness) with mean/median certified radius, and
+    /// — when an adversarial attack is also configured — the certified-vs-empirical sandwich bounding the
+    /// true robustness at the same perturbation budget.
+    /// </remarks>
+    public AdversarialRobustness.CertifiedRobustnessReport<T>? CertifiedRobustness { get; private set; }
+
+    /// <summary>Records the certified-robustness audit. Called by the builder during Build.</summary>
+    internal void SetCertifiedRobustnessReport(AdversarialRobustness.CertifiedRobustnessReport<T> report)
+        => CertifiedRobustness = report;
+
+    /// <summary>
+    /// The model-compression audit, or <c>null</c> when no strategy was configured via
+    /// <c>ConfigureModelCompressionStrategy(...)</c> or the model has no compressible parameters.
+    /// </summary>
+    /// <remarks>
+    /// The configured strategy is applied to the trained weights and the decompressed weights are loaded back
+    /// into a rebuilt model that is re-evaluated on the prepared data, so accuracy retention is a real measure
+    /// of predictive fit. The report gives the size-versus-accuracy trade-off at full compression, a
+    /// sensitivity-aware Pareto frontier, weight reconstruction error, and the knee (most compression within a
+    /// retention tolerance).
+    /// </remarks>
+    public AiDotNet.ModelCompression.ModelCompressionReport<T>? ModelCompression { get; private set; }
+
+    /// <summary>Records the model-compression audit. Called by the builder during Build.</summary>
+    internal void SetModelCompressionReport(AiDotNet.ModelCompression.ModelCompressionReport<T> report)
+        => ModelCompression = report;
+
+    /// <summary>
+    /// The time-series decomposition audit, or <c>null</c> when no decomposition was configured via
+    /// <c>ConfigureTimeSeriesDecomposition(...)</c> or the target could not be analyzed.
+    /// </summary>
+    /// <remarks>
+    /// Grades the configured decomposition rather than only returning components: trend and seasonal strength,
+    /// whether the residual still carries structure the decomposition missed, additive reconstruction fidelity,
+    /// and a held-out forecast-skill comparison of decomposition-based forecasting against a random-walk baseline.
+    /// </remarks>
+    public DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionReport<T>? TimeSeriesDecomposition { get; private set; }
+
+    /// <summary>Records the time-series decomposition audit. Called by the builder during Build.</summary>
+    internal void SetTimeSeriesDecompositionReport(DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionReport<T> report)
+        => TimeSeriesDecomposition = report;
 
     /// <summary>
     /// Gets the AutoML summary for this model, if AutoML was used during building.
@@ -1299,6 +1561,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         TextVectorizer = options.TextVectorizer;
+        EmbeddingModel = options.EmbeddingModel;
 
         ModelMetaData = Model?.GetModelMetadata() ?? new();
 

@@ -88,51 +88,56 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        // Validate BEFORE touching any collective: a null input is a programming error that must fail this
+        // rank immediately, not after it has entered a barrier/collective that peers are blocked on.
         if (inputData == null)
-        {
             throw new ArgumentNullException(nameof(inputData));
-        }
 
-        // Ensure all processes start together
+        // Local-step mode runs ENTIRELY OUTSIDE the collective sequence (no barrier, no ReduceScatter/
+        // AllGather), so a rank configured for local steps can never deadlock against a rank in the sharded
+        // path. This must precede the opening barrier.
+        if (!Config.AutoSyncGradients)
+            return RunWrappedOptimizerStep(inputData);
+
+        // Synchronized FSDP == ZeRO Stage-3 (Zhao et al. 2023; Rajbhandari et al. 2020): gradients AND
+        // optimizer state are partitioned. RunShardedZeroStep(shardGradients:true) ReduceScatters the
+        // gradients (each rank holds only its averaged shard), updates ONLY this rank's parameter shard with
+        // the wrapped optimizer — so its Adam m/v state is sized to the shard (real state partitioning) —
+        // and AllGathers the updated shards. Stage-3 PARAMETER residency is provided by the Stage-3 sharded
+        // layer; FSDPModel handles the model-side param sharding. CpuOffload flags are honored in the step.
+        //
+        // This is SPMD: every rank MUST reach the same collective sequence. The opening barrier lines the
+        // ranks up; the closing barrier is a clean STEP-BOUNDARY synchronization so no rank races ahead to
+        // the next step (or, in a shared-runtime harness, into another rank's teardown) while a peer is
+        // still finishing this step's AllGather.
+        //
+        // What the closing barrier is NOT: fault tolerance. It is deliberately placed on the SUCCESS path
+        // (not in a try/finally) because a finally-barrier would be FALSE SAFETY — if one rank fails inside
+        // ReduceScatter/AllGather while a peer is blocked in that same collective, a trailing Barrier() (a
+        // DIFFERENT collective) cannot rescue the mismatched sequence. Recovering from a divergent
+        // mid-collective failure requires a backend-level abort/cancellation, which ICommunicationBackend
+        // does not expose; a symmetric failure (all ranks throw) needs no barrier and the next step's
+        // opening barrier re-synchronizes survivors.
         Config.CommunicationBackend.Barrier();
-
-        // Perform optimization on the wrapped optimizer
-        var result = WrappedOptimizer.Optimize(inputData);
-
-        // Synchronize parameters across all processes if auto-sync is enabled
-        if (Config.AutoSyncGradients && result.BestSolution != null)
-        {
-            SynchronizeParameters(result.BestSolution);
-        }
-
-        // Synchronize optimizer state if needed
-        SynchronizeOptimizerState();
-
-        // Ensure all processes finish together
+        var result = RunShardedZeroStep(inputData, shardGradients: true);
         Config.CommunicationBackend.Barrier();
-
         return result;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported for FSDP: optimizer state is PARTITIONED, not replicated. State partitioning is
+    /// achieved intrinsically inside <c>RunShardedZeroStep</c> — the wrapped optimizer's
+    /// <c>UpdateParameters</c> is called with ONLY this rank's gradient/parameter shard, so its Adam m/v
+    /// state is allocated and advanced solely for this rank's parameters. No rank holds another rank's
+    /// state, so there is no cross-rank state to synchronize; calling this method would be a logic error,
+    /// and returning silently could mislead a caller into believing a synchronization occurred.
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // For now, this is a placeholder
-        // In a full implementation, we would synchronize optimizer-specific state
-        // like momentum buffers, variance estimates (for Adam), etc.
-
-        // Different optimizers have different state to sync:
-        // - SGD with momentum: velocity vectors
-        // - Adam: first and second moment estimates
-        // - RMSprop: squared gradient moving average
-
-        // This would require either:
-        // 1. Extending IOptimizer with state access methods
-        // 2. Type-specific handling for known optimizer types
-        // 3. A generic state serialization mechanism
-
-        // For the MVP, we assume stateless or that the wrapped optimizer handles its own state
-    }
+        => throw new NotSupportedException(
+            "FSDP optimizer state is partitioned across ranks during Optimize (each rank owns only its " +
+            "shard's Adam state); there is no replicated state to synchronize, so explicit state " +
+            "synchronization is neither required nor supported.");
 
     /// <inheritdoc/>
     public override bool ShouldEarlyStop()
@@ -217,71 +222,7 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
         WrappedOptimizer.Deserialize(optimizerData);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// FSDP saves per-rank checkpoint files with rank suffix (e.g., "model.bin.rank0").
-    /// Each rank saves its own shard for correct round-trip across distributed workers.
-    /// </remarks>
-    public override void SaveModel(string filePath)
-    {
-        Config.CommunicationBackend.Barrier();
-
-        try
-        {
-            // Validate and normalize filePath
-            if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
-
-            string normalizedPath = Path.GetFullPath(filePath.Trim());
-
-            // Each rank saves its own shard for correct round-trip
-            string rankPath = $"{normalizedPath}.rank{Rank}";
-            Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-            using (Helpers.ModelPersistenceGuard.InternalOperation())
-            {
-                var data = Serialize();
-                var envelopedData = ModelFileHeader.WrapWithHeader(
-                    data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-                File.WriteAllBytes(rankPath, envelopedData);
-            }
-        }
-        finally
-        {
-            Config.CommunicationBackend.Barrier();
-        }
-    }
-
-    /// <inheritdoc/>
-    public override void LoadModel(string filePath)
-    {
-        Config.CommunicationBackend.Barrier();
-
-        try
-        {
-            // Validate and normalize filePath
-            if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
-
-            string normalizedPath = Path.GetFullPath(filePath.Trim());
-
-            // Each rank loads its own shard
-            string rankPath = $"{normalizedPath}.rank{Rank}";
-            if (!File.Exists(rankPath))
-                throw new FileNotFoundException($"Checkpoint file not found for rank {Rank}.", rankPath);
-            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-            var fileData = File.ReadAllBytes(rankPath);
-            using (Helpers.ModelPersistenceGuard.InternalOperation())
-            {
-                // Extract from AIMF envelope, with legacy raw-bytes fallback
-                var payload = ModelFileHeader.HasHeader(fileData)
-                    ? ModelFileHeader.ExtractPayload(fileData)
-                    : fileData;
-                Deserialize(payload);
-            }
-        }
-        finally
-        {
-            Config.CommunicationBackend.Barrier();
-        }
-    }
+    // SaveModel/LoadModel are inherited from ShardedOptimizerBase, which now writes one .rank{Rank}
+    // checkpoint file per rank — exactly the per-shard round-trip FSDP requires (this override used to
+    // provide it, but the behavior is now the shared base default for all sharded strategies).
 }

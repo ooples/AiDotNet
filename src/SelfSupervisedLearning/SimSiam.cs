@@ -35,6 +35,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> Chen and He, "Exploring Simple Siamese Representation Learning"
 /// (CVPR 2021)</para>
+///
+/// <para><b>Best for:</b> Simplicity, understanding non-contrastive learning.</para>
+/// <para><b>Pros:</b> Simplest non-contrastive method, no momentum encoder.</para>
+/// <para><b>Cons:</b> Can be sensitive to hyperparameters.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -43,10 +47,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Exploring Simple Siamese Representation Learning", "https://arxiv.org/abs/2011.10566", Year = 2021, Authors = "Xinlei Chen, Kaiming He")]
-public class SimSiam<T> : SSLMethodBase<T>
+public class SimSiam<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly BYOLLoss<T> _loss;
-    private readonly SSLAugmentationPolicies<T> _augmentation;
+    private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
 
     /// <summary>
     /// Gets the typed symmetric projector.
@@ -57,7 +61,7 @@ public class SimSiam<T> : SSLMethodBase<T>
     public override string Name => "SimSiam";
 
     /// <inheritdoc />
-    public override SSLMethodCategory Category => SSLMethodCategory.NonContrastive;
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.NonContrastive;
 
     /// <inheritdoc />
     public override bool RequiresMemoryBank => false;
@@ -74,7 +78,7 @@ public class SimSiam<T> : SSLMethodBase<T>
     public SimSiam(
         INeuralNetwork<T> encoder,
         SymmetricProjector<T> projector,
-        SSLConfig? config = null)
+        SelfSupervisedLearningConfig<T>? config = null)
         : base(encoder, projector, config ?? CreateSimSiamConfig())
     {
         if (projector is null)
@@ -84,14 +88,13 @@ public class SimSiam<T> : SSLMethodBase<T>
             throw new ArgumentException("Projector must have a predictor head", nameof(projector));
 
         _loss = new BYOLLoss<T>();
-        _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
+        _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
-    private static SSLConfig CreateSimSiamConfig()
+    private static SelfSupervisedLearningConfig<T> CreateSimSiamConfig()
     {
-        return new SSLConfig
+        return new SelfSupervisedLearningConfig<T>
         {
-            Method = SSLMethodType.SimSiam,
             LearningRate = 0.05, // SGD with base LR
             UseCosineDecay = true,
             BatchSize = 512 // Works with smaller batches than SimCLR

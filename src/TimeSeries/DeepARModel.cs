@@ -308,6 +308,13 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
                     bestLoss = epochLoss;
                     bestSnapshot = SnapshotParameters();
                 }
+
+                // Report after checkpointing so an early stop still leaves the best weights to
+                // restore below.
+                if (!ReportEpoch(epoch, timeBounded ? 0 : _options.Epochs, NumOps.FromDouble(epochLoss)))
+                {
+                    break;
+                }
             }
         }
 

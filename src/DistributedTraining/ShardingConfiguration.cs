@@ -40,6 +40,15 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     /// <inheritdoc/>
     public T LearningRate { get; set; }
 
+    /// <inheritdoc/>
+    public bool CpuOffloadOptimizer { get; set; }
+
+    /// <inheritdoc/>
+    public bool CpuOffloadGradients { get; set; }
+
+    /// <inheritdoc/>
+    public bool CpuOffloadParams { get; set; }
+
     /// <summary>
     /// Creates a new sharding configuration with the specified communication backend.
     /// </summary>
@@ -146,6 +155,61 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
             AutoSyncGradients = true,
             MinimumParameterGroupSize = 4096,  // Larger groups to reduce messages
             EnableGradientCompression = true   // Compress to save bandwidth
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration equivalent to DeepSpeed ZeRO-Offload Stage-1: keeps
+    /// optimizer state (Adam m/v, momentum buffers) on the CPU and runs the
+    /// optimizer step on the CPU. Frees ~2× the parameter memory from GPU VRAM
+    /// at the cost of a per-step PCIe round-trip on gradients and updated
+    /// parameters. The optimizer becomes CPU-bound; gains dominate for
+    /// larger models where the ~2× VRAM saving unblocks training entirely.
+    /// </summary>
+    /// <remarks>
+    /// Pair this with <c>DistributedStrategy.FSDP</c> / <c>ZeRO2</c> / <c>ZeRO3</c>
+    /// (or <c>DDP</c> — optimizer-only offload is compatible with unsharded DDP)
+    /// for a straight ZeRO-Offload equivalent. Layer with <see cref="CreateForZeROOffloadFull"/>
+    /// to also page gradients and params.
+    /// </remarks>
+    public static ShardingConfiguration<T> CreateForZeROOffload(ICommunicationBackend<T> communicationBackend)
+    {
+        if (communicationBackend == null)
+        {
+            throw new ArgumentNullException(nameof(communicationBackend));
+        }
+
+        return new ShardingConfiguration<T>(communicationBackend)
+        {
+            AutoSyncGradients = true,
+            CpuOffloadOptimizer = true,
+        };
+    }
+
+    /// <summary>
+    /// Enables all three CPU-offload contracts at once: optimizer state (real ZeRO-1/2 state partitioning +
+    /// CPU-resident Adam update), gradients (CPU-resident during the reduce), and parameters. "Full" means
+    /// "all three offload flags engaged" — NOT "DeepSpeed ZeRO Stage-3 residency for any model". The
+    /// parameter semantics depend on the model: on a black-box wrapped model
+    /// <see cref="IShardingConfiguration{T}.CpuOffloadParams"/> is GPU-cache eviction (see its docs), not a
+    /// peak-residency reduction; true Stage-3 residency (all-gather each layer's parameters to GPU only for
+    /// its forward/backward, then release) requires building the model from
+    /// <see cref="AiDotNet.DistributedTraining.Layers.Stage3ShardedLinear{T}"/>. Requires a sharded strategy
+    /// (FSDP / ZeRO2 / ZeRO3); DDP has no shard to offload.
+    /// </summary>
+    public static ShardingConfiguration<T> CreateForZeROOffloadFull(ICommunicationBackend<T> communicationBackend)
+    {
+        if (communicationBackend == null)
+        {
+            throw new ArgumentNullException(nameof(communicationBackend));
+        }
+
+        return new ShardingConfiguration<T>(communicationBackend)
+        {
+            AutoSyncGradients = true,
+            CpuOffloadOptimizer = true,
+            CpuOffloadGradients = true,
+            CpuOffloadParams = true,
         };
     }
 }

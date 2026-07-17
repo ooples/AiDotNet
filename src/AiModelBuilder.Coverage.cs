@@ -22,68 +22,33 @@ namespace AiDotNet;
 /// <typeparam name="TOutput">The output type.</typeparam>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
-    private ModelOptions? _configuredModelOptions;
-    private IDataTransformer<T, TInput, TInput>? _configuredDataTransformer;
     private IDataSplitter<T>? _configuredDataSplitter;
     private IClassificationMetric<T>? _configuredClassificationMetric;
     private IRegressionMetric<T>? _configuredRegressionMetric;
     private ITextVectorizer<T>? _configuredTextVectorizer;
-    private IDocumentStore<T>? _configuredDocumentStore;
-    private IBenchmark<T>? _configuredBenchmark;
-    private PhysicsInformed.Interfaces.IPDESpecification<T>? _configuredPDESpecification;
     private IClusterMetric<T>? _configuredClusterMetric;
     private IExternalClusterMetric<T>? _configuredExternalClusterMetric;
     private ICurriculumScheduler<T>? _configuredCurriculumScheduler;
     private ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T>? _configuredExplorationStrategy;
-    private ISSLMethod<T>? _configuredSSLMethod;
+    private ReinforcementLearning.IntrinsicMotivation.IIntrinsicRewardModule<T>? _configuredIntrinsicRewardModule;
+    private double _configuredIntrinsicRewardWeight = 0.5;
     private IStoppingCriterion<T>? _configuredStoppingCriterion;
     private ITimeSeriesDecomposition<T>? _configuredTimeSeriesDecomposition;
     private IDistillationStrategy<T>? _configuredDistillationStrategy;
     private IModelCompressionStrategy<T>? _configuredModelCompressionStrategy;
-    private IAgentTool? _configuredTool;
-    private INoiseScheduler<T>? _configuredNoiseScheduler;
+    private readonly System.Collections.Generic.List<IAgentTool> _configuredTools = new();
     private IEnvironment<T>? _configuredEnvironment;
     private IAdversarialAttack<T, TInput, TOutput>? _configuredAdversarialAttack;
     private IAdversarialDefense<T, TInput, TOutput>? _configuredAdversarialDefense;
     private ICertifiedDefense<T, TInput, TOutput>? _configuredCertifiedDefense;
     private ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput>? _configuredQueryStrategy;
+    private IReadOnlyList<TInput>? _queryStrategyPool;
+    private int _queryStrategyBatchSize = 10;
+    private double _queryStrategyDiversityWeight = 0.5;
     private IAudioEnhancer<T>? _configuredAudioEnhancer;
     private RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? _configuredSimilarityMetric;
 
-    /// <summary>
-    /// Configures model options that control training behavior and hyperparameters.
-    /// </summary>
-    /// <param name="options">The model options to apply.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Model options are configuration objects that control how your model
-    /// trains and behaves. Each algorithm has its own options class (e.g., NeuralNetworkOptions,
-    /// ClusteringOptions, RegressionOptions) that inherits from ModelOptions. Options control things
-    /// like learning rate, number of epochs, regularization strength, and algorithm-specific parameters.
-    /// All options support setting a random seed for reproducibility.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureModelOptions(ModelOptions options)
-    {
-        _configuredModelOptions = options;
-        return this;
-    }
 
-    /// <summary>
-    /// Configures a data transformer for preprocessing or postprocessing data transformations.
-    /// </summary>
-    /// <param name="transformer">The data transformer implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Data transformers convert your data from one form to another,
-    /// such as scaling numbers to a standard range, encoding text as numbers, or reducing the
-    /// number of features. Available transformers include StandardScaler, MinMaxScaler,
-    /// OneHotEncoder, PCA, PolynomialFeatures, SimpleImputer, and hundreds more.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataTransformer(IDataTransformer<T, TInput, TInput> transformer)
-    {
-        _configuredDataTransformer = transformer;
-        return this;
-    }
 
     /// <summary>
     /// Configures a data splitting strategy for dividing datasets into train/test/validation sets.
@@ -150,55 +115,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Configures a document store for persisting and retrieving documents with vector similarity search.
-    /// </summary>
-    /// <param name="store">The document store implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Document stores save and retrieve documents along with their vector
-    /// embeddings, enabling similarity search. They are a core component of Retrieval-Augmented
-    /// Generation (RAG) systems. Available stores include in-memory, file-based, and database-backed
-    /// implementations.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureDocumentStore(IDocumentStore<T> store)
-    {
-        _configuredDocumentStore = store;
-        return this;
-    }
+    // ConfigureDocumentStore removed: pass the store via ConfigureRetrievalAugmentedGeneration(documentStore: ...), which consumes it (HybridGraphRetriever).
 
-    /// <summary>
-    /// Configures a benchmark for evaluating and comparing model performance systematically.
-    /// </summary>
-    /// <param name="benchmark">The benchmark implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Benchmarks provide standardized tests for comparing models.
-    /// They measure aspects like accuracy, speed, memory usage, and robustness across different
-    /// datasets and scenarios, helping you choose the best model for your needs.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmark(IBenchmark<T> benchmark)
-    {
-        _configuredBenchmark = benchmark;
-        return this;
-    }
+    // ConfigureBenchmark removed: benchmarking is a post-build action, not a build input. Call
+    // AiModelResult.EvaluateBenchmarkAsync(...) on the trained result.
 
-    /// <summary>
-    /// Configures a PDE specification for physics-informed neural network training.
-    /// </summary>
-    /// <param name="specification">The PDE specification implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> PDE (Partial Differential Equation) specifications define the
-    /// physical laws that physics-informed neural networks must respect. Examples include the
-    /// heat equation, wave equation, Navier-Stokes equations, and Maxwell's equations. The neural
-    /// network learns to satisfy these equations while fitting observed data.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigurePDESpecification(PhysicsInformed.Interfaces.IPDESpecification<T> specification)
-    {
-        _configuredPDESpecification = specification;
-        return this;
-    }
+    // ConfigurePDESpecification removed: the PDE a physics-informed model must satisfy is a
+    // constructor parameter of that model. Set it on the model's options — the one door.
 
     /// <summary>
     /// Configures an internal cluster metric for evaluating clustering quality without ground truth labels.
@@ -248,6 +171,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCurriculumScheduler(ICurriculumScheduler<T> scheduler)
     {
         _configuredCurriculumScheduler = scheduler;
+
+        // Route it to where curriculum learning actually reads a scheduler from. The build passes
+        // CurriculumLearningOptions.CustomScheduler to the CurriculumLearner; parking the value in a
+        // private field meant this method never reached it. Curriculum learning only runs when
+        // ConfigureCurriculumLearning supplied options with a dataset, so if none exist yet the
+        // value is held and applied when they arrive (below), making the two calls order-independent.
+        if (_curriculumLearningOptions is not null)
+        {
+            _curriculumLearningOptions.CustomScheduler = scheduler;
+        }
+
         return this;
     }
 
@@ -265,6 +199,54 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureExplorationStrategy(ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T> strategy)
     {
         _configuredExplorationStrategy = strategy;
+
+        // Route it to where RL training actually reads the exploration override from. If RL options
+        // already exist, fill in their ExplorationStrategy (unless the options set one explicitly).
+        // If they don't exist yet, BuildRLInternalAsync falls back to _configuredExplorationStrategy,
+        // so the two calls are order-independent either way.
+        if (_rlOptions is not null && _rlOptions.ExplorationStrategy is null)
+        {
+            _rlOptions.ExplorationStrategy = strategy;
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures curiosity (intrinsic-motivation) exploration for reinforcement learning: a novelty
+    /// bonus is added to the environment reward each step so the agent seeks unfamiliar states, which is
+    /// what makes sparse-reward tasks learnable.
+    /// </summary>
+    /// <param name="module">
+    /// The intrinsic-reward module. When <c>null</c>, the industry-leading default is used: Random Network
+    /// Distillation (prediction error against a fixed random network as the novelty signal).
+    /// </param>
+    /// <param name="weight">Weight applied to the intrinsic reward before adding it to the extrinsic reward. Defaults to 0.5.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If your environment only rewards the agent rarely, the agent has no
+    /// signal to learn from most of the time. Curiosity gives it a bonus for discovering new situations,
+    /// so it keeps exploring purposefully. The bonus fades as situations become familiar.</para>
+    /// <para>
+    /// Applies to the reinforcement-learning training path (with a configured environment); the mean
+    /// intrinsic reward is surfaced on the result's reinforcement-learning metrics.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCuriosity(
+        ReinforcementLearning.IntrinsicMotivation.IIntrinsicRewardModule<T>? module = null, double weight = 0.5)
+    {
+        _configuredIntrinsicRewardModule = module
+            ?? new ReinforcementLearning.IntrinsicMotivation.RandomNetworkDistillation<T>(seed: _rlOptions?.Seed);
+        _configuredIntrinsicRewardWeight = weight;
+
+        // Order-independent with ConfigureReinforcementLearning / ConfigureEnvironment: fill the options
+        // if they already exist; otherwise BuildRLInternalAsync falls back to the configured field.
+        if (_rlOptions is not null && _rlOptions.IntrinsicRewardModule is null)
+        {
+            _rlOptions.IntrinsicRewardModule = _configuredIntrinsicRewardModule;
+            _rlOptions.IntrinsicRewardWeight = weight;
+        }
+
         return this;
     }
 
@@ -279,9 +261,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// contrastive learning (SimCLR, MoCo), masked prediction (BERT, MAE), and bootstrap methods
     /// (BYOL, SimSiam). These representations can then be fine-tuned for downstream tasks.</para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureSSLMethod(ISSLMethod<T> method)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearningMethod(ISelfSupervisedLearningMethod<T> method)
     {
-        _configuredSSLMethod = method;
+        if (method is null) throw new ArgumentNullException(nameof(method));
+
+        // Write through to the SSL config so the method reaches the pretraining hook. Create the
+        // config if ConfigureSelfSupervisedLearning has not run yet; that overload reuses this
+        // instance, so the two compose in either call order.
+        (_selfSupervisedLearningConfig ??= new SelfSupervisedLearning.SelfSupervisedLearningConfig<T>()).Method = method;
         return this;
     }
 
@@ -333,6 +320,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDistillationStrategy(IDistillationStrategy<T> strategy)
     {
         _configuredDistillationStrategy = strategy;
+        // The strategy IS the distillation parameter — flow it onto the KD options so it reaches
+        // training (and round-trips onto AiModelResult.KnowledgeDistillationOptions). Handles the
+        // case where ConfigureKnowledgeDistillation was called first; the reverse ordering is
+        // reconciled in ConfigureKnowledgeDistillation.
+        if (_knowledgeDistillationOptions is not null)
+        {
+            _knowledgeDistillationOptions.Strategy = strategy;
+        }
         return this;
     }
 
@@ -354,7 +349,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Configures a tool for agent-based systems and function calling.
+    /// Configures a tool for agent-based systems and function calling. Call it more than once to register
+    /// several tools; they accumulate and are all made available to the agent built from the model result.
     /// </summary>
     /// <param name="tool">The tool implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
@@ -362,30 +358,21 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <para><b>For Beginners:</b> Tools are callable functions that AI agents can use to interact
     /// with external systems. Examples include web search, code execution, file operations,
     /// API calls, and database queries. Tools extend an agent's capabilities beyond pure
-    /// text generation to real-world actions.</para>
+    /// text generation to real-world actions. After building, use <c>AiModelResult.CreateAgent(...)</c>
+    /// or <c>RunAgentAsync(...)</c> to run an agent that can call these tools — plus the trained model itself.</para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTool(IAgentTool tool)
     {
-        _configuredTool = tool;
+        if (tool is not null)
+        {
+            _configuredTools.Add(tool);
+        }
+
         return this;
     }
 
-    /// <summary>
-    /// Configures a noise scheduler for diffusion model training and sampling.
-    /// </summary>
-    /// <param name="scheduler">The noise scheduler implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Noise schedulers control how noise is added and removed during
-    /// diffusion model training and generation. They define the noise schedule (how quickly noise
-    /// increases), which affects generation quality and speed. Common schedulers include DDPM,
-    /// DDIM, Euler, DPM-Solver, and PNDM.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureNoiseScheduler(INoiseScheduler<T> scheduler)
-    {
-        _configuredNoiseScheduler = scheduler;
-        return this;
-    }
+    // ConfigureNoiseScheduler removed: the noise schedule is a constructor parameter of the diffusion
+    // model that uses it. Set it on that model's options — the one door.
 
     /// <summary>
     /// Configures a reinforcement learning environment for agent training.
@@ -400,6 +387,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureEnvironment(IEnvironment<T> environment)
     {
         _configuredEnvironment = environment;
+
+        // Route it to where RL actually reads an environment from. The build gates the RL training
+        // path on RLTrainingOptions.Environment and drives that instance (Reset/Step) from there;
+        // parking the value in a private field meant this method never reached it and configuring an
+        // environment silently fell through to the supervised path. If no RL options exist yet,
+        // configuring an environment is itself the request to train in it, so create them with the
+        // standard loop defaults; otherwise fill in the environment they are missing. Holding the
+        // value in _configuredEnvironment as well is what lets ConfigureReinforcementLearning carry
+        // it over when options arrive later, making the two calls order-independent.
+        if (_rlOptions is null)
+        {
+            _rlOptions = RLTrainingOptions<T>.Default(environment);
+        }
+        else
+        {
+            _rlOptions.Environment = environment;
+        }
+
         return this;
     }
 
@@ -456,16 +461,35 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Configures a query strategy for active learning sample selection.
     /// </summary>
     /// <param name="strategy">The query strategy implementation to use.</param>
+    /// <param name="unlabeledPool">
+    /// The per-sample unlabeled pool to rank. Required for the selection to run — query strategies are
+    /// generic over the input type, so (unlike the Tensor-typed ConfigureActiveLearning) the pool cannot
+    /// be derived by splitting the batched training data. When null, the strategy is recorded but no
+    /// selection is produced.
+    /// </param>
+    /// <param name="batchSize">How many samples to select for labeling. Defaults to 10.</param>
+    /// <param name="diversityWeight">Redundancy penalty for batch selection (0 = pure uncertainty). Defaults to 0.5.</param>
     /// <returns>The builder instance for method chaining.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Query strategies determine which unlabeled samples to select for
     /// labeling in active learning. The goal is to choose the most informative samples that will
     /// improve the model most efficiently. Common strategies include uncertainty sampling,
     /// query-by-committee, expected model change, and diversity sampling.</para>
+    /// <para>
+    /// The strategy's per-sample scores feed the same diversity-aware batch selection as
+    /// <c>ConfigureActiveLearning</c> (BADGE / facility-location style), with redundancy measured via the
+    /// three-tier representation cascade. The result lands on
+    /// <see cref="AiModelResult{T, TInput, TOutput}.ActiveLearningSelection"/>.
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureQueryStrategy(ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput> strategy)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureQueryStrategy(
+        ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput> strategy,
+        IReadOnlyList<TInput>? unlabeledPool = null, int batchSize = 10, double diversityWeight = 0.5)
     {
         _configuredQueryStrategy = strategy;
+        _queryStrategyPool = unlabeledPool;
+        _queryStrategyBatchSize = batchSize;
+        _queryStrategyDiversityWeight = diversityWeight;
         return this;
     }
 
@@ -482,6 +506,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEnhancer(IAudioEnhancer<T> enhancer)
     {
         _configuredAudioEnhancer = enhancer;
+        // Apply enhancement as a composable, fitted preprocessing step over audio-tensor inputs; its Fit
+        // estimates the noise profile from the training audio so train and inference are cleaned consistently.
+        _dataPipeline.AddPreprocessingStep(
+            new Preprocessing.Audio.AudioEnhancementTransformer<T, TInput>(enhancer), "audio_enhancer");
+        _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;
         return this;
     }
 

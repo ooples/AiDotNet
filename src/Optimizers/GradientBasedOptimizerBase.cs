@@ -427,8 +427,35 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         GradientCache = options.GradientCache;
         Regularization = options.Regularization;
 
-        // Initialize learning rate scheduler from options
+        // Initialize learning rate scheduler from options.
+        //
+        // UseAdaptiveLearningRate is itself a schedule — shrink while improving, grow while stalled
+        // — so it is expressed as one rather than as a competing rule that writes the learning rate
+        // behind the scheduler's back (which is what it used to do in
+        // OptimizerBase.UpdateAdaptiveParameters, silently overwriting any configured schedule every
+        // step). Installing it here means there is exactly one writer, an explicitly configured
+        // scheduler simply replaces it, and the flag keeps its existing behavior for callers who
+        // never touched schedulers.
         _learningRateScheduler = options.LearningRateScheduler;
+        if (_learningRateScheduler is null && options.UseAdaptiveLearningRate)
+        {
+            // Stepped per fitness observation rather than on the SchedulerStepMode cadence, because
+            // that is exactly when the inline rule it replaces used to run (UpdateAdaptiveParameters,
+            // which most optimizers call per iteration). Only AdamOptimizer drives OnEpochEnd, so
+            // leaving this one to the epoch cadence would silently stop every other optimizer from
+            // adapting at all.
+            _adaptiveSchedulerStepsOnFitness = true;
+            _learningRateScheduler = new LearningRateSchedulers.AdaptiveFitnessScheduler(
+                baseLearningRate: options.InitialLearningRate,
+                decay: options.LearningRateDecay,
+                minLearningRate: options.MinLearningRate,
+                maxLearningRate: options.MaxLearningRate,
+                // The metric fed to the scheduler is this optimizer's fitness score, whose direction
+                // depends on the calculator (a loss vs R²/accuracy). Passing the direction keeps the
+                // rule identical to the inline one it replaces, which compared via IsBetterFitness.
+                higherIsBetter: FitnessCalculator.IsHigherScoreBetter);
+        }
+
         _schedulerStepMode = options.SchedulerStepMode;
 
         // Use scheduler's current learning rate if available, otherwise use initial rate
@@ -1977,10 +2004,47 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         if (_learningRateScheduler != null)
         {
-            // Step the scheduler and sync both learning rate fields
-            SetLearningRate(_learningRateScheduler.Step());
+            // Always step WITH the metric. Metric-driven schedules (adaptive, reduce-on-plateau)
+            // cannot react without one, and stepping them through the metric-less overload would
+            // leave them silently inert — a plateau schedule that never plateaus. Step-driven
+            // schedules ignore the argument, so this is uniformly correct.
+            SetLearningRate(_learningRateScheduler.Step(_lastSchedulerMetric));
         }
+
         return _currentLearningRate;
+    }
+
+    /// <summary>
+    /// The most recent fitness score, fed to the learning-rate schedule.
+    /// </summary>
+    /// <remarks>
+    /// Starts non-finite so that a schedule stepped before any fitness has been observed treats the
+    /// epoch as non-improving rather than acting on a fabricated value.
+    /// </remarks>
+    private double _lastSchedulerMetric = double.NaN;
+
+    /// <summary>
+    /// Whether the schedule is the one auto-installed for <c>UseAdaptiveLearningRate</c>, and so
+    /// must step on every fitness observation to preserve that flag's original cadence.
+    /// </summary>
+    private readonly bool _adaptiveSchedulerStepsOnFitness;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Captures the fitness so <see cref="StepScheduler"/> can hand it to a metric-driven schedule,
+    /// and drives the auto-installed adaptive schedule here so that <c>UseAdaptiveLearningRate</c>
+    /// keeps adapting at the same points it always did — every optimizer that calls
+    /// <c>UpdateAdaptiveParameters</c>, not merely the one that happens to raise epoch events.
+    /// </remarks>
+    protected override void OnFitnessObserved(T fitness)
+    {
+        base.OnFitnessObserved(fitness);
+        _lastSchedulerMetric = Convert.ToDouble(fitness);
+
+        if (_adaptiveSchedulerStepsOnFitness && _learningRateScheduler is not null)
+        {
+            SetLearningRate(_learningRateScheduler.Step(_lastSchedulerMetric));
+        }
     }
 
     /// <summary>
@@ -2011,7 +2075,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 _ => false
             };
 
-            if (shouldStep)
+            // The auto-installed adaptive schedule already steps on every fitness observation, which
+            // is the cadence of the inline rule it replaces. Stepping it again here would adapt it
+            // twice per epoch for the one optimizer that raises epoch events, and once for the rest.
+            if (shouldStep && !_adaptiveSchedulerStepsOnFitness)
             {
                 StepScheduler();
             }

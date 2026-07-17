@@ -538,8 +538,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
-    /// by training and testing it multiple times on different subsets of your training data.
-    /// Use the evaluation methods on AiModelResult to perform cross-validation after building.
+    /// by training and testing it multiple times on different subsets of your data. The configured
+    /// validator runs during Build and its result is on <c>AiModelResult.CrossValidationResult</c>.
+    /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// For labels that look forward (a forward return, say), prefer
+    /// <c>PurgedWalkForwardCrossValidator</c>: the other validators here, including
+    /// <c>TimeSeriesCrossValidator</c>, leak across the fold boundary because a label computed at the
+    /// last training index is derived from samples inside the validation fold, which flatters the
+    /// score.
+    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
     {
@@ -651,6 +660,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         CurriculumLearningOptions<T, TInput, TOutput>? options = null)
     {
         _curriculumLearningOptions = options ?? new CurriculumLearningOptions<T, TInput, TOutput>();
+
+        // Carry over a scheduler configured before these options existed, so
+        // ConfigureCurriculumScheduler and ConfigureCurriculumLearning work in either order. Options
+        // passed here win, since they are the more specific statement of intent.
+        if (_configuredCurriculumScheduler is not null && _curriculumLearningOptions.CustomScheduler is null)
+        {
+            _curriculumLearningOptions.CustomScheduler = _configuredCurriculumScheduler;
+        }
+
         return this;
     }
 
@@ -973,6 +991,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options)
     {
         _rlOptions = options;
+
+        // Carry over an environment configured before these options existed, so ConfigureEnvironment
+        // and ConfigureReinforcementLearning work in either order. Options passed here win, since
+        // they are the more specific statement of intent. The assignment above replaces _rlOptions
+        // wholesale, so without this an earlier ConfigureEnvironment would be discarded -- including
+        // on the generated YAML path, which calls the two in exactly this order.
+        if (_configuredEnvironment is not null && _rlOptions.Environment is null)
+        {
+            _rlOptions.Environment = _configuredEnvironment;
+        }
+
+        // Same carry-over for an exploration strategy configured before these options existed.
+        // Options passed here win when they set their own ExplorationStrategy.
+        if (_configuredExplorationStrategy is not null && _rlOptions.ExplorationStrategy is null)
+        {
+            _rlOptions.ExplorationStrategy = _configuredExplorationStrategy;
+        }
+
         return this;
     }
 
@@ -1005,7 +1041,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// var distillationOptions = new KnowledgeDistillationOptions&lt;Vector&lt;double&gt;, Vector&lt;double&gt;, double&gt;
     /// {
     ///     TeacherModelType = TeacherModelType.NeuralNetwork,
-    ///     StrategyType = DistillationStrategyType.ResponseBased,
+    ///     Strategy = null,        // null =&gt; response-based (standard Hinton) default
     ///     Temperature = 3.0,      // Soften predictions (2-5 typical)
     ///     Alpha = 0.3,            // 30% hard labels, 70% teacher knowledge
     ///     Epochs = 20,
@@ -1049,6 +1085,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         KnowledgeDistillationOptions<T, TInput, TOutput>? options = null)
     {
         _knowledgeDistillationOptions = options ?? new KnowledgeDistillationOptions<T, TInput, TOutput>();
+        // Reconcile with a strategy set via ConfigureDistillationStrategy (either call ordering):
+        // the explicitly-configured strategy wins over an unset options.Strategy so the selected
+        // distillation method actually reaches training.
+        if (_configuredDistillationStrategy is not null && _knowledgeDistillationOptions.Strategy is null)
+        {
+            _knowledgeDistillationOptions.Strategy = _configuredDistillationStrategy;
+        }
         return this;
     }
 
@@ -1842,7 +1885,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///     .ConfigureModel(encoder)
     ///     .ConfigureSelfSupervisedLearning(ssl =>
     ///     {
-    ///         ssl.Method = SSLMethodType.MoCoV3;
+    ///         ssl.Method = MoCoV3&lt;double&gt;.Create(encoder, createEncoderCopy, encoderOutputDim);
     ///         ssl.PretrainingEpochs = 300;
     ///         ssl.Temperature = 0.2;
     ///         ssl.ProjectorOutputDimension = 256;
@@ -1857,17 +1900,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///     .ConfigureModel(encoder)
     ///     .ConfigureSelfSupervisedLearning(ssl =>
     ///     {
-    ///         ssl.Method = SSLMethodType.BYOL;
+    ///         ssl.Method = BYOL&lt;double&gt;.Create(encoder, createEncoderCopy, encoderOutputDim);
     ///         ssl.BYOL = new BYOLConfig { Momentum = 0.996 };
     ///     })
     ///     .Build(unlabeledImages);
     /// </code>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
-        Action<SelfSupervisedLearning.SSLConfig>? configure = null)
+        Action<SelfSupervisedLearning.SelfSupervisedLearningConfig<T>>? configure = null)
     {
-        _sslConfig = new SelfSupervisedLearning.SSLConfig();
-        configure?.Invoke(_sslConfig);
+        // Reuse any config an earlier ConfigureSelfSupervisedLearningMethod call created, so the two entry points
+        // compose in either order rather than the later one silently clobbering the earlier.
+        _selfSupervisedLearningConfig ??= new SelfSupervisedLearning.SelfSupervisedLearningConfig<T>();
+        configure?.Invoke(_selfSupervisedLearningConfig);
         return this;
     }
 
@@ -1875,32 +1920,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Configures self-supervised learning with a typed pretraining hook
     /// (<see cref="AiDotNet"/>#1361).
     /// </summary>
-    /// <param name="configure">Optional <see cref="SelfSupervisedLearning.SSLConfig"/>
-    /// configurator. When null, a default <c>SSLConfig</c> is used.</param>
+    /// <param name="configure">Optional <see cref="SelfSupervisedLearning.SelfSupervisedLearningConfig{T}"/>
+    /// configurator. When null, a default <c>SelfSupervisedLearningConfig&lt;T&gt;</c> is used.</param>
     /// <param name="pretrainAction">User-supplied pretraining hook invoked BEFORE
-    /// main training. Receives the current base model + SSLConfig + cancellation
+    /// main training. Receives the current base model + SelfSupervisedLearningConfig&lt;T&gt; + cancellation
     /// token; returns the model that should feed into main training (typically the
     /// same model with its encoder updated via <see cref="SelfSupervisedLearning
-    /// .ISSLMethod{T}"/>'s TrainStep loop). The configured-but-no-action pattern
+    /// .ISelfSupervisedLearningMethod{T}"/>'s TrainStep loop). The configured-but-no-action pattern
     /// preserves backwards compatibility — SSL settings are stored on the result
     /// without forcing any pretraining stage to run.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// The two-argument overload is the wire-up entry point — the single-argument
-    /// overload above stores SSLConfig but does NOT run a pretraining stage (the
+    /// overload above stores SelfSupervisedLearningConfig&lt;T&gt; but does NOT run a pretraining stage (the
     /// SSL subsystem requires an encoder-shaped <c>INeuralNetwork&lt;T&gt;</c> which
     /// is not interchangeable with arbitrary <c>IFullModel&lt;T, TInput, TOutput&gt;
     /// </c>; the user-supplied action is where the conversion happens).
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
-        Action<SelfSupervisedLearning.SSLConfig>? configure,
-        Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig, CancellationToken,
+        Action<SelfSupervisedLearning.SelfSupervisedLearningConfig<T>>? configure,
+        Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SelfSupervisedLearningConfig<T>, CancellationToken,
             Task<IFullModel<T, TInput, TOutput>>> pretrainAction)
     {
         if (pretrainAction is null) throw new ArgumentNullException(nameof(pretrainAction));
-        _sslConfig = new SelfSupervisedLearning.SSLConfig();
-        configure?.Invoke(_sslConfig);
-        _sslPretrainAction = pretrainAction;
+        // Reuse any config an earlier ConfigureSelfSupervisedLearningMethod call created (see the overload above).
+        _selfSupervisedLearningConfig ??= new SelfSupervisedLearning.SelfSupervisedLearningConfig<T>();
+        configure?.Invoke(_selfSupervisedLearningConfig);
+        _selfSupervisedLearningPretrainAction = pretrainAction;
         return this;
     }
 

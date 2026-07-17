@@ -59,8 +59,15 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting", "https://arxiv.org/abs/2012.07436", Year = 2021, Authors = "Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang")]
-public class InformerModel<T> : TimeSeriesModelBase<T>
+public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Informer is a point forecaster: its head emits a single value per horizon step, so any
+    /// pointwise loss is meaningful. Defaults to mean squared error when none is configured.
+    /// </remarks>
+    public void SetLossFunction(ILossFunction<T> lossFunction) => ApplyLossFunction(lossFunction);
+
     private readonly InformerOptions<T> _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly Random _random;
@@ -303,7 +310,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
         var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
-        var mseLoss = new MeanSquaredErrorLoss<T>();
+        var mseLoss = TrainingLoss;
         var allParams = CollectTrainableParameters();
 
         int batchSize = Math.Max(1, _options.BatchSize);
@@ -371,6 +378,13 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 {
                     bestLoss = epochLoss;
                     bestSnapshot = allParams.Select(p => p.Clone()).ToList();
+                }
+
+                // Report after checkpointing so an early stop still leaves the best weights to
+                // restore below.
+                if (!ReportEpoch(epoch, timeBounded ? 0 : _options.Epochs, NumOps.FromDouble(epochLoss)))
+                {
+                    break;
                 }
             }
         }
@@ -448,7 +462,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         if (valid.Count < batchSize) return false;
 
         var layers = CollectTrainableLayers();
-        var mseLoss = new MeanSquaredErrorLoss<T>();
+        var mseLoss = TrainingLoss;
 
         Tensor<T> ForwardEnc(Tensor<T> input)
         {

@@ -917,6 +917,10 @@ jobs:
         # pwsh (PowerShell Core) is pre-installed on ubuntu-latest runners and runs
         # the existing scripts cross-platform without a rewrite.
         shell: pwsh
+        # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
+        # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
+        env:
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           # Sanitize shard name: remove/replace all characters invalid in file paths
           $shardName = "${{ matrix.shard.name }}"

@@ -54,7 +54,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "NeuralProcessBase",         // Neural processes: inherits MetaLearnerBase
         "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
         "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
-        "SSLMethodBase",             // Self-supervised learning: wraps encoder + projector
+        "SelfSupervisedLearningMethodBase",             // Self-supervised learning: wraps encoder + projector
         "AudioSafetyModuleBase",     // Audio safety: wraps another model for content moderation
         "TextSafetyModuleBase",      // Text safety: wraps another model for content moderation
         "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
