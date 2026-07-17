@@ -478,6 +478,14 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public CrossValidationResult<T, TInput, TOutput>? CrossValidationResult { get; internal set; }
 
     /// <summary>
+    /// The error that occurred if a configured cross-validation ran but failed, or <c>null</c> when
+    /// cross-validation succeeded or was never configured. Lets callers tell a genuine "not performed"
+    /// (<see cref="CrossValidationResult"/> null and this null) apart from a failed run (this non-null),
+    /// rather than reading both as "not performed".
+    /// </summary>
+    public Exception? CrossValidationError { get; internal set; }
+
+    /// <summary>
     /// Values of the metrics supplied to <c>ConfigureRegressionMetric</c> /
     /// <c>ConfigureClassificationMetric</c>, keyed by metric name.
     /// </summary>

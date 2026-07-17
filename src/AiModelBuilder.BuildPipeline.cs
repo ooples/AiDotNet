@@ -1719,6 +1719,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 $"Configured cross-validator '{_crossValidator.GetType().Name}' failed: {ex}. " +
                 "The trained model is unaffected; CrossValidationResult is left unset.");
             _crossValidationFailure = ex;
+
+            // Surface the failure on the result so facade users can distinguish "ran and failed" from
+            // "never performed" (a null CrossValidationResult reads the same for both otherwise).
+            result.CrossValidationError = ex;
         }
     }
 
@@ -1911,8 +1915,28 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             xTest = (TInput)(object)r.XTest;
             yTrain = (TOutput)(object)r.yTrain!;
             yTest = (TOutput)(object)r.yTest!;
-            xVal = (TInput)(object)(r.XValidation ?? r.XTest);
-            yVal = (TOutput)(object)(r.yValidation ?? r.yTest)!;
+            if (r.XValidation is not null)
+            {
+                xVal = (TInput)(object)r.XValidation;
+                yVal = r.yValidation is not null ? (TOutput)(object)r.yValidation : yTest;
+                return true;
+            }
+
+            // Nested inner split on the training partition (same splitter methodology) so validation never
+            // reuses the test partition — the tensor equivalent of the Matrix branch's TryInnerSplit, so
+            // purged/embargoed splitters keep their methodology instead of validating on the test set.
+            if (TryInnerSplitTensor(splitter, r.XTrain, r.yTrain, out var innerTX, out var innerTY,
+                    out var valTX, out var valTY))
+            {
+                xTrain = (TInput)(object)innerTX;
+                if (innerTY is not null) yTrain = (TOutput)(object)innerTY;
+                xVal = (TInput)(object)valTX;
+                yVal = valTY is not null ? (TOutput)(object)valTY : yTest;
+                return true;
+            }
+
+            xVal = (TInput)(object)r.XTest;
+            yVal = yTest;
             return true;
         }
 
@@ -1967,6 +1991,51 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // geometry, say). Fall back rather than fail the whole build over a validation set.
             System.Diagnostics.Trace.TraceWarning(
                 $"Splitter '{splitter.Description}' could not subdivide its training partition for a " +
+                $"validation set ({ex.Message}); validation will mirror the test partition.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Tensor counterpart of <see cref="TryInnerSplit"/>: re-applies the splitter to its own tensor training
+    /// partition to carve out a validation set with the same methodology, so early stopping never validates
+    /// against the outer test partition.
+    /// </summary>
+    /// <returns><c>false</c> when the inner split is not possible or degenerate.</returns>
+    private static bool TryInnerSplitTensor(
+        IDataSplitter<T> splitter, Tensor<T> trainX, Tensor<T>? trainY,
+        out Tensor<T> innerX, out Tensor<T>? innerY,
+        out Tensor<T> valX, out Tensor<T>? valY)
+    {
+        innerX = trainX; innerY = trainY;
+        valX = trainX; valY = trainY;
+
+        static int Rows(Tensor<T>? t) => t is null || t.Shape.Length == 0 ? 0 : t.Shape[0];
+
+        // Too little data to split again.
+        if (Rows(trainX) < 4)
+        {
+            return false;
+        }
+
+        try
+        {
+            var inner = splitter.SplitTensor(trainX, trainY);
+            if (Rows(inner.XTrain) == 0 || Rows(inner.XTest) == 0)
+            {
+                return false;
+            }
+
+            innerX = inner.XTrain;
+            innerY = inner.yTrain;
+            valX = inner.XValidation ?? inner.XTest;
+            valY = inner.yValidation ?? inner.yTest;
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Splitter '{splitter.Description}' could not subdivide its tensor training partition for a " +
                 $"validation set ({ex.Message}); validation will mirror the test partition.");
             return false;
         }
@@ -2993,6 +3062,53 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="x">Matrix of input features.</param>
     /// <param name="y">Vector of output values.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <summary>
+    /// Builds a <c>DatasetResult</c> by evaluating <paramref name="model"/> on the given partition, or
+    /// <c>null</c> when the partition is empty (e.g. no held-out split was produced). Used to populate the
+    /// direct-training branch's TestResult so configured test metrics have data to evaluate.
+    /// </summary>
+    private OptimizationResult<T, TInput, TOutput>.DatasetResult? BuildDirectBranchDatasetResult(
+        IFullModel<T, TInput, TOutput> model, TInput dataX, TOutput dataY, int featureCount)
+    {
+        if (!HasRows(dataX))
+        {
+            return null;
+        }
+
+        try
+        {
+            var predictions = model.Predict(dataX);
+            var predictedVec = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
+            var actualVec = ConversionsHelper.ConvertToVector<T, TOutput>(dataY);
+            return new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            {
+                X = dataX,
+                Y = dataY,
+                Predictions = predictions,
+                ErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+                {
+                    Actual = actualVec, Predicted = predictedVec, FeatureCount = featureCount
+                }),
+                PredictionStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+                {
+                    Actual = actualVec, Predicted = predictedVec, NumberOfParameters = featureCount
+                }),
+            };
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null; // fall back to the training partition rather than crash the build.
+        }
+    }
+
+    private static bool HasRows(TInput data) => data switch
+    {
+        AiDotNet.Tensors.LinearAlgebra.Matrix<T> m => m.Rows > 0,
+        AiDotNet.Tensors.LinearAlgebra.Tensor<T> t => t.Length > 0,
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> v => v.Length > 0,
+        _ => false,
+    };
+
     private async Task<AiModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(
         TInput x, TOutput y, CancellationToken cancellationToken)
     {
@@ -3061,6 +3177,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // Engine resolves to: the one from ConfigureAutoML(options), else the model if it's an
         // IAutoMLModel, else a built-in RandomSearch default.
         bool concreteModelPinned = _model != null && _model is not IAutoMLModel<T, TInput, TOutput>;
+
+        // A configured loss can only be honoured on a concrete model (ApplyConfiguredLossFunction above set it
+        // on the pinned model). AutoML constructs and trains its candidate models internally, so there is no
+        // model here to receive the loss — fail loudly rather than silently training against the wrong loss.
+        if (_configuredLossFunction is not null && !concreteModelPinned)
+        {
+            throw new NotSupportedException(
+                "ConfigureLossFunction requires a concrete model pinned via ConfigureModel: it cannot be " +
+                "applied to an AutoML search, which builds and trains candidate models internally. Pin a model, " +
+                "or supply the loss through that model's constructor/options.");
+        }
+
         if (!concreteModelPinned)
         {
             _autoMLModel ??= (_model as IAutoMLModel<T, TInput, TOutput>)
@@ -4493,17 +4621,27 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
             // trainPredOutput is already TOutput from model.Predict
 
+            var directTrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            {
+                X = directX, Y = directY, Predictions = trainPredOutput,
+                ErrorStats = trainErrorStats,
+                PredictionStats = trainPredStats
+            };
+
+            // Populate TestResult on the direct-training path too: without it, configured test metrics
+            // (ConfigureRegressionMetric/ConfigureClassificationMetric) have nothing to evaluate and the
+            // conversion downstream fails. Evaluate the held-out test partition when the split produced one,
+            // otherwise fall back to the training partition so the result is always well-formed.
+            var directTestResult = BuildDirectBranchDatasetResult(model, XTest, yTest, inputSize)
+                ?? directTrainingResult;
+
             optimizationResult = new OptimizationResult<T, TInput, TOutput>
             {
                 BestSolution = model,
                 Iterations = 1,
                 SelectedFeatureIndices = Enumerable.Range(0, inputSize).ToList(),
-                TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
-                {
-                    X = directX, Y = directY, Predictions = trainPredOutput,
-                    ErrorStats = trainErrorStats,
-                    PredictionStats = trainPredStats
-                }
+                TrainingResult = directTrainingResult,
+                TestResult = directTestResult
             };
         }
         else
