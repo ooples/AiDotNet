@@ -33,10 +33,6 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     // single thread that runs model forwards, so concurrent requests never race per-forward layer scratch.
     private AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<T>? _sharedBatcher;
     private readonly object _batcherInitLock = new();
-    // Only one thread drives the engine's Step() at a time. Whoever holds it advances the WHOLE batch, so
-    // concurrent requests co-batch; a request returns as soon as its own result task completes. Driving
-    // synchronously (no background loop) keeps generation deterministic and serializes model forwards.
-    private readonly object _engineLock = new();
     private bool _disposed;
 
     // The optimized, context-aware model backing incremental decode (writes/reads paged KV per sequence
@@ -719,9 +715,11 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             {
                 var config = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig
                 {
-                    // Requests drive Step() synchronously under the engine lock (no background loop), so
-                    // generation is deterministic and forwards are serialized.
-                    AutoStart = false,
+                    // ONE background loop thread drives Step() and is the sole thread that runs model
+                    // forwards, so concurrent requests co-batch, forwards are serialized (deterministic
+                    // per-request output), and request threads just await/consume instead of competing to
+                    // drive — which is what lets throughput scale with concurrency.
+                    AutoStart = true,
                     // Per-request GenerationRequest.SpeculationDepth overrides this; a positive default keeps
                     // greedy-exact prompt-lookup speculation available to greedy requests that don't specify one.
                     // Sequence-collapsing models (SupportsBatchedPrefill=false) must prefill/decode one
@@ -747,58 +745,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         Guard.NotNull(request);
         var batcher = EnsureBatcher()
             ?? throw new NotSupportedException($"Model '{_modelName}' does not support incremental generation.");
-        var task = batcher.GenerateAsync(request, cancellationToken);
-        DriveUntilComplete(batcher, task, request, cancellationToken);
-        return task.GetAwaiter().GetResult();
-    }
-
-    /// <summary>
-    /// Cooperatively drives the shared engine until <paramref name="task"/> completes. Whoever holds the
-    /// engine lock advances the whole batch (so concurrent requests co-batch); a caller whose task another
-    /// thread is already driving spins until its own task completes. Forwards are serialized by the lock.
-    /// </summary>
-    private void DriveUntilComplete(
-        AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<T> batcher,
-        System.Threading.Tasks.Task task,
-        AiDotNet.Serving.ContinuousBatching.GenerationRequest<T> request,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        // Generous upper bound on Step() calls for this driver: each Step advances every scheduled sequence
-        // (including this request's) by >= 1 token, so this request completes well within it. Guards against
-        // a wedged sequence that never makes progress instead of spinning forever.
-        long maxSteps = ((long)request.MaxNewTokens + request.PromptTokenIds.Count + 64) * 8L;
-        var spin = new System.Threading.SpinWait();
-
-        while (!task.IsCompleted)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (System.Threading.Monitor.TryEnter(_engineLock))
-            {
-                try
-                {
-                    while (!task.IsCompleted)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        batcher.Step();
-                        if (--maxSteps <= 0)
-                        {
-                            throw new TimeoutException(
-                                $"Generation for model '{_modelName}' did not complete within the step budget.");
-                        }
-                    }
-                }
-                finally
-                {
-                    System.Threading.Monitor.Exit(_engineLock);
-                }
-            }
-            else
-            {
-                // Another thread is driving (and advancing this request's sequence too); wait for my task.
-                spin.SpinOnce();
-            }
-        }
+        // The background loop drives generation; just await the result (blocks this request thread without
+        // consuming CPU, leaving cores for the loop's forward).
+        return batcher.GenerateAsync(request, cancellationToken).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -823,50 +772,27 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             yield break;
         }
 
-        // Tokens are captured as the engine produces them and yielded (outside the engine lock) as they
-        // become available. The consumer itself helps drive the shared engine one Step at a time.
-        var queue = new System.Collections.Concurrent.ConcurrentQueue<int>();
-        request.OnTokenGenerated = token => queue.Enqueue(token);
-        var task = batcher.GenerateAsync(request, cancellationToken);
-
-        while (true)
+        // The background loop produces tokens; we block-consume them off a queue (no busy-driving). EOS
+        // terminates the stream and is not yielded. CompleteAdding on task completion ends the enumeration.
+        var queue = new System.Collections.Concurrent.BlockingCollection<int>(
+            new System.Collections.Concurrent.ConcurrentQueue<int>());
+        request.OnTokenGenerated = token =>
         {
-            if (cancellationToken.IsCancellationRequested)
+            try { queue.Add(token); }
+            catch (System.InvalidOperationException) { /* consumer stopped: adding already completed */ }
+        };
+        var task = batcher.GenerateAsync(request, cancellationToken);
+        _ = task.ContinueWith(
+            _ => { try { queue.CompleteAdding(); } catch (System.ObjectDisposedException) { } },
+            System.Threading.Tasks.TaskScheduler.Default);
+
+        foreach (var token in queue.GetConsumingEnumerable(cancellationToken))
+        {
+            if (token == eosTokenId)
             {
                 yield break;
             }
-
-            // Advance the batch by one Step if we can grab the engine (another streaming/blocking caller
-            // may currently hold it — its Steps still advance this request's sequence).
-            if (System.Threading.Monitor.TryEnter(_engineLock))
-            {
-                try
-                {
-                    if (!task.IsCompleted)
-                    {
-                        batcher.Step();
-                    }
-                }
-                finally
-                {
-                    System.Threading.Monitor.Exit(_engineLock);
-                }
-            }
-
-            // Drain and yield any tokens produced so far (EOS terminates the stream, not yielded).
-            while (queue.TryDequeue(out int token))
-            {
-                if (token == eosTokenId)
-                {
-                    yield break;
-                }
-                yield return token;
-            }
-
-            if (task.IsCompleted)
-            {
-                yield break;
-            }
+            yield return token;
         }
     }
 

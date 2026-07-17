@@ -1,4 +1,7 @@
 using System.Reflection;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Serving.Controllers;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
@@ -63,12 +66,38 @@ Func<Tensor<float>, Tensor<float>> synthForward = input =>
     return logits;
 };
 
-var model = new ServableModelWrapper<float>(
-    ModelName,
-    inputDimension: 1,
-    outputDimension: vocab,
-    predictFunc: v => v,
-    generationForward: synthForward);
+// By default, serve a small REAL per-position transformer LM (Embedding -> MHA -> Dense) so requests
+// drive the UNIFIED paged continuous-batching engine (batched prefill + decode + speculation, prefix
+// sharing). Set DEVHOST_SYNTHETIC=1 to instead use the fast synthetic Func forward, which routes the
+// stateless per-request path and measures pure engine/HTTP overhead rather than the batching win.
+bool synthetic = Environment.GetEnvironmentVariable("DEVHOST_SYNTHETIC") == "1";
+ServableModelWrapper<float> model;
+if (synthetic)
+{
+    model = new ServableModelWrapper<float>(
+        ModelName, inputDimension: 1, outputDimension: vocab, predictFunc: v => v, generationForward: synthForward);
+}
+else
+{
+    const int embDim = 64, heads = 4;
+    var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+    {
+        new EmbeddingLayer<float>(vocab, embDim),
+        new MultiHeadAttentionLayer<float>(heads, embDim / heads,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
+        new DenseLayer<float>(vocab, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
+    };
+    var architecture = new NeuralNetworkArchitecture<float>(
+        inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.TextGeneration,
+        complexity: NetworkComplexity.Simple, inputSize: 1, outputSize: vocab, layers: layers);
+    var lm = new NeuralNetwork<float>(architecture);
+    var pv = lm.GetParameters();
+    var det = new float[pv.Length];
+    for (int i = 0; i < det.Length; i++) det[i] = ((i % 17) - 8) / 16.0f;
+    lm.UpdateParameters(new Vector<float>(det));
+    model = new ServableModelWrapper<float>(
+        ModelName, lm, inputShape: new[] { 1 }, enableSpeculativeDecoding: false, generationForward: lm.Predict);
+}
 
 repo.LoadModel<float>(ModelName, model);
 tokenizers.Register(ModelName, tokenizer);
