@@ -79,4 +79,35 @@ public enum CreditRule
     /// error's per-sample magnitude). This is the DFA variant intended to train deep / Transformer networks.
     /// </summary>
     DFANormalized = 7,
+
+    /// <summary>
+    /// <b>Local Error Signals</b> — Nøkland &amp; Eidnes, 2019 ("Training Neural Networks with Local Error
+    /// Signals"). A backprop-free <i>supervised</i> rule: every hidden layer carries its own learned linear
+    /// classifier to the labels and is trained by the gradient of <b>its own</b> cross-entropy against the target
+    /// (no backward chain, no privileged intermediate target). Because each layer talks directly to the labels
+    /// rather than to its neighbours, deep routing layers (e.g. attention) far from the readout still receive a
+    /// strong supervised signal, and the rule applies even when the trainable layers are non-contiguous.
+    /// </summary>
+    LocalErrorSignal = 8,
+
+    /// <summary>
+    /// <b>Difference Target Propagation</b> — Lee, Zhang, Fischer &amp; Bengio, 2015. A backprop-free rule that
+    /// propagates <i>targets</i> (not gradients) backward through <b>learned inverses</b>: every layer trains an
+    /// approximate inverse of its own forward map (by reconstructing its input from its output), and each hidden
+    /// layer's target is the difference-corrected <c>ĥ_{j−1} = h_{j−1} − g_j(h_j) + g_j(ĥ_j)</c>. Unlike Feedback
+    /// Alignment (fixed random feedback) or Kolen-Pollack (feedback tracks <c>Wᵀ</c>), the feedback here is the
+    /// learned inverse (≈ <c>W⁺</c>). Because targets chain layer-to-layer it requires <b>contiguous</b> trainable
+    /// layers; use <see cref="LocalErrorSignal"/> or Direct Feedback Alignment for non-contiguous stacks.
+    /// </summary>
+    DifferenceTargetPropagation = 9,
+
+    /// <summary>
+    /// <b>Direct Difference Target Propagation (DDTP-linear)</b> — Meulemans et al., 2020. Keeps Difference Target
+    /// Propagation's <b>learned inverses</b> but routes them <b>directly from the output</b> (like Direct Feedback
+    /// Alignment) rather than chaining layer-to-layer. Each hidden layer's feedback is a direct map from the output,
+    /// trained online to reconstruct that layer's activation from the network output (≈ a direct <c>W⁺</c>). It fills
+    /// the missing corner of the design matrix — learned-inverse feedback that, unlike
+    /// <see cref="DifferenceTargetPropagation"/>, also applies to <b>non-contiguous</b> stacks.
+    /// </summary>
+    DirectDifferenceTargetPropagation = 10,
 }
