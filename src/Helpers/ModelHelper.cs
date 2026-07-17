@@ -228,9 +228,15 @@ public static class ModelHelper<T, TInput, TOutput>
         }
         else if (input is Tensor<T> tensor)
         {
-            if (tensor.Shape.Length < 2)
+            if (tensor.Shape.Length != 2)
             {
-                throw new ArgumentException("Tensor must have at least 2 dimensions to extract columns");
+                // Column extraction indexes axis 1 with a 2-index accessor, so it is only defined for a rank-2
+                // tensor. A rank>2 (e.g. [batch, seq, features]) input reaching here means a "non-flat" model
+                // was misclassified as columnar upstream — fail with a clear message instead of the cryptic
+                // "Number of indices must match the tensor's rank" from the tensor accessor.
+                throw new ArgumentException(
+                    $"Column extraction requires a rank-2 tensor; got rank {tensor.Shape.Length} " +
+                    $"(shape {string.Join("×", tensor._shape)}).");
             }
 
             var result = new List<Vector<T>>();

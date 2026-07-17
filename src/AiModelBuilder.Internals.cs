@@ -1879,6 +1879,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var quantizedModel = quantizer.Quantize(model, internalConfig);
         var quantizedParameters = InterfaceGuard.Parameterizable(quantizedModel).GetParameters();
 
+        // Preserve trained state through quantization. Quantizers rebuild the model from its parameter vector
+        // (IParameterizable.WithParameters), which for model families that keep trained state OUTSIDE
+        // GetParameters() — e.g. gradient-boosted trees' tree ensembles and bin thresholds — drops those
+        // internals, leaving the quantized model UNTRAINED so its Predict throws "Model must be trained before
+        // making predictions" (surfaced when a downstream consumer such as the JIT path then traces it). Re-seat
+        // the quantized parameters onto a full DeepCopy of the trained source, which keeps those internals, and
+        // apply the parameters in-place (SetParameters) rather than rebuilding.
+        try
+        {
+            var trainedQuantized = model.DeepCopy();
+            InterfaceGuard.Parameterizable(trainedQuantized).SetParameters(quantizedParameters);
+            quantizedModel = trainedQuantized;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"Warning: could not preserve trained state through quantization ({ex.GetType().Name}: {ex.Message}); " +
+                "using the quantizer's model directly.");
+        }
+
         // Calculate actual quantized size based on bit width
         // For sub-byte quantization (4-bit), we need to account for packing
         long quantizedSizeBytes = ((long)quantizedParameters.Length * internalConfig.EffectiveBitWidth + 7) / 8;

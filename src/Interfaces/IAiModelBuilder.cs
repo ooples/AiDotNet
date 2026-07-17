@@ -1451,6 +1451,22 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
 
     /// <summary>
+    /// Configures training memory management — gradient checkpointing and activation pooling — so large models
+    /// (e.g. deep transformers) can train within a bounded activation-memory budget.
+    /// </summary>
+    /// <param name="configuration">
+    /// The training-memory configuration (presets such as <c>TrainingMemoryConfig.ForTransformers()</c> or
+    /// <c>MemoryEfficient()</c>); <c>null</c> applies the defaults.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> deep models store the intermediate results of every layer during training so they
+    /// can compute gradients. Gradient checkpointing trades a little extra compute to recompute some of those
+    /// instead of holding them all in memory, which lets a bigger model fit on the same hardware.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureMemoryManagement(Training.Memory.TrainingMemoryConfig? configuration = null);
+
+    /// <summary>
     /// Configures advanced reasoning capabilities for the model using Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency strategies.
     /// </summary>
     /// <param name="config">The reasoning configuration (optional, uses defaults if null).</param>
