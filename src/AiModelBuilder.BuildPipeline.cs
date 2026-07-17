@@ -5227,6 +5227,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ComputeCertifiedRobustness(finalResult, preparedX, preparedY, optimizationResult);
         ComputeModelCompression(finalResult, preparedX, preparedY, optimizationResult);
         ComputeTimeSeriesDecomposition(finalResult, preparedY);
+        finalResult.SetConfiguredTools(_configuredTools);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

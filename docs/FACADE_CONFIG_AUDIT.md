@@ -38,7 +38,14 @@ Tracking issue: #1876. Related PR: #1875.
 
 - **AudioEffect + AudioEnhancer** — wired through the **existing preprocessing pipeline** rather than a bespoke hook: each is wrapped in an `IDataTransformer` adapter (`AudioEffectTransformer` / `AudioEnhancementTransformer`, in `Preprocessing/Audio/`) and appended as a composable pipeline step via a new `AiModelDataPipeline.AddPreprocessingStep` primitive (append, not the replace semantics of `ConfigurePreprocessing`). The adapters apply the processor to audio-tensor inputs and pass non-audio through unchanged; the enhancer's `Fit` estimates the noise profile from the training audio so train and inference are cleaned consistently (a data-consistency guarantee a one-off enhancement pass lacks). The adapters are public for direct `ConfigurePreprocessing` use; the existing facade methods stay (non-breaking) but now feed the pipeline.
 
-Remaining Tier 4/6: Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
+- **Tool** — wired deep into the existing agents framework. `ConfigureTool` now **accumulates** tools (call it repeatedly), surfaced on `AiModelResult.ConfiguredTools`. `AiModelResult` gains a full agent surface — `CreateAgent`, `RunAgentAsync`, `CreateModelAnalystAgent`, `CreateSupervisor` — with four exceed-industry mechanisms:
+  1. **Trained-model-as-a-tool** (`ModelPredictionTool`) — the model you just trained is auto-exposed as a callable tool so the LLM agent can query it mid-reasoning (tabular models; graceful skip otherwise).
+  2. **Model-grounded verification** (`GroundedVerifierAgent`) — after the agent answers using the model tool, the model's real prediction is recomputed and the agent's numeric claims are checked against it; contradictions trigger a bounded self-refine. A grounded fact-checker the LLM cannot talk past — only a combined ML+agent library can do this.
+  3. **Tool guardrails + typed retry** (`GuardedAgentTool`) — every tool call is JSON-schema-validated (required props, types) before it runs; invalid calls come back as a descriptive error the model corrects on its next turn.
+  4. **Learned tool routing** (`LearnedToolRouter`) — an average-reward bandit over the toolset keyed by request similarity; `RunAgentAsync` nudges the model toward tools that worked on similar past requests and records each run's outcomes (persistable via export/import).
+  Plus `AiModelDataPipeline`-style composition: `AddPreprocessingStep` analog is the agent mesh — `CreateSupervisor` coordinates specialists (each callable as a tool via the framework's `AgentAsTool`), with `CreateModelAnalystAgent` putting the trained model on the team.
+
+Remaining Tier 4/6: none — the `PARTIAL` federated/hyperparameter/pipeline fields are the last open items. (AdversarialDefense already wired.)
 
 ---
 

@@ -36,7 +36,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private ITimeSeriesDecomposition<T>? _configuredTimeSeriesDecomposition;
     private IDistillationStrategy<T>? _configuredDistillationStrategy;
     private IModelCompressionStrategy<T>? _configuredModelCompressionStrategy;
-    private IAgentTool? _configuredTool;
+    private readonly System.Collections.Generic.List<IAgentTool> _configuredTools = new();
     private IEnvironment<T>? _configuredEnvironment;
     private IAdversarialAttack<T, TInput, TOutput>? _configuredAdversarialAttack;
     private IAdversarialDefense<T, TInput, TOutput>? _configuredAdversarialDefense;
@@ -349,7 +349,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Configures a tool for agent-based systems and function calling.
+    /// Configures a tool for agent-based systems and function calling. Call it more than once to register
+    /// several tools; they accumulate and are all made available to the agent built from the model result.
     /// </summary>
     /// <param name="tool">The tool implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
@@ -357,11 +358,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <para><b>For Beginners:</b> Tools are callable functions that AI agents can use to interact
     /// with external systems. Examples include web search, code execution, file operations,
     /// API calls, and database queries. Tools extend an agent's capabilities beyond pure
-    /// text generation to real-world actions.</para>
+    /// text generation to real-world actions. After building, use <c>AiModelResult.CreateAgent(...)</c>
+    /// or <c>RunAgentAsync(...)</c> to run an agent that can call these tools — plus the trained model itself.</para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTool(IAgentTool tool)
     {
-        _configuredTool = tool;
+        if (tool is not null)
+        {
+            _configuredTools.Add(tool);
+        }
+
         return this;
     }
 
