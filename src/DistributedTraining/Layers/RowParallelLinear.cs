@@ -21,7 +21,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-internal sealed class RowParallelLinear<T> : LayerBase<T>
+public sealed class RowParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly ReduceFromTensorParallelRegion<T> _g;

@@ -20,7 +20,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-internal sealed class ColumnParallelLinear<T> : LayerBase<T>
+public sealed class ColumnParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly CopyToTensorParallelRegion<T> _f;

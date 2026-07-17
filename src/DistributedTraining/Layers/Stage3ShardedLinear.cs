@@ -19,7 +19,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-internal sealed class Stage3ShardedLinear<T> : LayerBase<T>
+public sealed class Stage3ShardedLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly FsdpAllGatherParameter<T> _unshard;
