@@ -311,6 +311,12 @@ public class GenerationRequest<T>
     public int? Seed { get; set; }
 
     /// <summary>
+    /// Optional end-of-sequence token id for this request. Null falls back to the batcher's configured
+    /// default. Per-request so one shared batcher can serve requests with different stop tokens.
+    /// </summary>
+    public int? EosTokenId { get; set; }
+
+    /// <summary>
     /// Repetition penalty (1.0 = no penalty).
     /// </summary>
     public float RepetitionPenalty { get; set; } = 1.0f;

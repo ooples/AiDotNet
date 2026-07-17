@@ -181,6 +181,44 @@ public class ContinuousBatcherPagedEquivalenceTests
         Assert.Equal(noPrefix, withPrefix);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task PagedBatcher_Speculation_MatchesGreedy_AndAcceptsDrafts()
+    {
+        await Task.Yield();
+        // A per-position LM used so a multi-token verify forward yields per-position logits.
+        var wrapper = BuildWrapper();
+        var model = wrapper.IncrementalModel;
+        var cache = wrapper.IncrementalCache;
+        if (model is null || cache is null)
+        {
+            Assert.Fail("wrapper must expose the incremental model + paged cache");
+            return;
+        }
+        var prompt = new[] { 1, 2, 3 };
+        const int maxNew = 12;
+
+        // Plain greedy (speculation disabled).
+        var plainConfig = new ContinuousBatcherConfig { AutoStart = false, EosTokenId = 999, EnableSpeculativeDecoding = false };
+        using var plain = new ContinuousBatcher<float>(plainConfig, model, cache);
+        int[] greedy = DriveGreedy(plain, prompt, maxNew);
+
+        // Prompt-lookup speculation (greedy, temperature=0) must be byte-for-byte identical and accept drafts.
+        var specConfig = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EosTokenId = 999,
+            EnableSpeculativeDecoding = true,
+            SpeculationDepth = 4
+        };
+        using var spec = new ContinuousBatcher<float>(specConfig, model, cache);
+        int[] specTokens = DriveGreedy(spec, prompt, maxNew);
+
+        Assert.Equal(maxNew, greedy.Length);
+        Assert.Equal(greedy, specTokens); // speculation is exact for greedy
+        Assert.True(spec.SpeculationAcceptanceRate is > 0.0,
+            $"prompt-lookup speculation should accept some drafts (acceptance={spec.SpeculationAcceptanceRate}).");
+    }
+
     // Drives one greedy sequence on an existing batcher to completion and returns its generated tokens.
     private static int[] DriveGreedy(ContinuousBatcher<float> batcher, int[] prompt, int maxNew)
     {

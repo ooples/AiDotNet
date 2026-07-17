@@ -63,6 +63,11 @@ internal class ContinuousBatcher<T> : IDisposable
     // state (the shared ThreadSafeRandom made batched sampling non-deterministic).
     private readonly ConcurrentDictionary<long, Random> _sequenceRngs = new();
 
+    // Draft-model-free PROMPT-LOOKUP speculation accounting for the paged path (n-gram match against the
+    // running token stream; exact for greedy decode). Kept separate from the SpeculativeDecoder<T> path.
+    private long _pagedDraftedTokens;
+    private long _pagedAcceptedTokens;
+
     private bool UsePagedPath => _incrementalModel is not null && _pagedCache is not null;
 
     private SpeculativeDecoder<T>? _speculativeDecoder;
@@ -80,9 +85,20 @@ internal class ContinuousBatcher<T> : IDisposable
 
     /// <summary>
     /// Fraction of drafted tokens accepted by the target model, or null when speculative
-    /// decoding has not run for this batcher. Exposed for serving-layer telemetry.
+    /// decoding has not run for this batcher. Exposed for serving-layer telemetry. Covers both the
+    /// draft-model path (<see cref="SpeculativeDecoder{T}"/>) and the paged prompt-lookup path.
     /// </summary>
-    internal double? SpeculationAcceptanceRate => _speculativeDecoder?.AcceptanceRate;
+    internal double? SpeculationAcceptanceRate
+    {
+        get
+        {
+            if (_pagedDraftedTokens > 0)
+            {
+                return (double)_pagedAcceptedTokens / _pagedDraftedTokens;
+            }
+            return _speculativeDecoder?.AcceptanceRate;
+        }
+    }
 
     private readonly ConcurrentDictionary<long, TaskCompletionSource<GenerationResult<T>>> _pendingResults;
     private readonly ConcurrentQueue<SequenceState<T>> _incomingRequests;
@@ -349,9 +365,10 @@ internal class ContinuousBatcher<T> : IDisposable
         // Invoke the per-token callback if one was provided.
         sequence.Request.OnTokenGenerated?.Invoke(tokenId);
 
-        // Check for completion after the appended token.
+        // Check for completion after the appended token. EOS is per-request (a shared batcher serves
+        // requests with different stop tokens), falling back to the batcher default.
         if (sequence.Status != SequenceStatus.Completed &&
-            sequence.ShouldStop(_config.EosTokenId, sequence.Request.StopTokenIds))
+            sequence.ShouldStop(sequence.Request.EosTokenId ?? _config.EosTokenId, sequence.Request.StopTokenIds))
         {
             CompleteSequence(sequence);
         }
@@ -525,11 +542,166 @@ internal class ContinuousBatcher<T> : IDisposable
         return new[] { nextToken };
     }
 
+    /// <summary>
+    /// Greedy-exact prompt-lookup speculative decode over the paged cache. Forwards the last token to get
+    /// the target's greedy next token, drafts up to SpeculationDepth tokens by matching the trailing n-gram
+    /// against the running stream, verifies them in ONE multi-token forward (per-position logits), accepts
+    /// the longest greedy-matching prefix, rolls the paged KV back over rejected drafts, and emits the
+    /// correction. Emitted tokens are byte-for-byte identical to plain greedy decode — speculation only
+    /// changes how many forwards it takes. Falls back to a single sampled step for non-greedy requests
+    /// (prompt-lookup is exact only for greedy) or when no n-gram match exists.
+    /// </summary>
+    private IReadOnlyList<int> RunPagedDecodeStepSpeculative(SequenceState<T> sequence)
+    {
+        // Prompt-lookup speculation is exact only for greedy decode; sample normally otherwise.
+        if (sequence.Request.Temperature > 0f) return RunPagedDecodeStep(sequence);
+        if (_incrementalModel is not { } model) return Array.Empty<int>();
+
+        long seqId = sequence.SequenceId;
+        int remaining = sequence.MaxNewTokens - sequence.GeneratedLength;
+        if (remaining <= 0) return Array.Empty<int>();
+
+        int eos = sequence.Request.EosTokenId ?? _config.EosTokenId;
+        int p = _pagedPositions.TryGetValue(seqId, out var pos) ? pos : sequence.PromptLength;
+        int lastToken = sequence.TokenIds[sequence.TokenIds.Count - 1];
+
+        // 1) Forward the last token -> greedy next token (KV[p] now written; cache length p+1).
+        var greedyLogits = model.PredictWithContext(
+            CreateInputTensor(new List<int> { lastToken }), new InferenceForwardContext(seqId, p));
+        int greedy = ArgMaxLastPosition(greedyLogits);
+
+        // 2) Draft by matching the trailing n-gram against the running stream.
+        int k = Math.Max(1, _config.SpeculationDepth);
+        var draft = PromptLookupDraft(sequence.TokenIds, k);
+
+        var emitted = new List<int>(k + 1);
+
+        if (draft.Count == 0)
+        {
+            // No match: a single ordinary greedy step. greedy's KV is written when the NEXT step forwards it.
+            _pagedPositions[seqId] = p + 1;
+            emitted.Add(greedy);
+            sequence.AppendToken(greedy);
+            return emitted;
+        }
+
+        // 3) Verify the K drafts in ONE forward at position p+1 (KV[p+1..p+K]; cache length p+1+K).
+        var verifyLogits = model.PredictWithContext(
+            CreateInputTensor(draft), new InferenceForwardContext(seqId, p + 1));
+        _pagedDraftedTokens += draft.Count;
+
+        // 4) Accept the longest greedy-matching prefix: expected_0 = greedy; expected_{j+1} = argmax(row j).
+        int expected = greedy;
+        int nAccept = 0;
+        for (int j = 0; j < draft.Count; j++)
+        {
+            if (draft[j] != expected) break;
+            nAccept++;
+            expected = ArgMaxAtPosition(verifyLogits, j);
+        }
+        _pagedAcceptedTokens += nAccept;
+
+        // 5) Emit accepted drafts (KV at p+1..p+nAccept is correct), capped by the remaining budget / EOS.
+        for (int j = 0; j < nAccept; j++)
+        {
+            if (draft[j] == eos) { FinalizePagedSpeculation(seqId, p + 1 + j, sequence, emitted, draft[j]); return emitted; }
+            emitted.Add(draft[j]);
+            sequence.AppendToken(draft[j]);
+            if (emitted.Count >= remaining)
+            {
+                // Budget reached: the last emitted draft's KV (p+1+j) is real; next write is p+2+j.
+                _pagedPositions[seqId] = p + 2 + j;
+                return emitted;
+            }
+        }
+
+        // 6) Drop rejected drafts' KV (positions p+1+nAccept..p+K) and emit the correction.
+        _pagedCache?.TruncateSequence(seqId, p + 1 + nAccept);
+        _pagedPositions[seqId] = p + 1 + nAccept;
+        if (expected != eos)
+        {
+            emitted.Add(expected);
+            sequence.AppendToken(expected);
+        }
+        return emitted;
+    }
+
+    // Appends the EOS token and returns; its KV position is irrelevant (generation stops here).
+    private void FinalizePagedSpeculation(long seqId, int writePosition, SequenceState<T> sequence, List<int> emitted, int eosToken)
+    {
+        _pagedPositions[seqId] = writePosition;
+        emitted.Add(eosToken);
+        sequence.AppendToken(eosToken);
+    }
+
+    /// <summary>
+    /// Prompt-lookup draft: find the most recent earlier occurrence of the trailing <paramref name="ngram"/>
+    /// tokens in the running stream and propose the up-to-<paramref name="k"/> tokens that followed it. Empty
+    /// when no match exists. No draft model needed.
+    /// </summary>
+    private static List<int> PromptLookupDraft(IReadOnlyList<int> tokens, int k, int ngram = 2)
+    {
+        int n = tokens.Count;
+        var draft = new List<int>(k);
+        if (n < ngram + 1) return draft;
+
+        for (int start = n - ngram - 1; start >= 0; start--)
+        {
+            bool match = true;
+            for (int g = 0; g < ngram; g++)
+            {
+                if (tokens[start + g] != tokens[n - ngram + g]) { match = false; break; }
+            }
+            if (!match) continue;
+
+            int src = start + ngram;
+            for (int i = 0; i < k && src + i < n; i++) draft.Add(tokens[src + i]);
+            return draft;
+        }
+        return draft;
+    }
+
+    // Argmax over the last position of a logits tensor ([1,S,vocab], [S,vocab], [1,vocab], or [vocab]).
+    private static int ArgMaxLastPosition(Tensor<T> logits)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rank = logits.Shape.Length;
+        int vocab = logits.Shape[rank - 1];
+        int positions = 1;
+        for (int d = 0; d < rank - 1; d++) positions *= logits.Shape[d];
+        int baseOffset = (positions - 1) * vocab;
+        var flat = logits.AsSpan();
+        int best = 0;
+        T bestVal = flat[baseOffset];
+        for (int v = 1; v < vocab; v++)
+        {
+            if (numOps.GreaterThan(flat[baseOffset + v], bestVal)) { bestVal = flat[baseOffset + v]; best = v; }
+        }
+        return best;
+    }
+
+    // Argmax over vocab at output position posIndex of a per-position logits tensor ([1,positions,vocab] or [positions,vocab]).
+    private static int ArgMaxAtPosition(Tensor<T> logits, int posIndex)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rank = logits.Shape.Length;
+        int vocab = logits.Shape[rank - 1];
+        int baseOffset = posIndex * vocab;
+        var flat = logits.AsSpan();
+        int best = 0;
+        T bestVal = flat[baseOffset];
+        for (int v = 1; v < vocab; v++)
+        {
+            if (numOps.GreaterThan(flat[baseOffset + v], bestVal)) { bestVal = flat[baseOffset + v]; best = v; }
+        }
+        return best;
+    }
+
     private IReadOnlyList<int> RunDecodeStepSpeculative(SequenceState<T> sequence)
     {
-        // Speculative decoding on the paged incremental path is not wired yet (Phase 2); fall back to the
-        // paged single-token decode, which the speculative target forward here (_model) cannot serve anyway.
-        if (UsePagedPath) return RunDecodeStep(sequence);
+        // Paged incremental path: use draft-model-free PROMPT-LOOKUP speculation (n-gram match against the
+        // running token stream, verified in one multi-token forward over the paged KV). Exact for greedy.
+        if (UsePagedPath) return RunPagedDecodeStepSpeculative(sequence);
         if (_model == null) return Array.Empty<int>();
         if (!ShouldSpeculateForThisIteration()) return RunDecodeStep(sequence);
 
