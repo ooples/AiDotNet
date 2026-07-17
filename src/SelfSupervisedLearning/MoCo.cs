@@ -34,6 +34,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> He et al., "Momentum Contrast for Unsupervised Visual Representation
 /// Learning" (CVPR 2020)</para>
+///
+/// <para><b>Best for:</b> Limited GPU memory, consistent negative samples.</para>
+/// <para><b>Pros:</b> Memory efficient, consistent negative samples, good performance.</para>
+/// <para><b>Cons:</b> More complex than SimCLR, requires a momentum encoder.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -42,20 +46,20 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Momentum Contrast for Unsupervised Visual Representation Learning", "https://arxiv.org/abs/1911.05722", Year = 2020, Authors = "Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, Ross Girshick")]
-public class MoCo<T> : SSLMethodBase<T>
+public class MoCo<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly IMomentumEncoder<T> _momentumEncoder;
     private readonly IProjectorHead<T>? _momentumProjector;
     private readonly IMemoryBank<T> _memoryBank;
     private readonly InfoNCELoss<T> _loss;
-    private readonly SSLAugmentationPolicies<T> _augmentation;
+    private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
     private readonly double _baseMomentum;
 
     /// <inheritdoc />
     public override string Name => "MoCo";
 
     /// <inheritdoc />
-    public override SSLMethodCategory Category => SSLMethodCategory.Contrastive;
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.Contrastive;
 
     /// <inheritdoc />
     public override bool RequiresMemoryBank => true;
@@ -83,8 +87,8 @@ public class MoCo<T> : SSLMethodBase<T>
         IProjectorHead<T>? projector = null,
         IProjectorHead<T>? momentumProjector = null,
         int embeddingDim = 128,
-        SSLConfig? config = null)
-        : base(encoder, projector, config ?? new SSLConfig { Method = SSLMethodType.MoCoV2 })
+        SelfSupervisedLearningConfig<T>? config = null)
+        : base(encoder, projector, config ?? new SelfSupervisedLearningConfig<T>())
     {
         Guard.NotNull(momentumEncoder);
         _momentumEncoder = momentumEncoder;
@@ -98,7 +102,41 @@ public class MoCo<T> : SSLMethodBase<T>
 
         var temperature = _config.Temperature ?? 0.07;
         _loss = new InfoNCELoss<T>(temperature);
-        _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
+        _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
+    }
+
+    /// <summary>
+    /// Creates a MoCo instance with default configuration.
+    /// </summary>
+    /// <param name="encoder">The backbone encoder.</param>
+    /// <param name="createEncoderCopy">Function to create a copy of the encoder for momentum.</param>
+    /// <param name="encoderOutputDim">Output dimension of the encoder.</param>
+    /// <param name="projectionDim">Dimension of the projection space (default: 128).</param>
+    /// <param name="queueSize">Size of the memory queue (default: 65536).</param>
+    /// <returns>A configured MoCo instance.</returns>
+    public static MoCo<T> Create(
+        INeuralNetwork<T> encoder,
+        Func<INeuralNetwork<T>, INeuralNetwork<T>> createEncoderCopy,
+        int encoderOutputDim,
+        int projectionDim = 128,
+        int queueSize = 65536)
+    {
+        Guard.NotNull(encoder);
+        Guard.NotNull(createEncoderCopy);
+
+        var projector = new LinearProjector<T>(encoderOutputDim, projectionDim);
+        var momentumProjector = new LinearProjector<T>(encoderOutputDim, projectionDim);
+        momentumProjector.SetParameters(projector.GetParameters());
+
+        var encoderCopy = createEncoderCopy(encoder);
+        var momentumEncoder = new MomentumEncoder<T>(encoderCopy, 0.999);
+
+        var config = new SelfSupervisedLearningConfig<T>
+        {
+            MoCo = new MoCoConfig { QueueSize = queueSize }
+        };
+
+        return new MoCo<T>(encoder, momentumEncoder, projector, momentumProjector, projectionDim, config);
     }
 
     private void UpdateEncoderParameters(T learningRate)

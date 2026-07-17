@@ -1,7 +1,44 @@
 using AiDotNet.Interfaces;
+using AiDotNet.ReinforcementLearning.Policies.Exploration;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
+
+/// <summary>
+/// Exploration strategy stub that always returns a fixed one-hot action and records every call.
+/// Lets a test prove the RL training loop actually routes action selection through the configured
+/// exploration strategy (and drives its Reset/Update schedule), rather than dropping it in a field.
+/// </summary>
+internal sealed class RecordingExplorationStrategy<T> : IExplorationStrategy<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly int _forcedActionIndex;
+    private readonly int _actionSpaceSize;
+
+    public RecordingExplorationStrategy(int forcedActionIndex, int actionSpaceSize)
+    {
+        _forcedActionIndex = forcedActionIndex;
+        _actionSpaceSize = actionSpaceSize;
+    }
+
+    public int GetExplorationActionCalls { get; private set; }
+    public int UpdateCalls { get; private set; }
+    public int ResetCalls { get; private set; }
+    public System.Collections.Generic.List<int> ObservedActionSpaceSizes { get; } = new();
+
+    public Vector<T> GetExplorationAction(Vector<T> state, Vector<T> policyAction, int actionSpaceSize, Random random)
+    {
+        GetExplorationActionCalls++;
+        ObservedActionSpaceSizes.Add(actionSpaceSize);
+        var action = new Vector<T>(_actionSpaceSize);
+        action[_forcedActionIndex] = NumOps.One;
+        return action;
+    }
+
+    public void Update() => UpdateCalls++;
+
+    public void Reset() => ResetCalls++;
+}
 
 internal sealed class DeterministicBanditEnvironment<T> : IEnvironment<T>
 {
@@ -31,9 +68,22 @@ internal sealed class DeterministicBanditEnvironment<T> : IEnvironment<T>
     public int ActionSpaceSize { get; }
     public bool IsContinuousActionSpace => false;
 
+    /// <summary>
+    /// Total Reset() calls over this instance's lifetime (not reset per episode).
+    /// Lets a test prove THIS environment instance was driven by the training loop.
+    /// </summary>
+    public int TotalResets { get; private set; }
+
+    /// <summary>
+    /// Total Step() calls over this instance's lifetime (not reset per episode).
+    /// Lets a test prove THIS environment instance was driven by the training loop.
+    /// </summary>
+    public int TotalSteps { get; private set; }
+
     public Vector<T> Reset()
     {
         _steps = 0;
+        TotalResets++;
         return new Vector<T>(ObservationSpaceDimension);
     }
 
@@ -47,6 +97,7 @@ internal sealed class DeterministicBanditEnvironment<T> : IEnvironment<T>
             throw new ArgumentException("Action index out of range.", nameof(action));
 
         _steps++;
+        TotalSteps++;
 
         var reward = actionIndex == 0 ? _numOps.One : _numOps.Zero;
         var done = _steps >= _maxSteps;

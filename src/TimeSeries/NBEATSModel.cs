@@ -63,8 +63,15 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("N-BEATS: Neural basis expansion analysis for interpretable time series forecasting", "https://arxiv.org/abs/1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
-public class NBEATSModel<T> : TimeSeriesModelBase<T>
+public class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// N-BEATS is a point forecaster: its head emits a single value per horizon step, so any
+    /// pointwise loss is meaningful. Defaults to mean squared error when none is configured.
+    /// </remarks>
+    public void SetLossFunction(ILossFunction<T> lossFunction) => ApplyLossFunction(lossFunction);
+
     private readonly NBEATSModelOptions<T> _options;
     private readonly List<NBEATSBlock<T>> _blocks;
     private Vector<T> _trainingSeries = Vector<T>.Empty();
@@ -295,7 +302,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         // R²-style fixture. MSE is also an explicit listed N-BEATS loss
         // (Oreshkin et al. 2019 §4.2, "Squared error" ensemble member),
         // so this stays within the paper's set of supported losses.
-        var trainingLoss = new MeanSquaredErrorLoss<T>();
+        var trainingLoss = TrainingLoss;
 
         int numSamples = x.Rows;
 
@@ -518,6 +525,13 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                             Engine.TensorMultiplyScalarInto(bestParamSnapshot[pi], trainableParams[pi], NumOps.One);
                     }
                 }
+
+                // Report after snapshotting so an early stop still leaves the best weights to
+                // restore below.
+                if (!ReportEpoch(epoch, timeBounded ? 0 : _options.Epochs, NumOps.FromDouble(epochLoss)))
+                {
+                    break;
+                }
             }
         }
 
@@ -615,7 +629,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             return false;
 
         var layers = _blocks.Cast<ITrainableLayer<T>>().ToList();
-        var trainingLoss = new MeanSquaredErrorLoss<T>();
+        var trainingLoss = TrainingLoss;
 
         Tensor<T> ForwardStack(Tensor<T> input) => RunForwardStack(input);
 
@@ -723,7 +737,17 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             }
 
             if (epochStepCount > 0)
-                _lastRunEpochLosses.Add(epochLossSum / epochStepCount);
+            {
+                double epochLoss = epochLossSum / epochStepCount;
+                _lastRunEpochLosses.Add(epochLoss);
+
+                // Surface the resident epoch to facade callbacks / early stopping; break on veto (the
+                // post-loop baseline gate still decides whether to keep the resident attempt).
+                if (!ReportEpoch(epoch, _options.Epochs, NumOps.FromDouble(epochLoss)))
+                {
+                    break;
+                }
+            }
         }
 
         // Correctness gate. On Tensors >= 0.112.0 the fused plan trains N-BEATS faithfully (verified:

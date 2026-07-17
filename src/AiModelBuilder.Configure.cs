@@ -1393,7 +1393,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     /// <summary>
     /// Threads any <see cref="_adversarialRobustnessConfiguration"/> set via
-    /// <see cref="ConfigureAdversarialRobustness"/> into the constructed
+    /// <see cref="ConfigureAdversarialRobustness"/>, and any defense set via
+    /// <see cref="ConfigureAdversarialDefense"/>, into the constructed
     /// <see cref="AiModelResult{T, TInput, TOutput}"/> so the runtime
     /// adversarial-robustness API (<c>PredictWithDefense</c>,
     /// <c>EvaluateRobustness</c>) actually picks up the user's settings.
@@ -1410,19 +1411,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     private void AttachAdversarialRobustness(AiModelResult<T, TInput, TOutput> result)
     {
-        if (_adversarialRobustnessConfiguration is null || !_adversarialRobustnessConfiguration.Enabled)
+        // An explicit ConfigureAdversarialRobustness(Enabled = false) is an opt-out of
+        // adversarial robustness as a whole — including any standalone
+        // ConfigureAdversarialDefense call. Attach nothing.
+        if (_adversarialRobustnessConfiguration is not null && !_adversarialRobustnessConfiguration.Enabled)
         {
             return;
         }
 
-        // Always surface the underlying options so EvaluateRobustness /
-        // PredictWithDefense can read them at inference time even when no
-        // custom defense was supplied.
-        result.SetAdversarialRobustnessOptions(_adversarialRobustnessConfiguration.Options);
+        // A defense named via ConfigureAdversarialDefense is the more specific statement of
+        // intent, so it wins over a configuration's CustomDefense. Prior to this read,
+        // _configuredAdversarialDefense was written by ConfigureAdversarialDefense and read
+        // nowhere in the repository: the method was a total no-op, as was the YAML
+        // "AdversarialDefense" path that routes through it (YamlConfigApplier).
+        var defense = _configuredAdversarialDefense ?? _adversarialRobustnessConfiguration?.CustomDefense;
 
-        if (_adversarialRobustnessConfiguration.CustomDefense is not null)
+        // Surface the underlying options so EvaluateRobustness / PredictWithDefense can read
+        // them at inference time even when no custom defense was supplied. Only when a
+        // configuration actually exists — a standalone defense needs no options object, and
+        // synthesising one would misreport what the caller configured.
+        if (_adversarialRobustnessConfiguration is not null)
         {
-            result.SetAdversarialDefense(_adversarialRobustnessConfiguration.CustomDefense);
+            result.SetAdversarialRobustnessOptions(_adversarialRobustnessConfiguration.Options);
+        }
+
+        if (defense is not null)
+        {
+            result.SetAdversarialDefense(defense);
         }
     }
 
@@ -1964,6 +1979,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             TextVectorizer = _configuredTextVectorizer,
+            EmbeddingModel = _configuredEmbeddingModel,
             PreprocessingInfo = preprocessingInfo,
             PostprocessingPipeline = _postprocessingPipeline,
             KnowledgeDistillationOptions = _knowledgeDistillationOptions,
@@ -2121,11 +2137,36 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             Console.WriteLine();
         }
 
+        // Resolve the exploration-strategy override. RLTrainingOptions.ExplorationStrategy and the
+        // fluent ConfigureExplorationStrategy() feed the same seam; options win when both are set.
+        // When present it REPLACES the agent's built-in exploration: the agent produces a greedy
+        // action and the strategy decides the exploratory action (mirrors each policy taking an
+        // IExplorationStrategy<T> and calling GetExplorationAction on its greedy choice). When null,
+        // the agent's own SelectAction(explore: true) exploration is used, so default behaviour is
+        // unchanged. Applying it here — where the facade owns action selection — is the only place
+        // the value can actually reach training, since IRLAgent<T> exposes no policy object to inject
+        // into and each agent implements exploration internally.
+        var explorationStrategy = _rlOptions.ExplorationStrategy ?? _configuredExplorationStrategy;
+        Random? explorationRng = explorationStrategy is null
+            ? null
+            : (_rlOptions.Seed.HasValue ? new Random(_rlOptions.Seed.Value) : new Random());
+
+        // Curiosity: an intrinsic-reward module adds a novelty bonus to each step's reward (order-
+        // independent with ConfigureReinforcementLearning via the configured-field fallback).
+        var intrinsicRewardModule = _rlOptions.IntrinsicRewardModule ?? _configuredIntrinsicRewardModule;
+        double intrinsicRewardWeight = _rlOptions.IntrinsicRewardModule is not null
+            ? _rlOptions.IntrinsicRewardWeight
+            : _configuredIntrinsicRewardWeight;
+        double intrinsicRewardSum = 0;
+        long intrinsicRewardCount = 0;
+
         // Training loop
         for (int episode = 0; episode < episodes; episode++)
         {
             var state = _rlOptions.Environment.Reset();
             rlAgent.ResetEpisode();
+            explorationStrategy?.Reset();
+            intrinsicRewardModule?.Reset();
 
             T episodeReward = numOps.Zero;
             int steps = 0;
@@ -2134,11 +2175,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // Episode loop
             while (!done && steps < _rlOptions.MaxStepsPerEpisode)
             {
-                // Select action
-                var action = rlAgent.SelectAction(state, explore: true);
+                // Select action. When an exploration strategy is configured it overrides the agent's
+                // internal exploration: take the greedy (exploit) action and let the strategy inject
+                // exploration. Otherwise use the agent's own exploration path.
+                Vector<T> action;
+                if (explorationStrategy is not null)
+                {
+                    var greedyAction = rlAgent.SelectAction(state, explore: false);
+                    action = explorationStrategy.GetExplorationAction(
+                        state, greedyAction, greedyAction.Length, explorationRng!);
+                }
+                else
+                {
+                    action = rlAgent.SelectAction(state, explore: true);
+                }
 
                 // Take step in environment
                 var (nextState, reward, isDone, info) = _rlOptions.Environment.Step(action);
+
+                // Curiosity: add a novelty bonus for the state reached, then learn it so it fades.
+                if (intrinsicRewardModule is not null)
+                {
+                    var intrinsic = intrinsicRewardModule.ComputeIntrinsicReward(nextState);
+                    intrinsicRewardModule.Update(nextState);
+                    reward = numOps.Add(reward, numOps.FromDouble(intrinsicRewardWeight * numOps.ToDouble(intrinsic)));
+                    intrinsicRewardSum += numOps.ToDouble(intrinsic);
+                    intrinsicRewardCount++;
+                }
 
                 // Store experience
                 rlAgent.StoreExperience(state, action, reward, nextState, isDone);
@@ -2150,6 +2213,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 {
                     losses.Add(loss);
                 }
+
+                // Advance the exploration schedule (e.g. epsilon/noise decay) once per environment step.
+                explorationStrategy?.Update();
 
                 // Update for next step
                 state = nextState;
@@ -2331,6 +2397,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ProcessKnowledgeGraphOptions(result);
         AttachSafetyPipeline(result);
         AttachAdversarialRobustness(result);
+
+        // Surface the mean intrinsic (curiosity) reward, so a caller can see how much novelty drove
+        // training and watch it fade across runs as the environment becomes familiar.
+        if (intrinsicRewardCount > 0)
+        {
+            result.SetConfiguredMetric("MeanIntrinsicReward", numOps.FromDouble(intrinsicRewardSum / intrinsicRewardCount));
+        }
 
         return result;
     }

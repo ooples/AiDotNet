@@ -38,7 +38,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - Integrated Gradients shows which pixels contributed most to the "cat" prediction
 /// </para>
 /// </remarks>
-public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGradientsExplanation<T>>, IGPUAcceleratedExplainer<T>
+public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGradientsExplanation<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -334,6 +334,10 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
     /// in parallel across multiple instances, further improving performance.
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
+        => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
+
     public IntegratedGradientsExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new IntegratedGradientsExplanation<T>[instances.Rows];
@@ -414,7 +418,7 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
 /// Represents the result of an Integrated Gradients analysis.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class IntegratedGradientsExplanation<T>
+public class IntegratedGradientsExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -422,6 +426,9 @@ public class IntegratedGradientsExplanation<T>
     /// Gets or sets the feature attributions.
     /// </summary>
     public Vector<T> Attributions { get; set; } = new Vector<T>(0);
+
+    /// <inheritdoc />
+    public Vector<T> GetFeatureAttributions() => Attributions;
 
     /// <summary>
     /// Gets or sets the baseline used.

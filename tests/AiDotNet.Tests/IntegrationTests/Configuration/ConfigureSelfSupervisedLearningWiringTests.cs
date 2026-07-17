@@ -11,13 +11,13 @@ namespace AiDotNet.Tests.IntegrationTests.Configuration;
 /// <summary>
 /// Regression test for AiDotNet#1361 — <c>ConfigureSelfSupervisedLearning</c>
 /// stored SSL settings but had no way for callers to actually run a
-/// pretraining stage. The single-argument <c>Action&lt;SSLConfig&gt;</c>
+/// pretraining stage. The single-argument <c>Action&lt;SelfSupervisedLearningConfig&gt;</c>
 /// overload remains configuration-only (the SSL subsystem operates on
 /// an encoder-shaped <c>INeuralNetwork&lt;T&gt;</c> which is not
 /// interchangeable with arbitrary <c>IFullModel&lt;T, TInput,
 /// TOutput&gt;</c>). The fix adds a new two-argument overload accepting
 /// a typed pretraining hook; that hook runs BEFORE main training and
-/// receives the base model + the configured <c>SSLConfig</c>, returning
+/// receives the base model + the configured <c>SelfSupervisedLearningConfig</c>, returning
 /// the model that should feed into main training.
 ///
 /// <para>These tests use a recording pretrain hook that just counts
@@ -27,6 +27,29 @@ namespace AiDotNet.Tests.IntegrationTests.Configuration;
 /// </summary>
 public class ConfigureSelfSupervisedLearningWiringTests
 {
+    /// <summary>
+    /// A minimal <see cref="ISelfSupervisedLearningMethod{T}"/>. These tests only care that the method instance travels
+    /// to the hook, never that it trains, so nothing here needs an encoder.
+    /// </summary>
+    private sealed class StubSSLMethod : ISelfSupervisedLearningMethod<double>
+    {
+        public string Name => "stub";
+        public SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.Contrastive;
+        public bool RequiresMemoryBank => false;
+        public bool UsesMomentumEncoder => false;
+        public long ParameterCount => 0;
+        public INeuralNetwork<double> GetEncoder() => throw new NotSupportedException();
+        public SelfSupervisedLearningStepResult<double> TrainStep(
+            Tensor<double> batch, SelfSupervisedLearningAugmentationContext<double>? augmentationContext = null)
+            => new SelfSupervisedLearningStepResult<double> { Loss = 0.0 };
+        public Tensor<double> Encode(Tensor<double> input) => input;
+        public void Reset() { }
+        public Vector<double> GetParameters() => new Vector<double>(0);
+        public void SetParameters(Vector<double> parameters) { }
+        public void OnEpochStart(int epochNumber) { }
+        public void OnEpochEnd(int epochNumber) { }
+    }
+
     private static (Matrix<double> x, Vector<double> y) BuildDataset(int rows = 20, int features = 3)
     {
         var rng = new Random(11);
@@ -51,7 +74,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
         var (x, y) = BuildDataset();
         int pretrainCalls = 0;
         IFullModel<double, Matrix<double>, Vector<double>>? capturedBaseModel = null;
-        SSLConfig? capturedConfig = null;
+        SelfSupervisedLearningConfig<double>? capturedConfig = null;
 
         await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(DataLoaders.FromMatrixVector(x, y))
@@ -59,14 +82,14 @@ public class ConfigureSelfSupervisedLearningWiringTests
             .ConfigureSelfSupervisedLearning(
                 configure: cfg =>
                 {
-                    cfg.Method = SSLMethodType.SimCLR;
+                    cfg.Method = new StubSSLMethod();
                     cfg.PretrainingEpochs = 1;
                 },
-                pretrainAction: (model, sslConfig, ct) =>
+                pretrainAction: (model, selfSupervisedLearningConfig, ct) =>
                 {
                     pretrainCalls++;
                     capturedBaseModel = model;
-                    capturedConfig = sslConfig;
+                    capturedConfig = selfSupervisedLearningConfig;
                     return Task.FromResult(model); // pass-through, returns same model
                 })
             .BuildAsync();
@@ -74,7 +97,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
         Assert.Equal(1, pretrainCalls);
         Assert.NotNull(capturedBaseModel);
         Assert.NotNull(capturedConfig);
-        Assert.Equal(SSLMethodType.SimCLR, capturedConfig!.Method);
+        Assert.Equal("stub", capturedConfig!.Method?.Name);
         Assert.Equal(1, capturedConfig.PretrainingEpochs);
     }
 
@@ -142,7 +165,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
     [Fact(Timeout = 120000)]
     public async Task ConfigureSSL_SingleArgOverload_DoesNotRunPretrainStage()
     {
-        // The single-argument Action<SSLConfig> overload is the legacy
+        // The single-argument Action<SelfSupervisedLearningConfig<T>> overload is the legacy
         // configuration-only API: SSL settings get stored on the result via the
         // result-side adapter, but BuildAsync does NOT run any pretraining stage
         // because there is no typed pretrainAction to invoke.
@@ -154,14 +177,80 @@ public class ConfigureSelfSupervisedLearningWiringTests
             .ConfigureModel(new RidgeRegression<double>())
             .ConfigureSelfSupervisedLearning(cfg =>
             {
-                cfg.Method = SSLMethodType.SimCLR;
+                cfg.Method = new StubSSLMethod();
                 sentinel++; // configurator gets called
             })
             .BuildAsync();
 
-        Assert.Equal(1, sentinel); // the SSLConfig configurator runs at ConfigureSelfSupervisedLearning call time
+        Assert.Equal(1, sentinel); // the SelfSupervisedLearningConfig configurator runs at ConfigureSelfSupervisedLearning call time
         // No further hook is invoked during BuildAsync — there's no recorded
         // pretrainAction. We assert "no exception thrown" implicitly above.
+    }
+
+    /// <summary>
+    /// ConfigureSelfSupervisedLearningMethod used to assign a private field that nothing ever read, so a caller could hand
+    /// in a fully-built ISelfSupervisedLearningMethod and have it silently discarded. It now writes through to the config
+    /// that reaches the pretraining hook. This test fails against that dead store.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ConfigureSSLMethod_ReachesThePretrainHook()
+    {
+        var (x, y) = BuildDataset();
+        var method = new StubSSLMethod();
+        SelfSupervisedLearningConfig<double>? capturedConfig = null;
+
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(DataLoaders.FromMatrixVector(x, y))
+            .ConfigureModel(new RidgeRegression<double>())
+            .ConfigureSelfSupervisedLearningMethod(method)
+            .ConfigureSelfSupervisedLearning(
+                configure: null,
+                pretrainAction: (model, selfSupervisedLearningConfig, ct) =>
+                {
+                    capturedConfig = selfSupervisedLearningConfig;
+                    return Task.FromResult(model);
+                })
+            .BuildAsync();
+
+        Assert.NotNull(capturedConfig);
+        Assert.Same(method, capturedConfig!.Method);
+    }
+
+    /// <summary>
+    /// Both entry points used to allocate a fresh config unconditionally, so whichever ran second
+    /// clobbered the first. They must compose in either order.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ConfigureSSLMethod_AndConfigureSSL_ComposeInEitherOrder()
+    {
+        var (x, y) = BuildDataset();
+        var method = new StubSSLMethod();
+        SelfSupervisedLearningConfig<double>? capturedConfig = null;
+
+        // Method first, config second — the order that the unconditional allocation broke.
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(DataLoaders.FromMatrixVector(x, y))
+            .ConfigureModel(new RidgeRegression<double>())
+            .ConfigureSelfSupervisedLearningMethod(method)
+            .ConfigureSelfSupervisedLearning(
+                configure: cfg => cfg.PretrainingEpochs = 3,
+                pretrainAction: (model, selfSupervisedLearningConfig, ct) =>
+                {
+                    capturedConfig = selfSupervisedLearningConfig;
+                    return Task.FromResult(model);
+                })
+            .BuildAsync();
+
+        Assert.NotNull(capturedConfig);
+        Assert.Same(method, capturedConfig!.Method);      // survived the second call
+        Assert.Equal(3, capturedConfig.PretrainingEpochs); // and the second call's settings landed
+    }
+
+    [Fact]
+    public void ConfigureSSLMethod_NullArgument_ThrowsArgumentNull()
+    {
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        Assert.Throws<ArgumentNullException>(() => builder.ConfigureSelfSupervisedLearningMethod(null!));
     }
 
     [Fact(Timeout = 120000)]

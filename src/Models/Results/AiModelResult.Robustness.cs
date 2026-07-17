@@ -16,8 +16,37 @@ public partial class AiModelResult<T, TInput, TOutput>
     [JsonProperty]
     internal AdversarialRobustnessOptions<T>? AdversarialRobustnessOptions { get; private set; }
 
-    [JsonProperty]
-    internal bool HasAdversarialRobustness { get; private set; }
+    /// <summary>
+    /// Gets whether this result has any adversarial robustness behaviour to apply at inference time.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Derived rather than stored. A configured <see cref="AdversarialDefense"/> IS adversarial
+    /// robustness: a caller who supplies a defense has asked for it to run, and must not additionally
+    /// have to discover an unrelated-sounding option flag
+    /// (<c>EnableAdversarialTraining</c>/<c>UseInputPreprocessing</c>, both of which default to false)
+    /// before their defense is honoured. Previously this was written in exactly one place — from those
+    /// two flags — so a supplied defense was stored on the result and then silently ignored at
+    /// <see cref="PredictWithDefense"/>.
+    /// </para>
+    /// <para>
+    /// Deriving also removes an ordering hazard: while this was a stored flag,
+    /// <see cref="SetAdversarialRobustnessOptions"/> unconditionally overwrote it, so a value set by
+    /// <see cref="SetAdversarialDefense"/> would be clobbered depending on call order. The
+    /// options-flag clause below is the previous expression verbatim, so flag-driven behaviour is
+    /// unchanged.
+    /// </para>
+    /// <para>
+    /// Not serialized: it is computed from <see cref="AdversarialRobustnessOptions"/> and
+    /// <see cref="AdversarialDefense"/>, which are themselves persisted, and Newtonsoft cannot write
+    /// a value back into a getter-only member.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal bool HasAdversarialRobustness =>
+        AdversarialDefense != null ||
+        (AdversarialRobustnessOptions != null &&
+         (AdversarialRobustnessOptions.EnableAdversarialTraining || AdversarialRobustnessOptions.UseInputPreprocessing));
 
     [JsonProperty]
     internal IAdversarialDefense<T, TInput, TOutput>? AdversarialDefense { get; private set; }
@@ -25,7 +54,6 @@ public partial class AiModelResult<T, TInput, TOutput>
     internal void SetAdversarialRobustnessOptions(AdversarialRobustnessOptions<T>? options)
     {
         AdversarialRobustnessOptions = options;
-        HasAdversarialRobustness = options != null && (options.EnableAdversarialTraining || options.UseInputPreprocessing);
     }
 
     internal void SetAdversarialDefense(IAdversarialDefense<T, TInput, TOutput>? defense)

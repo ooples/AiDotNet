@@ -27,7 +27,7 @@ namespace AiDotNet.Interfaces;
 /// The "Process" part means it works with functions rather than simple values.
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("GaussianProcess")]
-public interface IGaussianProcess<T> : System.IDisposable
+public interface IGaussianProcess<T> : IFullModel<T, Matrix<T>, Vector<T>>, System.IDisposable
 {
     /// <summary>
     /// Trains the Gaussian Process model on the provided data.

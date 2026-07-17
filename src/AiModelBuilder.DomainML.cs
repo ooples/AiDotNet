@@ -22,16 +22,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private IAudioEffect<T>? _configuredAudioEffect;
     private IActiveLearningStrategy<T>? _configuredActiveLearningStrategy;
-    private IContinualLearner<T, TInput, TOutput>? _configuredContinualLearner;
+    private Tensor<T>? _activeLearningPool;
+    private int _activeLearningBatchSize = 10;
+    private double _activeLearningDiversityWeight = 0.5;
+    private bool _continualLearningEnabled;
+    private ContinualLearning.Interfaces.IContinualLearningStrategy<T, TInput, TOutput>? _continualLearningStrategy;
+    private ContinualLearning.Interfaces.IContinualLearnerConfig<T>? _continualLearningConfig;
+    private ContinualLearning.Results.ContinualLearningResult<T>? _continualLearningTaskResult;
+    private ContinualLearning.Results.ContinualEvaluationResult<T>? _continualLearningRetention;
     private AiDotNet.DriftDetection.IDriftDetector<T>? _configuredDriftDetector;
-    private IVideoModel<T>? _configuredVideoModel;
-    private IPointCloudModel<T>? _configuredPointCloudModel;
-    private IDocumentModel<T>? _configuredDocumentModel;
-    private IFinancialModel<T>? _configuredFinancialModel;
-    private IRadialBasisFunction<T>? _configuredRadialBasisFunction;
     private IDistanceMetric<T>? _configuredDistanceMetric;
     private IEmbeddingModel<T>? _configuredEmbeddingModel;
-    private IScoringRule<T>? _configuredScoringRule;
     private IModelExplainer<T>? _configuredModelExplainer;
 
     /// <summary>
@@ -47,6 +48,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEffect(IAudioEffect<T> audioEffect)
     {
         _configuredAudioEffect = audioEffect;
+        // Apply the effect as a composable preprocessing step (augmentation) over audio-tensor inputs.
+        _dataPipeline.AddPreprocessingStep(
+            new Preprocessing.Audio.AudioEffectTransformer<T, TInput>(audioEffect), "audio_effect");
+        _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;
         return this;
     }
 
@@ -54,32 +59,72 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Configures an active learning strategy for intelligently selecting training samples.
     /// </summary>
     /// <param name="strategy">The active learning strategy implementation to use.</param>
+    /// <param name="unlabeledPool">
+    /// The pool of unlabeled samples to rank. When <c>null</c>, the held-out test partition is used as the
+    /// candidate pool, so a useful "which samples is the model least sure about" ranking is produced with
+    /// no extra configuration.
+    /// </param>
+    /// <param name="batchSize">How many samples to select for labeling. Defaults to 10.</param>
+    /// <param name="diversityWeight">
+    /// Redundancy penalty for batch selection (0 = pure uncertainty, higher = more diversity pressure).
+    /// Defaults to 0.5.
+    /// </param>
     /// <returns>The builder instance for method chaining.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Active learning helps your model learn more efficiently by
     /// choosing the most informative samples to label next. Instead of labeling all your data,
     /// the model asks for labels on the examples it's most uncertain about, saving labeling effort.</para>
+    /// <para>
+    /// The configured strategy supplies per-sample informativeness; on top of that, the batch is chosen
+    /// with a diversity/redundancy penalty (BADGE / facility-location style) so it covers the pool rather
+    /// than collecting near-duplicate uncertain samples. Diversity is measured in the strongest available
+    /// space — authentic BADGE gradient embeddings, then a model-exposed representation, then input
+    /// features. The ranking and selected batch are surfaced on
+    /// <see cref="AiModelResult{T, TInput, TOutput}.ActiveLearningSelection"/>.
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(IActiveLearningStrategy<T> strategy)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(
+        IActiveLearningStrategy<T> strategy, Tensor<T>? unlabeledPool = null, int batchSize = 10, double diversityWeight = 0.5)
     {
         _configuredActiveLearningStrategy = strategy;
+        _activeLearningPool = unlabeledPool;
+        _activeLearningBatchSize = batchSize;
+        _activeLearningDiversityWeight = diversityWeight;
         return this;
     }
 
     /// <summary>
-    /// Configures a continual learning trainer that can learn new tasks without forgetting old ones.
+    /// Configures continual learning so the model learns this task without forgetting earlier ones.
     /// </summary>
-    /// <param name="learner">The continual learner implementation to use.</param>
+    /// <param name="strategy">
+    /// The continual-learning strategy (EWC, LwF, GEM, MAS, SI). When <c>null</c>, the industry-standard
+    /// default is used: Elastic Weight Consolidation combined with experience replay — a
+    /// regularization+rehearsal hybrid that outperforms either alone.
+    /// </param>
+    /// <param name="config">
+    /// Optional continual-learning configuration (learning rate, epochs, replay memory size). Defaults to
+    /// sensible values when <c>null</c>.
+    /// </param>
     /// <returns>The builder instance for method chaining.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Continual learning (lifelong learning) enables your model to
     /// learn new tasks over time without forgetting what it learned before. Traditional neural
     /// networks suffer from "catastrophic forgetting" - continual learning techniques like
     /// EWC, LwF, and GEM prevent this.</para>
+    /// <para>
+    /// There is one model: the strategy is applied to the model configured via <c>ConfigureModel</c>.
+    /// Training this Build routes through the continual learner, which preserves prior tasks; the
+    /// per-task retention report (retained accuracy, average forgetting, forward/backward transfer) is
+    /// surfaced on <see cref="AiModelResult{T, TInput, TOutput}.ContinualLearningReport"/>.
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(IContinualLearner<T, TInput, TOutput> learner)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(
+        ContinualLearning.Interfaces.IContinualLearningStrategy<T, TInput, TOutput>? strategy = null,
+        ContinualLearning.Interfaces.IContinualLearnerConfig<T>? config = null)
     {
-        _configuredContinualLearner = learner;
+        _continualLearningEnabled = true;
+        _continualLearningStrategy = strategy;
+        _continualLearningConfig = config;
         return this;
     }
 
@@ -93,6 +138,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// production is changing compared to what it was trained on. If drift is detected, it may
     /// signal that your model needs retraining. Common detectors include DDM, ADWIN, and
     /// Page-Hinkley methods.</para>
+    /// <para>
+    /// The configured detector drives a two-lens <see cref="DriftDetection.DriftMonitor{T}"/> calibrated
+    /// on the training residuals and checked against the held-out test stream. The attributed
+    /// <see cref="AiModelResult{T, TInput, TOutput}.DriftReport"/> (concept vs covariate drift) and the
+    /// live <see cref="AiModelResult{T, TInput, TOutput}.DriftMonitor"/> are surfaced on the built result;
+    /// production code streams live <c>(predicted, actual)</c> pairs through the same monitor.
+    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDriftDetection(AiDotNet.DriftDetection.IDriftDetector<T> driftDetector)
     {
@@ -100,86 +152,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Configures a video model for video understanding and generation tasks.
-    /// </summary>
-    /// <param name="videoModel">The video model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Video models process sequences of frames for tasks like
-    /// action recognition, video classification, temporal segmentation, and video generation.
-    /// They capture both spatial (within-frame) and temporal (across-frame) information.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureVideoModel(IVideoModel<T> videoModel)
-    {
-        _configuredVideoModel = videoModel;
-        return this;
-    }
+    // ConfigureVideoModel removed: IVideoModel<T> : IFullModel; use ConfigureModel(...).
+    // ConfigurePointCloudModel removed: IPointCloudModel<T> -> INeuralNetwork<T> -> IFullModel; use ConfigureModel(...).
+    // ConfigureDocumentModel removed: IDocumentModel<T> : IFullModel; use ConfigureModel(...).
+    // ConfigureFinancialModel removed: IFinancialModel<T> : IFullModel; use ConfigureModel(...).
 
-    /// <summary>
-    /// Configures a point cloud model for 3D data processing.
-    /// </summary>
-    /// <param name="model">The point cloud model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Point cloud models process 3D data represented as collections of
-    /// points in space (from LiDAR, depth cameras, etc.). They enable tasks like 3D object detection,
-    /// segmentation, and scene understanding for autonomous driving and robotics.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigurePointCloudModel(IPointCloudModel<T> model)
-    {
-        _configuredPointCloudModel = model;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a document model for document understanding and processing.
-    /// </summary>
-    /// <param name="documentModel">The document model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Document models understand the layout and content of documents
-    /// (PDFs, forms, invoices). They combine text understanding with spatial layout information
-    /// to extract structured data, classify documents, and answer questions about document content.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureDocumentModel(IDocumentModel<T> documentModel)
-    {
-        _configuredDocumentModel = documentModel;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a financial model for quantitative finance and risk analysis.
-    /// </summary>
-    /// <param name="financialModel">The financial model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Financial models apply ML to finance tasks such as portfolio
-    /// optimization, risk assessment, option pricing, credit scoring, and algorithmic trading.
-    /// They handle specialized requirements like time-series data and risk-adjusted metrics.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureFinancialModel(IFinancialModel<T> financialModel)
-    {
-        _configuredFinancialModel = financialModel;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a radial basis function for RBF networks and interpolation.
-    /// </summary>
-    /// <param name="rbf">The radial basis function implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Radial basis functions measure the distance from a center point
-    /// and produce a response that depends only on that distance. They are used in RBF neural networks
-    /// for function approximation and in scattered data interpolation. Common types include
-    /// Gaussian, Multiquadric, and Thin Plate Spline.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureRadialBasisFunction(IRadialBasisFunction<T> rbf)
-    {
-        _configuredRadialBasisFunction = rbf;
-        return this;
-    }
+    // ConfigureRadialBasisFunction removed: an RBF is a constructor parameter of the RBF network /
+    // interpolator that uses it. Set it on that model's options — the one door.
 
     /// <summary>
     /// Configures a distance metric for measuring similarity between data points.
@@ -206,6 +185,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <para><b>For Beginners:</b> Embedding models convert high-dimensional or categorical data
     /// into compact, dense vectors that capture semantic meaning. Similar items end up close
     /// together in the embedding space. Used for text (Word2Vec, BERT), images, graphs, and more.</para>
+    /// <para>
+    /// An embedding model is a preprocessing/transform component (text → dense vector), not a trainable
+    /// predictive model, so it is not routed through training. The configured embedder is surfaced on the
+    /// built result as <see cref="AiModelResult{T, TInput, TOutput}.EmbeddingModel"/> so callers can embed
+    /// new inputs at inference time consistently with how features were prepared.
+    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureEmbeddingModel(IEmbeddingModel<T> embeddingModel)
     {
@@ -218,17 +203,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <param name="scorer">The scoring rule implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Scoring rules evaluate how good probabilistic predictions are.
-    /// Unlike simple accuracy, they assess whether predicted probabilities are well-calibrated.
-    /// Common scoring rules include Brier Score, Log Loss, and CRPS (Continuous Ranked
-    /// Probability Score).</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureScoringRule(IScoringRule<T> scorer)
-    {
-        _configuredScoringRule = scorer;
-        return this;
-    }
+    // ConfigureScoringRule was removed: the scoring rule is configured on the model's options
+    // (NGBoostRegressionOptions<T>.ScoringRule, a nullable IScoringRule<T>), which is the one door.
+    // A builder-level setter could not reach an already-constructed model whose rule is read in its
+    // constructor.
 
     /// <summary>
     /// Configures a model explainer for understanding model predictions.

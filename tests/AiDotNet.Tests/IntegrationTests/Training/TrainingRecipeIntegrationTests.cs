@@ -116,11 +116,11 @@ namespace AiDotNetTests.IntegrationTests.Training
             var optionsProp = model.GetType().GetProperty("Options",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
             Assert.NotNull(optionsProp);
-            var options = optionsProp!.GetValue(model);
+            var options = optionsProp?.GetValue(model);
             Assert.NotNull(options);
-            var seasonalPeriodProp = options!.GetType().GetProperty("SeasonalPeriod");
+            var seasonalPeriodProp = options?.GetType().GetProperty("SeasonalPeriod");
             Assert.NotNull(seasonalPeriodProp);
-            Assert.Equal(12, (int)seasonalPeriodProp!.GetValue(options)!);
+            Assert.Equal(12, Convert.ToInt32(seasonalPeriodProp?.GetValue(options)));
         }
 
         [Fact(Timeout = 120000)]
@@ -146,14 +146,14 @@ namespace AiDotNetTests.IntegrationTests.Training
             var optionsProp = model.GetType().GetProperty("Options",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
             Assert.NotNull(optionsProp);
-            var options = optionsProp!.GetValue(model);
+            var options = optionsProp?.GetValue(model);
             Assert.NotNull(options);
-            var seasonalPeriodProp = options!.GetType().GetProperty("SeasonalPeriod");
+            var seasonalPeriodProp = options?.GetType().GetProperty("SeasonalPeriod");
             Assert.NotNull(seasonalPeriodProp);
-            Assert.Equal(7, (int)seasonalPeriodProp!.GetValue(options)!);
-            var includeTrendProp = options.GetType().GetProperty("IncludeTrend");
+            Assert.Equal(7, Convert.ToInt32(seasonalPeriodProp?.GetValue(options)));
+            var includeTrendProp = options?.GetType().GetProperty("IncludeTrend");
             Assert.NotNull(includeTrendProp);
-            Assert.True((bool)includeTrendProp!.GetValue(options)!);
+            Assert.True(Convert.ToBoolean(includeTrendProp?.GetValue(options)));
         }
 
         [Theory]

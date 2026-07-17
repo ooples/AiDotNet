@@ -455,4 +455,11 @@ public class FederatedLearningMetadata
     /// - Understanding convergence patterns
     /// </remarks>
     public List<RoundMetadata> RoundMetrics { get; set; } = new List<RoundMetadata>();
+
+    /// <summary>
+    /// Results from the advanced federated capabilities configured via <c>ConfigureFederatedLearning(...)</c>
+    /// (client contribution, fairness, drift, private-set-intersection, TEE attestation, zero-knowledge proofs,
+    /// secure MPC, and unlearning readiness), or <c>null</c> when none were configured.
+    /// </summary>
+    public FederatedLearning.FederatedAdvancedMetadata? AdvancedCapabilities { get; set; }
 }
