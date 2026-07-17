@@ -29,6 +29,17 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     private readonly bool _supportsBatchedPrefill;
     private long _nextSequenceId;
 
+    // The optimized, context-aware model backing incremental decode (writes/reads paged KV per sequence
+    // id via PredictWithContext), or null when this model has no incremental path. Exposed to the
+    // continuous-batching engine (and its equivalence tests) so ONE shared batcher can drive the same
+    // model + paged cache the session path uses — the two must produce byte-identical output before the
+    // live serving path routes through the batcher.
+    internal AiDotNet.NeuralNetworks.NeuralNetworkBase<T>? IncrementalModel => _incrementalModel;
+
+    // The shared paged KV cache backing every sequence of this model, or null when there is no
+    // incremental path. Same instance the GenerationSession path allocates its sequences in.
+    internal AiDotNet.Inference.PagedAttention.PagedKVCache<T>? IncrementalCache => _incrementalCache;
+
     // Concurrent generation sessions share ONE optimized model instance. Its KV state is isolated
     // per sequence id (paged cache), but the layers carry per-forward scratch (e.g. _lastInput), so
     // two threads cannot run the forward simultaneously without corrupting each other. Inference on a
