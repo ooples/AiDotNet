@@ -32,9 +32,6 @@ jobs:
     name: Heavy Timeout Models
     runs-on: ubuntu-latest
     timeout-minutes: 350   # generous budget; these models are the slow ones by definition
-    # Licensed key so save/load-heavy suites don't trip the unlicensed free-trial operation limit.
-    env:
-      AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
@@ -61,6 +58,10 @@ jobs:
         # stack memory and OOM/cancel the lane instead of giving the visibility this workflow exists for.
         shell: pwsh
         continue-on-error: true
+        # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
+        # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
+        env:
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           $runnerJson = 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
           if (Test-Path $runnerJson) {
