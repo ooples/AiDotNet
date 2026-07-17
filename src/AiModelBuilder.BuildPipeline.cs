@@ -4271,6 +4271,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 effectiveClientCount = clientPartitions.Count;
             }
 
+            var advancedFederatedCapabilities = new AiDotNet.FederatedLearning.FederatedAdvancedCapabilities<T>(
+                contribution: _federatedContributionEvaluator,
+                fairness: _federatedFairnessConstraint,
+                drift: _federatedDriftDetector,
+                unlearner: _federatedUnlearner,
+                tee: _federatedTeeProvider,
+                zk: _federatedZkProofSystem,
+                mpc: _federatedSecureComputationProtocol,
+                psi: _federatedPrivateSetIntersection);
+
             var trainer = new AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer<T, TInput, TOutput>(
                 optimizerPrototype: finalOptimizer,
                 learningRateOverride: flOptions.LearningRate,
@@ -4281,7 +4291,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 clientSelectionStrategy: _federatedClientSelectionStrategy,
                 serverOptimizer: _federatedServerOptimizer,
                 heterogeneityCorrection: _federatedHeterogeneityCorrection,
-                homomorphicEncryptionProvider: _federatedHomomorphicEncryptionProvider);
+                homomorphicEncryptionProvider: _federatedHomomorphicEncryptionProvider,
+                advancedCapabilities: advancedFederatedCapabilities);
 
             var aggregationStrategy = _federatedAggregationStrategy ?? CreateDefaultFederatedAggregationStrategy(flOptions);
             trainer.SetAggregationStrategy(aggregationStrategy);

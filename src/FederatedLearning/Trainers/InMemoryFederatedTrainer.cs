@@ -43,6 +43,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     private readonly IFederatedServerOptimizer<T>? _serverOptimizerOverride;
     private readonly IFederatedHeterogeneityCorrection<T>? _heterogeneityCorrectionOverride;
     private readonly IHomomorphicEncryptionProvider<T>? _homomorphicEncryptionProviderOverride;
+    private readonly FederatedAdvancedCapabilities<T>? _advancedCapabilities;
     private readonly Dictionary<int, double> _clientPerformanceScores = new();
     private readonly Dictionary<int, double[]> _clientEmbeddings = new();
 
@@ -58,11 +59,13 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         IClientSelectionStrategy? clientSelectionStrategy = null,
         IFederatedServerOptimizer<T>? serverOptimizer = null,
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
-        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null,
+        FederatedAdvancedCapabilities<T>? advancedCapabilities = null)
     {
         Guard.NotNull(optimizerPrototype);
         _optimizerPrototype = optimizerPrototype;
         _learningRateOverride = learningRateOverride;
+        _advancedCapabilities = advancedCapabilities;
 
         if (convergenceThreshold < 0.0)
         {
@@ -291,6 +294,13 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         Dictionary<int, Vector<T>>? perClientPersonalState = usePersonalization ? new Dictionary<int, Vector<T>>() : null;
         Dictionary<int, Vector<T>>? perClusterPersonalState = isClusteredPersonalization ? new Dictionary<int, Vector<T>>() : null;
+
+        // Advanced capabilities: PSI overlap runs once up front; per-client parameters are recorded per round.
+        Dictionary<int, Vector<T>>? lastAdvancedClientParams = null;
+        if (_advancedCapabilities?.AnyConfigured == true)
+        {
+            _advancedCapabilities.RunPrivateSetIntersection(ComputeClientSampleIdentities(clientData));
+        }
 
         for (int round = 0; round < rounds; round++)
         {
@@ -561,6 +571,20 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             SetGlobalModel(newGlobalModel);
 
+            if (_advancedCapabilities?.AnyConfigured == true && clientModels.Count > 0)
+            {
+                var advClientParams = new Dictionary<int, Vector<T>>(clientModels.Count);
+                foreach (var kv in clientModels)
+                {
+                    advClientParams[kv.Key] = InterfaceGuard.Parameterizable(kv.Value).GetParameters();
+                }
+
+                var advGlobalParams = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
+                _advancedCapabilities.RecordClientParameters(advClientParams);
+                _advancedCapabilities.OnRoundComplete(round, advClientParams, advGlobalParams, new Dictionary<int, double>());
+                lastAdvancedClientParams = advClientParams;
+            }
+
             if (usePersonalization && effectivePersonalizationOptions != null && perClientPersonalState != null)
             {
                 ApplyPostAggregationPersonalization(
@@ -621,7 +645,62 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         metadata.AverageRoundTimeSeconds = metadata.RoundsCompleted > 0 ? elapsed.TotalSeconds / metadata.RoundsCompleted : 0.0;
         metadata.AverageClientsPerRound = metadata.RoundsCompleted > 0 ? (double)metadata.RoundMetrics.Sum(r => r.SelectedClientIds.Count) / metadata.RoundsCompleted : 0.0;
 
+        if (_advancedCapabilities?.AnyConfigured == true)
+        {
+            var finalGlobalParams = InterfaceGuard.Parameterizable(GetGlobalModel()).GetParameters();
+            _advancedCapabilities.Finalize(
+                lastAdvancedClientParams ?? new Dictionary<int, Vector<T>>(), finalGlobalParams);
+            metadata.AdvancedCapabilities = _advancedCapabilities.BuildMetadata();
+        }
+
         return metadata;
+    }
+
+    /// <summary>
+    /// Removes a client's contribution from the trained global model (GDPR right-to-be-forgotten), when an
+    /// unlearner was configured. Returns the unlearned parameters and a verification certificate, or <c>null</c>
+    /// when no unlearner is configured or the client did not participate.
+    /// </summary>
+    /// <param name="clientId">The client to unlearn.</param>
+    public (Vector<T> UnlearnedParameters, Unlearning.UnlearningCertificate Certificate)? UnlearnClient(int clientId)
+    {
+        if (_advancedCapabilities is null) return null;
+        var globalParams = InterfaceGuard.Parameterizable(GetGlobalModel()).GetParameters();
+        return _advancedCapabilities.UnlearnClient(clientId, globalParams);
+    }
+
+    /// <summary>Hashes each client's sample rows into identity strings for the private-set-intersection overlap check.</summary>
+    private Dictionary<int, IReadOnlyList<string>> ComputeClientSampleIdentities(
+        Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientData)
+    {
+        var result = new Dictionary<int, IReadOnlyList<string>>();
+        var numOps = MathHelper.GetNumericOperations<T>();
+        foreach (var kv in clientData)
+        {
+            try
+            {
+                var matrix = ConversionsHelper.ConvertToMatrix<T, TInput>(kv.Value.Features);
+                var ids = new List<string>(matrix.Rows);
+                using var sha = System.Security.Cryptography.SHA256.Create();
+                for (int r = 0; r < matrix.Rows; r++)
+                {
+                    var bytes = new byte[matrix.Columns * sizeof(double)];
+                    for (int c = 0; c < matrix.Columns; c++)
+                    {
+                        BitConverter.GetBytes(numOps.ToDouble(matrix[r, c])).CopyTo(bytes, c * sizeof(double));
+                    }
+
+                    ids.Add(Convert.ToBase64String(sha.ComputeHash(bytes)));
+                }
+
+                result[kv.Key] = ids;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+            }
+        }
+
+        return result;
     }
 
     private void TrainAsyncInMemory(

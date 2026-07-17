@@ -422,9 +422,15 @@ Whole features that appear configurable and never run.
 
 | method | dead | live |
 |---|---|---|
-| `ConfigureFederatedLearning` | 8 (`_federatedContributionEvaluator`, `_federatedDriftDetector`, `_federatedFairnessConstraint`, `_federatedPrivateSetIntersection`, `_federatedSecureComputationProtocol`, `_federatedTeeProvider`, `_federatedUnlearner`, `_federatedZkProofSystem`) | 6 |
-| `ConfigureHyperparameterOptimizer` | 1 (`_hyperparameterTrials`) | 2 |
-| `ConfigurePipelineParallelism` | 1 (`_pipelineMicroBatchCount`) | 3 |
+| ~~`ConfigureFederatedLearning`~~ | **DONE** — all 8 (`contributionEvaluator`, `driftDetector`, `fairnessConstraint`, `privateSetIntersection`, `secureComputationProtocol`, `teeProvider`, `unlearner`, `zkProofSystem`) now flow into `InMemoryFederatedTrainer` via `FederatedAdvancedCapabilities<T>` and are exercised at their real lifecycle points, surfaced on `FederatedLearningMetadata.AdvancedCapabilities` | 14 |
+| ~~`ConfigureHyperparameterOptimizer`~~ | **DONE** — `_hyperparameterTrials` is passed to `_hyperparameterOptimizer.Optimize(...)` (`BuildPipeline.cs:4123`) | 3 |
+| ~~`ConfigurePipelineParallelism`~~ | **DONE** — `_pipelineMicroBatchCount` is passed to `PipelineParallelModel` ctor (`BuildPipeline.cs:3602`) | 4 |
+
+**All PARTIAL methods are now fully wired.** The federated integration (`FederatedAdvancedCapabilities<T>`) drives, at their genuine lifecycle points:
+- **PSI** — cross-client sample-identity overlap (leakage/dedup signal) once at training start;
+- **drift / TEE / ZK / MPC** per round — concept-drift detection, TEE attestation over the aggregated model digest, a zero-knowledge range proof bounding the update norm (self-verified), and a one-time secure secret-shared-sum correctness check;
+- **contribution / fairness** at training end — Shapley client value + free-rider identification, and a per-client fairness-violation score;
+- **unlearning** on demand — `InMemoryFederatedTrainer.UnlearnClient(clientId)` returns the unlearned parameters + a GDPR certificate.
 
 ---
 
