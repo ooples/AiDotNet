@@ -58,6 +58,10 @@ jobs:
         # stack memory and OOM/cancel the lane instead of giving the visibility this workflow exists for.
         shell: pwsh
         continue-on-error: true
+        # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
+        # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
+        env:
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           $runnerJson = 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
           if (Test-Path $runnerJson) {
