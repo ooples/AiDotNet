@@ -111,6 +111,16 @@ internal sealed class GatherFromTensorParallelRegion<T> : AutogradFunction<T>
     {
         var local = inputs[0];                      // [batch, localOut]
         if (_backend.WorldSize <= 1) return local;
+        // The output-column gather relies on an EQUAL per-rank AllGather count (every rank contributes
+        // batch * localOut elements). ICommunicationBackend.AllGather / the NCCL/Gloo backends only support
+        // a single sendCount per rank, so an uneven split (_fullOutputSize not divisible by the world size)
+        // would misassemble the gathered output. Reject it up front rather than corrupting silently.
+        if (_fullOutputSize % _backend.WorldSize != 0)
+            throw new System.InvalidOperationException(
+                $"GatherFromTensorParallelRegion requires the output size ({_fullOutputSize}) to be evenly " +
+                $"divisible by the tensor-parallel world size ({_backend.WorldSize}); uneven shards need a " +
+                "variable-count gather the backends do not provide. Use an output size divisible by the " +
+                "world size, or gatherOutput=false feeding a following RowParallelLinear.");
         int batch = local._shape[0];
         var gathered = _backend.AllGather(local.ToVector());
         var full = new Tensor<T>(new[] { batch, _fullOutputSize });

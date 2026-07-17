@@ -390,16 +390,20 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported as a standalone call. All required synchronization is performed INLINE in Optimize via
+    /// the two subgroup reductions — SubgroupAllReduce(SUM) within the tensor-parallel group and
+    /// SubgroupAllReduce(AVERAGE) within the data-parallel group — followed by the wrapped optimizer's
+    /// ApplyGradients (which owns its per-rank Adam m/v state). Pipeline stages own independent state, and
+    /// tensor/data neighbours' optimizer state is either partitioned with their parameter shard or updated
+    /// identically from the reduced gradient, so there is no additional per-step state exchange to perform.
+    /// This method therefore throws rather than silently reporting success for a no-op.
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // Intentional no-op. All required gradient synchronization is performed INLINE in Optimize via
-        // the two subgroup reductions — SubgroupAllReduce(SUM) within the tensor-parallel group and
-        // SubgroupAllReduce(AVERAGE) within the data-parallel group — followed by the wrapped optimizer's
-        // ApplyGradients (which owns its per-rank Adam m/v state). Pipeline stages own independent state,
-        // and tensor/data neighbours' optimizer state is either partitioned with their parameter shard or
-        // updated identically from the reduced gradient, so there is no additional per-step state exchange
-        // to perform here.
-    }
+        => throw new NotSupportedException(
+            "HybridShardedOptimizer performs all required state synchronization inline in Optimize (subgroup " +
+            "tensor/data reductions + per-rank ApplyGradients); there is no standalone optimizer-state " +
+            "synchronization to perform.");
 
     /// <inheritdoc/>
     public override byte[] Serialize()

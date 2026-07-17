@@ -126,8 +126,14 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
             if (inputData == null)
                 throw new ArgumentNullException(nameof(inputData));
 
-            // Check for world size changes (workers joined/left)
-            if (DetectWorldSizeChange())
+            // Check for world size changes (workers joined/left). CRITICAL: the decision must be COLLECTIVE
+            // — a rank-local DetectWorldSizeChange() would let some ranks enter HandleWorkerChange's
+            // collectives while others go straight to the gradient reduce, producing a divergent collective
+            // sequence (deadlock/corruption). AllReduce(Max) over a 1/0 flag makes every rank agree that a
+            // membership change occurred before any rank branches into the rendezvous.
+            var changed = new Vector<T>(new[] { DetectWorldSizeChange() ? NumOps.One : NumOps.Zero });
+            Config.CommunicationBackend.AllReduce(changed, ReductionOperation.Max);
+            if (!NumOps.Equals(changed[0], NumOps.Zero))
             {
                 HandleWorkerChange(inputData);
             }
@@ -157,13 +163,19 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported as a standalone call. Between membership changes this optimizer replicates parameters
+    /// and the wrapped optimizer's Adam m/v state is identical on every rank (no per-step exchange needed);
+    /// the only state movement is the parameter broadcast in HandleWorkerChange on a membership change.
+    /// A general "synchronize optimizer state" — including transferring serialized Adam state to a newly
+    /// joined worker — is a full elastic state-transfer protocol that this optimizer does not implement, so
+    /// it fails fast here rather than silently reporting success.
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // Intentional no-op for the per-step path. Elastic re-sharding of optimizer state happens only on a
-        // membership change and is performed in HandleWorkerChange (via ResynchronizeParametersAcrossWorkers).
-        // Between membership changes this optimizer replicates parameters across workers, so the wrapped
-        // optimizer's Adam m/v state is identical on every rank and needs no per-step exchange.
-    }
+        => throw new NotSupportedException(
+            "ElasticOptimizer does not support standalone optimizer-state synchronization. Parameter " +
+            "re-sync happens in HandleWorkerChange on a membership change; transferring serialized optimizer " +
+            "(Adam m/v) state to newly joined workers is not implemented.");
 
     /// <summary>
     /// Detects if the world size has changed since the last handled membership event.

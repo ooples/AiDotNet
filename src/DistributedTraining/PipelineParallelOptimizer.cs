@@ -98,11 +98,9 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
             // per-schedule op-count tests); this optimizer only applies the accumulated per-stage update,
             // which is why numMicroBatches > 1 is rejected in the constructor rather than faked here. (When
             // pipeline is combined with data parallelism, the data-parallel replica reduction is handled by
-            // the data-parallel wrapper — HybridShardedModel's subgroup reduce — not by this class.)
-            if (Config.AutoSyncGradients && result.BestSolution != null)
-            {
-            }
-
+            // the data-parallel wrapper — HybridShardedModel's subgroup reduce — not by this class.) There
+            // is deliberately no AutoSyncGradients branch here: there is nothing for this stage-local
+            // optimizer to synchronize.
             OffloadParamsToCpu(result.BestSolution);
             return result;
         }

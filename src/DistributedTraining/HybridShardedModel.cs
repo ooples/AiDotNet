@@ -351,9 +351,16 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         for (int r = 0; r < worldSize; r++)
         {
             var (startR, sizeR) = ShardLayoutForRank(r);
-            // Copy rank r's shard (found at concatOffset in the AllGather output) to its logical position.
-            for (int i = 0; i < sizeR; i++)
-                full[startR + i] = gathered[concatOffset + i];
+            // Reconstruct only THIS rank's data-parallel replica. Data-parallel replicas of the same
+            // (pipeline, tensor) position share a destination region, but when AutoSyncGradients is off they
+            // may legitimately DIVERGE — copying every replica into the same region would let the
+            // highest-ranked replica silently overwrite this rank's parameters. Copy only shards whose
+            // data-parallel coordinate matches this rank's _dataRank; advance the concat offset for all.
+            if (r % _dataParallelSize == _dataRank)
+            {
+                for (int i = 0; i < sizeR; i++)
+                    full[startR + i] = gathered[concatOffset + i];
+            }
             concatOffset += sizeR;
         }
 
