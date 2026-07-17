@@ -58,6 +58,45 @@ public static class ServingConfigMapper
         };
     }
 
+    /// <summary>
+    /// Bytes one KV-cache block occupies for a model with the given attention shape: both keys and values,
+    /// across all layers, for every token slot in the block, at the KV storage precision (Int8 = 1 byte,
+    /// otherwise fp16 = 2 bytes).
+    /// </summary>
+    public static long KvBytesPerBlock(
+        int numLayers, int numKvHeads, int headDim, int blockSize, KVCacheQuantizationMode quantization)
+    {
+        int bytesPerElement = quantization == KVCacheQuantizationMode.Int8 ? 1 : 2;
+        return 2L * numLayers * numKvHeads * headDim * blockSize * bytesPerElement; // 2 = keys + values
+    }
+
+    /// <summary>
+    /// Builds engine options for a paged model of known attention shape, sizing the KV block pool <b>precisely</b>
+    /// from <see cref="InferenceOptimizationConfig.KVCacheMaxSizeMB"/> and the real per-block byte cost (rather
+    /// than the shape-agnostic nominal estimate). Quantized KV therefore fits proportionally more blocks.
+    /// </summary>
+    public static EngineOptions ToEngineOptionsForPagedModel(
+        InferenceOptimizationConfig? config, int? eosTokenId,
+        int numLayers, int numKvHeads, int headDim, int blockSize)
+    {
+        var c = config ?? InferenceOptimizationConfig.Default;
+        long budgetBytes = (long)Math.Max(1, c.KVCacheMaxSizeMB) * 1024 * 1024;
+        long bytesPerBlock = KvBytesPerBlock(numLayers, numKvHeads, headDim, blockSize, c.KVCacheQuantization);
+        long blocks = Math.Max(8, budgetBytes / Math.Max(1, bytesPerBlock)); // at least a handful of blocks
+        int numKvBlocks = (int)Math.Min(blocks, int.MaxValue);
+
+        int maxSequences = c.EnableBatching ? Math.Max(1, c.MaxBatchSize) : 1;
+        return new EngineOptions
+        {
+            BlockSize = blockSize,
+            MaxNumSequences = maxSequences,
+            NumKvBlocks = numKvBlocks,
+            MaxBatchedTokens = Math.Max(blockSize * numKvBlocks / Math.Max(1, maxSequences), maxSequences),
+            EosTokenId = eosTokenId,
+            KvCacheQuantization = c.KVCacheQuantization,
+        };
+    }
+
     /// <summary>True if the config asks for speculative decoding.</summary>
     public static bool IsSpeculativeEnabled(InferenceOptimizationConfig? config)
         => (config ?? InferenceOptimizationConfig.Default).EnableSpeculativeDecoding;

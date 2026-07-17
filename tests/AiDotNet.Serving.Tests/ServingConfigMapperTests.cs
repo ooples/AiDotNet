@@ -87,6 +87,32 @@ public class ServingConfigMapperTests
     }
 
     [Fact]
+    public void PagedModelSizing_DerivesBlocksFromMemoryBudgetAndShape()
+    {
+        // 4 layers, 8 kv heads, headDim 64, block 16, fp16 -> 2*4*8*64*16*2 = 131,072 bytes = 128 KiB/block.
+        // A 64 MiB budget therefore yields 64 MiB / 128 KiB = 512 blocks.
+        var config = new InferenceOptimizationConfig { KVCacheMaxSizeMB = 64, MaxBatchSize = 8 };
+        long perBlock = ServingConfigMapper.KvBytesPerBlock(4, 8, 64, 16, KVCacheQuantizationMode.None);
+        Assert.Equal(131072L, perBlock);
+
+        var opts = ServingConfigMapper.ToEngineOptionsForPagedModel(config, null, 4, 8, 64, 16);
+        Assert.Equal(16, opts.BlockSize);
+        Assert.Equal(512, opts.NumKvBlocks); // 64 MiB / 128 KiB
+        opts.Validate();
+    }
+
+    [Fact]
+    public void PagedModelSizing_Int8_FitsTwiceAsManyBlocks()
+    {
+        var fp16 = new InferenceOptimizationConfig { KVCacheMaxSizeMB = 64 };
+        var int8 = new InferenceOptimizationConfig { KVCacheMaxSizeMB = 64, KVCacheQuantization = KVCacheQuantizationMode.Int8 };
+
+        var a = ServingConfigMapper.ToEngineOptionsForPagedModel(fp16, null, 4, 8, 64, 16);
+        var b = ServingConfigMapper.ToEngineOptionsForPagedModel(int8, null, 4, 8, 64, 16);
+        Assert.Equal(2 * a.NumKvBlocks, b.NumKvBlocks);
+    }
+
+    [Fact]
     public void SpeculationHelpers_ReadConfig()
     {
         Assert.False(ServingConfigMapper.IsSpeculativeEnabled(null));

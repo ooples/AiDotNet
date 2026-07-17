@@ -53,7 +53,11 @@ public sealed class TextGenerator<T> : IDisposable
         int? eos = selection.EosTokenId
             ?? (_tokenizer is not null && _tokenizer.EosTokenId >= 0 ? _tokenizer.EosTokenId : (int?)null);
 
-        var opts = options ?? ServingConfigMapper.ToEngineOptions(config, eos);
+        // A paged model exposes its attention shape, so the KV pool can be sized precisely from the memory
+        // budget; otherwise fall back to the shape-agnostic nominal sizing.
+        var opts = options ?? (model is ICausalLmRunner<T> paged
+            ? ServingConfigMapper.ToEngineOptionsForPagedModel(config, eos, paged.NumLayers, paged.NumKvHeads, paged.HeadDim, paged.BlockSize)
+            : ServingConfigMapper.ToEngineOptions(config, eos));
         if (opts.EosTokenId is null && eos is not null)
             opts = CloneWithEos(opts, eos);
 
