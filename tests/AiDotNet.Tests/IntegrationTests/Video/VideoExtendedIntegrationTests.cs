@@ -396,14 +396,20 @@ public class VideoExtendedIntegrationTests
             Assert.Equal(3 * SecondOrderFeatures, align.GetInputShape()[0]);
     }
 
-    // The second-order path carries temporal information end-to-end: perturbing a frame two steps away
-    // from a target frame changes that frame's reconstruction. With numFrames = 3 the backward pass warps
-    // frame 2 directly onto frame 0 through the composed i+2 flow, so frame 0's output must respond.
+    // The DIRECT second-order (i+2) path carries temporal information end-to-end: perturbing a frame two
+    // steps away from a target frame changes that frame's reconstruction THROUGH THE i+2 WARP ALONE.
+    // First-order propagation is disabled so that the ordinary i±1 recurrence cannot carry frame 2's
+    // change to frame 0 transitively (2→1→0) — without that isolation the assertion would pass even if
+    // the direct i→i+2 propagation were broken, making the test meaningless.
     [Fact(Timeout = 120000)]
     public async Task BasicVSRPlusPlus_SecondOrder_TwoStepNeighbourInfluencesOutput()
     {
         await Task.Yield();
         var model = CreateSecondOrderModel();
+        // Isolate the second-order path: with the first-order (i±1) contribution zeroed, the ONLY route
+        // from frame 2 to frame 0 is the composed i→i+2 warp.
+        model.DisableFirstOrderPropagationForTesting = true;
+
         var clip = MakeClip(numFrames: 3, seed: 2);
         var baseline = model.EnhanceVideo(clip);
 
@@ -423,8 +429,64 @@ public class VideoExtendedIntegrationTests
         for (int i = 0; i < outFrameStride; i++)
             maxDelta = System.Math.Max(maxDelta, System.Math.Abs(a[i] - b[i]));
         Assert.True(maxDelta > 1e-9,
-            $"Perturbing frame 2 left frame 0's reconstruction unchanged (Δ={maxDelta:E3}); the " +
-            "second-order backward propagation path is not carrying information to frame 0.");
+            $"With first-order propagation disabled, perturbing frame 2 left frame 0's reconstruction " +
+            $"unchanged (Δ={maxDelta:E3}); the DIRECT second-order (i+2) path is not carrying information " +
+            "to frame 0.");
+    }
+
+    // Directly proves the second-order (i+2) SLOT of frame 0's alignment input is a function of frame 2:
+    // records frame 0's [current | first-order | second-order] alignment tensor via the model's recorder
+    // hook and asserts the second-order channel slice ([2·numFeatures, 3·numFeatures)) responds to a
+    // frame-2 perturbation. This exercises the composed i→i+2 flow at the exact tensor the alignment layer
+    // consumes, independent of any first-order contribution and of the downstream reconstruction.
+    [Fact(Timeout = 120000)]
+    public async Task BasicVSRPlusPlus_SecondOrder_AlignmentSecondOrderSliceRespondsToTwoStepPerturbation()
+    {
+        await Task.Yield();
+        var model = CreateSecondOrderModel();
+
+        Tensor<double>? frame0AlignInput = null;
+        model.BackwardAlignInputRecorder = (frameIndex, alignInput) =>
+        {
+            if (frameIndex == 0) frame0AlignInput = alignInput.Clone();
+        };
+
+        var clip = MakeClip(numFrames: 3, seed: 3);
+        _ = model.EnhanceVideo(clip);
+        Assert.NotNull(frame0AlignInput);
+        var baselineSlice = ExtractSecondOrderSlice(frame0AlignInput!);
+
+        frame0AlignInput = null;
+        var perturbed = new Tensor<double>([3, 3, SecondOrderHW, SecondOrderHW]);
+        clip.Data.Span.CopyTo(perturbed.Data.Span);
+        int frameStride = 3 * SecondOrderHW * SecondOrderHW;
+        var ps = perturbed.Data.Span;
+        for (int i = 2 * frameStride; i < 3 * frameStride; i++) ps[i] += 0.5;
+        _ = model.EnhanceVideo(perturbed);
+        Assert.NotNull(frame0AlignInput);
+        var changedSlice = ExtractSecondOrderSlice(frame0AlignInput!);
+
+        double maxDelta = 0.0;
+        for (int i = 0; i < baselineSlice.Length; i++)
+            maxDelta = System.Math.Max(maxDelta, System.Math.Abs(baselineSlice[i] - changedSlice[i]));
+        Assert.True(maxDelta > 1e-9,
+            $"Frame 0's second-order alignment slot did not respond to a frame-2 perturbation (Δ={maxDelta:E3}); " +
+            "the composed i→i+2 flow is not routing frame 2 into frame 0's alignment input.");
+    }
+
+    // The alignment input is [current | first-order warp | second-order warp] concatenated along the
+    // channel axis (axis 0 of the rank-3 [C, H, W] feature map), so the second-order slot is the last
+    // third of the channels: [2·numFeatures, 3·numFeatures).
+    private static double[] ExtractSecondOrderSlice(Tensor<double> alignInput)
+    {
+        int channels = alignInput.Shape[0];
+        int perChannel = alignInput.Length / channels;
+        int start = 2 * SecondOrderFeatures * perChannel;
+        int count = SecondOrderFeatures * perChannel;
+        var slice = new double[count];
+        var span = alignInput.Data.Span;
+        for (int i = 0; i < count; i++) slice[i] = span[start + i];
+        return slice;
     }
 
     [Fact(Timeout = 120000)]

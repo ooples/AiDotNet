@@ -183,6 +183,24 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private readonly double _learningRate;
 
+    /// <summary>
+    /// Test-only hook: when true, the first-order (i±1) warped neighbour is zeroed in every propagation
+    /// step, leaving ONLY the second-order (i±2) contribution. This isolates the direct two-step
+    /// propagation path so a test can prove that i→i±2 information transfer works, independent of the
+    /// ordinary i±1 recurrence that would otherwise carry the same information transitively (2→1→0).
+    /// Defaults to false, so production behaviour is unchanged.
+    /// </summary>
+    internal bool DisableFirstOrderPropagationForTesting { get; set; }
+
+    /// <summary>
+    /// Test-only hook: if set, invoked for each frame index during BACKWARD propagation with that frame's
+    /// deformable-alignment input tensor [current | first-order warp | second-order warp] (channel-axis
+    /// concatenation). Lets a test record and inspect the second-order channel slice
+    /// (<c>[2·numFeatures, 3·numFeatures)</c>) to verify it responds to a two-step-away perturbation.
+    /// Null in production, so it adds no overhead there.
+    /// </summary>
+    internal Action<int, Tensor<T>>? BackwardAlignInputRecorder { get; set; }
+
     #endregion
 
     #region Properties
@@ -678,7 +696,11 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 var warp2 = (i + 2 < numFrames)
                     ? WarpFeatureTape(backwardFeats[i + 2], ComposeFlow(flows[i].forward, flows[i + 1].forward))
                     : ZerosLike(warp1);
+                // Test-only isolation: zero the first-order slot so the only route by which a two-step-away
+                // frame reaches this one is the second-order (i+2) warp above.
+                if (DisableFirstOrderPropagationForTesting) warp1 = ZerosLike(warp1);
                 var alignInput = ConcatenateFeaturesTape(propagatedFeatures[i], warp1, warp2);
+                BackwardAlignInputRecorder?.Invoke(i, alignInput);
                 var aligned = _backwardAlignments[iter].Forward(alignInput);
                 var fuseInput = ConcatenateFeaturesTape(propagatedFeatures[i], aligned);
                 backwardFeats[i] = _backwardConvs[iter].Forward(fuseInput);
@@ -695,6 +717,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 var warp2 = (i - 2 >= 0)
                     ? WarpFeatureTape(forwardFeats[i - 2], ComposeFlow(flows[i - 1].backward, flows[i - 2].backward))
                     : ZerosLike(warp1);
+                if (DisableFirstOrderPropagationForTesting) warp1 = ZerosLike(warp1);
                 var alignInput = ConcatenateFeaturesTape(backwardFeats[i], warp1, warp2);
                 var aligned = _forwardAlignments[iter].Forward(alignInput);
                 var fuseInput = ConcatenateFeaturesTape(backwardFeats[i], aligned);

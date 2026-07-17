@@ -469,16 +469,49 @@ public class Cutie<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Training forward. Routes through the SAME grouped forward as inference (image encoder ->
-    /// memory attention -> mask decoder via <see cref="SegmentFrame"/>), NOT the base sequential walk
-    /// over ALL <c>Layers</c>. Cutie's layers are used in GROUPS (encoder 0-4, object encoder 5-6,
-    /// memory attention 10-13, mask decoder 14+), so a naive sequential walk optimizes a graph
-    /// inference never runs — the trained weights then leave the real forward degenerate
-    /// (DifferentInputs / ScaledInput collapse post-training). Sharing SegmentFrame keeps the train
-    /// and inference graphs identical, and (with the scalar loops removed) fully tape-tracked.
+    /// Training forward. Cutie's layers are used in GROUPS (image encoder 0-4, object encoder 5-6,
+    /// memory attention 10-13, mask decoder 14+), so the base sequential walk over ALL <c>Layers</c>
+    /// would optimize a graph inference never runs. Plain <see cref="SegmentFrame"/> is not enough
+    /// either: with an empty memory bank its attention short-circuits and the object encoder is never
+    /// invoked, so layer groups 5-6 and 10-13 would receive NO gradients and collapse post-training.
+    /// This grouped forward encodes a reference-memory entry from the input UNDER THE SAME TAPE (so the
+    /// object encoder trains), then runs the tape-aware memory attention (which now always executes
+    /// layers 10-13) and the mask decoder — covering every trainable group in one differentiable graph.
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => SegmentFrame(input);
+    {
+        EnsureLayerRandomSeedsWired();
+
+        bool hasBatch = input.Rank == 4;
+        var frame = hasBatch ? input : AddBatchDimension(input);
+
+        // 1. Image encoder (layers 0-4).
+        var features = EncodeImage(frame);
+
+        // 2. Build a reference-memory entry UNDER THE TAPE so the object encoder (layers 5-6) trains.
+        //    Derive a provisional single-channel mask from the encoded features (tape-aware channel-mean)
+        //    at exactly the feature resolution the object encoder expects — no ground-truth mask is
+        //    available on the training forward, and this keeps the whole memory path differentiable.
+        var provisionalMask = Engine.ReduceMean(features, new[] { 1 }, keepDims: true); // [B,1,h,w]
+        var objectFeatures = EncodeObject(features, provisionalMask);                    // layers 5-6
+
+        // 3. Temporarily register the tape-connected memory entry for the attention pass, then remove it
+        //    so the training forward leaves no residue in the inference-time memory bank.
+        _memoryBank.Add((objectFeatures, objectFeatures));
+        Tensor<T> attended;
+        try
+        {
+            attended = AttendToMemory(features); // tape-aware attention + layers 10-13
+        }
+        finally
+        {
+            _memoryBank.RemoveAt(_memoryBank.Count - 1);
+        }
+
+        // 4. Mask decoder (layers 14+).
+        var mask = DecodeMask(attended);
+        return hasBatch ? mask : RemoveBatchDimension(mask);
+    }
 
     #endregion
 
@@ -553,44 +586,31 @@ public class Cutie<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AttendToMemory(Tensor<T> query)
     {
-        if (_memoryBank.Count == 0) return query;
-
-        int batchSize = query.Shape[0];
-        int channels = query.Shape[1];
-        int height = query.Shape[2];
-        int width = query.Shape[3];
-
-        var attended = new Tensor<T>(query._shape);
-
-        foreach (var (key, value) in _memoryBank)
+        // Read-across-memory attention, expressed entirely with tape-aware Engine ops so gradients flow
+        // back into the query features AND the stored memory (key/value) tensors. The previous body read
+        // query/key/value through scalar [b,c,h,w] indexers and wrote a fresh tensor with NumOps + a final
+        // Transform — a detached graph that severed the tape, so under training the memory-attention path
+        // received no gradients. Per spatial location p the score is the channel-wise dot product
+        // sum_c query[b,c,p]*key[b,c,p]; the softmax-style weight exp(score/sqrt(C)) then scales value.
+        Tensor<T> attended = query;
+        if (_memoryBank.Count > 0)
         {
-            for (int b = 0; b < batchSize; b++)
+            T scale = NumOps.FromDouble(1.0 / Math.Sqrt(query.Shape[1]));
+            Tensor<T>? accumulated = null;
+            foreach (var (key, value) in _memoryBank)
             {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        double score = 0;
-                        for (int c = 0; c < channels; c++)
-                            score += Convert.ToDouble(query[b, c, h, w]) * Convert.ToDouble(key[b, c, h, w]);
-
-                        double weight = Math.Exp(score / Math.Sqrt(channels));
-
-                        for (int c = 0; c < channels; c++)
-                        {
-                            double v = Convert.ToDouble(value[b, c, h, w]);
-                            attended[b, c, h, w] = NumOps.Add(attended[b, c, h, w], NumOps.FromDouble(v * weight));
-                        }
-                    }
-                }
+                // score[b,1,h,w] = sum_c query*key  (reduce over the channel axis, keep it for broadcast).
+                var score = Engine.ReduceSum(Engine.TensorMultiply(query, key), new[] { 1 }, keepDims: true);
+                var weight = Engine.TensorExp(Engine.TensorMultiplyScalar(score, scale)); // [b,1,h,w]
+                var term = Engine.TensorBroadcastMultiply(value, weight);                 // [b,C,h,w]
+                accumulated = accumulated is null ? term : Engine.TensorAdd(accumulated, term);
             }
+            attended = Engine.TensorMultiplyScalar(accumulated!, NumOps.FromDouble(1.0 / _memoryBank.Count));
         }
 
-        // Normalize
-        double norm = _memoryBank.Count;
-        attended = attended.Transform((v, _) => NumOps.FromDouble(Convert.ToDouble(v) / norm));
-
-        // Process through attention layers (indices 10-13)
+        // ALWAYS run the memory-attention layers (indices 10-13), even when the memory bank is empty, so
+        // they are part of every forward — and therefore of the training tape — instead of being skipped
+        // by an early return that left them permanently untrained.
         for (int i = 10; i < 14 && i < Layers.Count; i++)
         {
             attended = Layers[i].Forward(attended);
@@ -612,9 +632,18 @@ public class Cutie<T> : NeuralNetworkBase<T>
             decoded = Layers[i].Forward(decoded);
 
         // The decoder's strided upsampling may land a power-of-two short of the input resolution;
-        // finish with vectorized 2x nearest upsamples until it reaches the target.
+        // finish with vectorized 2x nearest upsamples until BOTH axes reach the target.
         while (decoded.Shape[2] < _inputHeight || decoded.Shape[3] < _inputWidth)
             decoded = Upsample2x(decoded);
+
+        // Upsample2x doubles BOTH axes, so it can overshoot: when only one axis was short it still
+        // doubles the already-correct one, and a non-power-of-two gap lands past the target. Crop each
+        // axis back to the exact input resolution (tape-aware narrow at offset 0) so the returned mask is
+        // exactly [batch, 1, _inputHeight, _inputWidth] regardless of the gap shape.
+        if (decoded.Shape[2] > _inputHeight)
+            decoded = Engine.TensorNarrow(decoded, dim: 2, start: 0, length: _inputHeight);
+        if (decoded.Shape[3] > _inputWidth)
+            decoded = Engine.TensorNarrow(decoded, dim: 3, start: 0, length: _inputWidth);
 
         return decoded;
     }

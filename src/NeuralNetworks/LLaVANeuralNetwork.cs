@@ -84,8 +84,12 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     private readonly List<ILayer<T>> _visionEncoderLayers = [];
     private readonly List<ILayer<T>> _projectionLayers = [];
     private readonly List<ILayer<T>> _languageModelLayers = [];
-    private Matrix<T>? _visionClsToken;
-    private Matrix<T>? _visionPositionalEmbeddings;
+    // Registered trainable tensors (surfaced via GetExtraTrainableTensors). They are used DIRECTLY in the
+    // tape-aware vision forward (PrependClsToken / AddPositionalEmbeddings), so gradients reach them and
+    // the tape optimizer updates them. Kept as Tensor<T> (not Matrix<T>) precisely so the concat/add ops
+    // treat them as tape leaves rather than copying detached values.
+    private Tensor<T>? _visionClsToken;
+    private Tensor<T>? _visionPositionalEmbeddings;
     private ILayer<T>? _patchEmbedding;
     private ILayer<T>? _textTokenEmbedding;
     private Matrix<T>? _textPositionalEmbeddings;
@@ -320,8 +324,8 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         _groundingHead = Layers[idx++];
 
         // Initialize positional embeddings
-        _visionClsToken = Matrix<T>.CreateDefault(1, _visionHiddenDim, NumOps.Zero);
-        _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionHiddenDim, NumOps.Zero);
+        _visionClsToken = new Tensor<T>(new[] { 1, _visionHiddenDim });
+        _visionPositionalEmbeddings = new Tensor<T>(new[] { numPatches + 1, _visionHiddenDim });
         _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _lmHiddenDim, NumOps.Zero);
 
         InitializeWeights();
@@ -334,7 +338,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         if (_visionClsToken is not null)
         {
-            for (int j = 0; j < _visionClsToken.Columns; j++)
+            for (int j = 0; j < _visionClsToken.Shape[1]; j++)
             {
                 _visionClsToken[0, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
             }
@@ -342,9 +346,9 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         if (_visionPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _visionPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _visionPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _visionPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _visionPositionalEmbeddings.Shape[1]; j++)
                 {
                     _visionPositionalEmbeddings[i, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
                 }
@@ -1028,39 +1032,27 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         return result;
     }
 
-    private Tensor<T> PrependClsToken(Tensor<T> sequence, Matrix<T> clsToken)
+    private Tensor<T> PrependClsToken(Tensor<T> sequence, Tensor<T> clsToken)
     {
-        int hiddenDim = sequence.Shape[1];
-
-        // Build the CLS row as a constant tensor, then concatenate along the sequence axis with a
-        // TAPE-AWARE op so the gradient still flows back into the patch embedding. A scalar indexer
-        // copy (the previous body) produced a detached tensor and severed the tape, freezing the
-        // patch-embedding layer during training.
-        var cls = Tensor<T>.CreateDefault([1, hiddenDim], NumOps.Zero);
-        for (int j = 0; j < hiddenDim && j < clsToken.Columns; j++)
-        {
-            cls[0, j] = clsToken[0, j];
-        }
-
-        return Engine.TensorConcatenate(new[] { cls, sequence }, axis: 0);
+        // Concatenate the registered trainable CLS tensor [1, hiddenDim] DIRECTLY onto the sequence.
+        // TensorConcatenate is tape-tracked, so the gradient now flows into BOTH the patch-embedding
+        // side AND _visionClsToken — and the tape optimizer (which sees it via GetExtraTrainableTensors)
+        // updates it. The previous body copied clsToken's values into a fresh constant tensor, which
+        // detached it: it was counted/serialized as a parameter but training could never move it.
+        return Engine.TensorConcatenate(new[] { clsToken, sequence }, axis: 0);
     }
 
-    private Tensor<T> AddPositionalEmbeddings(Tensor<T> sequence, Matrix<T> posEmbeddings)
+    private Tensor<T> AddPositionalEmbeddings(Tensor<T> sequence, Tensor<T> posEmbeddings)
     {
         int seqLen = sequence.Shape[0];
-        int hiddenDim = sequence.Shape[1];
 
-        // Materialize the positional table as a constant tensor and add it with a TAPE-AWARE op so
-        // the gradient keeps flowing back through the sequence (patch embedding / CLS). The previous
-        // scalar indexer body produced a detached tensor and severed the tape.
-        var pos = Tensor<T>.CreateDefault([seqLen, hiddenDim], NumOps.Zero);
-        for (int i = 0; i < seqLen && i < posEmbeddings.Rows; i++)
-        {
-            for (int j = 0; j < hiddenDim && j < posEmbeddings.Columns; j++)
-            {
-                pos[i, j] = posEmbeddings[i, j];
-            }
-        }
+        // Add the registered trainable positional table DIRECTLY with a tape-aware op so the gradient
+        // reaches _visionPositionalEmbeddings (updated by the tape optimizer via GetExtraTrainableTensors).
+        // When the sequence is shorter than the table (fewer patches than the configured maximum), narrow
+        // the table to the used rows first — still tape-connected — so shapes line up for the add.
+        var pos = posEmbeddings.Shape[0] == seqLen
+            ? posEmbeddings
+            : Engine.TensorNarrow(posEmbeddings, dim: 0, start: 0, length: seqLen);
 
         return Engine.TensorAdd(sequence, pos);
     }
@@ -1156,12 +1148,12 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             // Positional embeddings
             if (_visionClsToken is not null)
             {
-                count += _visionClsToken.Rows * _visionClsToken.Columns;
+                count += _visionClsToken.Length;
             }
 
             if (_visionPositionalEmbeddings is not null)
             {
-                count += _visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
+                count += _visionPositionalEmbeddings.Length;
             }
 
             if (_textPositionalEmbeddings is not null)
@@ -1210,6 +1202,18 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         EnsureLayerRandomSeedsWired();
         var features = ExtractVisualFeatures(input);
         return ProjectToLanguageSpace(features);
+    }
+
+    /// <summary>
+    /// Surfaces the CLS token and vision positional embeddings as trainable tensors that live OUTSIDE
+    /// <c>Layers</c>, so the base tape training path watches and updates them alongside the layer weights.
+    /// They are used directly (uncopied) in <see cref="PrependClsToken"/> / <see cref="AddPositionalEmbeddings"/>,
+    /// so the gradient reaches these exact instances and the optimizer step moves them.
+    /// </summary>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+    {
+        if (_visionClsToken is not null) yield return _visionClsToken;
+        if (_visionPositionalEmbeddings is not null) yield return _visionPositionalEmbeddings;
     }
 
     /// <inheritdoc/>
@@ -1298,8 +1302,8 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         if (_visionClsToken is not null)
         {
-            int rows = _visionClsToken.Rows;
-            int columns = _visionClsToken.Columns;
+            int rows = _visionClsToken.Shape[0];
+            int columns = _visionClsToken.Shape[1];
             for (int i = 0; i < rows; i++)
             {
                 int rowOffset = i * columns;
@@ -1313,8 +1317,8 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         if (_visionPositionalEmbeddings is not null)
         {
-            int rows = _visionPositionalEmbeddings.Rows;
-            int columns = _visionPositionalEmbeddings.Columns;
+            int rows = _visionPositionalEmbeddings.Shape[0];
+            int columns = _visionPositionalEmbeddings.Shape[1];
             for (int i = 0; i < rows; i++)
             {
                 int rowOffset = i * columns;
