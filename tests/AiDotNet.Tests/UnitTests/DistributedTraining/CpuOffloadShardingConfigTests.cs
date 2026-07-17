@@ -106,6 +106,11 @@ public class CpuOffloadShardingConfigTests
     // These drive RunWrappedOptimizerStep with a genuine non-CPU outer engine so the
     // swap branch executes (the previous tests set the outer to CpuEngine, which the
     // scope correctly no-ops, so they never exercised a swap at all).
+    //
+    // NOTE: these two use a DispatchProxy-based non-CpuEngine marker (ThrowingEngineProxy).
+    // System.Reflection.DispatchProxy is unavailable on .NET Framework (net471), and net471 has no GPU
+    // engine to swap anyway, so they compile/run only on the modern TFMs.
+#if !NETFRAMEWORK
 
     [Fact(Timeout = 60000)]
     public async Task RunWrappedOptimizerStep_SwapsToCpuAndRestoresExactOuter_WhenFlagOn_AndOuterIsNonCpu()
@@ -168,6 +173,8 @@ public class CpuOffloadShardingConfigTests
             AiDotNetEngine.Current = priorEngine;
         }
     }
+
+#endif
 
     [Fact(Timeout = 60000)]
     public async Task RunWrappedOptimizerStep_IsNoOp_WhenOuterAlreadyCpu()
@@ -307,11 +314,13 @@ public class CpuOffloadShardingConfigTests
 
     // ── test-only helpers ────────────────────────────────────────────────
 
+#if !NETFRAMEWORK
     /// <summary>
     /// A non-CPU <see cref="IEngine"/> used purely as an identity marker for the engine-swap
     /// tests. It is NOT a <see cref="CpuEngine"/>, so the offload scope performs a real swap;
     /// and it throws on any actual tensor op, because the wrapped step must run on the
-    /// swapped-in CpuEngine and must never touch this outer engine.
+    /// swapped-in CpuEngine and must never touch this outer engine. Uses System.Reflection.DispatchProxy,
+    /// which is unavailable on .NET Framework (net471) — hence the guard.
     /// </summary>
     private class ThrowingEngineProxy : DispatchProxy
     {
@@ -322,6 +331,7 @@ public class CpuOffloadShardingConfigTests
                 $"ThrowingEngineProxy is a non-CpuEngine identity marker for engine-swap tests; " +
                 $"'{targetMethod?.Name}' must never be called — the wrapped step runs on the swapped-in CpuEngine.");
     }
+#endif
 
     /// <summary>Test-only sharded optimizer that exposes the protected
     /// OffloadGradientsToCpu helper so the gradient-offload tests can drive it
