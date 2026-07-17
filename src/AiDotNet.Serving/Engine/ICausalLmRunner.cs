@@ -49,6 +49,9 @@ public readonly struct SequenceKvLayout
 /// <typeparam name="T">The model's numeric type.</typeparam>
 public interface ICausalLmRunner<T>
 {
+    /// <summary>Vocabulary size (the width of the returned logits rows).</summary>
+    int VocabularySize { get; }
+
     /// <summary>Number of transformer layers whose KV must be cached (block pool is sized per layer).</summary>
     int NumLayers { get; }
 
