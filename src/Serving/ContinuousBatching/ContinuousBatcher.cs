@@ -436,12 +436,14 @@ internal class ContinuousBatcher<T> : IDisposable
     // then sample the first token. Positions 0..promptLen-1 are now cached; decode continues from promptLen.
     private int? RunPagedPrefill(SequenceState<T> sequence)
     {
+        if (_pagedCache is not { } cache || _incrementalModel is not { } model) return null;
+
         long seqId = sequence.SequenceId;
         int promptLen = sequence.TokenIds.Count;
-        _pagedCache!.AllocateSequence(seqId, promptLen);
+        cache.AllocateSequence(seqId, promptLen);
 
         var input = CreateInputTensor(sequence.TokenIds);
-        var logits = _incrementalModel!.PredictWithContext(input, new InferenceForwardContext(seqId, 0));
+        var logits = model.PredictWithContext(input, new InferenceForwardContext(seqId, 0));
         _pagedPositions[seqId] = promptLen;
 
         int nextToken = SampleFromLogits(logits, sequence.Request);
@@ -476,12 +478,14 @@ internal class ContinuousBatcher<T> : IDisposable
     // Paged decode: forward ONLY the last token against the cached KV for this sequence (O(1) per step).
     private IReadOnlyList<int> RunPagedDecodeStep(SequenceState<T> sequence)
     {
+        if (_incrementalModel is not { } model) return Array.Empty<int>();
+
         long seqId = sequence.SequenceId;
         int position = _pagedPositions.TryGetValue(seqId, out var p) ? p : sequence.PromptLength;
         int lastToken = sequence.TokenIds[sequence.TokenIds.Count - 1];
 
         var input = CreateInputTensor(new List<int> { lastToken });
-        var logits = _incrementalModel!.PredictWithContext(input, new InferenceForwardContext(seqId, position));
+        var logits = model.PredictWithContext(input, new InferenceForwardContext(seqId, position));
         _pagedPositions[seqId] = position + 1;
 
         int nextToken = SampleFromLogits(logits, sequence.Request);
@@ -926,9 +930,9 @@ internal class ContinuousBatcher<T> : IDisposable
     private void CompleteSequence(SequenceState<T> sequence)
     {
         // Release this sequence's paged KV blocks (no-op on the stateless path).
-        if (UsePagedPath)
+        if (_pagedCache is { } cache)
         {
-            _pagedCache!.FreeSequence(sequence.SequenceId);
+            cache.FreeSequence(sequence.SequenceId);
             _pagedPositions.TryRemove(sequence.SequenceId, out _);
         }
 
