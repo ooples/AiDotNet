@@ -494,11 +494,108 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     #region NeuralNetworkBase Implementation
 
+    /// <summary>
+    /// Deferred on purpose. The base walk resolves each lazy layer's shape from the architecture's
+    /// DECLARED input shape and, in doing so, pins the conv patch-embed's input channel count. That
+    /// declared channel count does not match the RGB image actually fed at inference/training, so the
+    /// eager walk would lock the conv to the wrong depth and throw "Expected input depth N, but got M"
+    /// on the first forward. SVTR's conv stem is channel- and resolution-agnostic and resolves
+    /// correctly from the FIRST real forward, so we skip the eager shape walk (pre-#1688 behavior:
+    /// every layer resolves lazily on first Forward).
+    /// </summary>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        var preprocessed = PreprocessTextImage(input);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        // ONNX mode still applies the [0,255] pixel normalization it was exported with. The native
+        // path runs the raw (batch-normalized) image so it matches ForwardForTraining exactly AND
+        // keeps the input's full dynamic range: PreprocessTextImage divides by 255, which collapses
+        // an already-[0,1]-scaled tensor to a near-constant ~-1 and starves the model of signal.
+        return _useNativeMode
+            ? RunNativeLayers(input)
+            : RunOnnxInference(PreprocessTextImage(input));
+    }
+
+    /// <summary>
+    /// Training forward. Overridden so the gradient path is IDENTICAL to <see cref="PredictCore"/>'s
+    /// native path: both run <see cref="RunNativeLayers"/>, whose conv-patch-embed -> token-sequence
+    /// flatten is a tape-aware Engine reshape. The base
+    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> walks the raw layer list with no
+    /// spatial->sequence step, so the mixing blocks used to receive the 4-D conv feature map (shape
+    /// mismatch) and no gradient reached the conv patch-embed — which is why training never reduced
+    /// the loss, never moved the parameters, and left the post-train forward non-finite.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return RunNativeLayers(input);
+    }
+
+    /// <summary>
+    /// Runs SVTR's native layer stack: the progressive conv patch-embed (spatial [B,C,H,W]), a
+    /// tape-aware flatten to the token sequence [B, H*W, C] at the first mixing block, then the
+    /// transformer mixing blocks and the CTC head. Shared by inference and training so both paths
+    /// are identical.
+    /// </summary>
+    private Tensor<T> RunNativeLayers(Tensor<T> input)
+    {
+        // Promote a single [C, H, W] image to a unit-batch [1, C, H, W] for the conv patch-embed
+        // (the harness passes rank-3; training/NormalizeBatchDim passes rank-4).
+        var output = input.Shape.Length == 3
+            ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] })
+            : input;
+
+        bool flattened = false;
+        foreach (var layer in Layers)
+        {
+            // Flatten the conv feature map to a token sequence right before the first mixing block.
+            if (!flattened && output.Shape.Length == 4 && layer is TransformerEncoderLayer<T>)
+            {
+                output = FlattenSpatialToSequence(output);
+                flattened = true;
+            }
+            output = layer.Forward(output);
+        }
+        return output;
+    }
+
+    /// <summary>Tape-aware [B, C, H, W] -> [B, H*W, C] flatten (channels-last token sequence).</summary>
+    private Tensor<T> FlattenSpatialToSequence(Tensor<T> x)
+    {
+        int b = x.Shape[0], c = x.Shape[1], h = x.Shape[2], w = x.Shape[3];
+        var channelsLast = Engine.TensorPermute(x, new[] { 0, 2, 3, 1 }); // [B, H, W, C]
+        return Engine.Reshape(channelsLast, new[] { b, h * w, c });        // [B, H*W, C]
+    }
+
+    /// <summary>
+    /// Per-layer activations for the introspection tests. Overridden for the SAME reason as
+    /// <see cref="ForwardForTraining"/>: the base walks the raw layer list with no conv->sequence
+    /// flatten, so the first mixing block would receive the 4-D conv feature map ("Input embedding
+    /// dimension (H) does not match weight dimension (D)"). Mirror <see cref="RunNativeLayers"/>,
+    /// capturing each layer's output.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input.Shape.Length == 3
+            ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] })
+            : input;
+
+        bool flattened = false;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (!flattened && current.Shape.Length == 4 && Layers[i] is TransformerEncoderLayer<T>)
+            {
+                current = FlattenSpatialToSequence(current);
+                flattened = true;
+            }
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     /// <inheritdoc/>
@@ -507,32 +604,23 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
-        SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        // Delegate to the base tape-training loop: forward via our ForwardForTraining, autodiff
+        // backward, then the configured optimizer's in-place step (Adam). The previous override
+        // ran a manual SGD (params - grads*1e-4) on top of TrainWithTape, which fought the optimizer
+        // and, at lr 1e-4 over the smoke iterations, barely changed the weights or the loss.
+        base.Train(input, expectedOutput);
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
+        // Contract (NeuralNetworkBase.UpdateParameters): assign the supplied values AS the network's
+        // new parameters. Training is driven by the base tape loop + optimizer above, not by a manual
+        // gradient step here.
+        SetParameters(parameters);
     }
 
     #endregion

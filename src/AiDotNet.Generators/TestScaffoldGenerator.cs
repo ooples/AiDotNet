@@ -473,6 +473,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // <double>. <float> halves per-step cost. (DocumentNNModelTestBase was made generic over T so this
         // float entry compiles as DocumentNNModelTestBase<float>.)
         "UDOP",
+        // SVTR (Du 2022) — scene-text recognizer: conv patch-embed (2x stride-2) -> token-sequence
+        // mixing transformer (8 blocks, embed 192) -> CTC head. Now that training is a real tape +
+        // Adam step (was a no-op manual SGD) with a tape-aware conv-backward, one <double> CPU step on
+        // the ~1024-token default image is multi-second, so the 30-step Training_ShouldReduceLoss and
+        // the 10-step DifferentInputs_AfterTraining invariants overran the 120 s gate. <float> halves
+        // per-step cost while preserving the self-relative training invariants and the architecture.
+        "SVTR",
         // Foundation self-supervised ASR family on CreateDefaultFoundationASRLayers (12-layer / 768-dim
         // wav2vec-2/HuBERT-style encoder + CTC head). Restoring the paper's RESIDUAL transformer blocks
         // fixed their uniform-output training collapse (DifferentInputs L2 ~= 1e-12), but the 12-layer
@@ -629,6 +636,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // MoreData probe overran the 120 s gate, so the universal smoke-cap trims it (float is not an
         // option: DocumentNNModelTestBase is non-generic <double>).
         "DBNet",
+        // SVTR (Du et al. 2022): scene-text recognizer — conv patch-embed + 8-block mixing transformer
+        // + CTC head. Now that training is a real tape + Adam step (the old override was a no-op manual
+        // SGD), its 10-iter Training and DifferentInputs tests fit the gate at <float> (SVTR is also in
+        // Fp32TestClassNames), but — exactly like PSENet/DBNet — the 50+200-iter MoreData probe overran
+        // 120 s even at float. The universal smoke-cap trims MoreData (1+2 iters) and keeps every other
+        // training invariant running on CI; the DocumentNN family branch emits no iteration overrides so
+        // this fires exactly once. float + this cap is the same combination ViLBERT/GLaMM use.
+        "SVTR",
         // ViT-family encoders (Dosovitskiy et al. 2021) sharing CreateDefaultViTLayers. Restoring the
         // paper's residual transformer blocks (TransformerEncoderLayer) fixed their correctness
         // failures (DifferentInputs collapse / GradientFlow / Clone) but the 12-layer residual

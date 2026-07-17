@@ -11281,23 +11281,31 @@ public static class LayerHelper<T>
         int intermediateSize = hiddenDim * 4;
         int seqLen = imageWidth / 4;
 
-        // Patch embedding
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
+        // Progressive overlapping patch embedding (SVTR, Du et al. 2022, sec 3.1): two consecutive
+        // 3x3 stride-2 convolutions downsample the input image [3, H, W] by 4x and project it to the
+        // hidden dimension, producing a [D, H/4, W/4] feature map. Conv layers are resolution-agnostic
+        // (they cache only the input DEPTH, never a spatial crop size), so — unlike PatchEmbeddingLayer —
+        // they handle the lazy-shape-resolution pass (model GetInputShape) and the smaller harness image
+        // being different sizes without a stale-crop crash. The spatial->token flatten that follows the
+        // convs is done in SVTR's own ForwardForTraining/PredictCore via a tape-aware Engine reshape, so
+        // BOTH the training and inference paths flatten identically (the base's inference-only reshape
+        // used to sever the training path -> loss never fell / params never moved).
+        yield return new ConvolutionalLayer<T>(hiddenDim / 2, kernelSize: 3, stride: 2, padding: 1);
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(hiddenDim, 4, 4, 0);
-        yield return new LayerNormalizationLayer<T>();
+        yield return new ConvolutionalLayer<T>(hiddenDim, kernelSize: 3, stride: 2, padding: 1);
 
-        // Transformer layers
+        // Mixing blocks. SVTR's mixing block is a standard pre-norm transformer block WITH residual
+        // connections (local/global attention + MLP, each wrapped in x = x + f(LN(x))). The composite
+        // TransformerEncoderLayer supplies those residual skips; the previous bare
+        // MHA->LN->FFN->FFN->LN stack had NO residual path, so the signal decayed ~3-4x per block and
+        // collapsed after training (DifferentInputs). It also propagates the parent RandomSeed to its
+        // sublayers, keeping Predict deterministic.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(intermediateSize, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, intermediateSize, hiddenDim);
         }
 
-        // CTC output
+        // CTC output head (per time step -> character logits).
         yield return new DenseLayer<T>(charsetSize, identityActivation);
     }
 
