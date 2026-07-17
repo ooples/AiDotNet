@@ -208,6 +208,39 @@ public sealed class BlockManager
     }
 
     /// <summary>
+    /// Creates a child sequence that shares only the <paramref name="prefixTokens"/>-token prefix of the parent
+    /// (copy-on-write), rather than the parent's whole current length. This is the primitive behind prefix
+    /// sharing / prefill-once: several sequences that begin with the same prompt reference one copy of the
+    /// prompt's KV blocks and only diverge (allocating fresh blocks) as they generate.
+    /// </summary>
+    /// <remarks>For clean semantics the caller should pass a block-aligned <paramref name="prefixTokens"/> so the
+    /// shared blocks contain exactly the prefix; a non-aligned prefix shares a final block whose tail also holds
+    /// the parent's continuation (a subsequent write copies-on-write).</remarks>
+    /// <returns>The child's block table (the shared prefix blocks).</returns>
+    public IReadOnlyList<int> ForkPrefix(string parentSequenceId, string childSequenceId, int prefixTokens)
+    {
+        var parentTable = RequireTable(parentSequenceId);
+        if (string.IsNullOrEmpty(childSequenceId)) throw new ArgumentException("Child id required.", nameof(childSequenceId));
+        if (_blockTables.ContainsKey(childSequenceId))
+            throw new InvalidOperationException($"Sequence '{childSequenceId}' already exists.");
+        if (prefixTokens < 1) throw new ArgumentOutOfRangeException(nameof(prefixTokens));
+        if (prefixTokens > _lengths[parentSequenceId])
+            throw new ArgumentOutOfRangeException(nameof(prefixTokens), "Prefix exceeds the parent's length.");
+
+        int prefixBlocks = BlocksForTokens(prefixTokens);
+        var childTable = new List<int>(prefixBlocks);
+        for (int i = 0; i < prefixBlocks; i++)
+        {
+            int block = parentTable[i];
+            _refCounts[block]++;
+            childTable.Add(block);
+        }
+        _blockTables[childSequenceId] = childTable;
+        _lengths[childSequenceId] = prefixTokens;
+        return childTable;
+    }
+
+    /// <summary>
     /// Releases a sequence's blocks: each block's reference count is decremented, and blocks reaching zero
     /// references return to the free pool. Safe to call once per sequence; unknown ids are ignored.
     /// </summary>

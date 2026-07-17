@@ -40,6 +40,9 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
     private readonly Dictionary<string, Random> _rngBySequence = new();
     private readonly Queue<GenerationRequest> _pendingAdds = new();
     private readonly HashSet<string> _pendingAborts = new();
+    // For N>1 parallel sampling: siblings that wait to be forked from the prompt owner once it has prefilled,
+    // so the prompt's KV is computed and stored once and shared (prefix sharing / prefill-once).
+    private readonly Dictionary<string, List<Sequence>> _deferredSiblings = new();
 
     private long _totalPreemptions;
     private long _totalFinishedRequests;
@@ -176,17 +179,22 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
         {
             var seq = new Sequence(request, i);
             seqs.Add(seq);
-            _waiting.AddLast(seq);
             _rngBySequence[seq.SequenceId] = request.SamplingParameters.Seed is { } s
                 ? RandomHelper.CreateSeededRandom(s + i) // decorrelate parallel samples
                 : RandomHelper.CreateSecureRandom();
         }
         _byRequest[request.RequestId] = seqs;
+
+        // Only the prompt owner (index 0) is queued now. Its siblings are deferred and forked from its prompt
+        // KV once it has prefilled, so the shared prompt is processed and stored exactly once.
+        _waiting.AddLast(seqs[0]);
+        if (n > 1) _deferredSiblings[request.RequestId] = seqs.GetRange(1, n - 1);
     }
 
     private bool ApplyAbort(string requestId)
     {
         if (!_byRequest.TryGetValue(requestId, out var seqs)) return false;
+        _deferredSiblings.Remove(requestId); // drop any not-yet-forked siblings
         foreach (var seq in seqs)
         {
             if (seq.State.IsFinished()) continue;
@@ -297,7 +305,12 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
     private void AdvanceSequence(Sequence seq, Vector<T> logits)
     {
         int lengthBefore = seq.Length;
+        bool wasPrefill = seq.NumComputedTokens == 0;
         seq.NumComputedTokens = lengthBefore; // all current tokens now have cached KV
+
+        // The prompt owner just finished prefill: fork its now-computed prompt KV to any deferred siblings.
+        if (wasPrefill && seq.SequenceIndex == 0)
+            SpawnDeferredSiblings(seq);
 
         int tokenId = LogitsSampler.Sample(logits, seq.Request.SamplingParameters, seq.TokenIds, _rngBySequence[seq.SequenceId]);
         // The KV slot for this token was already reserved at schedule time; appending the token now keeps the
@@ -311,6 +324,35 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
             _running.Remove(seq);
             _rngBySequence.Remove(seq.SequenceId);
             seq.Finish(terminalState, reason);
+        }
+    }
+
+    private void SpawnDeferredSiblings(Sequence owner)
+    {
+        if (!_deferredSiblings.TryGetValue(owner.Request.RequestId, out var siblings)) return;
+        _deferredSiblings.Remove(owner.Request.RequestId);
+
+        int promptLen = owner.PromptLength;
+        // Clean sharing needs the prompt to fill whole blocks, so the shared blocks contain exactly the prompt
+        // (the owner's just-generated token lives in a fresh block beyond them). Otherwise fall back to giving
+        // each sibling its own prompt allocation (independent prefill via the waiting queue).
+        bool blockAligned = promptLen % _options.BlockSize == 0;
+
+        foreach (var sibling in siblings)
+        {
+            if (blockAligned)
+            {
+                _blocks.ForkPrefix(owner.SequenceId, sibling.SequenceId, promptLen); // shares KV, no new blocks
+                sibling.NumComputedTokens = promptLen; // prompt KV already computed (shared) — skip re-prefill
+                sibling.State = SequenceState.Running;
+                _running.Add(sibling);
+            }
+            else
+            {
+                sibling.State = SequenceState.Waiting;
+                sibling.NumComputedTokens = 0;
+                _waiting.AddLast(sibling); // independent prefill
+            }
         }
     }
 
