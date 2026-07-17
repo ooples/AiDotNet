@@ -730,30 +730,59 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Writes ONE checkpoint file PER RANK, suffixed <c>.rank{Rank}</c>. This is required for correctness:
-    /// the sharded strategies (ZeRO-1/2/3, FSDP) give every rank a DISTINCT optimizer-state shard (its
-    /// slice of Adam's m/v), so a single shared file would persist only one rank's shard — and because the
-    /// ZeRO/FSDP payload is rank-stamped, the other ranks would even fail to reload it. Per-rank files
-    /// round-trip every rank's own state; the replicated strategies (DDP / async / gradient-compression)
-    /// simply write identical per-rank files, which is harmless.
+    /// Writes ONE checkpoint file PER RANK (suffixed <c>.rank{Rank}</c>) — the sharded strategies give each
+    /// rank a DISTINCT optimizer-state shard, so a single shared file would persist only one rank's shard.
+    /// The write is ATOMIC across ranks via a two-phase commit so a mid-save failure cannot leave a
+    /// partially-committed checkpoint that <see cref="LoadModel"/> would load:
+    /// <list type="number">
+    /// <item>every rank writes its shard to a temporary <c>.rank{Rank}.tmp</c>;</item>
+    /// <item>a barrier confirms EVERY rank wrote its temp successfully (a rank that failed threw before the
+    /// barrier, so reaching it proves all temps exist);</item>
+    /// <item>every rank publishes its temp to the final <c>.rank{Rank}</c>, then a second barrier confirms
+    /// all published;</item>
+    /// <item>rank 0 writes the commit marker <c>.committed</c> (recording the world size) LAST.</item>
+    /// </list>
+    /// <see cref="LoadModel"/> refuses any checkpoint without a matching commit marker, so a save that fails
+    /// before step 4 leaves the previous committed checkpoint intact and is simply not loaded.
     /// </remarks>
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
+
+        string basePath = Path.GetFullPath(filePath.Trim());
+        string tmpPath = $"{basePath}.rank{Rank}.tmp";
+        string finalPath = $"{basePath}.rank{Rank}";
+        string committedPath = $"{basePath}.committed";
+
         Config.CommunicationBackend.Barrier();
         try
         {
-            if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
-
-            string rankPath = $"{Path.GetFullPath(filePath.Trim())}.rank{Rank}";
+            // Phase 1: write this rank's shard to a temp file.
             Helpers.ModelPersistenceGuard.EnforceBeforeSave();
             using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
                 var data = Serialize();
                 byte[] envelopedData = ModelFileHeader.WrapWithHeader(
                     data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-                File.WriteAllBytes(rankPath, envelopedData);
+                File.WriteAllBytes(tmpPath, envelopedData);
             }
+
+            // Barrier: reaching here means EVERY rank wrote its temp (a failed rank threw earlier).
+            Config.CommunicationBackend.Barrier();
+
+            // Phase 2: publish temp -> final (delete-then-move for net471 compatibility). The commit marker
+            // written after the next barrier is the true atomicity gate.
+            if (File.Exists(finalPath))
+                File.Delete(finalPath);
+            File.Move(tmpPath, finalPath);
+
+            // Barrier: all ranks have published their final shard.
+            Config.CommunicationBackend.Barrier();
+
+            // Phase 3: rank 0 publishes the commit marker LAST, recording the world size for validation.
+            if (Rank == 0)
+                File.WriteAllText(committedPath, $"committed worldSize={WorldSize}");
         }
         finally
         {
@@ -762,24 +791,42 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     }
 
     /// <inheritdoc/>
-    /// <remarks>Each rank loads its own <c>.rank{Rank}</c> shard file written by <see cref="SaveModel"/>.</remarks>
+    /// <remarks>
+    /// Loads this rank's <c>.rank{Rank}</c> shard, but ONLY from a checkpoint that carries the
+    /// <c>.committed</c> marker written by <see cref="SaveModel"/> after every rank published (and whose
+    /// recorded world size matches). A checkpoint without the marker (an interrupted or partial save) is
+    /// rejected rather than loaded.
+    /// </remarks>
     public virtual void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
+
+        string basePath = Path.GetFullPath(filePath.Trim());
+        string rankPath = $"{basePath}.rank{Rank}";
+        string committedPath = $"{basePath}.committed";
+
         Config.CommunicationBackend.Barrier();
         try
         {
-            if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
+            // Refuse to load an uncommitted (partial/interrupted) distributed checkpoint.
+            if (!File.Exists(committedPath))
+                throw new InvalidOperationException(
+                    $"Checkpoint at '{basePath}' has no commit marker (.committed); it was never fully written " +
+                    "across all ranks and will not be loaded.");
+            string marker = File.ReadAllText(committedPath);
+            if (!marker.Contains($"worldSize={WorldSize}"))
+                throw new InvalidOperationException(
+                    $"Checkpoint at '{basePath}' was committed for a different world size ('{marker}'); " +
+                    $"cannot load with world size {WorldSize}.");
 
-            string rankPath = $"{Path.GetFullPath(filePath.Trim())}.rank{Rank}";
             if (!File.Exists(rankPath))
-                throw new FileNotFoundException($"Checkpoint file not found for rank {Rank}.", rankPath);
+                throw new FileNotFoundException($"Committed checkpoint is missing this rank's shard.", rankPath);
 
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
             var fileData = File.ReadAllBytes(rankPath);
             using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
-                // Extract from the AIMF envelope, with a legacy raw-bytes fallback.
                 var payload = ModelFileHeader.HasHeader(fileData)
                     ? ModelFileHeader.ExtractPayload(fileData)
                     : fileData;

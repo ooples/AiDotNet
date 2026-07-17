@@ -230,9 +230,45 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
         }
 
         ResynchronizeParametersAcrossWorkers(model);
+        ResynchronizeOptimizerStateAcrossWorkers();
 
         _currentWorldSize = newWorldSize;
     }
+
+    /// <summary>
+    /// Transfers the wrapped optimizer's serialized state (e.g. Adam's m/v moment buffers) from rank 0 (the
+    /// designated survivor) to every worker, so a newly-joined worker resumes with the authoritative
+    /// optimizer state and not just the parameters. The serialized bytes are carried over the Vector-typed
+    /// communication backend as one element per byte (a length header is broadcast first). This is a
+    /// COLLECTIVE — every rank must call it — and is invoked from HandleWorkerChange after the parameter
+    /// re-sync. (Full survivor election across an arbitrary surviving set is a separate torchelastic-scale
+    /// feature; rank 0 is the designated survivor here.)
+    /// </summary>
+    internal void ResynchronizeOptimizerStateAcrossWorkers()
+    {
+        var backend = Config.CommunicationBackend;
+
+        // Rank 0 (survivor) provides the authoritative serialized optimizer state; other ranks contribute a
+        // placeholder that Broadcast overwrites. Broadcast the length first so non-root ranks size the buffer.
+        byte[] rootBytes = Rank == 0 ? WrappedOptimizer.Serialize() : System.Array.Empty<byte>();
+        var header = backend.Broadcast(new Vector<T>(new[] { NumOps.FromDouble(rootBytes.Length) }), root: 0);
+        int length = NumOps.ToInt32(header[0]);
+        if (length <= 0)
+            return; // optimizer has no serialized state to transfer
+
+        var payload = new T[length];
+        if (Rank == 0)
+            for (int i = 0; i < length; i++) payload[i] = NumOps.FromDouble(rootBytes[i]);
+        var received = backend.Broadcast(new Vector<T>(payload), root: 0);
+
+        var stateBytes = new byte[length];
+        for (int i = 0; i < length; i++) stateBytes[i] = (byte)(NumOps.ToInt32(received[i]) & 0xFF);
+        WrappedOptimizer.Deserialize(stateBytes);
+    }
+
+    /// <summary>Test hook: returns the wrapped optimizer's serialized state so an invariant can verify the
+    /// elastic optimizer-state transfer made every rank's state identical to rank 0's.</summary>
+    internal byte[] SerializeWrappedOptimizerForTest() => WrappedOptimizer.Serialize();
 
     /// <summary>
     /// Re-synchronizes the model parameters across all workers by broadcasting rank 0's authoritative copy.

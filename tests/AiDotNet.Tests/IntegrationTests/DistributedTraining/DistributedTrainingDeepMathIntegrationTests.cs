@@ -1174,6 +1174,93 @@ public class DistributedTrainingDeepMathIntegrationTests
         return p;
     }
 
+    /// <summary>
+    /// INVARIANT (atomic distributed checkpoint): a sharded optimizer's SaveModel writes each rank's shard
+    /// via a two-phase commit and publishes a .committed marker LAST; the checkpoint round-trips through
+    /// LoadModel, and a checkpoint WITHOUT the marker (a partial/interrupted save) is rejected rather than
+    /// silently loaded.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ShardedCheckpoint_AtomicCommit_RoundTripsAndRejectsUncommitted()
+    {
+        await Task.Yield();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, System.Guid.NewGuid().ToString());
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+        var adam = NewAdam();
+        adam.SetModel(new DistributedTrainingIntegrationTests.MockDistributedModel(8));
+        var opt = new ZeRO1Optimizer<double, Vector<double>, Vector<double>>(adam, config);
+
+        var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidn_ckpt_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(dir);
+        try
+        {
+            var path = System.IO.Path.Combine(dir, "ckpt");
+            opt.SaveModel(path);
+
+            Assert.True(System.IO.File.Exists(path + ".committed"), "commit marker must be written");
+            Assert.True(System.IO.File.Exists(path + ".rank0"), "rank 0 shard must be published");
+            Assert.False(System.IO.File.Exists(path + ".rank0.tmp"), "temp file must be renamed away");
+
+            // Committed checkpoint loads.
+            var adam2 = NewAdam();
+            adam2.SetModel(new DistributedTrainingIntegrationTests.MockDistributedModel(8));
+            var opt2 = new ZeRO1Optimizer<double, Vector<double>, Vector<double>>(adam2, config);
+            opt2.LoadModel(path);
+
+            // Uncommitted checkpoint (marker removed) is rejected.
+            System.IO.File.Delete(path + ".committed");
+            Assert.Throws<InvalidOperationException>(() => opt2.LoadModel(path));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(dir, recursive: true);
+            backend.Shutdown();
+        }
+    }
+
+    /// <summary>
+    /// INVARIANT (elastic optimizer-state transfer): the elastic rendezvous broadcasts rank 0's serialized
+    /// optimizer state (Adam m/v etc.) to every worker, so after ResynchronizeOptimizerStateAcrossWorkers
+    /// all ranks hold the identical authoritative optimizer state — not just identical parameters.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Elastic_OptimizerStateTransfer_AllRanksMatchRank0()
+    {
+        await Task.Yield();
+        var envId = System.Guid.NewGuid().ToString();
+        var serialized = new byte[2][];
+        var errors = new Exception?[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                    backend.Initialize();
+                    var config = new ShardingConfiguration<double>(backend) { AutoSyncGradients = true };
+                    var elastic = new ElasticOptimizer<double, Vector<double>, Vector<double>>(
+                        NewAdam(), config, minWorkers: 1, maxWorkers: 8);
+                    elastic.ResynchronizeOptimizerStateAcrossWorkers();   // collective broadcast from rank 0
+                    serialized[rank] = elastic.SerializeWrappedOptimizerForTest();
+                    backend.Shutdown();
+                }
+                catch (Exception ex) { errors[rank] = ex; }
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        Assert.True(errors[0] is null, "rank 0: " + errors[0]);
+        Assert.True(errors[1] is null, "rank 1: " + errors[1]);
+        Assert.NotNull(serialized[0]);
+        Assert.Equal(serialized[0].Length, serialized[1].Length);
+        for (int i = 0; i < serialized[0].Length; i++)
+            Assert.Equal(serialized[0][i], serialized[1][i]);
+    }
+
     private static double[,] DeterministicMatrix(int rows, int cols, int seed)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
