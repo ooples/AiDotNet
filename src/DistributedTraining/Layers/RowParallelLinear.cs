@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -16,6 +18,9 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// is replicated and added ONCE after the reduce. Weight-shard gradients come from the tape (no
 /// manual backward).
 /// </summary>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true)]
 internal sealed class RowParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;

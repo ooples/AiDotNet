@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -14,6 +16,9 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// the layer, not the model. This is the residency the cache-eviction <c>CpuOffloadParams</c> path
 /// only approximated.
 /// </summary>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true)]
 internal sealed class Stage3ShardedLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;

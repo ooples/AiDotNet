@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -15,6 +17,9 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// <c>dX = Σ_r dX_r</c>. Weight/bias-shard gradients are produced automatically by the tape from the
 /// Engine matmul (no manual backward — the framework is tape-autodiff only).
 /// </summary>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true)]
 internal sealed class ColumnParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
