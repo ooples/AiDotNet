@@ -32,6 +32,9 @@ jobs:
     name: Heavy Timeout Models
     runs-on: ubuntu-latest
     timeout-minutes: 350   # generous budget; these models are the slow ones by definition
+    # Licensed key so save/load-heavy suites don't trip the unlicensed free-trial operation limit.
+    env:
+      AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
