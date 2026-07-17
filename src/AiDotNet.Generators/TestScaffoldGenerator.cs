@@ -5423,6 +5423,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
         }
 
+        if (model.ClassName == "HamiltonianNeuralNetwork")
+        {
+            // HNN (Greydanus et al. 2019) fits a scalar Hamiltonian H(q,p) via supervised gradient
+            // descent on a 3x64 MLP (Adam). At the default 10 (x3 = 30) TrainingError steps and the
+            // conservative default LR it UNDERFITS the single trained (input,target) pair (train MSE
+            // ~1.7e-3), so it does not memorize that pair tighter than an unseen random test target and
+            // trips TrainingError_ShouldNotExceedTestError (which needs train MSE <= 3*test MSE). More
+            // steps let it properly memorize the training pair (train MSE << unseen-test MSE, the
+            // expected generalization gap); the tiny MLP keeps 60 iterations well inside the budget.
+            // The architecture stays paper-faithful (scalar H + symplectic-gradient dynamics).
+            sb.AppendLine("    protected override int TrainingIterations => 60;");
+        }
+
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
         if (pinInitSeed)
         {
