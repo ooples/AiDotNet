@@ -464,26 +464,14 @@ internal class ContinuousBatcher<T> : IDisposable
         if (cached >= promptLen) cached = promptLen - 1; // defensive: never reuse the whole prompt
         LastPrefillReusedPrefixTokens = cached;
 
-        Tensor<T> logits;
-        if (cached > 0)
-        {
-            // Forward the suffix ONE token at a time from the forked position. This is the proven
-            // prefix-transparent path (identical output whether or not a prefix was reused). A single
-            // multi-token forward at a non-zero offset over forked KV is NOT yet validated (the cached
-            // attention's position handling for offset multi-token inputs — see the batched-prefill /
-            // ComputeBatchedAttention work) and diverges, so it is intentionally not used here.
-            logits = model.PredictWithContext(
-                CreateInputTensor(new List<int> { prompt[cached] }), new InferenceForwardContext(seqId, cached));
-            for (int i = cached + 1; i < promptLen; i++)
-            {
-                logits = model.PredictWithContext(
-                    CreateInputTensor(new List<int> { prompt[i] }), new InferenceForwardContext(seqId, i));
-            }
-        }
-        else
-        {
-            logits = model.PredictWithContext(CreateInputTensor(prompt), new InferenceForwardContext(seqId, 0));
-        }
+        // Forward the (cached..promptLen) suffix in a SINGLE batched forward from the forked position.
+        // The context-aware forward writes KV for positions cached..promptLen-1 and attends to the forked
+        // prefix KV at 0..cached-1; a multi-token forward at a non-zero offset is verified equivalent to
+        // the per-token forward (see the paged-equivalence tests), so this batched prefill is exact and
+        // faster. cached == 0 forwards the whole prompt from position 0.
+        var suffix = new List<int>(promptLen - cached);
+        for (int i = cached; i < promptLen; i++) suffix.Add(prompt[i]);
+        var logits = model.PredictWithContext(CreateInputTensor(suffix), new InferenceForwardContext(seqId, cached));
         _pagedPositions[seqId] = promptLen;
 
         // Register this prompt as a reusable prefix (its KV now holds exactly the prompt) so later prompts
