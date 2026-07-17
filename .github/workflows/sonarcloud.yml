@@ -292,11 +292,6 @@ jobs:
     needs: build
     timeout-minutes: 45
     if: ${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') }}
-    # Run tests under the repo's licensed key so save/load-heavy suites do not trip the unlicensed
-    # free-trial operation limit (TrialStateManager). The secrets context is only available in job/step
-    # env, not workflow-level env, so it is set here.
-    env:
-      AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -884,6 +879,10 @@ jobs:
         # pwsh (PowerShell Core) is pre-installed on ubuntu-latest runners and runs
         # the existing scripts cross-platform without a rewrite.
         shell: pwsh
+        # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
+        # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
+        env:
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           # Sanitize shard name: remove/replace all characters invalid in file paths
           $shardName = "${{ matrix.shard.name }}"
