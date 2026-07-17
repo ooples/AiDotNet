@@ -157,7 +157,7 @@ public class ReduceOnPlateauScheduler : LearningRateSchedulerBase
 
         // A non-finite metric (NaN or +/-Infinity) is a diverged/invalid observation: count it as a bad
         // epoch but never let it become the best value (-Infinity would otherwise read as an improvement).
-        if (!double.IsFinite(metric))
+        if (!IsFiniteValue(metric))
         {
             _numBadEpochs++;
             if (_numBadEpochs > _patience)
@@ -304,4 +304,6 @@ public class ReduceOnPlateauScheduler : LearningRateSchedulerBase
         if (state.TryGetValue("num_bad_epochs", out var numBad))
             _numBadEpochs = Convert.ToInt32(numBad);
     }
+
+    private static bool IsFiniteValue(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
 }

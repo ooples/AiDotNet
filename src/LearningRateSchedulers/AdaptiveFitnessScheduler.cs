@@ -56,26 +56,26 @@ public class AdaptiveFitnessScheduler : LearningRateSchedulerBase
         bool higherIsBetter = false)
         : base(baseLearningRate, minLearningRate)
     {
-        if (!double.IsFinite(baseLearningRate))
+        if (!IsFiniteValue(baseLearningRate))
         {
             throw new ArgumentOutOfRangeException(nameof(baseLearningRate), baseLearningRate,
                 "Base learning rate must be a finite number.");
         }
 
-        if (!double.IsFinite(decay) || decay <= 0 || decay >= 1)
+        if (!IsFiniteValue(decay) || decay <= 0 || decay >= 1)
         {
             throw new ArgumentOutOfRangeException(nameof(decay), decay,
                 "Decay must be a finite value in (0, 1): it shrinks the rate on improvement and is inverted " +
                 "to grow it on stagnation, so a value >= 1 would reverse the rule.");
         }
 
-        if (!double.IsFinite(minLearningRate) || minLearningRate < 0)
+        if (!IsFiniteValue(minLearningRate) || minLearningRate < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(minLearningRate), minLearningRate,
                 "Minimum learning rate must be a finite, non-negative number.");
         }
 
-        if (!double.IsFinite(maxLearningRate) || maxLearningRate <= minLearningRate)
+        if (!IsFiniteValue(maxLearningRate) || maxLearningRate <= minLearningRate)
         {
             throw new ArgumentOutOfRangeException(nameof(maxLearningRate), maxLearningRate,
                 $"Maximum learning rate must be a finite value exceeding the minimum ({minLearningRate}).");
@@ -101,7 +101,7 @@ public class AdaptiveFitnessScheduler : LearningRateSchedulerBase
         // A non-finite metric (NaN or +/-Infinity) is a diverged/invalid observation. Treat it as
         // non-improving WITHOUT recording it as the best value: +Infinity would otherwise register as an
         // improvement under one metric direction and permanently poison the comparison history.
-        if (!double.IsFinite(metric))
+        if (!IsFiniteValue(metric))
         {
             _currentLearningRate /= _decay;
             _currentLearningRate = Math.Max(_minLearningRate, Math.Min(_maxLearningRate, _currentLearningRate));
@@ -169,4 +169,6 @@ public class AdaptiveFitnessScheduler : LearningRateSchedulerBase
             _bestMetric = Convert.ToDouble(bestMetric);
         }
     }
+
+    private static bool IsFiniteValue(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
 }

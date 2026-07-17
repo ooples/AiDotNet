@@ -1,5 +1,7 @@
 using System;
 using System.Threading.Tasks;
+using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
@@ -93,6 +95,53 @@ public class ConfiguredLossFunctionTests
             typeof(ISupportsLossFunction<double>).IsAssignableFrom(modelType),
             $"{modelType.Name} is a point forecaster and should accept a configured loss.");
         await Task.CompletedTask;
+    }
+
+    // cols must equal the models' LookbackWindow (4): NBEATS treats each row as a lookback window.
+    private static (Matrix<double> X, Vector<double> Y) BuildSeries(int rows = 48, int cols = 4)
+    {
+        var x = new Matrix<double>(rows, cols);
+        var y = new Vector<double>(rows);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++) x[i, j] = Math.Sin((i + j) * 0.3) + i * 0.01;
+            y[i] = Math.Sin((i + cols) * 0.3) + i * 0.01;
+        }
+
+        return (x, y);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Facade_ConfigureLossFunction_ReachesTrainedModel()
+    {
+        var (x, y) = BuildSeries();
+        var model = new NBeatsProbe(new NBEATSModelOptions<double> { LookbackWindow = 4, ForecastHorizon = 1, Epochs = 2 });
+
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureModel(model)
+            .ConfigureLossFunction(new MeanAbsoluteErrorLoss<double>())
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(x, y))
+            .BuildAsync();
+
+        // The loss the model actually trained against was the one configured through the facade — not a
+        // facade-side reporting variable, and not the default MSE.
+        Assert.IsType<MeanAbsoluteErrorLoss<double>>(model.DefaultLossFunction);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Facade_InvalidNonTapeLoss_IsRejected()
+    {
+        var (x, y) = BuildSeries();
+        var model = new NBeatsProbe(new NBEATSModelOptions<double> { LookbackWindow = 4, ForecastHorizon = 1, Epochs = 2 });
+
+        // A non-tape loss must be rejected through the facade up front, not accepted and then failing deep
+        // in the first backward pass.
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureModel(model)
+            .ConfigureLossFunction(new NotATapeLoss())
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(x, y));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => builder.BuildAsync());
     }
 
     /// <summary>Exposes the protected default loss for assertions.</summary>
