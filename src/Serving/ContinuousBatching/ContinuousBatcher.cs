@@ -107,6 +107,11 @@ internal class ContinuousBatcher<T> : IDisposable
     private readonly ConcurrentDictionary<long, TaskCompletionSource<GenerationResult<T>>> _pendingResults;
     private readonly ConcurrentQueue<SequenceState<T>> _incomingRequests;
 
+    // Signals the background run loop that a new request has arrived, so it wakes IMMEDIATELY instead of
+    // waiting out its idle poll interval — the difference between ~IdleSleepMs and ~0 first-token latency
+    // for a request that arrives while the loop is idle.
+    private readonly SemaphoreSlim _workAvailable = new(0);
+
     private CancellationTokenSource? _cts;
     private Task? _runLoopTask;
     private bool _isRunning;
@@ -233,6 +238,9 @@ internal class ContinuousBatcher<T> : IDisposable
 
         _pendingResults[sequence.SequenceId] = tcs;
         _incomingRequests.Enqueue(sequence);
+        // Wake the run loop now if it is idle-waiting (see _workAvailable). Safe to over-signal: extra
+        // permits just cause a spurious no-op Step before the loop settles back to waiting.
+        try { _workAvailable.Release(); } catch (System.ObjectDisposedException) { }
 
         // If running, the run loop will pick this up
         // If not running, start in synchronous mode
@@ -455,10 +463,14 @@ internal class ContinuousBatcher<T> : IDisposable
             {
                 int tokensGenerated = Step();
 
-                // If no work was done, wait a bit before checking again
-                if (tokensGenerated == 0 && _scheduler.WaitingCount == 0 && _scheduler.RunningCount == 0)
+                // Nothing to do: block until a new request signals _workAvailable (immediate wake) or the
+                // idle interval elapses (fallback re-check). This avoids busy-polling AND the up-to-
+                // IdleSleepMs first-token latency a plain Task.Delay would add for a request that arrives
+                // right after the loop goes idle.
+                if (tokensGenerated == 0 && _scheduler.WaitingCount == 0 && _scheduler.RunningCount == 0
+                    && _incomingRequests.IsEmpty)
                 {
-                    await Task.Delay(_config.IdleSleepMs, cancellationToken).ConfigureAwait(false);
+                    await _workAvailable.WaitAsync(_config.IdleSleepMs, cancellationToken).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException)
@@ -1546,6 +1558,7 @@ internal class ContinuousBatcher<T> : IDisposable
             tcs.TrySetCanceled();
         }
         _pendingResults.Clear();
+        _workAvailable.Dispose();
 
         GC.SuppressFinalize(this);
     }
