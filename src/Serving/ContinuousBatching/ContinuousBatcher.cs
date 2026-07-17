@@ -327,8 +327,11 @@ internal class ContinuousBatcher<T> : IDisposable
         // Run prefill for new sequences and account for the first generated token. On the paged path with
         // more than one new (non-empty) sequence, prefill them ALL in ONE right-padded batched forward
         // (Phase 2); fall back to per-sequence prefill otherwise or if the batched attempt can't allocate.
+        // Batched prefill pads prompts to a common length; a sequence-collapsing model (Flatten head,
+        // SupportsBatchedPrefill=false) would see the padded width and diverge from a single-prompt
+        // forward, so only batch prefill for models that accept a multi-token forward.
         bool batchedPrefillDone = false;
-        if (UsePagedPath && _config.MaxPrefillChunkTokens <= 0 && prefillSequences.Count > 1)
+        if (UsePagedPath && _config.SupportsBatchedPrefill && _config.MaxPrefillChunkTokens <= 0 && prefillSequences.Count > 1)
         {
             var batchedPrefill = RunBatchedPagedPrefill(prefillSequences);
             if (batchedPrefill is not null)
