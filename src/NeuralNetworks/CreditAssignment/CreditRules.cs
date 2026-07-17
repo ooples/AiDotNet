@@ -73,4 +73,41 @@ public static class CreditRules
     /// </summary>
     /// <param name="seed">Optional RNG seed for the fixed feedback matrices (reproducibility).</param>
     public static ICreditRule<T> DFANormalized<T>(int? seed = null) => new NormalizedDfaCreditRule<T>(seed);
+
+    /// <summary>
+    /// <b>Local Error Signals</b> (Nøkland &amp; Eidnes, 2019): a backprop-free supervised rule where every hidden
+    /// layer carries its own learned linear classifier to the labels and is trained by the gradient of its own
+    /// cross-entropy. Deep routing layers (e.g. attention) far from the readout still receive a strong supervised
+    /// signal, and the rule applies to non-contiguous trainable layers.
+    /// </summary>
+    public static ICreditRule<T> LocalErrorSignal<T>(int? seed = null, double classifierLearningRate = 0.05, double weightDecay = 0.0)
+        => new LocalErrorSignalCreditRule<T>(seed, classifierLearningRate, weightDecay);
+
+    /// <summary>
+    /// <b>Difference Target Propagation</b> (Lee, Zhang, Fischer &amp; Bengio, 2015): a backprop-free rule that
+    /// propagates difference-corrected <i>targets</i> backward through per-layer <b>learned inverses</b> (each trained
+    /// online to reconstruct its layer's input from its output). The feedback is the learned inverse (≈ <c>W⁺</c>),
+    /// distinct from Feedback Alignment (fixed random) and Kolen-Pollack (<c>Wᵀ</c>-tracking). Requires contiguous
+    /// trainable layers.
+    /// </summary>
+    /// <param name="seed">Optional RNG seed for reproducible inverse initialisation.</param>
+    /// <param name="inverseLearningRate">Step size for the per-layer reconstruction (inverse) learning (default 0.05).</param>
+    /// <param name="weightDecay">L2 decay on the learned inverses (default 0).</param>
+    /// <param name="outputStepSize">The step η taken from the output activation toward the loss-reducing target (default 1.0).</param>
+    public static ICreditRule<T> DifferenceTargetPropagation<T>(
+        int? seed = null, double inverseLearningRate = 0.05, double weightDecay = 0.0, double outputStepSize = 1.0)
+        => new DifferenceTargetPropagationCreditRule<T>(seed, inverseLearningRate, weightDecay, outputStepSize);
+
+    /// <summary>
+    /// <b>Direct Difference Target Propagation (DDTP-linear)</b> (Meulemans et al., 2020): Difference Target
+    /// Propagation's learned inverses routed <i>directly from the output</i> (like Direct Feedback Alignment), each
+    /// trained online to reconstruct its layer's activation from the network output. Learned-inverse feedback that —
+    /// unlike sequential DTP — also applies to non-contiguous trainable stacks.
+    /// </summary>
+    /// <param name="seed">Optional RNG seed for reproducible direct-inverse initialisation.</param>
+    /// <param name="inverseLearningRate">Step size for the per-layer direct-reconstruction learning (default 0.05).</param>
+    /// <param name="weightDecay">L2 decay on the learned direct inverses (default 0).</param>
+    public static ICreditRule<T> DirectDifferenceTargetPropagation<T>(
+        int? seed = null, double inverseLearningRate = 0.05, double weightDecay = 0.0)
+        => new DirectDifferenceTargetPropagationCreditRule<T>(seed, inverseLearningRate, weightDecay);
 }

@@ -46,6 +46,24 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
         int numMicroBatches = 1)
         : base(wrappedOptimizer, config)
     {
+        if (numMicroBatches < 1)
+            throw new ArgumentOutOfRangeException(nameof(numMicroBatches),
+                numMicroBatches, "numMicroBatches must be >= 1.");
+
+        // Micro-batch PIPELINE SCHEDULING (splitting a batch into micro-batches and interleaving
+        // their forward/backward across pipeline stages with gradient accumulation) is a MODEL-level
+        // concern: it requires per-stage layer execution and inter-stage activation exchange, which is
+        // implemented in PipelineParallelModel (GPipe, 1F1B, ZB-H1/H2, ZB-V, Interleaved-1F1B, Looped-BFS
+        // — Huang et al. 2019 and follow-ups). This OPTIMIZER only performs the per-stage PARAMETER
+        // UPDATE after the model has produced the (accumulated) gradients, so it cannot itself schedule
+        // micro-batches. Advertising numMicroBatches > 1 here would be a false claim; reject it and
+        // direct the caller to the model that actually implements the schedules.
+        if (numMicroBatches > 1)
+            throw new NotSupportedException(
+                "PipelineParallelOptimizer performs only the per-stage optimizer update; micro-batch " +
+                "pipeline scheduling and gradient accumulation are implemented in PipelineParallelModel " +
+                $"(configure microBatchCount there and choose a schedule). Got numMicroBatches={numMicroBatches}.");
+
         _numMicroBatches = numMicroBatches;
     }
 
@@ -64,23 +82,26 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
             if (inputData == null)
                 throw new ArgumentNullException(nameof(inputData));
 
-            // Pipeline parallel optimization requires:
-            // 1. Process micro-batches through the pipeline
-            // 2. Accumulate gradients across micro-batches
-            // 3. Update parameters once all micro-batches complete
-            // 4. Synchronize across pipeline stages if using data parallelism
+            // The micro-batch pipeline schedule (per-stage forward/backward interleaving + gradient
+            // accumulation across micro-batches) runs in PipelineParallelModel; by the time control
+            // reaches this optimizer the stage's gradients are already accumulated. This optimizer
+            // therefore performs exactly the per-stage PARAMETER UPDATE — the numMicroBatches=1
+            // contract enforced in the constructor. RunWrappedOptimizerStep engages
+            // IShardingConfiguration.CpuOffloadOptimizer: the Adam m/v state + update run on CpuEngine.
+            var result = RunWrappedOptimizerStep(inputData);
 
-            // For this framework implementation, we provide simplified pattern
-            var result = WrappedOptimizer.Optimize(inputData);
-
-            // Each stage updates its own parameters
-            if (Config.AutoSyncGradients && result.BestSolution != null)
-            {
-                // In pure pipeline parallelism, no cross-stage parameter sync needed
-                // (each stage owns different parameters)
-                // If combined with data parallelism, would sync within data-parallel group
-            }
-
+            // AUDIT (stage-local, no double-reduce): in pure pipeline parallelism each stage owns a DISJOINT
+            // slice of the parameters, so there is deliberately NO cross-stage gradient or parameter
+            // all-reduce here — adding one would incorrectly mix distinct stages' parameters. The real
+            // micro-batch schedule (GPipe/1F1B/ZB forward-backward interleaving + gradient accumulation) is
+            // implemented and tested in PipelineParallelModel (see PipelineParallelismIntegrationTests'
+            // per-schedule op-count tests); this optimizer only applies the accumulated per-stage update,
+            // which is why numMicroBatches > 1 is rejected in the constructor rather than faked here. (When
+            // pipeline is combined with data parallelism, the data-parallel replica reduction is handled by
+            // the data-parallel wrapper — HybridShardedModel's subgroup reduce — not by this class.) There
+            // is deliberately no AutoSyncGradients branch here: there is nothing for this stage-local
+            // optimizer to synchronize.
+            OffloadParamsToCpu(result.BestSolution);
             return result;
         }
         finally

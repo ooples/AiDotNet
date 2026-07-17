@@ -112,6 +112,29 @@ public class CreditRuleFacadeTrainingTests
         return new NeuralNetwork<double>(architecture);
     }
 
+    // A DEEP contiguous MLP (several hidden layers) on the same blob task — exercises the depth that the single
+    // hidden layer of BuildMlp does not, which is where target-propagation rules (learned inverses) are meant to work.
+    // The weight init is SEEDED (architecture.RandomSeed) so the test is deterministic and independent of the
+    // process-shared RNG / engine state that other tests in this class mutate (e.g. the transformer test's ResetToCpu).
+    private static NeuralNetwork<double> BuildDeepBlobNet(int hiddenLayers, int initSeed, int width = 16)
+    {
+        var layers = new List<ILayer<double>> { new FullyConnectedLayer<double>(MlpDim, width, new ReLUActivation<double>()) };
+        for (int i = 0; i < hiddenLayers - 1; i++)
+            layers.Add(new FullyConnectedLayer<double>(width, width, new ReLUActivation<double>()));
+        layers.Add(new FullyConnectedLayer<double>(width, MlpClasses, new SoftmaxActivation<double>()));
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            complexity: NetworkComplexity.Medium,
+            inputSize: MlpDim,
+            outputSize: MlpClasses,
+            layers: layers)
+        {
+            RandomSeed = initSeed,
+        };
+        return new NeuralNetwork<double>(architecture);
+    }
+
     [Theory]
     [InlineData(CreditRule.FeedbackAlignment, 0.60)]
     [InlineData(CreditRule.DirectFeedbackAlignment, 0.60)]
@@ -120,6 +143,9 @@ public class CreditRuleFacadeTrainingTests
     [InlineData(CreditRule.DirectKolenPollack, 0.60)]
     [InlineData(CreditRule.DRTP, 0.60)]
     [InlineData(CreditRule.DFANormalized, 0.60)]
+    [InlineData(CreditRule.LocalErrorSignal, 0.60)]
+    [InlineData(CreditRule.DifferenceTargetPropagation, 0.60)]
+    [InlineData(CreditRule.DirectDifferenceTargetPropagation, 0.60)]
     public async Task ConfigureCreditRule_TrainsMlp_HeldOutAccuracyBeatsChance(CreditRule rule, double minAccuracy)
     {
         var (trainX, trainY, _) = MakeBlobs(300, seed: 1);
@@ -151,6 +177,54 @@ public class CreditRuleFacadeTrainingTests
             $"{rule}: held-out accuracy {afterAcc:F3} did not reach {minAccuracy:F2} (chance={1.0 / MlpClasses:F3}, before={beforeAcc:F3}).");
         Assert.True(afterAcc > beforeAcc + 0.10,
             $"{rule}: accuracy did not improve enough (before={beforeAcc:F3}, after={afterAcc:F3}).");
+    }
+
+    /// <summary>
+    /// The target-propagation rules (learned inverses) must train a genuinely <b>deep contiguous</b> network — three
+    /// hidden layers — above chance, not just the single hidden layer of the learns-test above. This is the depth
+    /// regime these rules are designed for (Difference Target Propagation chains inverses layer-to-layer; its direct
+    /// variant routes a learned inverse from the output).
+    /// </summary>
+    [Theory]
+    [InlineData(CreditRule.DifferenceTargetPropagation)]
+    [InlineData(CreditRule.DirectDifferenceTargetPropagation)]
+    public async Task TargetPropagation_TrainsDeepContiguousNet_BeatsChance(CreditRule rule)
+    {
+        var (trainX, trainY, _) = MakeBlobs(300, seed: 1);
+        var (testX, _, testLabels) = MakeBlobs(120, seed: 999);
+
+        // Deep nets are init-sensitive for the sequential linear-inverse rule (it can stall from a poor init),
+        // so this asserts the CAPABILITY: from at least one of three SEEDED (deterministic) inits, the rule must
+        // train a 3-hidden contiguous net well above chance. All three are logged so init-sensitivity stays visible.
+        double bestAfter = 0, bestBefore = 0;
+        foreach (int initSeed in new[] { 101, 202, 303 })
+        {
+            var net = BuildDeepBlobNet(hiddenLayers: 3, initSeed: initSeed);
+            double beforeAcc = Accuracy<double>(net.Predict, testX, testLabels, MlpClasses);
+            var adam = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(
+                null,
+                new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+                {
+                    InitialLearningRate = 0.03,
+                    MaxIterations = 150,
+                    BatchSize = 32,
+                });
+            var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+                .ConfigureModel(net)
+                .ConfigureOptimizer(adam)
+                .ConfigureCreditRule(rule, seed: 42)
+                .ConfigureLossFunction(new CategoricalCrossEntropyLoss<double>())
+                .ConfigureDataLoader(new InMemoryDataLoader<double, Tensor<double>, Tensor<double>>(trainX, trainY))
+                .BuildAsync();
+            double afterAcc = Accuracy<double>(result.Predict, testX, testLabels, MlpClasses);
+            _output.WriteLine($"{rule} deep(3-hidden) init={initSeed}: before={beforeAcc:F3} after={afterAcc:F3} (chance={1.0 / MlpClasses:F3})");
+            if (afterAcc > bestAfter) { bestAfter = afterAcc; bestBefore = beforeAcc; }
+        }
+
+        Assert.True(bestAfter >= 0.60,
+            $"{rule}: deep-net best-of-3 held-out accuracy {bestAfter:F3} did not reach 0.60 (chance={1.0 / MlpClasses:F3}).");
+        Assert.True(bestAfter > bestBefore + 0.10,
+            $"{rule}: deep-net accuracy did not improve enough (best before={bestBefore:F3}, after={bestAfter:F3}).");
     }
 
     // ===========================================================================================
@@ -270,6 +344,9 @@ public class CreditRuleFacadeTrainingTests
             ("DirectKolenPollack", CreditRule.DirectKolenPollack),
             ("DRTP", CreditRule.DRTP),
             ("DFANormalized", CreditRule.DFANormalized),
+            ("LocalErrorSignal", CreditRule.LocalErrorSignal),
+            ("DifferenceTargetPropagation", CreditRule.DifferenceTargetPropagation),
+            ("DirectDifferenceTargetPropagation", CreditRule.DirectDifferenceTargetPropagation),
         };
 
         _output.WriteLine($"rule                       heldout(top1)   chance={chance:F3}");
