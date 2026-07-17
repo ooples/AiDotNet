@@ -1450,52 +1450,14 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
 
-    /// <summary>
-    /// Configures training memory management — gradient checkpointing and activation pooling — so large models
-    /// (e.g. deep transformers) can train within a bounded activation-memory budget.
-    /// </summary>
-    /// <param name="configuration">
-    /// The training-memory configuration (presets such as <c>TrainingMemoryConfig.ForTransformers()</c> or
-    /// <c>MemoryEfficient()</c>); <c>null</c> applies the defaults.
-    /// </param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> deep models store the intermediate results of every layer during training so they
-    /// can compute gradients. Gradient checkpointing trades a little extra compute to recompute some of those
-    /// instead of holding them all in memory, which lets a bigger model fit on the same hardware.
-    /// </remarks>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureMemoryManagement(Training.Memory.TrainingMemoryConfig? configuration = null);
-
-    /// <summary>Configures a runtime profiling pass over the build/inference path.</summary>
-    /// <param name="config">The profiling configuration; <c>null</c> applies the defaults.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null);
-
-    /// <summary>Configures model interpretability (feature attribution, explanations) on the built result.</summary>
-    /// <param name="options">The interpretability options; <c>null</c> applies the defaults.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureInterpretability(InterpretabilityOptions? options = null);
-
-    /// <summary>Configures the preprocessing pipeline directly from a prebuilt <see cref="PreprocessingPipeline{T,TInput,TInput}"/>.</summary>
-    /// <param name="pipeline">The preprocessing pipeline; <c>null</c> applies the defaults.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(PreprocessingPipeline<T, TInput, TInput>? pipeline = null);
-
-    /// <summary>Configures training-time data augmentation with a type-parameterized augmentation config.</summary>
-    /// <param name="config">The augmentation configuration.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(global::AiDotNet.Augmentation.AugmentationConfig<T, TInput>? config);
-
-    /// <summary>Configures AutoML with a caller-supplied AutoML model implementation.</summary>
-    /// <param name="autoMLModel">The AutoML model that drives architecture/hyperparameter search.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
-
-    /// <summary>Configures the Neural Radiance Field image/pixel data loader (NeRF pipelines).</summary>
-    /// <param name="dataLoader">The image-view / pixel-batch data loader.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureDataLoader(
-        IDataLoader<global::AiDotNet.NeuralRadianceFields.Data.ImageView<T>, global::AiDotNet.NeuralRadianceFields.Data.PixelBatch<T>> dataLoader);
+    // NOTE: Several fluent Configure* methods (ConfigureMemoryManagement, ConfigureProfiling,
+    // ConfigureInterpretability, the PreprocessingPipeline overload of ConfigurePreprocessing, the typed
+    // ConfigureAugmentation, the advanced ConfigureAutoML(IAutoMLModel<...>) overload, and the NeRF
+    // ConfigureDataLoader overload) are intentionally NOT part of this interface — same reasoning as the
+    // documented ConfigureAutoML note below: adding abstract members would break every external
+    // IAiModelBuilder implementer. They remain public methods on the concrete AiModelBuilder<T,TInput,TOutput>
+    // (the type the generated YAML applier dispatches against), and AiModelBuilderInterfaceCompletenessTests
+    // pins that intentional-concrete-only set so no NEW fluent method is silently dropped from the surface.
 
     /// <summary>
     /// Configures advanced reasoning capabilities for the model using Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency strategies.

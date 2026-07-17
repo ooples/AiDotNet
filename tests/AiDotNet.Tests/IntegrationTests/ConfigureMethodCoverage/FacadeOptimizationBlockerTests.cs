@@ -15,7 +15,8 @@ namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 /// <summary>
 /// Regression tests for the three facade-optimization blockers:
 /// <list type="number">
-/// <item>ConfigureMemoryManagement is now on the IAiModelBuilder interface (exercised through the interface type).</item>
+/// <item>ConfigureMemoryManagement stays concrete-only (documented compat policy); verify it chains fluently on
+/// the concrete builder so consumers casting to it can chain the call.</item>
 /// <item>Quantization must preserve a model's trained state for families (e.g. gradient-boosted trees) that keep
 /// trained internals outside the parameter vector — previously Predict threw "Model must be trained".</item>
 /// <item>The facade's supervised build must train a rank-3 tensor forecasting model (previously the optimizer's
@@ -28,14 +29,15 @@ public sealed class FacadeOptimizationBlockerTests
 
     [Fact]
     [Trait("category", "integration-configure-method")]
-    public void ConfigureMemoryManagement_is_callable_through_the_interface()
+    public void ConfigureMemoryManagement_chains_fluently_on_the_concrete_builder()
     {
-        // #52: the method must be reachable on IAiModelBuilder<T,TInput,TOutput>, not only the concrete builder.
-        global::AiDotNet.Interfaces.IAiModelBuilder<double, Matrix<double>, Vector<double>> builder =
-            new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        // ConfigureMemoryManagement is intentionally concrete-only (see the IAiModelBuilder note + the
+        // completeness test's allowlist). Verify it honours the fluent contract — returns the SAME builder
+        // instance — so a consumer that casts to the concrete type can chain it.
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
         var chained = builder.ConfigureMemoryManagement(
             global::AiDotNet.Training.Memory.TrainingMemoryConfig.ForTransformers());
-        Assert.NotNull(chained);
+        Assert.Same(builder, chained);
     }
 
     [Fact(Timeout = 120_000)]

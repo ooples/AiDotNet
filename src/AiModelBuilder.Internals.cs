@@ -1894,9 +1894,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         catch (Exception ex)
         {
+            // Preserving trained state failed. Do NOT fall back to the quantizer's rebuilt model — for families
+            // that keep trained internals outside the parameter vector it is UNTRAINED and would throw at predict
+            // time (the exact defect this path fixes). Skip quantization entirely (return no quantized model) so
+            // the caller keeps the original trained, unquantized model rather than a landmine.
             Console.WriteLine(
                 $"Warning: could not preserve trained state through quantization ({ex.GetType().Name}: {ex.Message}); " +
-                "using the quantizer's model directly.");
+                "skipping quantization and keeping the original trained model.");
+            return (null, null);
         }
 
         // Calculate actual quantized size based on bit width
