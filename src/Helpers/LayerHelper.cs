@@ -28350,6 +28350,65 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
     }
 
+    /// <summary>
+    /// Creates the full native image-to-mask layer stack for GroundedSAM2.
+    /// </summary>
+    /// <param name="visionDim">Token/embedding dimension of the vision transformer.</param>
+    /// <param name="numHeads">Number of attention heads per transformer block.</param>
+    /// <param name="numEncoderLayers">Number of image-encoder transformer blocks.</param>
+    /// <param name="numDecoderLayers">Number of mask-decoder transformer blocks.</param>
+    /// <param name="patchSize">Patch size for the image tokenizer (and the mask upsample factor).</param>
+    /// <param name="numClasses">Number of segmentation classes emitted by the mask head.</param>
+    /// <param name="imageHeight">Input image height (used to size the positional encoding).</param>
+    /// <param name="imageWidth">Input image width (used to size the positional encoding).</param>
+    /// <param name="dropRate">Dropout rate applied after each transformer block (0 disables dropout).</param>
+    /// <returns>A collection of layers forming the GroundedSAM2 image-to-mask pipeline.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Grounded SAM (Ren et al. 2024) combines Grounding DINO and SAM — both are
+    /// transformer models. This builds the picture-to-mask pipeline: first a small "patch embedding"
+    /// convolution chops the image into a grid of patches and turns each into a vector (a token); a fixed
+    /// positional code tells the model where each patch sits; a stack of transformer blocks (the encoder,
+    /// then the mask decoder) lets every patch look at every other patch; finally a 1×1 convolution turns
+    /// each patch into per-class scores and an upsampling layer blows that small grid back up to the full
+    /// image size, giving a per-pixel segmentation map. The last two layers are always the mask head
+    /// (mask conv + upsample), which is what the model relies on to find the head after the token stack.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateGroundedSAM2Layers(
+        int visionDim, int numHeads, int numEncoderLayers, int numDecoderLayers,
+        int patchSize, int numClasses, int imageHeight, int imageWidth, double dropRate)
+    {
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int ffnDim = visionDim * 4;
+        int gridH = Math.Max(1, imageHeight / patchSize);
+        int gridW = Math.Max(1, imageWidth / patchSize);
+        int numTokens = gridH * gridW;
+
+        // Patch embedding: a non-overlapping patchSize×patchSize strided conv projects the RGB image to a
+        // [visionDim, gridH, gridW] token grid (linear projection — LayerNorm/attention follow inside the
+        // transformer blocks), matching SAM's ViT patch-embed.
+        yield return new ConvolutionalLayer<T>(visionDim, patchSize, patchSize, 0, identity);
+        // Sinusoidal positional encoding over the token sequence (parameter-free).
+        yield return new PositionalEncodingLayer<T>(numTokens, visionDim);
+        // Image encoder transformer blocks (SAM ViT image encoder / Grounding DINO image branch).
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim, visionDim);
+            if (dropRate > 0) yield return new DropoutLayer<T>(dropRate);
+        }
+        // Cross-modality / SAM mask-decoder transformer blocks.
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim, visionDim);
+            if (dropRate > 0) yield return new DropoutLayer<T>(dropRate);
+        }
+        // Mask head (ALWAYS the last two layers): 1×1 conv -> numClasses logits at token-grid resolution,
+        // then upsample by patchSize back to the full input resolution.
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+        yield return new UpsamplingLayer<T>(patchSize);
+    }
+
     #endregion
     #region MaskAdapter Layers
 
