@@ -11,7 +11,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits all NN invariant tests and adds document-specific invariants:
 /// empty input handling, output consistency, structural sensitivity, and scaling robustness.
 /// </summary>
-public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
+/// <remarks>
+/// Generic over the numeric type <typeparamref name="T"/> (mirroring <see cref="NeuralNetworkModelTestBase{T}"/>)
+/// so document models whose full-precision training footprint/cost overruns the CI runner can be scaffolded
+/// at &lt;float&gt; via the Fp32 float-selection path. A non-generic <c>DocumentNNModelTestBase</c> shim below
+/// preserves the &lt;double&gt; default for models that don't opt into float.
+/// </remarks>
+public abstract class DocumentNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // DOCUMENT INVARIANT: Empty Input Should Not Crash
@@ -31,9 +37,10 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
         Assert.True(output.Length > 0, "Output should not be empty for blank document input.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            double o = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(o),
                 $"Output[{i}] is NaN for blank document — model should handle empty input.");
-            Assert.False(double.IsInfinity(output[i]),
+            Assert.False(double.IsInfinity(o),
                 $"Output[{i}] is Infinity for blank document.");
         }
     }
@@ -82,7 +89,7 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(output1[i]) - ConvertToDouble(output2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -106,15 +113,23 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
         var network = CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng);
-        var largeInput = new Tensor<double>(InputShape);
+        var largeInput = new Tensor<T>(InputShape);
+        var two = NumOps.FromDouble(2.0);
         for (int i = 0; i < input.Length; i++)
-            largeInput[i] = input[i] * 2.0;
+            largeInput[i] = NumOps.Multiply(input[i], two);
 
         var output = network.Predict(largeInput);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(!double.IsNaN(output[i]) && !double.IsInfinity(output[i]),
+            double o = ConvertToDouble(output[i]);
+            Assert.True(!double.IsNaN(o) && !double.IsInfinity(o),
                 $"Output[{i}] is not finite for 2x scaled input — numerical instability.");
         }
     }
 }
+
+/// <summary>
+/// Non-generic &lt;double&gt; convenience base — the default for document models that do not opt into
+/// &lt;float&gt; scaffolding. Mirrors the <see cref="NeuralNetworkModelTestBase"/> / <c>&lt;double&gt;</c> shim.
+/// </summary>
+public abstract class DocumentNNModelTestBase : DocumentNNModelTestBase<double> { }

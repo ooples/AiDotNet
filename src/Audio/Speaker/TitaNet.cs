@@ -231,7 +231,49 @@ public class TitaNet<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeak
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        return RunLayers(input);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunLayers(input);
+
+    /// <summary>
+    /// TitaNet encoder forward with paper-faithful SqueezeExcite and RESIDUAL blocks. The default layer
+    /// list is prolog[Dense,BN] + N conv-SE blocks[main Dense, BN, se1 Dense, se2 Dense(sigmoid)] +
+    /// epilog[Dense,BN] + attentive-pool[Dense(tanh),Dense] + embedding[Dense]. The previous code walked
+    /// this sequentially, which applied the SE's (0,1) sigmoid as a REPLACEMENT of the signal (not a gate)
+    /// through a tight seDim bottleneck and had NO residual — so input variance washed out to a constant
+    /// embedding (DifferentInputs / ScaledInput collapse, Koluguri 2021 uses SE-*scaled* residual blocks).
+    /// Here the SE output multiplicatively GATES the block features and a residual skip adds the block
+    /// input back, preserving input sensitivity; all ops are tape-aware for training.
+    /// </summary>
+    private Tensor<T> RunLayers(Tensor<T> input)
+    {
+        var x = input;
+        int n = Layers.Count;
+        // Prolog: Dense -> BN.
+        int idx = 0;
+        if (idx + 1 < n) { x = Layers[idx++].Forward(x); x = Layers[idx++].Forward(x); }
+
+        // Conv-SE residual blocks (4 layers each: main Dense, BN, se1 Dense, se2 Dense(sigmoid)). The
+        // trailing 5 layers are the epilog(2) + attentive pool(2) + embedding(1), so blocks occupy the
+        // range [2, n-5).
+        while (idx + 4 <= n - 5)
+        {
+            var blockIn = x;
+            var h = Layers[idx].Forward(x);          // main Dense
+            h = Layers[idx + 1].Forward(h);          // BatchNorm
+            var gate = Layers[idx + 2].Forward(h);   // SE squeeze Dense
+            gate = Layers[idx + 3].Forward(gate);    // SE excite Dense (sigmoid) -> (0,1) gate
+            h = Engine.TensorMultiply(h, gate);      // SE: gate the features (not replace)
+            x = Engine.TensorAdd(blockIn, h);        // residual skip
+            idx += 4;
+        }
+
+        // Remaining layers (epilog + attentive pooling + embedding projection) run sequentially.
+        for (; idx < n; idx++)
+            x = Layers[idx].Forward(x);
+        return x;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)

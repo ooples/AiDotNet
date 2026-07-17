@@ -517,6 +517,30 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    /// <summary>
+    /// Runs the graph layer stack, then pools the per-node class logits into a single [numClasses] vector.
+    /// The stack's final Dense(numClasses) emits per-node logits [numNodes, numClasses]; without pooling
+    /// this rank-2 tensor cannot align to the classification target (rank-1 [numClasses]) and
+    /// CrossEntropyWithLogits over-indexed ClassIndicesToOneHot and threw. Mean-pooling every axis but the
+    /// class axis yields the document-level [numClasses] logit vector the classification target expects.
+    /// All ops are tape-aware, so training back-propagates through the pool into the graph layers.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        var output = input;
+        foreach (var layer in Layers)
+            output = layer.Forward(output);
+
+        if (output.Shape.Length >= 2)
+        {
+            int classAxis = output.Shape.Length - 1;
+            var poolAxes = new int[classAxis];
+            for (int a = 0; a < classAxis; a++) poolAxes[a] = a;
+            output = Engine.ReduceMean(output, poolAxes, keepDims: false); // → [numClasses]
+        }
+        return output;
+    }
+
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -524,9 +548,11 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
+        // TrainWithTape performs the complete forward + backward + optimizer step over the tape. The
+        // previous code then ALSO ran a manual UpdateParameters(CollectGradients()) gradient-descent step
+        // on top of it — a double update that reads gradients TrainWithTape already consumed and pushes
+        // the weights past the tape's step. One tape step is the correct, complete update.
         TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
         SetTrainingMode(false);
     }
 

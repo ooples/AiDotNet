@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -87,7 +88,20 @@ public class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         _options = options ?? new HuBERTSEROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // HuBERT-SER is a multi-class emotion CLASSIFIER (Hsu et al. fine-tune HuBERT with a softmax head
+        // under cross-entropy — Sec. 4). The audio base defaults the loss to MSE, which is wrong for a
+        // classifier: MSE on the raw logits grows QUADRATICALLY when a step overshoots, so the first Adam
+        // step on the deep 12-layer encoder drove the memorization loss up ~40x (step1=1.02 -> step2=41.86)
+        // and never recovered (LossStrictlyDecreasesOnMemorizationTask). Cross-entropy-with-logits is the
+        // paper-faithful objective and its gradient (softmax - target) is BOUNDED in [-1, 1], so a single
+        // step can no longer explode the loss. (Gradient-norm clipping cannot fix this on its own: a uniform
+        // clip scale cancels in Adam's per-parameter m/sqrt(v) normalization, leaving the first step
+        // unchanged.) ForwardForTraining returns raw logits and PredictCore applies the softmax separately,
+        // so the loss's internal softmax is applied exactly once.
+        LossFunction = new CrossEntropyWithLogitsLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = 0.0002, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
@@ -234,7 +248,33 @@ public class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        // Speech emotion recognition is single-label multi-class: return softmax PROBABILITIES at
+        // inference so the output is non-negative and sums to 1 (ClassOutput_ShouldBeNonNegative). Training
+        // stays on raw logits via ForwardForTraining (standard train-on-logits / predict-with-softmax, so
+        // CrossEntropyWithLogits isn't double-softmaxed).
+        return Engine.Softmax(RunLayersRaw(input), axis: -1);
+    }
+
+    /// <summary>Raw logit forward (no softmax) — used for tape training so the logit loss is well-posed.</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunLayersRaw(input);
+
+    private Tensor<T> RunLayersRaw(Tensor<T> input)
+    {
+        var c = input;
+        foreach (var l in Layers) c = l.Forward(c);
+        // Mean-pool the frame/token axis to ONE utterance-level [numClasses] logit vector. HuBERT SER
+        // pools the frame representations into an utterance embedding before the classifier, so this is
+        // paper-faithful. It is also REQUIRED for a well-posed loss: the stack emits per-frame logits
+        // [1, seq, numClasses] while the classification target is [numClasses]; pooling to [numClasses]
+        // aligns predicted and target so cross-entropy is computed over the utterance-level distribution.
+        if (c.Shape.Length >= 2)
+        {
+            int classAxis = c.Shape.Length - 1;
+            var poolAxes = new int[classAxis];
+            for (int a = 0; a < classAxis; a++) poolAxes[a] = a;
+            c = Engine.ReduceMean(c, poolAxes, keepDims: false);
+        }
+        return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -243,7 +283,7 @@ public class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

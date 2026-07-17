@@ -8338,8 +8338,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// warmup-LR one) shifts the sum, so an unchanged checksum is a reliable
     /// "nothing was persisted" signal.
     /// </summary>
+    // Number of parameter elements the #1822 fused-persistence probe samples. The
+    // probe only needs to detect whether the fused step moved ANY live parameter, not
+    // an exact norm — so it samples a deterministic stride instead of every element.
+    private const int FusedChecksumTargetSamples = 1 << 16; // 65536
+
     private double FusedTrainableParamChecksum(IReadOnlyList<ITrainableLayer<T>> layers)
     {
+        // Bounded persistence probe (#1822). Summing ALL parameters is O(N) scalar
+        // generic ToDouble; at foundation scale (e.g. 385M params) that alone is
+        // several seconds on the CRITICAL first fused step — the exact cost that
+        // pushed GLaMM's GradientFlow invariant past its per-test timeout. We only
+        // need to know whether the fused kernel PERSISTED its update, so sample a
+        // deterministic stride: element 0 of EVERY trainable tensor (so every tensor
+        // is covered — Adam moves every trained param, flipping the checksum) plus a
+        // strided sweep of large tensors, capping total work at ~TargetSamples
+        // regardless of model size. Small tensors are fully covered (stride 1). The
+        // same indices are read before and after the step, so the != comparison
+        // remains valid. Bit-for-bit identical to the full sum for models below the
+        // cap; for larger models it's a faithful subset that still catches the
+        // silent-no-op the guard exists for.
+        long total = 0;
+        for (int li = 0; li < layers.Count; li++)
+            foreach (var p in layers[li].GetTrainableParameters())
+                if (p is not null) total += p.AsSpan().Length;
+        if (total == 0) return 0.0;
+
+        int stride = (int)System.Math.Max(1, total / FusedChecksumTargetSamples);
         double acc = 0.0;
         for (int li = 0; li < layers.Count; li++)
         {
@@ -8347,7 +8372,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 if (p is null) continue;
                 var span = p.AsSpan();
-                for (int i = 0; i < span.Length; i++)
+                for (int i = 0; i < span.Length; i += stride)
                 {
                     double v = NumOps.ToDouble(span[i]);
                     acc += v * v;

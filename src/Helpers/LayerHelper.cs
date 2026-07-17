@@ -19643,16 +19643,22 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(transformerDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // Transformer encoder
+        // Transformer encoder — RESIDUAL blocks (HuBERT/wav2vec-2 use standard residual transformer
+        // layers: x + MHA(LN(x)), x + FFN(LN(x))). The previous bare MHA->LN->FFN->LN chain had NO skip
+        // connections, so the 12-layer stack washed out the signal and destabilized training (the first
+        // optimizer step drove the loss WORSE than random and it never strictly decreased —
+        // LossStrictlyDecreasesOnMemorizationTask). TransformerEncoderBlock applies the residual MHA + FFN
+        // internally, matching the paper and restoring a trainable gradient path.
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (transformerDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, geluActivation);
-            yield return new DenseLayer<T>(transformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(transformerDim, numAttentionHeads, feedForwardDim, dropoutRate, geluActivation);
         }
+
+        // Final encoder LayerNorm (HuBERT/wav2vec-2 normalize the encoder output before the head). Without
+        // it the residual-accumulated features feed the classifier as large unbounded logits, so
+        // CrossEntropyWithLogits was numerically unstable (initial loss ~16.7, exploding to ~313 in one
+        // step). Normalizing bounds the logits so training descends.
+        yield return new LayerNormalizationLayer<T>();
 
         // Emotion classification head
         yield return new DenseLayer<T>(classifierHiddenDim, reluActivation);
@@ -30565,80 +30571,42 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates DCCRN encoder, LSTM, and decoder layers.
+    /// Creates the DCCRN layers that live in the model's layer list: the per-stage BatchNorms, the
+    /// bottleneck LSTM stack, the LSTM-output projection, and the mask activation. The TRUE complex
+    /// convolutions themselves (Hu 2020's "Deep Complex" innovation) are NOT layers — DCCRN carries their
+    /// real/imaginary kernels as raw trainable tensors (see <c>DCCRN.ComplexConv2D</c> /
+    /// <c>GetExtraTrainableTensors</c>) so it can implement the complex cross-term convolution with the
+    /// paper's asymmetric stride (2,1) / kernel (5,2) via tape-aware Engine.Conv2D. This helper therefore
+    /// yields exactly: numStages encoder BatchNorms, numLstmLayers LSTMs, one projection Dense
+    /// (projectionDim wide), numStages-1 decoder BatchNorms, and one mask activation.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDCCRNLayers(
-        int fftSize = 512,
-        int baseChannels = 16,
         int numStages = 5,
         int numLstmLayers = 2,
-        int lstmHiddenDim = 128,
-        int kernelSize = 5,
-        int stride = 2,
-        int inChannels = 2,
-        int timeDim = 100)
+        int lstmHiddenDim = 256,
+        int projectionDim = 256,
+        bool useComplexMask = true)
     {
-        int freqBins = fftSize / 2 + 1;
-
-        // Encoder
-        int currentInChannels = inChannels;
+        // Encoder BatchNorms (one per complex-conv stage; applied over the 2*C real channels).
         for (int i = 0; i < numStages; i++)
-        {
-            int outChannels = baseChannels * (int)Math.Pow(2, Math.Min(i, 4));
-            int currentFreqBins = freqBins / (int)Math.Pow(stride, i);
-
-            yield return new ConvolutionalLayer<T>(
-                outChannels, kernelSize, stride, kernelSize / 2,
-                (IActivationFunction<T>)new LeakyReLUActivation<T>());
             yield return new BatchNormalizationLayer<T>();
 
-            // Skip connection layer
-            yield return new ConvolutionalLayer<T>(
-                outChannels, 1, 1, 0);
-
-            currentInChannels = outChannels;
-        }
-
-        // LSTM layers
-        int lstmInputDim = currentInChannels * (fftSize / (int)Math.Pow(stride, numStages));
-        int[] lstmInputShape = [1, lstmInputDim];
+        // Bottleneck LSTM stack over the time axis.
         for (int i = 0; i < numLstmLayers; i++)
-        {
-            int inputDim = i == 0 ? lstmInputDim : lstmHiddenDim;
-            yield return new LSTMLayer<T>( lstmHiddenDim,
+            yield return new LSTMLayer<T>(lstmHiddenDim,
                 (IActivationFunction<T>)new TanhActivation<T>(), (IActivationFunction<T>)new SigmoidActivation<T>());
-            lstmInputShape = [1, lstmHiddenDim];
-        }
 
-        // LSTM projection
-        yield return new DenseLayer<T>(lstmInputDim);
+        // Projection back to the flattened encoder feature width (2 * complex-Cout * F').
+        yield return new DenseLayer<T>(projectionDim);
 
-        // Decoder
-        int decoderChannels = baseChannels * (int)Math.Pow(2, Math.Min(numStages - 1, 4));
-        for (int i = 0; i < numStages; i++)
-        {
-            int outChannels = i < numStages - 1
-                ? baseChannels * (int)Math.Pow(2, Math.Min(numStages - 2 - i, 4))
-                : inChannels;
+        // Decoder BatchNorms (all stages except the final output stage, which feeds the mask directly).
+        for (int i = 0; i < numStages - 1; i++)
+            yield return new BatchNormalizationLayer<T>();
 
-            int skipChannels = decoderChannels * 2;
-            int currentFreqBins = freqBins / (int)Math.Pow(stride, numStages - i);
-            int[] decoderInputShape = [1, skipChannels, currentFreqBins, timeDim];
-
-            if (i < numStages - 1)
-            {
-                yield return new DeconvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2,
-                    (IActivationFunction<T>)new LeakyReLUActivation<T>());
-                yield return new BatchNormalizationLayer<T>();
-            }
-            else
-            {
-                yield return new DeconvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2,
-                    (IActivationFunction<T>?)null);
-            }
-
-            decoderChannels = outChannels;
-        }
+        // Complex-ratio-mask activation: Tanh for the CRM, Sigmoid for a magnitude mask.
+        yield return useComplexMask
+            ? new ActivationLayer<T>((IActivationFunction<T>)new TanhActivation<T>())
+            : new ActivationLayer<T>((IActivationFunction<T>)new SigmoidActivation<T>());
     }
 
     /// <summary>

@@ -1324,10 +1324,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             for (int j = 0; j < chunk.Length; j++, globalIdx++)
             {
                 double after = ConvertToDouble(chunk[j]);
-                Assert.False(double.IsNaN(after),
-                    $"Parameter[{globalIdx}] is NaN after training — gradient computation is broken.");
-                Assert.False(double.IsInfinity(after),
-                    $"Parameter[{globalIdx}] is Infinity after training — gradient explosion.");
+                // Build the (expensive) diagnostic string ONLY when the invariant is
+                // actually violated. The previous form called Assert.False with an
+                // interpolated message UNCONDITIONALLY, so C# allocated two strings for
+                // every parameter — ~770M throwaway strings (~90 GB) on a 385M-param
+                // foundation model (GLaMM), which alone blew the 120 s xUnit budget and
+                // timed the test out. Guarding preserves the invariant exactly (every
+                // value is still inspected; identical failure messages) while paying the
+                // formatting/allocation cost only on the rare failure path.
+                if (double.IsNaN(after) || double.IsInfinity(after))
+                {
+                    Assert.False(double.IsNaN(after),
+                        $"Parameter[{globalIdx}] is NaN after training — gradient computation is broken.");
+                    Assert.False(double.IsInfinity(after),
+                        $"Parameter[{globalIdx}] is Infinity after training — gradient explosion.");
+                }
             }
         }
         Assert.True(anyChanged,
