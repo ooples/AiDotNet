@@ -19,6 +19,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.230.0](https://github.com/ooples/AiDotNet/compare/v0.229.2...v0.230.0) (2026-07-17)
+
+
+### Features
+
+* **checkpoint:** typed model-state restore via ICheckpointableModel sidecar ([#1811](https://github.com/ooples/AiDotNet/issues/1811)) ([e5395d8](https://github.com/ooples/AiDotNet/commit/e5395d8d4298108de3fff9054ddb21159c2addbc))
+* **credit:** add Local Error Signals + Difference Target Propagation (+ direct variant) credit rules ([#1880](https://github.com/ooples/AiDotNet/issues/1880)) ([1f39e9e](https://github.com/ooples/AiDotNet/commit/1f39e9e8c4b86ee5f375520096c91e234c3e57ba))
+* **distributed:** ZeRO-Offload equivalent — CPU offload flags on IShardingConfiguration ([#1877](https://github.com/ooples/AiDotNet/issues/1877)) ([2173bc6](https://github.com/ooples/AiDotNet/commit/2173bc6edc09e5636db7b7fb9ccaf6ae3f0bec2d))
+* **facade:** pluggable credit-assignment rules (Feedback Alignment / DFA / Sign-Symmetric) ([#1805](https://github.com/ooples/AiDotNet/issues/1805)) ([e5f25be](https://github.com/ooples/AiDotNet/commit/e5f25be7304c896b90583bc3cfd5ac14171783ed))
+* **licensing:** asymmetric public-key signatures (aidn2) — replace extractable symmetric HMAC ([#1808](https://github.com/ooples/AiDotNet/issues/1808)) ([794c717](https://github.com/ooples/AiDotNet/commit/794c717ad52c53f390f6ad5a79f35a99179d53aa))
+* **metrics:** language-model perplexity + top-k accuracy metrics ([#1791](https://github.com/ooples/AiDotNet/issues/1791)) ([b09e399](https://github.com/ooples/AiDotNet/commit/b09e399eec3119fddefb18b27d0617d5294f2070))
+* **training:** GPU-resident fused step for non-TS single-net models ([#1843](https://github.com/ooples/AiDotNet/issues/1843)) ([a5e69ca](https://github.com/ooples/AiDotNet/commit/a5e69cafb03318459389df42eb22267aa8a9a62c))
+* **transformer:** opt-in numerically-stable log-softmax-cross-entropy head (default OFF) ([#1828](https://github.com/ooples/AiDotNet/issues/1828)) ([ae6f645](https://github.com/ooples/AiDotNet/commit/ae6f645632acbae5d8e4be572563b17b16f36c78))
+
+
+### Bug Fixes
+
+* **ci:** green Diffusion ModelFamily shards — fix DeepFloydIF shape + defer verified foundation-scale OOM models ([#1706](https://github.com/ooples/AiDotNet/issues/1706)) ([#1758](https://github.com/ooples/AiDotNet/issues/1758)) ([3522f76](https://github.com/ooples/AiDotNet/commit/3522f76ff4c3fbe62ba54030da8d6efb2159a3dc))
+* consolidated AiDotNet fixes + excellence goals + audit pass ([#1832](https://github.com/ooples/AiDotNet/issues/1832), [#1833](https://github.com/ooples/AiDotNet/issues/1833), [#1834](https://github.com/ooples/AiDotNet/issues/1834), [#1835](https://github.com/ooples/AiDotNet/issues/1835), [#1836](https://github.com/ooples/AiDotNet/issues/1836), [#1837](https://github.com/ooples/AiDotNet/issues/1837)) ([#1838](https://github.com/ooples/AiDotNet/issues/1838)) ([1ca524d](https://github.com/ooples/AiDotNet/commit/1ca524d4e224efba9c7b7585818c20d851d7f039))
+* correct sequence layer shape contracts ([#1873](https://github.com/ooples/AiDotNet/issues/1873)) ([f59f3fc](https://github.com/ooples/AiDotNet/commit/f59f3fc6620433aebb1225bebffb2111663b0ae3))
+* **determinism:** seed minibatch shuffle under SetDeterministicMode (real cause of run-to-run training nondeterminism) ([#1819](https://github.com/ooples/AiDotNet/issues/1819)) ([a43234e](https://github.com/ooples/AiDotNet/commit/a43234eb4ccdbadcd611da72d1b3f1ed4ef2e8c3))
+* **diffusion:** predictNoiseBatched must not drop the batch dim ([#1843](https://github.com/ooples/AiDotNet/issues/1843) regression) ([#1850](https://github.com/ooples/AiDotNet/issues/1850)) ([d83f043](https://github.com/ooples/AiDotNet/commit/d83f0433340b52f41ff69d2012ac57b3bd623a5a))
+* **diffusion:** preserve fp16-resident weights across clone/param round-trip ([#1764](https://github.com/ooples/AiDotNet/issues/1764)) ([#1788](https://github.com/ooples/AiDotNet/issues/1788)) ([c6f0aee](https://github.com/ooples/AiDotNet/commit/c6f0aee5af354589bbb2af08e629b13d0b5f623f))
+* **facade:** revert unneeded transformer routing; assert REAL learning ([#1803](https://github.com/ooples/AiDotNet/issues/1803)) ([35d55f1](https://github.com/ooples/AiDotNet/commit/35d55f114a29791891aa1b2281356ef36ab9c721))
+* **facade:** unblock BuildAsync for radiance-field models ([#1826](https://github.com/ooples/AiDotNet/issues/1826)) ([#1829](https://github.com/ooples/AiDotNet/issues/1829)) ([8909159](https://github.com/ooples/AiDotNet/commit/8909159c60b24239104c64ecdd300652d28aa071))
+* **finance:** tFT/Informer train through the genuine tape forward (ForwardNativeForTraining) ([#1849](https://github.com/ooples/AiDotNet/issues/1849)) ([47d493e](https://github.com/ooples/AiDotNet/commit/47d493e57d1c7d40ef95ac6f2691670e2aaa89cc))
+* **generators:** scope AIDN001 model-metadata validation to the AiDotNet library ([#1825](https://github.com/ooples/AiDotNet/issues/1825)) ([8c6256b](https://github.com/ooples/AiDotNet/commit/8c6256b16a4cd7495fc3fce6264a445350b047d8))
+* **gpu:** invalidate resident weight buffers after in-place optimizer update (GPU transformer training was stale) ([#1817](https://github.com/ooples/AiDotNet/issues/1817)) ([5c19829](https://github.com/ooples/AiDotNet/commit/5c1982908ac5f0507fe9b40195c305d4a75d7531))
+* **inference:** memory-bounded transformer forward — arena recycles per-layer scratch ([#1824](https://github.com/ooples/AiDotNet/issues/1824)) ([#1824](https://github.com/ooples/AiDotNet/issues/1824)) ([413628d](https://github.com/ooples/AiDotNet/commit/413628d19b366d856892072f1353ce194252769f))
+* **license:** only classify aidn. keys as offline-HMAC when the signature is 32 bytes ([#1807](https://github.com/ooples/AiDotNet/issues/1807)) ([9e71dea](https://github.com/ooples/AiDotNet/commit/9e71dea6a23a504d2f5a9b14c0078188bda76a56))
+* **licensing:** require a prior successful online validation before honouring ValidationPending ([#1802](https://github.com/ooples/AiDotNet/issues/1802)) ([d1afcd0](https://github.com/ooples/AiDotNet/commit/d1afcd0769622e5356f9ee7e8de8797f6f4d2b0c))
+* **optimizer:** bound eval cache + add O(tokens) mini-batch-loss fitness mode ([#1820](https://github.com/ooples/AiDotNet/issues/1820)) ([e1e2394](https://github.com/ooples/AiDotNet/commit/e1e239411e29a6855d2a0fa17df316d670b64a7a))
+* **optimizer:** bump Tensor.Version after in-place tape Step so GPU re-uploads updated weights ([#1810](https://github.com/ooples/AiDotNet/issues/1810)) ([ca3a1e8](https://github.com/ooples/AiDotNet/commit/ca3a1e8e6057624e804592af7afdcd1cdc67e1d6))
+* **optimizers:** bound DefaultGradientCache to stop unbounded training-loop memory leak ([#1831](https://github.com/ooples/AiDotNet/issues/1831)) ([58b6834](https://github.com/ooples/AiDotNet/commit/58b68349ca20a724a2f18ea01b276e4ca8d4bdc0))
+* **timeseries:** make facade training callbacks and early stopping actually work ([#1875](https://github.com/ooples/AiDotNet/issues/1875)) ([0214e23](https://github.com/ooples/AiDotNet/commit/0214e237f90bfef3361730dd382fd5197f6ded1c))
+* **training:** Transformer.Train() silent no-op — fused compiled step didn't persist to live params ([#1822](https://github.com/ooples/AiDotNet/issues/1822)) ([#1823](https://github.com/ooples/AiDotNet/issues/1823)) ([803330c](https://github.com/ooples/AiDotNet/commit/803330ca95ae25a3a844cf12f1e3ff81a97bb8d7))
+* **transformer:** label smoothing (paper eps=0.1) un-freezes batched training ([#1559](https://github.com/ooples/AiDotNet/issues/1559)) ([#1818](https://github.com/ooples/AiDotNet/issues/1818)) ([f135e7b](https://github.com/ooples/AiDotNet/commit/f135e7b3ae384d7ebf3b9a8497a141a571b22dd8))
+
+
+### Performance
+
+* activate TensorArena for training across all model paths (zero-alloc) ([#1809](https://github.com/ooples/AiDotNet/issues/1809)) ([a39fb1b](https://github.com/ooples/AiDotNet/commit/a39fb1bae59b737904696e94b03ff2452c06c4e6))
+* cache Adam per-param backing arrays across steps (+ NBEATS bias-col reuse) ([#1816](https://github.com/ooples/AiDotNet/issues/1816)) ([29d2ad4](https://github.com/ooples/AiDotNet/commit/29d2ad468a6c30bb49764a48f767f00b6d4148b7))
+* **optimizer:** parallelize eager Adam Step across parameters ([#1806](https://github.com/ooples/AiDotNet/issues/1806)) ([0b3adac](https://github.com/ooples/AiDotNet/commit/0b3adac800f0804534519eec16be7f08d0deb213))
+* **optimizer:** wire eager fp32 Adam step onto the shared SIMD kernel ([#1815](https://github.com/ooples/AiDotNet/issues/1815)) ([1a5125c](https://github.com/ooples/AiDotNet/commit/1a5125ca9e73f9a57e96ac9777efa5e51ff67235))
+
 ## [v0.207.0] - 2026-05-21
 
 _Release v0.207.0_
@@ -1272,4 +1318,3 @@ See https://github.com/ooples/AiDotNet/releases/tag/v0.0.3-preview
 ## [v0.0.1-preview] - 2023-09-23 (pre-release)
 
 See https://github.com/ooples/AiDotNet/releases/tag/v0.0.1-preview
-
