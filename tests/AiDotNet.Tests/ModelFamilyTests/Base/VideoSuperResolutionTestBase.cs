@@ -37,8 +37,9 @@ public abstract class VideoSuperResolutionTestBase<T> : VideoNNModelTestBase<T>
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
-                $"SR output[{i}] is NaN — upscaling introduced numerical instability.");
+            double v = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(v) || double.IsInfinity(v),
+                $"SR output[{i}] is not finite (NaN/Infinity) — upscaling introduced numerical instability.");
         }
     }
 }

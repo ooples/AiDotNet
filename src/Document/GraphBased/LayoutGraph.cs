@@ -548,12 +548,20 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        // TrainWithTape performs the complete forward + backward + optimizer step over the tape. The
-        // previous code then ALSO ran a manual UpdateParameters(CollectGradients()) gradient-descent step
-        // on top of it — a double update that reads gradients TrainWithTape already consumed and pushes
-        // the weights past the tape's step. One tape step is the correct, complete update.
-        TrainWithTape(input, expectedOutput);
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape performs the complete forward + backward + optimizer step over the tape. The
+            // previous code then ALSO ran a manual UpdateParameters(CollectGradients()) gradient-descent step
+            // on top of it — a double update that reads gradients TrainWithTape already consumed and pushes
+            // the weights past the tape's step. One tape step is the correct, complete update.
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            // Restore inference mode even if TrainWithTape throws, so a failed step doesn't leave
+            // BatchNorm/Dropout stuck in training mode for subsequent inference.
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

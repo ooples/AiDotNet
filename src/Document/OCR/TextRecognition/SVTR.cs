@@ -9,7 +9,6 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using Microsoft.ML.OnnxRuntime;
 
 namespace AiDotNet.Document.OCR.TextRecognition;
 
@@ -64,7 +63,6 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private readonly InferenceSession? _onnxSession;
     private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _embedDim;
     private readonly int _numLayers;
@@ -160,7 +158,10 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         ImageSize = imageWidth;
         base.MaxSequenceLength = maxSequenceLength;
 
-        _onnxSession = new InferenceSession(onnxModelPath);
+        // Install the ONNX model through the base abstraction so DocumentNeuralNetworkBase.RunOnnxInference
+        // (which reads OnnxModel/OnnxEncoder/OnnxDecoder) actually runs it. The previous code created a raw
+        // InferenceSession the base never consulted, so every ONNX PredictCore hit "No ONNX model loaded".
+        OnnxModel = new AiDotNet.Onnx.OnnxModel<T>(onnxModelPath);
 
         InitializeLayers();
     }
@@ -204,6 +205,14 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         ImageSize = imageWidth;
         base.MaxSequenceLength = maxSequenceLength;
+
+        // Wire SVTR's optimizer into the base tape-training loop. base.Train drives training through
+        // the base training optimizer, not this private field, so without this a caller-supplied
+        // optimizer would be silently ignored (the field and the base trainer would disagree). The
+        // field is the broad IOptimizer; the base loop needs a gradient-based optimizer — the default
+        // (and any real training optimizer) is one, and a non-gradient optimizer falls back to null
+        // (the base then lazily builds its default Adam).
+        SetBaseTrainOptimizer(_optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
 
         InitializeLayers();
         InitializeEmbeddings();
@@ -630,8 +639,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-            _onnxSession?.Dispose();
+        // The ONNX model is owned by the base (DocumentNeuralNetworkBase.OnnxModel) and disposed there.
         base.Dispose(disposing);
     }
 

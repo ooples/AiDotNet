@@ -145,18 +145,31 @@ public class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
-        Tensor<T> logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
         var probs = new Dictionary<string, T>();
-        double sumExp = 0;
-        var expValues = new double[_options.NumClasses];
-        for (int i = 0; i < _options.NumClasses && i < logits.Length; i++)
+        if (IsOnnxMode && OnnxEncoder is not null)
         {
-            expValues[i] = Math.Exp(NumOps.ToDouble(logits[i]));
-            sumExp += expValues[i];
+            // The ONNX encoder emits RAW logits, so softmax them here.
+            var logits = OnnxEncoder.Run(features);
+            double sumExp = 0;
+            var expValues = new double[_options.NumClasses];
+            for (int i = 0; i < _options.NumClasses && i < logits.Length; i++)
+            {
+                expValues[i] = Math.Exp(NumOps.ToDouble(logits[i]));
+                sumExp += expValues[i];
+            }
+            for (int i = 0; i < _options.NumClasses && i < _options.EmotionLabels.Length; i++)
+                probs[_options.EmotionLabels[i]] = NumOps.FromDouble(sumExp > 0 ? expValues[i] / sumExp : 1.0 / _options.NumClasses);
         }
-        for (int i = 0; i < _options.NumClasses && i < _options.EmotionLabels.Length; i++)
-            probs[_options.EmotionLabels[i]] = NumOps.FromDouble(sumExp > 0 ? expValues[i] / sumExp : 1.0 / _options.NumClasses);
+        else
+        {
+            // Native PredictCore ALREADY returns softmax probabilities (see PredictCore). Re-softmaxing
+            // them would distort the distribution (softmax of a probability vector is not that vector),
+            // so use the probabilities directly.
+            var p = Predict(features);
+            for (int i = 0; i < _options.NumClasses && i < _options.EmotionLabels.Length && i < p.Length; i++)
+                probs[_options.EmotionLabels[i]] = p[i];
+        }
 
         return probs;
     }

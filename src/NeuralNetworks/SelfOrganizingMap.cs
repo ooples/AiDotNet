@@ -93,6 +93,14 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new SelfOrganizingMapNNOptions();
         Options = _options;
+
+        // totalEpochs is a divisor in both the learning-rate decay (currentEpoch / totalEpochs) and the
+        // neighborhood-radius schedule (totalEpochs / log(mapArea)); a non-positive value makes those
+        // schedules divide by zero/negative and emit NaN/Infinity weights on the first update.
+        if (totalEpochs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(totalEpochs),
+                "Total training epochs must be greater than zero for SOM.");
+
         _inputDimension = architecture.InputSize;
 
         if (_inputDimension <= 0)
