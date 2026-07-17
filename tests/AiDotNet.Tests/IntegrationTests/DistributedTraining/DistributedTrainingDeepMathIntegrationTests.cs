@@ -1049,6 +1049,74 @@ public class DistributedTrainingDeepMathIntegrationTests
 
 
 
+    /// <summary>
+    /// INVARIANT (end-to-end automatic tensor parallelism): wrapping a real NeuralNetwork MLP in
+    /// TensorParallelModel across two ranks makes each rank build its OWN Megatron-partitioned model
+    /// (Column/Row weight shards) and run true compute-partitioned inference. The distributed Predict is
+    /// bit-identical (to tol) to the non-parallel model's Predict, and both ranks report they used the real
+    /// compute-partitioned path (not the replication fallback).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task TensorParallelModel_ComputePartitioned_PredictEqualsNonParallel()
+    {
+        await Task.Yield();
+        const int inputSize = 4, ffn = 8, outputSize = 3, batch = 2;
+        var combined = new Vector<double>(DeterministicVector(ffn * inputSize + ffn + outputSize * ffn + outputSize, 21));
+        var X = MatrixToTensor(DeterministicMatrix(batch, inputSize, 22), batch, inputSize);
+
+        var refModel = BuildMlpNetwork(inputSize, ffn, outputSize);
+        refModel.SetParameters(combined);
+        var yRef = refModel.Predict(X);
+
+        var envId = System.Guid.NewGuid().ToString();
+        var results = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>[2];
+        var errors = new Exception?[2];
+        var usedPartition = new bool[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                    backend.Initialize();
+                    var config = new ShardingConfiguration<double>(backend);
+                    var nn = BuildMlpNetwork(inputSize, ffn, outputSize);
+                    nn.SetParameters(combined);
+                    var tp = new TensorParallelModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(nn, config);
+                    results[rank] = tp.Predict(X);
+                    usedPartition[rank] = (tp.GetModelMetadata().Properties["ComputePartitioned"] as bool?) ?? false;
+                    backend.Shutdown();
+                }
+                catch (Exception ex) { errors[rank] = ex; }
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        Assert.True(errors[0] is null, "rank 0: " + errors[0]);
+        Assert.True(errors[1] is null, "rank 1: " + errors[1]);
+        Assert.True(usedPartition[0] && usedPartition[1], "both ranks must use the real compute-partitioned path, not the replication fallback");
+        for (int rr = 0; rr < 2; rr++)
+            for (int b = 0; b < batch; b++)
+                for (int o = 0; o < outputSize; o++)
+                    Assert.Equal(yRef[b, o], results[rr][b, o], 9);
+    }
+
+    private static AiDotNet.NeuralNetworks.NeuralNetwork<double> BuildMlpNetwork(int inputSize, int ffn, int outputSize)
+    {
+        var layers = new List<AiDotNet.Interfaces.ILayer<double>>
+        {
+            new AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<double>(inputSize, ffn, new AiDotNet.ActivationFunctions.ReLUActivation<double>()),
+            new AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<double>(ffn, outputSize, new AiDotNet.ActivationFunctions.IdentityActivation<double>()),
+        };
+        var arch = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: inputSize, outputSize: outputSize, layers: layers);
+        return new AiDotNet.NeuralNetworks.NeuralNetwork<double>(arch);
+    }
+
     private static double[,] DeterministicMatrix(int rows, int cols, int seed)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
