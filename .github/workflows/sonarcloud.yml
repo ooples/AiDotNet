@@ -292,6 +292,11 @@ jobs:
     needs: build
     timeout-minutes: 45
     if: ${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') }}
+    # Run tests under the repo's licensed key so save/load-heavy suites do not trip the unlicensed
+    # free-trial operation limit (TrialStateManager). The secrets context is only available in job/step
+    # env, not workflow-level env, so it is set here.
+    env:
+      AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
     strategy:
       fail-fast: false
       matrix:
