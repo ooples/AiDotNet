@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using AiDotNet.Helpers;
 using AiDotNet.Inference;
+using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.SpeculativeDecoding;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
 
@@ -43,6 +45,18 @@ internal class ContinuousBatcher<T> : IDisposable
     private readonly KVCache<T>? _kvCache;
     private readonly Func<Tensor<T>, Tensor<T>>? _model;
     private readonly IDraftModel<T>? _draftModelOverride;
+
+    // Paged incremental-decode path (preferred). When set, each sequence gets an isolated cache sequence in
+    // the SHARED PagedKVCache and is decoded incrementally via the model's ForwardWithContext — O(1) per step
+    // with real KV caching — instead of the stateless full-context recompute above. Falls back to _model when
+    // a model cannot build the paged path.
+    private readonly NeuralNetworkBase<T>? _incrementalModel;
+    private readonly PagedKVCache<T>? _pagedCache;
+    // Number of tokens whose KV is already cached for each active sequence (the next ForwardWithContext
+    // position), keyed by SequenceState.SequenceId.
+    private readonly ConcurrentDictionary<long, int> _pagedPositions = new();
+
+    private bool UsePagedPath => _incrementalModel is not null && _pagedCache is not null;
 
     private SpeculativeDecoder<T>? _speculativeDecoder;
     private readonly object _speculativeLock = new();
@@ -114,6 +128,36 @@ internal class ContinuousBatcher<T> : IDisposable
         _config = config;
         _model = model;
         _kvCache = kvCache;
+        _draftModelOverride = draftModel;
+
+        _scheduler = new BatchScheduler<T>(config.SchedulerConfig);
+        _pendingResults = new ConcurrentDictionary<long, TaskCompletionSource<GenerationResult<T>>>();
+        _incomingRequests = new ConcurrentQueue<SequenceState<T>>();
+    }
+
+    /// <summary>
+    /// Creates a continuous batcher that decodes each sequence incrementally against a SHARED
+    /// <see cref="PagedKVCache{T}"/> (paged KV, O(1) per step) using the model's
+    /// <see cref="NeuralNetworkBase{T}.PredictWithContext"/>. This is the fast path — concurrent sequences
+    /// share one optimized model and one paged cache, isolated by sequence id. Use this whenever the model
+    /// supports the paged incremental path; otherwise use the stateless <see cref="Func{T,TResult}"/> ctor.
+    /// </summary>
+    /// <param name="config">Batcher configuration.</param>
+    /// <param name="incrementalModel">The optimized, context-aware model (writes/reads KV per sequence id).</param>
+    /// <param name="pagedCache">The shared paged KV cache backing all sequences.</param>
+    /// <param name="draftModel">Optional draft model for speculative decoding.</param>
+    public ContinuousBatcher(
+        ContinuousBatcherConfig config,
+        NeuralNetworkBase<T> incrementalModel,
+        PagedKVCache<T> pagedCache,
+        IDraftModel<T>? draftModel = null)
+    {
+        Guard.NotNull(config);
+        Guard.NotNull(incrementalModel);
+        Guard.NotNull(pagedCache);
+        _config = config;
+        _incrementalModel = incrementalModel;
+        _pagedCache = pagedCache;
         _draftModelOverride = draftModel;
 
         _scheduler = new BatchScheduler<T>(config.SchedulerConfig);
@@ -369,15 +413,15 @@ internal class ContinuousBatcher<T> : IDisposable
         sequence.GenerationStartedAt = DateTime.UtcNow;
 
         int? firstToken = null;
-        if (_model != null && sequence.TokenIds.Count > 0)
+        if (UsePagedPath && sequence.TokenIds.Count > 0)
         {
-            // Create input tensor from prompt tokens
+            firstToken = RunPagedPrefill(sequence);
+        }
+        else if (_model != null && sequence.TokenIds.Count > 0)
+        {
+            // Stateless full-context prefill (fallback for models without the paged incremental path).
             var inputTokens = CreateInputTensor(sequence.TokenIds);
-
-            // Run model forward pass for all prompt tokens
             var logits = _model(inputTokens);
-
-            // Get next token from logits
             int nextToken = SampleFromLogits(logits, sequence.Request);
             sequence.AppendToken(nextToken);
             firstToken = nextToken;
@@ -388,8 +432,26 @@ internal class ContinuousBatcher<T> : IDisposable
         return firstToken;
     }
 
+    // Paged prefill: write the whole prompt's KV into this sequence's paged cache in one context-aware forward,
+    // then sample the first token. Positions 0..promptLen-1 are now cached; decode continues from promptLen.
+    private int? RunPagedPrefill(SequenceState<T> sequence)
+    {
+        long seqId = sequence.SequenceId;
+        int promptLen = sequence.TokenIds.Count;
+        _pagedCache!.AllocateSequence(seqId, promptLen);
+
+        var input = CreateInputTensor(sequence.TokenIds);
+        var logits = _incrementalModel!.PredictWithContext(input, new InferenceForwardContext(seqId, 0));
+        _pagedPositions[seqId] = promptLen;
+
+        int nextToken = SampleFromLogits(logits, sequence.Request);
+        sequence.AppendToken(nextToken);
+        return nextToken;
+    }
+
     private IReadOnlyList<int> RunDecodeStep(SequenceState<T> sequence)
     {
+        if (UsePagedPath) return RunPagedDecodeStep(sequence);
         if (_model == null) return Array.Empty<int>();
 
         // Forward the full running sequence (prompt + tokens generated so far) so the model attends
@@ -411,8 +473,27 @@ internal class ContinuousBatcher<T> : IDisposable
         return new[] { nextToken };
     }
 
+    // Paged decode: forward ONLY the last token against the cached KV for this sequence (O(1) per step).
+    private IReadOnlyList<int> RunPagedDecodeStep(SequenceState<T> sequence)
+    {
+        long seqId = sequence.SequenceId;
+        int position = _pagedPositions.TryGetValue(seqId, out var p) ? p : sequence.PromptLength;
+        int lastToken = sequence.TokenIds[sequence.TokenIds.Count - 1];
+
+        var input = CreateInputTensor(new List<int> { lastToken });
+        var logits = _incrementalModel!.PredictWithContext(input, new InferenceForwardContext(seqId, position));
+        _pagedPositions[seqId] = position + 1;
+
+        int nextToken = SampleFromLogits(logits, sequence.Request);
+        sequence.AppendToken(nextToken);
+        return new[] { nextToken };
+    }
+
     private IReadOnlyList<int> RunDecodeStepSpeculative(SequenceState<T> sequence)
     {
+        // Speculative decoding on the paged incremental path is not wired yet (Phase 2); fall back to the
+        // paged single-token decode, which the speculative target forward here (_model) cannot serve anyway.
+        if (UsePagedPath) return RunDecodeStep(sequence);
         if (_model == null) return Array.Empty<int>();
         if (!ShouldSpeculateForThisIteration()) return RunDecodeStep(sequence);
 
@@ -844,6 +925,13 @@ internal class ContinuousBatcher<T> : IDisposable
 
     private void CompleteSequence(SequenceState<T> sequence)
     {
+        // Release this sequence's paged KV blocks (no-op on the stateless path).
+        if (UsePagedPath)
+        {
+            _pagedCache!.FreeSequence(sequence.SequenceId);
+            _pagedPositions.TryRemove(sequence.SequenceId, out _);
+        }
+
         sequence.Complete(sequence.FinishReason ?? StopReason.MaxLength);
         _scheduler.CompleteSequence(sequence);
         _totalRequestsProcessed++;
