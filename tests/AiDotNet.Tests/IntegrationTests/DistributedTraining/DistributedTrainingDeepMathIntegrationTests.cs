@@ -637,6 +637,98 @@ public class DistributedTrainingDeepMathIntegrationTests
     }
 
     /// <summary>
+    /// INVARIANT (AUTOMATIC tensor parallelism): the TensorParallelLayerPartitioner rewrites a plain MLP
+    /// built from two FullyConnectedLayers into ColumnParallel → RowParallel Megatron layers WITHOUT a
+    /// manual model rewrite, and the auto-partitioned forward is bit-identical (to tol) to the original
+    /// non-parallel forward across two ranks. This proves the auto-substitution is numerically transparent
+    /// (real compute partitioning, not the replication fallback) AND that the weight extraction order is
+    /// correct. The first layer's ReLU is applied on each rank's output-column slice, exercising the
+    /// element-wise-activation-on-split property the Megatron MLP relies on.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task AutoTensorParallel_PartitionedMLP_EqualsNonParallelMLP()
+    {
+        await Task.Yield();
+        const int batch = 2, inputSize = 4, ffn = 8, outputSize = 3;
+        var fc1Params = new Vector<double>(DeterministicVector(ffn * inputSize + ffn, 11));
+        var fc2Params = new Vector<double>(DeterministicVector(outputSize * ffn + outputSize, 12));
+        var Xm = DeterministicMatrix(batch, inputSize, 13);
+        var X = MatrixToTensor(Xm, batch, inputSize);
+
+        // Non-parallel reference, HAND-COMPUTED (deliberately not by running FullyConnectedLayer.Forward:
+        // the auto-partition path already exercises the real layers, and running an extra layer forward on
+        // the test thread would be comparing the partitioner against itself). FullyConnectedLayer stores
+        // weights [out, in] then bias [out]; forward is Y = act(X·Wᵀ + b). fc1 uses ReLU, fc2 identity.
+        var yRef = new double[batch, outputSize];
+        for (int b = 0; b < batch; b++)
+        {
+            var h = new double[ffn];
+            for (int f = 0; f < ffn; f++)
+            {
+                double acc = fc1Params[ffn * inputSize + f]; // bias1[f]
+                for (int i = 0; i < inputSize; i++) acc += Xm[b, i] * fc1Params[f * inputSize + i];
+                h[f] = acc > 0 ? acc : 0.0; // ReLU
+            }
+            for (int o = 0; o < outputSize; o++)
+            {
+                double acc = fc2Params[outputSize * ffn + o]; // bias2[o]
+                for (int f = 0; f < ffn; f++) acc += h[f] * fc2Params[o * ffn + f];
+                yRef[b, o] = acc;
+            }
+        }
+
+        var envId = System.Guid.NewGuid().ToString();
+        var results = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>[2];
+        var errors = new Exception?[2];
+        var tasks = new List<Task>();
+        for (int r = 0; r < 2; r++)
+        {
+            int rank = r;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    var backend = new InMemoryCommunicationBackend<double>(rank, 2, envId);
+                    backend.Initialize();
+                    var (fc1, fc2) = BuildMlp(fc1Params, fc2Params, inputSize, ffn, outputSize);
+                    var part = AiDotNet.DistributedTraining.Layers.TensorParallelLayerPartitioner<double>.Partition(
+                        new List<AiDotNet.Interfaces.ILayer<double>> { fc1, fc2 }, backend);
+
+                    // The consecutive linear pair must be recognized as a Megatron MLP (2 partitioned, 0 replicated).
+                    Assert.Equal(2, part.PartitionedLinearCount);
+                    Assert.Equal(0, part.ReplicatedLayerCount);
+
+                    var y = part.Layers[1].Forward(part.Layers[0].Forward(X));
+                    results[rank] = y;
+                    backend.Shutdown();
+                }
+                catch (Exception ex) { errors[rank] = ex; }
+            }));
+        }
+        await Task.WhenAll(tasks);
+
+        Assert.True(errors[0] is null, "rank 0: " + errors[0]);
+        Assert.True(errors[1] is null, "rank 1: " + errors[1]);
+        for (int rr = 0; rr < 2; rr++)
+            for (int b = 0; b < batch; b++)
+                for (int o = 0; o < outputSize; o++)
+                    Assert.Equal(yRef[b, o], results[rr][b, o], 9);
+    }
+
+    private static (AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<double> fc1,
+                    AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<double> fc2) BuildMlp(
+        Vector<double> p1, Vector<double> p2, int inputSize, int ffn, int outputSize)
+    {
+        var fc1 = new AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<double>(
+            inputSize, ffn, new AiDotNet.ActivationFunctions.ReLUActivation<double>());
+        fc1.SetParameters(p1);
+        var fc2 = new AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<double>(
+            ffn, outputSize, new AiDotNet.ActivationFunctions.IdentityActivation<double>());
+        fc2.SetParameters(p2);
+        return (fc1, fc2);
+    }
+
+    /// <summary>
     /// INVARIANT (ZeRO Stage-3 / FSDP residency, Zhao et al. 2023): a Stage3ShardedLinear where each of
     /// two ranks stores only HALF the flat weight, materializing the full weight just-in-time via
     /// AllGather in Forward, produces output bit-identical (to tol) to the full non-sharded linear
@@ -953,6 +1045,9 @@ public class DistributedTrainingDeepMathIntegrationTests
 
         backend.Shutdown();
     }
+
+
+
 
     private static double[,] DeterministicMatrix(int rows, int cols, int seed)
     {
