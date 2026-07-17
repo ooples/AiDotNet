@@ -756,6 +756,12 @@ internal class ContinuousBatcher<T> : IDisposable
             lastLogits[i] /= sumExp;
         }
 
+        // Apply min-p: zero out tokens below minP × the top token's probability, then renormalize.
+        if (request.MinP > 0.0f)
+        {
+            ApplyMinP(lastLogits, request.MinP);
+        }
+
         // Apply top-p (nucleus) sampling
         if (request.TopP < 1.0f)
         {
@@ -780,6 +786,20 @@ internal class ContinuousBatcher<T> : IDisposable
         }
 
         return vocabSize - 1; // Fallback to last token
+    }
+
+    private static void ApplyMinP(float[] probs, float minP)
+    {
+        float max = 0f;
+        for (int i = 0; i < probs.Length; i++) if (probs[i] > max) max = probs[i];
+        float threshold = minP * max;
+        float sum = 0f;
+        for (int i = 0; i < probs.Length; i++)
+        {
+            if (probs[i] < threshold) probs[i] = 0f;
+            sum += probs[i];
+        }
+        if (sum > 0f) for (int i = 0; i < probs.Length; i++) probs[i] /= sum;
     }
 
     private static void ApplyTopP(float[] probs, float topP)

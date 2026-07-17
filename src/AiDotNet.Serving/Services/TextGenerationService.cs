@@ -20,10 +20,16 @@ namespace AiDotNet.Serving.Services;
 /// background loop per request.
 /// </para>
 /// </remarks>
-public sealed class TextGenerationService : ITextGenerationService
+public sealed class TextGenerationService : ITextGenerationService, IDisposable
 {
     private readonly IModelRepository _modelRepository;
     private readonly ILogger<TextGenerationService> _logger;
+
+    // One shared, continuously-running ContinuousBatcher per (model, numeric type). Concurrent requests to a
+    // model are enqueued into the SAME batcher so they batch together in-flight (the actual throughput win),
+    // instead of each request spinning up its own single-sequence engine. Keyed by "modelName|T".
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IDisposable> _batchers = new();
+    private volatile bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TextGenerationService"/> class.
@@ -36,6 +42,41 @@ public sealed class TextGenerationService : ITextGenerationService
         _modelRepository = modelRepository;
         Guard.NotNull(logger);
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Gets (or lazily creates and starts) the shared continuous batcher for a model. The batcher runs a
+    /// background loop, so requests submitted from different HTTP calls are scheduled into the same in-flight
+    /// batch. Built over the model's stateless token→logits forward.
+    /// </summary>
+    private ContinuousBatcher<T> GetOrCreateBatcher<T>(string modelName, IServableGenerativeModel<T> model, int eosTokenId)
+    {
+        string key = modelName + "|" + typeof(T).FullName;
+        var batcher = (ContinuousBatcher<T>)_batchers.GetOrAdd(key, _ =>
+        {
+            var config = new ContinuousBatcherConfig
+            {
+                AutoStart = true, // background run loop → cross-request in-flight batching
+                EosTokenId = eosTokenId,
+            };
+            var created = new ContinuousBatcher<T>(config, tokens => model.Forward(tokens));
+            created.Start();
+            return created;
+        });
+        return batcher;
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        foreach (var batcher in _batchers.Values)
+        {
+            try { batcher.Dispose(); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Failed to dispose a continuous batcher."); }
+        }
+        _batchers.Clear();
     }
 
     /// <inheritdoc/>
@@ -100,60 +141,31 @@ public sealed class TextGenerationService : ITextGenerationService
         }
 
         int eosTokenId = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId;
-        double temperature = request.Temperature;
-        double topP = request.TopP;
-        int topK = request.TopK;
-        double minP = request.MinP;
-        // Seeded per request id when present so greedy stays deterministic and sampling is reproducible.
-        var rng = new Random(request.RequestId?.GetHashCode() ?? 0);
+        var batcher = GetOrCreateBatcher(modelName, gm, eosTokenId);
 
-        if (gm.SupportsIncrementalGeneration)
+        // Bridge the batcher's push-based per-token callback to this pull-based enumerable so streamed HTTP
+        // responses drain tokens as the shared batch produces them. The batcher owns sampling
+        // (temperature / top-p / top-k / min-p) and scheduling across all concurrent sequences.
+        var tokens = new System.Collections.Concurrent.BlockingCollection<int>();
+        var genRequest = new GenerationRequest<T>
         {
-            using var session = gm.BeginGeneration(request.InputTokens);
-            int prefillStart = session.CachedPromptTokens;
-            int suffixLength = request.InputTokens.Length - prefillStart;
+            PromptTokenIds = new List<int>(request.InputTokens),
+            MaxNewTokens = request.MaxNewTokens,
+            Temperature = (float)request.Temperature,
+            TopP = (float)request.TopP,
+            TopK = request.TopK,
+            MinP = (float)request.MinP,
+            OnTokenGenerated = tok => { try { tokens.Add(tok); } catch (InvalidOperationException) { /* stream closed */ } },
+        };
 
-            Tensor<T> logits;
-            if (gm.SupportsBatchedPrefill && suffixLength > 1)
-            {
-                var suffix = new int[suffixLength];
-                for (int i = 0; i < suffixLength; i++)
-                {
-                    suffix[i] = request.InputTokens[prefillStart + i];
-                }
-                logits = session.Forward(TokensToTensor<T>(suffix));
-            }
-            else
-            {
-                logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[prefillStart] }));
-                for (int i = prefillStart + 1; i < request.InputTokens.Length; i++)
-                {
-                    logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[i] }));
-                }
-            }
+        var task = batcher.GenerateAsync(genRequest, ct);
+        // Terminate the stream when generation finishes (completed, cancelled, or faulted).
+        _ = task.ContinueWith(_ => { try { tokens.CompleteAdding(); } catch { /* already completed */ } },
+            System.Threading.Tasks.TaskScheduler.Default);
 
-            for (int step = 0; step < request.MaxNewTokens; step++)
-            {
-                if (ct.IsCancellationRequested) yield break;
-                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, minP, rng);
-                if (next == eosTokenId) yield break;
-                yield return next;
-                logits = session.Forward(TokensToTensor<T>(new[] { next }));
-            }
-        }
-        else
+        foreach (int tok in tokens.GetConsumingEnumerable(ct))
         {
-            // Stateless fallback: re-forward the full growing context each step.
-            var context = new List<int>(request.InputTokens);
-            for (int step = 0; step < request.MaxNewTokens; step++)
-            {
-                if (ct.IsCancellationRequested) yield break;
-                var logits = gm.Forward(TokensToTensor<T>(context));
-                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, minP, rng);
-                if (next == eosTokenId) yield break;
-                yield return next;
-                context.Add(next);
-            }
+            yield return tok;
         }
     }
 

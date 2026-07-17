@@ -301,6 +301,11 @@ public class GenerationRequest<T>
     public int TopK { get; set; } = 0;
 
     /// <summary>
+    /// Min-p sampling threshold: drop tokens below this fraction of the top token's probability (0 = disabled).
+    /// </summary>
+    public float MinP { get; set; } = 0.0f;
+
+    /// <summary>
     /// Repetition penalty (1.0 = no penalty).
     /// </summary>
     public float RepetitionPenalty { get; set; } = 1.0f;
