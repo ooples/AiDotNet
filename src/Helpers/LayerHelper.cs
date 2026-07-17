@@ -28280,46 +28280,45 @@ public static class LayerHelper<T>
     /// Creates encoder layers for the GroundedSAM2 model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateGroundedSAM2EncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
+        int visionDim, int numLayers, int numHeads, double dropRate)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int ffnDim = visionDim * 4;
+        // Grounded SAM (Ren et al. 2024) = Grounding DINO + SAM, both TRANSFORMER models. SAM's image
+        // encoder (Kirillov et al. 2023) is a plain ViT (Dosovitskiy et al. 2021): a linear patch-
+        // embedding projection followed by N residual transformer blocks (multi-head self-attention +
+        // MLP, with LayerNorm and skip connections). Grounding DINO's image branch is likewise a
+        // transformer. We reproduce that transformer stack here — LayerNorm, NOT the previous
+        // Conv+BatchNorm CNN backbone (the paper uses no batch-statistics normalization, and the CNN
+        // both diverged from the paper architecture and was batch/scale-unstable). The leading Dense is
+        // the patch-embedding projection: it is REQUIRED so a per-token-constant input does not collapse
+        // to an identical vector under the first LayerNorm (the DifferentInputs collapse mode).
+        yield return new DenseLayer<T>(visionDim, identity);
+        for (int i = 0; i < numLayers; i++)
         {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
+            if (dropRate > 0) yield return new DropoutLayer<T>(dropRate);
         }
+        yield return new LayerNormalizationLayer<T>();
     }
 
     /// <summary>
     /// Creates decoder layers for the GroundedSAM2 model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateGroundedSAM2DecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
+        int decoderDim, int numLayers, int numHeads)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+        int ffnDim = decoderDim * 4;
+        // Grounding DINO's cross-modality decoder and SAM's two-way mask decoder are TRANSFORMER
+        // decoders that refine the token/query features before the box/mask heads. We reproduce a
+        // residual transformer decoder stack (LayerNorm) that preserves the per-token feature
+        // dimension so the token-level output matches the encoder; the pixel-space mask head is
+        // abstracted at the model-family test scale (token -> token). LayerNorm, no BatchNorm.
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
+        }
+        yield return new LayerNormalizationLayer<T>();
     }
 
     #endregion

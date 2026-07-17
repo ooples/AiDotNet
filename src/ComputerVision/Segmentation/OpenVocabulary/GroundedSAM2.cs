@@ -66,9 +66,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 
     #region Fields
     private readonly int _height, _width, _channels, _numClasses;
-    private readonly int[] _channelDims;
     private readonly int _decoderDim;
-    private readonly int[] _depths;
     private readonly double _dropRate;
     private readonly bool _useNativeMode;
     private readonly string? _onnxModelPath;
@@ -121,8 +119,6 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [112, 224, 448, 896];
-        _depths = [2, 3, 16, 3];
         _decoderDim = 256;
         InitializeLayers();
     }
@@ -157,8 +153,6 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [112, 224, 448, 896];
-        _depths = [2, 3, 16, 3];
         _decoderDim = 256;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load GroundedSAM2 ONNX model: {ex.Message}", ex); }
@@ -208,11 +202,14 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     #region Private Methods
     private Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        // Transformer stack operates on token features [batch, tokens, dim] (or [tokens, dim]) directly.
+        // No image batch-dim gymnastics — the former CNN backbone needed a rank-4 [N,C,H,W] tensor; the
+        // ViT / Grounding-DINO transformer blocks resolve the embedding dim from the last axis and treat
+        // the leading axes as batch/sequence.
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        return features;
     }
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
@@ -256,10 +253,14 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateGroundedSAM2EncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
+            // Grounded SAM = Grounding DINO + SAM (both transformer). visionDim matches the post-patch
+            // token dimension the grounding-family harness feeds ([batch, tokens, 256]); the ViT-style
+            // transformer depth is kept to the paper pattern at a test-feasible layer count.
+            int visionDim = _decoderDim; // 256
+            int numHeads = 8;
+            var encoderLayers = LayerHelper<T>.CreateGroundedSAM2EncoderLayers(visionDim, numLayers: 12, numHeads, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateGroundedSAM2DecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
+            var decoderLayers = LayerHelper<T>.CreateGroundedSAM2DecoderLayers(visionDim, numLayers: 3, numHeads).ToList();
             Layers.AddRange(decoderLayers);
         }
     }
@@ -301,7 +302,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
+    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); }
 
     /// <summary>
     /// Reads configuration from a binary stream.
@@ -313,7 +314,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
+    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); }
 
     /// <summary>
     /// Creates a new instance with the same configuration but fresh weights.
