@@ -184,6 +184,12 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
                     T varI = cov[i, i];
                     if (NumOps.GreaterThan(varI, NumOps.FromDouble(1e-10)))
                     {
+                        // Edge weights are computed from the STANDARDIZED covariance (correlation)
+                        // on purpose: DiBS returns a causal ADJACENCY matrix whose edge strengths
+                        // must be scale-invariant (a property of the joint distribution, not the
+                        // measurement units) — required by DiscoverStructure_IsInvariantToDataScaling
+                        // and the relative-magnitude invariants (IndependentVariablesHaveWeakEdges,
+                        // etc.). This is NOT an OLS regression coefficient in original units.
                         T weight = NumOps.Divide(cov[i, j], varI);
                         if (NumOps.GreaterThan(NumOps.Abs(weight), weightThreshold))
                             result[i, j] = weight;
