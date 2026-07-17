@@ -82,65 +82,20 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
             if (inputData == null)
                 throw new ArgumentNullException(nameof(inputData));
 
-            var gradientOptimizer = (IGradientBasedOptimizer<T, TInput, TOutput>)WrappedOptimizer;
+            // When cross-rank synchronization is off, fall back to a plain local step.
+            if (!Config.AutoSyncGradients)
+                return RunWrappedOptimizerStep(inputData);
 
-            // Populate InitialSolution from wrapped optimizer's model if not already set
-            if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
-            {
-                inputData.InitialSolution = baseOptimizer.Model.Clone();
-            }
-
-            // CRITICAL: Save parameters BEFORE local optimization
-            Vector<T>? savedParameters = null;
-            if (Config.AutoSyncGradients && inputData.InitialSolution != null)
-            {
-                savedParameters = InterfaceGuard.Parameterizable(inputData.InitialSolution).GetParameters();
-            }
-
-            // Step 1: Optimize locally to compute gradients
-            var localResult = WrappedOptimizer.Optimize(inputData);
-
-            // Step 2: ZeRO-2 gradient sharding with ReduceScatter
-            if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)
-            {
-                var localGradients = gradientOptimizer.LastComputedGradients;
-
-                if (localGradients != null && localGradients.Length > 0)
-                {
-                    // ZeRO-2 CORE: ReduceScatter averages gradients AND scatters them
-                    // Each rank receives only its shard of the averaged gradients
-                    var myGradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
-
-                    // Calculate which parameter shard this rank owns
-                    int totalParams = savedParameters.Length;
-                    int shardSize = myGradientShard.Length;
-                    int myShardStart = Rank * shardSize;
-
-                    // Extract this rank's parameter shard
-                    var myParamShard = new T[shardSize];
-                    for (int i = 0; i < shardSize && (myShardStart + i) < totalParams; i++)
-                    {
-                        myParamShard[i] = savedParameters[myShardStart + i];
-                    }
-                    var myParamShardVector = new Vector<T>(myParamShard);
-
-                    // Step 3: Update ONLY this rank's shard using the gradient shard
-                    // This is where ZeRO-2 saves memory - only updating 1/N of parameters
-                    var updatedShard = gradientOptimizer.UpdateParameters(myParamShardVector, myGradientShard);
-
-                    // Step 4: AllGather to reconstruct full parameters from all shards
-                    // Each rank contributes its updated shard, everyone gets full parameter vector
-                    var fullParameters = Config.CommunicationBackend.AllGather(updatedShard);
-
-                    // Step 5: Create model with reconstructed full parameters
-                    var finalModel = InterfaceGuard.Parameterizable(localResult.BestSolution).WithParameters(fullParameters);
-                    localResult.BestSolution = finalModel;
-                }
-            }
-
-            SynchronizeOptimizerState();
-
-            return localResult;
+            // ZeRO Stage-2 (Rajbhandari et al. 2020): gradients AND optimizer state are PARTITIONED.
+            // RunShardedZeroStep with shardGradients:true computes gradients backward-only (no full
+            // update), ReduceScatters them so each rank holds ONLY its averaged gradient shard (the
+            // full averaged gradient is never materialized on any rank — the memory win over ZeRO-1),
+            // updates just this rank's parameter shard with the wrapped optimizer (whose Adam m/v state
+            // is therefore sized to the shard), and AllGathers the updated shards into the full vector.
+            // CpuOffloadOptimizer is scoped to the update; CpuOffloadGradients drains the shard to CPU
+            // before it is read; CpuOffloadParams drops the GPU param cache after write-back.
+            var result = RunShardedZeroStep(inputData, shardGradients: true);
+            return result;
         }
         finally
         {
@@ -150,17 +105,17 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported for ZeRO-2 (same contract as ZeRO-1/FSDP): optimizer state is PARTITIONED. Gradients
+    /// are ReduceScattered so each rank holds only its shard, and the wrapped optimizer's UpdateParameters
+    /// runs on ONLY that shard, so its Adam m/v state is advanced solely for this rank's parameters. There
+    /// is no replicated cross-rank state to synchronize; returning silently would mislead the caller.
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // In ZeRO-2, both optimizer states and gradients are sharded
-        // Each process:
-        // 1. Owns a shard of optimizer state
-        // 2. Receives its shard of reduced gradients via ReduceScatter
-        // 3. Updates only its parameter shard
-        // 4. AllGather updated parameters for next forward pass
-
-        // Framework placeholder - full implementation requires optimizer integration
-    }
+        => throw new NotSupportedException(
+            "ZeRO-2 optimizer state is partitioned across ranks (each rank owns only its shard's Adam " +
+            "state); there is no replicated state to synchronize, so explicit state synchronization is " +
+            "neither required nor supported.");
 
     /// <inheritdoc/>
     public override byte[] Serialize()

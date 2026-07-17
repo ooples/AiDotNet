@@ -71,6 +71,13 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
     private readonly int _maxStaleness;
 
     /// <summary>
+    /// Maximum number of steps a worker may run ahead of the slowest worker before it must synchronize
+    /// (the Stale-Synchronous Parallel staleness bound, Ho et al. 2013). 0 means synchronize every step,
+    /// which reduces async SGD exactly to synchronous gradient SGD.
+    /// </summary>
+    public int MaxStaleness => _maxStaleness;
+
+    /// <summary>
     /// Creates an async SGD optimizer.
     /// </summary>
     /// <param name="wrappedOptimizer">The optimizer to wrap with async capabilities</param>
@@ -82,6 +89,17 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
         int allowStaleness = 0)
         : base(wrappedOptimizer, config)
     {
+        // Async SGD's synchronized path applies averaged GRADIENTS via ApplyGradients, so a non-gradient
+        // optimizer cannot participate. Reject it at construction instead of silently skipping the
+        // distributed gradient synchronization at training time.
+        if (wrappedOptimizer is not IGradientBasedOptimizer<T, TInput, TOutput>)
+            throw new ArgumentException(
+                "Async SGD requires a gradient-based optimizer (IGradientBasedOptimizer).",
+                nameof(wrappedOptimizer));
+
+        if (allowStaleness < 0)
+            throw new ArgumentOutOfRangeException(nameof(allowStaleness), "Staleness bound must be non-negative.");
+
         _maxStaleness = allowStaleness;
     }
 
@@ -91,32 +109,21 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
         if (inputData == null)
             throw new ArgumentNullException(nameof(inputData));
 
-        // NO barrier at start - async operation!
+        // NO barrier — async SGD deliberately does not synchronize workers (its defining property).
 
-        // Optimize locally without waiting
-        var result = WrappedOptimizer.Optimize(inputData);
+        // When cross-rank synchronization is off, fall back to a plain local step.
+        if (!Config.AutoSyncGradients)
+            return RunWrappedOptimizerStep(inputData);
 
-        // Asynchronous parameter update
-        if (Config.AutoSyncGradients && result.BestSolution != null)
-        {
-            // In true async SGD:
-            // 1. Push gradients to parameter server (non-blocking)
-            // 2. Pull updated parameters (may be from other workers' updates)
-            // 3. Continue immediately without waiting
-
-            // For this framework implementation, we provide simplified async pattern
-            // Production would use parameter server or async AllReduce
-            var parameters = InterfaceGuard.Parameterizable(result.BestSolution).GetParameters();
-
-            // Simulate async update - in production, this would be non-blocking
-            Config.CommunicationBackend.AllReduce(parameters, ReductionOperation.Average);
-
-            InterfaceGuard.Parameterizable(result.BestSolution).SetParameters(parameters);
-        }
-
-        // NO barrier at end - continue immediately!
-
-        return result;
+        // Downpour / parameter-server async SGD (Dean et al. 2012; Stale-Synchronous Parallel, Ho et al.
+        // 2013): each worker computes a GRADIENT and pushes it to the server, which applies the combined
+        // update — gradient-based, NOT parameter averaging (parameter averaging is a different algorithm:
+        // EASGD / model averaging). RunDataParallelStep does exactly the per-step version: backward-only
+        // gradient, combine, single update from the original parameters. The asynchrony and the up-to-
+        // MaxStaleness stale reads are a property of the RUNTIME; the synchronous InMemory backend enforces
+        // staleness 0, under which async SGD reduces exactly to synchronous gradient SGD — the limit
+        // implemented here (see ShouldSync for the bounded-staleness barrier a real async runtime applies).
+        return RunDataParallelStep(inputData, ReductionOperation.Average);
     }
 
     /// <inheritdoc/>
@@ -133,13 +140,17 @@ public class AsyncSGDOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TIn
     /// <returns>True if should synchronize at this iteration</returns>
     public bool ShouldSync(int iteration)
     {
-        // Some async implementations do periodic sync every N iterations
-        // to prevent too much drift
-        if (_maxStaleness == 0)
-            return true; // Always sync (becomes sync SGD)
+        if (iteration < 0)
+            throw new ArgumentOutOfRangeException(nameof(iteration), "Iteration must be non-negative.");
 
-        // Framework pattern - could implement periodic sync
-        return false;
+        // Stale-Synchronous Parallel bounded-staleness barrier (Ho et al. 2013): a worker may run ahead by
+        // at most _maxStaleness steps before it MUST synchronize, so no replica ever reads parameters more
+        // than _maxStaleness steps stale. staleness 0 => synchronize every step (reduces to synchronous
+        // SGD). staleness s>0 => synchronize once every (s+1) steps, which bounds the maximum drift to s.
+        if (_maxStaleness == 0)
+            return true;
+
+        return (iteration % (_maxStaleness + 1)) == 0;
     }
 
     /// <inheritdoc/>

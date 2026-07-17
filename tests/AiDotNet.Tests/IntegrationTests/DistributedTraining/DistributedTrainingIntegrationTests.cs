@@ -1601,6 +1601,81 @@ public class DistributedTrainingIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task DDPModel_Train_WithCpuOffloadGradients_UpdatesParametersThroughOffloadPath()
+    {
+        await Task.Yield();
+        // End-to-end integration for the CpuOffloadGradients runtime path. Train() routes through
+        // DDPModel.SynchronizeGradients -> OffloadGradientsToCpu(_computedGradients) -> AllReduce ->
+        // ApplyGradients. We assert OBSERVABLE BEHAVIOUR, not just no-throw: the parameters must
+        // actually move, and move AGAINST the (strictly positive) gradient. If the offload path
+        // silently no-op'd (materialized nothing / never reduced), the parameters would be unchanged.
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend)
+        {
+            AutoSyncGradients = true,
+            CpuOffloadGradients = true,
+        };
+        var model = new MockDistributedModel(8);
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var target = new Vector<double>(new double[] { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 });
+
+        var before = model.GetParameters();
+        ddpModel.Train(input, target);
+        var after = model.GetParameters();
+
+        // The offloaded-gradient training step produced a real update in the correct direction.
+        bool anyChanged = false;
+        for (int i = 0; i < before.Length; i++)
+        {
+            if (after[i] != before[i]) anyChanged = true;
+            Assert.True(after[i] <= before[i],
+                $"param[{i}] must not increase under a positive gradient: {before[i]} -> {after[i]}");
+        }
+        Assert.True(anyChanged, "CpuOffloadGradients training path left every parameter unchanged (silent no-op).");
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FSDPModel_Train_WithCpuOffloadFull_UpdatesParametersAndInvalidatesCache()
+    {
+        await Task.Yield();
+        // End-to-end integration for Stage-3-full (all three flags on). FSDPModel.Train hits both
+        // OffloadGradientsToCpu (before AllReduce) and OffloadParamsToCpu (after the update). We assert
+        // the parameters actually change (real update through the fully-offloaded path) AND that a
+        // subsequent Predict reflects the UPDATED parameters — proving OffloadParamsToCpu invalidated
+        // the gather cache rather than serving pre-update weights.
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = ShardingConfiguration<double>.CreateForZeROOffloadFull(backend);
+        var model = new MockDistributedModel(8);
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var target = new Vector<double>(new double[] { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 });
+
+        var before = model.GetParameters();
+        fsdpModel.Train(input, target);
+        var after = model.GetParameters();
+
+        bool anyChanged = false;
+        for (int i = 0; i < before.Length; i++)
+        {
+            if (after[i] != before[i]) anyChanged = true;
+            Assert.True(after[i] <= before[i],
+                $"param[{i}] must not increase under a positive gradient: {before[i]} -> {after[i]}");
+        }
+        Assert.True(anyChanged, "CpuOffloadFull training path left every parameter unchanged (silent no-op).");
+
+        backend.Shutdown();
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task DDPModel_WithParameters_CreatesNewModel()
     {
         var envId = Guid.NewGuid().ToString();
@@ -2094,16 +2169,19 @@ public class DistributedTrainingIntegrationTests
     /// aggregators call InterfaceGuard.Parameterizable(client) at runtime
     /// and require the closed type to advertise IParameterizable.
     /// </summary>
-    private class MockDistributedModel : IFullModel<double, Vector<double>, Vector<double>>,
-        IParameterizable<double, Vector<double>, Vector<double>>
+    internal class MockDistributedModel : IFullModel<double, Vector<double>, Vector<double>>,
+        IParameterizable<double, Vector<double>, Vector<double>>,
+        IGradientComputable<double, Vector<double>, Vector<double>>
     {
         private Vector<double> _parameters;
         private Vector<double>? _gradients;
         private readonly int _parameterCount;
+        private readonly double _gradientScale;
 
-        public MockDistributedModel(int parameterCount)
+        public MockDistributedModel(int parameterCount, double gradientScale = 1.0)
         {
             _parameterCount = parameterCount;
+            _gradientScale = gradientScale;
             _parameters = new Vector<double>(Enumerable.Range(0, parameterCount).Select(i => (double)i * 0.1).ToArray());
         }
 
@@ -2132,11 +2210,13 @@ public class DistributedTrainingIntegrationTests
 
         public Vector<double> ComputeGradients(Vector<double> input, Vector<double> expectedOutput, ILossFunction<double>? lossFunction = null)
         {
-            // Mock gradient computation
+            // Mock gradient computation, scaled by _gradientScale so multi-rank tests can give each
+            // rank a DIFFERENT gradient (e.g. scale 1 vs 2) — then a broken/removed collective no longer
+            // yields the same result as a correct reduce.
             var gradients = new double[_parameters.Length];
             for (int i = 0; i < gradients.Length; i++)
             {
-                gradients[i] = 0.01 * (i + 1);
+                gradients[i] = 0.01 * (i + 1) * _gradientScale;
             }
             _gradients = new Vector<double>(gradients);
             return _gradients;
@@ -2231,7 +2311,9 @@ public class DistributedTrainingIntegrationTests
 
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)
         {
-            var newModel = new MockDistributedModel(_parameterCount);
+            // Preserve the rank gradient scale — a copy that reset it to the default would silently restore
+            // identical gradients across ranks and invalidate the collective (per-rank gradient) tests.
+            var newModel = new MockDistributedModel(_parameterCount, _gradientScale);
             newModel.SetParameters(parameters);
             return newModel;
         }
@@ -2259,7 +2341,9 @@ public class DistributedTrainingIntegrationTests
 
         public IFullModel<double, Vector<double>, Vector<double>> Clone()
         {
-            var cloned = new MockDistributedModel(_parameterCount);
+            // Preserve the rank gradient scale (see WithParameters) so a cloned rank-scaled model keeps its
+            // distinct gradients — otherwise collective tests that rely on per-rank gradients silently pass.
+            var cloned = new MockDistributedModel(_parameterCount, _gradientScale);
             cloned.SetParameters(_parameters);
             return cloned;
         }
