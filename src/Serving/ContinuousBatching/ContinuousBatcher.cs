@@ -56,6 +56,10 @@ internal class ContinuousBatcher<T> : IDisposable
     // position), keyed by SequenceState.SequenceId.
     private readonly ConcurrentDictionary<long, int> _pagedPositions = new();
 
+    // Per-sequence RNG so sampling is reproducible per request and concurrent sequences don't share RNG
+    // state (the shared ThreadSafeRandom made batched sampling non-deterministic).
+    private readonly ConcurrentDictionary<long, Random> _sequenceRngs = new();
+
     private bool UsePagedPath => _incrementalModel is not null && _pagedCache is not null;
 
     private SpeculativeDecoder<T>? _speculativeDecoder;
@@ -422,7 +426,7 @@ internal class ContinuousBatcher<T> : IDisposable
             // Stateless full-context prefill (fallback for models without the paged incremental path).
             var inputTokens = CreateInputTensor(sequence.TokenIds);
             var logits = _model(inputTokens);
-            int nextToken = SampleFromLogits(logits, sequence.Request);
+            int nextToken = SampleFromLogits(logits, sequence);
             sequence.AppendToken(nextToken);
             firstToken = nextToken;
         }
@@ -446,7 +450,7 @@ internal class ContinuousBatcher<T> : IDisposable
         var logits = model.PredictWithContext(input, new InferenceForwardContext(seqId, 0));
         _pagedPositions[seqId] = promptLen;
 
-        int nextToken = SampleFromLogits(logits, sequence.Request);
+        int nextToken = SampleFromLogits(logits, sequence);
         sequence.AppendToken(nextToken);
         return nextToken;
     }
@@ -469,7 +473,7 @@ internal class ContinuousBatcher<T> : IDisposable
         var logits = _model(inputTokens);
 
         // Sample next token
-        int nextToken = SampleFromLogits(logits, sequence.Request);
+        int nextToken = SampleFromLogits(logits, sequence);
         sequence.AppendToken(nextToken);
 
         return new[] { nextToken };
@@ -488,7 +492,7 @@ internal class ContinuousBatcher<T> : IDisposable
         var logits = model.PredictWithContext(input, new InferenceForwardContext(seqId, position));
         _pagedPositions[seqId] = position + 1;
 
-        int nextToken = SampleFromLogits(logits, sequence.Request);
+        int nextToken = SampleFromLogits(logits, sequence);
         sequence.AppendToken(nextToken);
         return new[] { nextToken };
     }
@@ -803,8 +807,10 @@ internal class ContinuousBatcher<T> : IDisposable
         return MathHelper.GetNumericOperations<T>().FromDouble(value);
     }
 
-    private int SampleFromLogits(Tensor<T> logits, GenerationRequest<T> request)
+    private int SampleFromLogits(Tensor<T> logits, SequenceState<T> sequence)
     {
+        var request = sequence.Request;
+
         // Get last position logits (shape is typically [batch, seq, vocab])
         int vocabSize = logits.Shape[^1];
         int lastPos = logits.Shape.Length > 2 ? logits.Shape[^2] - 1 : 0;
@@ -817,6 +823,17 @@ internal class ContinuousBatcher<T> : IDisposable
                 ? [0, lastPos, i]
                 : [0, i];
             lastLogits[i] = Convert.ToSingle(logits[indices]);
+        }
+
+        // Greedy decoding (temperature <= 0): the argmax — deterministic, and avoids dividing by zero below.
+        if (request.Temperature <= 0f)
+        {
+            int best = 0;
+            for (int i = 1; i < vocabSize; i++)
+            {
+                if (lastLogits[i] > lastLogits[best]) best = i;
+            }
+            return best;
         }
 
         // Apply temperature
@@ -841,6 +858,12 @@ internal class ContinuousBatcher<T> : IDisposable
             lastLogits[i] /= sumExp;
         }
 
+        // Apply min-p: drop tokens below minP × the top token's probability, then renormalize.
+        if (request.MinP > 0.0f)
+        {
+            ApplyMinP(lastLogits, request.MinP);
+        }
+
         // Apply top-p (nucleus) sampling
         if (request.TopP < 1.0f)
         {
@@ -853,8 +876,9 @@ internal class ContinuousBatcher<T> : IDisposable
             ApplyTopK(lastLogits, request.TopK);
         }
 
-        // Sample from distribution
-        var random = RandomHelper.ThreadSafeRandom;
+        // Sample from the per-sequence deterministic RNG (seeded from the request) so identical seeded
+        // requests are reproducible and concurrent sequences don't share RNG state.
+        var random = GetSequenceRng(sequence);
         float r = (float)random.NextDouble();
         float cumSum = 0;
         for (int i = 0; i < vocabSize; i++)
@@ -865,6 +889,34 @@ internal class ContinuousBatcher<T> : IDisposable
         }
 
         return vocabSize - 1; // Fallback to last token
+    }
+
+    // Per-sequence deterministic RNG: seeded from the request when a seed is provided (reproducible),
+    // otherwise cryptographically secure. Persisted per sequence so draws advance across decode steps.
+    private Random GetSequenceRng(SequenceState<T> sequence)
+        => _sequenceRngs.GetOrAdd(sequence.SequenceId, _ =>
+            sequence.Request.Seed is { } seed
+                ? RandomHelper.CreateSeededRandom(seed)
+                : RandomHelper.CreateSecureRandom());
+
+    private static void ApplyMinP(float[] probs, float minP)
+    {
+        float max = 0f;
+        for (int i = 0; i < probs.Length; i++)
+        {
+            if (probs[i] > max) max = probs[i];
+        }
+        float threshold = minP * max;
+        float sum = 0f;
+        for (int i = 0; i < probs.Length; i++)
+        {
+            if (probs[i] < threshold) probs[i] = 0f;
+            sum += probs[i];
+        }
+        if (sum > 0f)
+        {
+            for (int i = 0; i < probs.Length; i++) probs[i] /= sum;
+        }
     }
 
     private static void ApplyTopP(float[] probs, float topP)
@@ -929,12 +981,13 @@ internal class ContinuousBatcher<T> : IDisposable
 
     private void CompleteSequence(SequenceState<T> sequence)
     {
-        // Release this sequence's paged KV blocks (no-op on the stateless path).
+        // Release this sequence's paged KV blocks (no-op on the stateless path) and its RNG.
         if (_pagedCache is { } cache)
         {
             cache.FreeSequence(sequence.SequenceId);
             _pagedPositions.TryRemove(sequence.SequenceId, out _);
         }
+        _sequenceRngs.TryRemove(sequence.SequenceId, out _);
 
         sequence.Complete(sequence.FinishReason ?? StopReason.MaxLength);
         _scheduler.CompleteSequence(sequence);
