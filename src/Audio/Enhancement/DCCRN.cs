@@ -742,7 +742,19 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             {
                 var skip = _encoderOutputs[e];
                 x = MatchSpatial(x, skip.Shape[2], skip.Shape[3]);
-                x = Engine.TensorConcatenate([x, skip], axis: 1);
+                // Both x and skip use the [all-real, all-imag] channel layout that ComplexConv2D expects
+                // (it splits input at Cin/2). Concatenating the whole complex tensors would produce
+                // [xR, xI, sR, sI]; the next ComplexConv2D would then read [xR, xI] as the real half and
+                // [sR, sI] as the imaginary half, pairing real components with imaginary ones. Rejoin as
+                // [xR, sR, xI, sI] so the real and imaginary halves stay grouped.
+                int xc = x.Shape[1] / 2;
+                int sc = skip.Shape[1] / 2;
+                int cb = x.Shape[0], cf = skip.Shape[2], ct = skip.Shape[3];
+                var xRe = Engine.TensorSlice(x, [0, 0, 0, 0], [cb, xc, cf, ct]);
+                var xIm = Engine.TensorSlice(x, [0, xc, 0, 0], [cb, xc, cf, ct]);
+                var sRe = Engine.TensorSlice(skip, [0, 0, 0, 0], [cb, sc, cf, ct]);
+                var sIm = Engine.TensorSlice(skip, [0, sc, 0, 0], [cb, sc, cf, ct]);
+                x = Engine.TensorConcatenate([xRe, sRe, xIm, sIm], axis: 1);
             }
 
             int cout = (d < _numStages - 1) ? EncoderComplexChannels(_numStages - 2 - d) : 1;
@@ -940,7 +952,10 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int fanOut = coutComplex * ComplexKernelH * ComplexKernelW;
         double limit = Math.Sqrt(6.0 / (fanIn + fanOut));
         var kernel = new Tensor<T>(shape);
-        var rng = new Random(seed);
+        // Use the repo's seeded-random helper (as elsewhere in the codebase, e.g. NeuralNetworkBase)
+        // so deterministic seeding stays uniform across the project. Init is intentionally
+        // deterministic Glorot — predictability is desired here, not a security concern.
+        var rng = RandomHelper.CreateSeededRandom(seed);
         var span = kernel.Data.Span;
         for (int i = 0; i < span.Length; i++)
             span[i] = NumOps.FromDouble((rng.NextDouble() * 2.0 - 1.0) * limit);

@@ -40,10 +40,11 @@ public class TinyBERTNERTests : TransformerNERTestBase<float>
     // (lossShort 0.000000 on task 1 vs lossLong 0.000433 on task 2), so the 0.000433 gap trips the
     // razor-thin 1e-4 default even though NEITHER run diverged. That is cross-task variance on a
     // fully-converged model, not optimizer divergence — genuine divergence spirals to NaN/1e6+ and
-    // is still caught by the base MoreData NaN guard. Use the same 0.5 absolute bound the
-    // auto-scaffold applies to other converged small-transformer families; it is comfortably above
-    // the sub-1e-3 cross-task noise yet far below any real divergence.
-    protected override double MoreDataTolerance => 0.5;
+    // is still caught by the base MoreData NaN guard. Bound the tolerance at 0.001 — roughly 2.3x
+    // above the observed 0.000433 cross-task gap, so it still passes on fully-converged runs, yet
+    // ~500x tighter than the previous 0.5 so any genuine loss degradation (let alone divergence)
+    // fails the assertion instead of slipping through.
+    protected override double MoreDataTolerance => 0.001;
 
     /// <summary>
     /// Override with varied random inputs instead of base-class

@@ -55,16 +55,20 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
 
     private readonly double _convergenceThreshold;
     private readonly double _correlationThreshold;
+    private readonly double _directionalityAsymmetryThreshold;
 
     public CCMAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyTimeSeriesOptions(options);
         _convergenceThreshold = options?.EdgeThreshold ?? 0.05;
         _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
+        _directionalityAsymmetryThreshold = options?.DirectionalityAsymmetryThreshold ?? 0.2;
         if (double.IsNaN(_convergenceThreshold) || _convergenceThreshold < 0 || _convergenceThreshold > 1)
             throw new ArgumentException("EdgeThreshold (convergence threshold) must be a finite number between 0 and 1.");
         if (double.IsNaN(_correlationThreshold) || _correlationThreshold < 0 || _correlationThreshold > 1)
             throw new ArgumentException("CorrelationThreshold must be a finite number between 0 and 1.");
+        if (double.IsNaN(_directionalityAsymmetryThreshold) || _directionalityAsymmetryThreshold < 0 || _directionalityAsymmetryThreshold > 1)
+            throw new ArgumentException("DirectionalityAsymmetryThreshold must be a finite number between 0 and 1.");
     }
 
     /// <inheritdoc/>
@@ -144,7 +148,7 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
                 double bwd = Math.Abs(NumOps.ToDouble(result[j, i]));
                 if (fwd <= 0 || bwd <= 0) continue;
                 double asymmetry = Math.Abs(fwd - bwd) / (Math.Max(fwd, bwd) + 1e-10);
-                if (asymmetry >= 0.2)
+                if (asymmetry >= _directionalityAsymmetryThreshold)
                 {
                     if (fwd >= bwd) result[j, i] = NumOps.Zero;
                     else result[i, j] = NumOps.Zero;

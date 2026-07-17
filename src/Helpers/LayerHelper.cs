@@ -9381,7 +9381,10 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Flow head (2 channels: horizontal and vertical flow) at 1/8 resolution.
-        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
+        // IdentityActivation, NOT the ConvolutionalLayer default ReLU: optical flow is signed
+        // (negative x/y motion is valid), and a ReLU head would clamp all negative flow to 0.
+        // Matches the GMFlow flow head, which is also linear for the same reason.
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Upsample the 1/8-resolution flow field back to the full input resolution.
         // FlowFormer (Huang et al. 2022, §3.3) — like RAFT — predicts flow at 1/8 resolution
@@ -11268,6 +11271,14 @@ public static class LayerHelper<T>
     /// <param name="numHeads">Number of attention heads (default: 6).</param>
     /// <param name="charsetSize">Character set size (default: 95).</param>
     /// <returns>A collection of layers forming an SVTR model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> SVTR reads text out of an image. It first shrinks the picture with
+    /// two small convolution "stem" blocks (each is Conv -> BatchNorm -> ReLU, the standard order that
+    /// keeps the numbers well-scaled), turning the image into a compact grid of features. That grid is
+    /// then flattened into a sequence of "tokens" and passed through transformer mixing blocks that let
+    /// every position look at every other position, which is what lets the model recognize whole words.
+    /// A final dense layer turns each position into character scores for CTC decoding.</para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultSVTRLayers(
         int imageWidth = 256,
         int imageHeight = 64,
@@ -11278,6 +11289,7 @@ public static class LayerHelper<T>
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         int intermediateSize = hiddenDim * 4;
         int seqLen = imageWidth / 4;
 
@@ -11290,9 +11302,18 @@ public static class LayerHelper<T>
         // convs is done in SVTR's own ForwardForTraining/PredictCore via a tape-aware Engine reshape, so
         // BOTH the training and inference paths flatten identically (the base's inference-only reshape
         // used to sever the training path -> loss never fell / params never moved).
-        yield return new ConvolutionalLayer<T>(hiddenDim / 2, kernelSize: 3, stride: 2, padding: 1);
+        // Each stem block is ordered Conv (linear) -> BatchNorm -> ReLU. ConvolutionalLayer defaults
+        // to a built-in ReLU, so leaving the activation implicit would run Conv -> ReLU -> BatchNorm,
+        // making BN normalize already-clipped, non-negative activations instead of the raw conv
+        // response (the Conv->ReLU->BN ordering bug fixed elsewhere in this file — PSENet stem,
+        // Citrinet epilogue, DBNet backbone). Pass IdentityActivation to the convs and apply ReLU as
+        // an explicit ActivationLayer after each BatchNorm.
+        yield return new ConvolutionalLayer<T>(hiddenDim / 2, kernelSize: 3, stride: 2, padding: 1, identityActivation);
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(hiddenDim, kernelSize: 3, stride: 2, padding: 1);
+        yield return new ActivationLayer<T>(reluActivation);
+        yield return new ConvolutionalLayer<T>(hiddenDim, kernelSize: 3, stride: 2, padding: 1, identityActivation);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(reluActivation);
 
         // Mixing blocks. SVTR's mixing block is a standard pre-norm transformer block WITH residual
         // connections (local/global attention + MLP, each wrapped in x = x + f(LN(x))). The composite

@@ -217,6 +217,20 @@ public class CausalDiscoveryOptions
     public double? CorrelationThreshold { get; set; }
 
     /// <summary>
+    /// Minimum relative asymmetry (in [0, 1]) between the two cross-map skills of a pair before CCM
+    /// prunes the weaker reverse direction as a reconstruction artifact. Default: null (0.2).
+    /// </summary>
+    /// <remarks>
+    /// <para>Used by <see cref="AiDotNet.CausalDiscovery.TimeSeries.CCMAlgorithm{T}"/>. For a pair
+    /// (X, Y) with forward/backward cross-map skills f and b, the relative asymmetry is
+    /// |f - b| / (max(f, b) + eps). When it meets or exceeds this threshold the dominant direction is
+    /// kept and the weaker one is zeroed; below it, both directions are retained as genuine
+    /// bidirectional coupling. Raising the value keeps only more strongly asymmetric edges (fewer
+    /// pruned reverse links); lowering it prunes more aggressively. Must be within [0, 1].</para>
+    /// </remarks>
+    public double? DirectionalityAsymmetryThreshold { get; set; }
+
+    /// <summary>
     /// Concavity parameter (gamma) for MCP/SCAD penalty functions. Default: null (algorithm-specific).
     /// </summary>
     /// <remarks>

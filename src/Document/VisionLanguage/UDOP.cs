@@ -92,6 +92,14 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     // ClassIndicesToOneHot and threw). Held outside the sequential layer walk, applied after pooling.
     private DenseLayer<T>? _classHead;
 
+    // True only when InitializeLayers built the default architecture and appended its own classification
+    // head as the last layer. For a custom Architecture.Layers stack we do NOT own a head — even one that
+    // happens to end in a DenseLayer is a user layer, not our pooled class head. Persisted so
+    // DeserializeNetworkSpecificData rebinds _classHead only when we actually created it, instead of
+    // blindly grabbing the last layer (which for a custom stack would wrongly skip that layer in the
+    // sequential walk AND reapply it after pooling).
+    private bool _hasBuiltInClassHead;
+
     /// <summary>Guards <see cref="ResolveLazyLayerShapes"/> so the one-shot warm forward runs at most once.</summary>
     private bool _lazyShapesWarmed;
 
@@ -250,6 +258,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            _hasBuiltInClassHead = false;
             return;
         }
 
@@ -270,6 +279,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         // walk (applied explicitly after mean-pooling).
         _classHead = new DenseLayer<T>(_numClasses);
         Layers.Add(_classHead);
+        _hasBuiltInClassHead = true;
     }
 
     /// <summary>
@@ -311,7 +321,11 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         var startTime = DateTime.UtcNow;
 
         var preprocessed = PreprocessDocument(documentImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        // Layout detection is a generative/per-region task: it needs the rank-2 [numDetections, numClasses]
+        // sequence output that ParseLayoutOutput indexes as output[i, c]. Use the raw encoder-decoder
+        // forward, NOT Forward — Forward pools + projects through the classification head to a rank-1
+        // [numClasses] vector, which would collapse every detection and break the two-dimensional indexing.
+        var output = _useNativeMode ? ForwardEncoderDecoder(preprocessed) : RunOnnxInference(preprocessed);
 
         var regions = ParseLayoutOutput(output, confidenceThreshold);
 
@@ -371,7 +385,11 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         var startTime = DateTime.UtcNow;
 
         var preprocessed = PreprocessDocument(documentImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        // Question answering is generative: DecodeGenerativeOutput indexes the rank-2 [seq, vocab]
+        // sequence as output[t, v]. Use the raw encoder-decoder forward, NOT Forward — Forward pools +
+        // projects through the classification head to a rank-1 [numClasses] vector, which would leave no
+        // per-token axis to decode.
+        var output = _useNativeMode ? ForwardEncoderDecoder(preprocessed) : RunOnnxInference(preprocessed);
 
         // UDOP uses generative output - decode the sequence
         var (answer, confidence) = DecodeGenerativeOutput(output, maxAnswerLength);
@@ -635,6 +653,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         writer.Write(MaxSequenceLength);
         writer.Write(_numClasses);
         writer.Write(_useNativeMode);
+        writer.Write(_hasBuiltInClassHead);
     }
 
     /// <inheritdoc/>
@@ -649,6 +668,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         int maxSeqLen = reader.ReadInt32();
         int numClasses = reader.ReadInt32();
         bool useNativeMode = reader.ReadBoolean();
+        _hasBuiltInClassHead = reader.ReadBoolean();
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSeqLen;
@@ -660,8 +680,15 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         // (restored) head in the sequential walk and (b) apply the stale random head after pooling — so a
         // deserialized clone diverged by ~O(1) from the original (Clone_* failures). The head is the last
         // layer (added last in InitializeLayers, order preserved through serialization).
-        if (Layers.Count > 0)
+        //
+        // Only rebind when the ORIGINAL model actually created the built-in head. A custom
+        // Architecture.Layers stack owns no head — and if it happens to end in a DenseLayer, grabbing it
+        // as _classHead would wrongly skip that user layer in the sequential walk and reapply it after
+        // pooling. In that case leave _classHead null so Forward runs the custom stack straight through.
+        if (_hasBuiltInClassHead && Layers.Count > 0)
             _classHead = Layers[Layers.Count - 1] as DenseLayer<T>;
+        else
+            _classHead = null;
     }
 
     /// <inheritdoc/>
@@ -676,10 +703,14 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     #region NeuralNetworkBase Implementation
 
     /// <summary>
-    /// Encoder-decoder forward pass: runs encoder layers, then feeds encoder output
-    /// as cross-attention context to decoder layers.
+    /// Raw encoder-decoder forward pass: runs encoder layers, then feeds encoder output as
+    /// cross-attention context to decoder layers, and returns the generative sequence tensor
+    /// (rank-2 <c>[seq, vocab]</c>) WITHOUT the classification head. This is what the generative
+    /// task heads (<see cref="DetectLayout(Tensor{T}, double)"/> per-region logits and
+    /// <see cref="AnswerQuestion(Tensor{T}, string, int, double)"/> per-token logits) index by
+    /// <c>output[i, c]</c> / <c>output[t, v]</c>. The classification head is NOT applied here.
     /// </summary>
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> ForwardEncoderDecoder(Tensor<T> input)
     {
         Tensor<T> output = input;
         Tensor<T>? encoderOutput = null;
@@ -726,11 +757,23 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
             }
         }
 
-        // Classification head: mean-pool the generated sequence to one document vector, then project to
-        // numClasses. Produces a fixed rank-1 [numClasses] logit vector (tape-aware) that matches the
-        // classification target's rank so the loss aligns; the raw [seq, vocab] generative tensor could
-        // not be aligned to a class target. Pooling over every axis but the last collapses whatever
-        // [.., D] sequence/patch layout the encoder-decoder produced into a single [D] document embedding.
+        return output;
+    }
+
+    /// <summary>
+    /// Default (classification) forward pass used by <see cref="PredictCore"/> and
+    /// <see cref="ClassifyDocument(Tensor{T}, int)"/>: runs the encoder-decoder, then applies the
+    /// classification head — mean-pool the generated sequence to one document vector and project to
+    /// numClasses. Produces a fixed rank-1 <c>[numClasses]</c> logit vector (tape-aware) that matches
+    /// the classification target's rank so the loss aligns; the raw <c>[seq, vocab]</c> generative
+    /// tensor could not be aligned to a class target. The generative task heads (DetectLayout /
+    /// AnswerQuestion) deliberately bypass this and call <see cref="ForwardEncoderDecoder"/> directly,
+    /// so the per-region / per-token rank-2 output survives and their two-dimensional indexing works.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        Tensor<T> output = ForwardEncoderDecoder(input);
+
         if (_classHead is not null)
         {
             if (output.Shape.Length >= 2)
@@ -766,8 +809,10 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         // code then ALSO called UpdateParameters(CollectGradients()) — a SECOND, manual gradient-descent
         // step (lr=1e-4) on top of the tape's optimizer step, double-updating the weights (and reading
         // per-layer gradients that TrainWithTape had already consumed). One tape step is the correct,
-        // complete update.
-        TrainWithTape(input, expectedOutput);
+        // complete update. Pass the constructor-supplied optimizer so a user-configured optimizer
+        // actually drives the update (it is gradient-based — e.g. the default AdamOptimizer); when it is
+        // not gradient-based the `as` yields null and TrainWithTape falls back to its default optimizer.
+        TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         SetTrainingMode(false);
     }
 

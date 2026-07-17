@@ -518,18 +518,33 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     }
 
     /// <summary>
-    /// Runs the graph layer stack, then pools the per-node class logits into a single [numClasses] vector.
-    /// The stack's final Dense(numClasses) emits per-node logits [numNodes, numClasses]; without pooling
-    /// this rank-2 tensor cannot align to the classification target (rank-1 [numClasses]) and
-    /// CrossEntropyWithLogits over-indexed ClassIndicesToOneHot and threw. Mean-pooling every axis but the
-    /// class axis yields the document-level [numClasses] logit vector the classification target expects.
-    /// All ops are tape-aware, so training back-propagates through the pool into the graph layers.
+    /// Inference forward: runs the graph layer stack and returns the per-node class logits
+    /// [numNodes, numClasses] UNCHANGED. DetectLayout, DetectReadingOrder, and ParseLayoutOutput index
+    /// this rank-2 output per node (output[node, class]); pooling it to a rank-1 [numClasses] vector here
+    /// would collapse every node and break their two-dimensional indexing. The document-level pooling
+    /// needed to align with the classification target happens only on the training path
+    /// (<see cref="ForwardForTraining"/>).
     /// </summary>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         var output = input;
         foreach (var layer in Layers)
             output = layer.Forward(output);
+        return output;
+    }
+
+    /// <summary>
+    /// Training forward: runs the base training forward (which wires layer seeds and applies gradient
+    /// checkpointing / weight streaming over the graph layers), then mean-pools every axis but the class
+    /// axis so the per-node logits [numNodes, numClasses] reduce to the document-level [numClasses] logit
+    /// vector the classification target expects. Without this pooling the rank-2 tensor cannot align to
+    /// the rank-1 [numClasses] target and CrossEntropyWithLogits over-indexes ClassIndicesToOneHot and
+    /// throws. All ops are tape-aware, so training back-propagates through the pool into the graph layers.
+    /// Inference (PredictCore → Forward) deliberately skips this pooling to keep the per-node output.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var output = base.ForwardForTraining(input);
 
         if (output.Shape.Length >= 2)
         {

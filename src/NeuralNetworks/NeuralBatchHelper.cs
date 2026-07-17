@@ -605,7 +605,11 @@ internal static class NeuralBatchHelper
         // Correct the single-forward slope for the batched path's concurrent-buffer
         // overhead (see BatchedRetentionFactor). Without this the chosen chunk's actual
         // retained heap overshoots the budget by ~2.1× (measured 1506 MB at a 1 GB budget).
-        beta = System.Math.Max(1L, (long)(beta * BatchedRetentionFactor));
+        // Guard the double multiply: beta can now saturate to long.MaxValue (impossible analytic
+        // floor), and casting an out-of-long-range double back to long is unspecified (can yield a
+        // negative). Clamp to long.MaxValue so an impossible per-sample floor stays impossible.
+        double scaledBeta = beta * BatchedRetentionFactor;
+        beta = scaledBeta >= long.MaxValue ? long.MaxValue : System.Math.Max(1L, (long)scaledBeta);
 
         long budgetWithMargin = (long)(memoryBudgetBytes * MemoryBudgetSafetyFactor);
         // Reserve memory for the COMPLETE concatenated output FIRST. PredictInBatches retains an output
@@ -614,8 +618,12 @@ internal static class NeuralBatchHelper
         // chunk-dependent term) alone cannot bound it. Subtract the full-output retention, then solve for
         // the chunk from what remains, and reject a budget too small to even hold the result.
         long outputRetention = EstimateFinalOutputBytes(nn, axis0);
-        long availableForChunk = budgetWithMargin - alpha - outputRetention;
-        if (availableForChunk <= 0)
+        // Reject BEFORE subtracting. outputRetention can saturate to long.MaxValue and alpha can be
+        // large, so computing budgetWithMargin - alpha - outputRetention directly could underflow past
+        // long.MinValue and wrap to an apparently-positive availableForChunk — silently admitting a
+        // chunk that violates the budget. Order the guards so neither intermediate subtraction can
+        // underflow: test outputRetention against the budget first, then alpha against what remains.
+        if (outputRetention >= budgetWithMargin || alpha >= budgetWithMargin - outputRetention)
         {
             throw new InvalidOperationException(
                 $"The memory budget ({memoryBudgetBytes} bytes, {budgetWithMargin} after the " +
@@ -623,6 +631,7 @@ internal static class NeuralBatchHelper
                 $"output (~{outputRetention} bytes) plus the per-call fixed overhead (~{alpha} bytes). " +
                 "Increase the memory budget or reduce the output size.");
         }
+        long availableForChunk = budgetWithMargin - outputRetention - alpha;
         // Solve alpha + outputRetention + beta * chunk <= budget for chunk.
         long chunk = availableForChunk / beta;
         if (chunk < 1) return 1;
@@ -712,7 +721,7 @@ internal static class NeuralBatchHelper
     {
         long totalElements = 0;
         foreach (var layer in nn.Layers)
-            totalElements += SumResolvedOutputElements(layer);
+            totalElements = SaturatingAdd(totalElements, SumResolvedOutputElements(layer));
         if (totalElements <= 0) return 0;
 
         long elementSize = typeof(T) == typeof(double) ? sizeof(double)
@@ -723,7 +732,30 @@ internal static class NeuralBatchHelper
         // floor a genuine (modestly padded) lower bound — not a wild over-estimate —
         // so the chosen chunk stays as large as the budget safely allows.
         const long ScratchAndDoubleBufferFactor = 3;
-        return elementSize * totalElements * ScratchAndDoubleBufferFactor;
+        // Saturating so an absurd (impossible) layer shape floors at long.MaxValue instead of wrapping
+        // to a small/negative value that would understate the footprint and admit an invalid chunk.
+        return SaturatingMul(SaturatingMul(elementSize, totalElements), ScratchAndDoubleBufferFactor);
+    }
+
+    /// <summary>
+    /// Non-negative <see cref="long"/> multiply that saturates to <see cref="long.MaxValue"/> on
+    /// overflow instead of wrapping. All call sites here multiply element counts / byte sizes, which are
+    /// non-negative, so a wrap would produce a bogus small or negative footprint that admits an
+    /// impossible chunk.
+    /// </summary>
+    private static long SaturatingMul(long a, long b)
+    {
+        try { return checked(a * b); }
+        catch (OverflowException) { return long.MaxValue; }
+    }
+
+    /// <summary>
+    /// Non-negative <see cref="long"/> add that saturates to <see cref="long.MaxValue"/> on overflow.
+    /// </summary>
+    private static long SaturatingAdd(long a, long b)
+    {
+        try { return checked(a + b); }
+        catch (OverflowException) { return long.MaxValue; }
     }
 
     /// <summary>
@@ -775,7 +807,7 @@ internal static class NeuralBatchHelper
         foreach (var dim in shape)
         {
             if (dim <= 0) return 0;
-            product *= dim;
+            product = SaturatingMul(product, dim);
         }
         return product;
     }
@@ -796,12 +828,12 @@ internal static class NeuralBatchHelper
             foreach (var dim in shape)
             {
                 if (dim <= 0) { valid = false; break; }
-                product *= dim;
+                product = SaturatingMul(product, dim);
             }
-            if (valid) elements += product;
+            if (valid) elements = SaturatingAdd(elements, product);
         }
         foreach (var sub in layer.GetSubLayers())
-            elements += SumResolvedOutputElements(sub);
+            elements = SaturatingAdd(elements, SumResolvedOutputElements(sub));
         return elements;
     }
 }

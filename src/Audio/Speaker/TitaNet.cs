@@ -251,6 +251,19 @@ public class TitaNet<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeak
     {
         var x = input;
         int n = Layers.Count;
+
+        // The SE-block/residual parsing below is valid ONLY for the default TitaNet layout built by
+        // CreateDefaultTitaNetLayers. When the caller supplied a custom Architecture.Layers chain
+        // (see InitializeLayers), that fixed 4-layer-per-block interpretation would skip layers or
+        // apply incompatible multiply/add shapes — so forward a custom chain through every layer once,
+        // in order.
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            foreach (var layer in Layers)
+                x = layer.Forward(x);
+            return x;
+        }
+
         // Prolog: Dense -> BN.
         int idx = 0;
         if (idx + 1 < n) { x = Layers[idx++].Forward(x); x = Layers[idx++].Forward(x); }

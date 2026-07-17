@@ -4011,7 +4011,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (model.ClassName == "GLaMM")
             {
                 sb.AppendLine();
-                sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                // The HeavyTimeout trait moves this out of the PR shard into the nightly heavy lane, but
+                // the trait alone does not change the per-test xUnit cap — a 120 s Timeout still fires in
+                // the heavy lane. GLaMM's MoreData_ShouldNotDegrade deep-clones a paper-scale ~385M graph
+                // and fuse-compiles it twice, which exceeds 120 s on CPU even at smoke iteration counts,
+                // so give it a heavy-lane-appropriate 600 s cap (the nightly job budgets 350 min overall
+                // and runs serially, so 600 s per test is safe).
+                sb.AppendLine("    [Xunit.Fact(Timeout = 600000)]");
                 sb.AppendLine("    [Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
                 sb.AppendLine("    public override async System.Threading.Tasks.Task MoreData_ShouldNotDegrade()");
                 sb.AppendLine("    {");
@@ -5485,9 +5491,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // ~1.7e-3), so it does not memorize that pair tighter than an unseen random test target and
             // trips TrainingError_ShouldNotExceedTestError (which needs train MSE <= 3*test MSE). More
             // steps let it properly memorize the training pair (train MSE << unseen-test MSE, the
-            // expected generalization gap); the tiny MLP keeps 60 iterations well inside the budget.
-            // The architecture stays paper-faithful (scalar H + symplectic-gradient dynamics).
-            sb.AppendLine("    protected override int TrainingIterations => 60;");
+            // expected generalization gap). TrainingError_ShouldNotExceedTestError itself trains for
+            // TrainingIterations * 3 steps, so an override of 20 yields the intended ~60 total steps;
+            // setting 60 here would balloon to 180 train calls and needlessly bloat generated-test
+            // runtime. The tiny MLP keeps 60 total steps well inside the budget, and the architecture
+            // stays paper-faithful (scalar H + symplectic-gradient dynamics).
+            sb.AppendLine("    protected override int TrainingIterations => 20;");
         }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");

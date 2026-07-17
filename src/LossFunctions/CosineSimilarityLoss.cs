@@ -57,8 +57,13 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
 
         T dotProduct = Engine.DotProduct(predicted, actual);
-        T normPredicted = Engine.DotProduct(predicted, predicted);
-        T normActual = Engine.DotProduct(actual, actual);
+        // Regularize the squared norms with eps INSIDE the sqrt (sqrt(sum(x^2) + eps)), matching
+        // ComputeTapeLoss. A bare sqrt(sum(x^2)) has an unbounded gradient as the norm -> 0; adding
+        // eps before the sqrt bounds it to 1/(2*sqrt(eps)) and keeps this vector API numerically
+        // consistent with the tape path (same loss definition on both surfaces).
+        T sqEps = NumOps.FromDouble(1e-12);
+        T normPredicted = NumOps.Add(Engine.DotProduct(predicted, predicted), sqEps);
+        T normActual = NumOps.Add(Engine.DotProduct(actual, actual), sqEps);
 
         T cosineSimilarity = NumericalStabilityHelper.SafeDiv(
             dotProduct,
@@ -81,8 +86,12 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
 
         T dotProduct = Engine.DotProduct(predicted, actual);
-        T normPredicted = Engine.DotProduct(predicted, predicted);
-        T normActual = Engine.DotProduct(actual, actual);
+        // Same eps-inside-sqrt regularization as CalculateLoss/ComputeTapeLoss. The gradient below is
+        // exact for cos = dot / (||p||*||a||) with ||p|| = sqrt(sum(p^2) + eps): the regularized
+        // squared norm flows through both the numerator's ||p||^2 term and the ||p||^3*||a|| denominator.
+        T sqEps = NumOps.FromDouble(1e-12);
+        T normPredicted = NumOps.Add(Engine.DotProduct(predicted, predicted), sqEps);
+        T normActual = NumOps.Add(Engine.DotProduct(actual, actual), sqEps);
 
         T normPredSqrt = NumOps.Sqrt(normPredicted);
         T normProduct = NumOps.Multiply(normPredSqrt, NumOps.Sqrt(normActual));
