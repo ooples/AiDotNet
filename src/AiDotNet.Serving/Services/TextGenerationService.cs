@@ -100,61 +100,64 @@ public sealed class TextGenerationService : ITextGenerationService
         }
 
         int eosTokenId = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId;
+
+        // Preferred path: stream tokens off the ONE shared continuous-batching engine as they are
+        // produced (paged KV, prefix sharing, per-request sampling). EOS terminates the stream and is
+        // not yielded. The engine honors MaxNewTokens; a defensive cap is applied here as well.
+        if (model is ServableModelWrapper<T> wrapper && wrapper.SupportsIncrementalGeneration)
+        {
+            int emitted = 0;
+            foreach (var token in wrapper.StreamGeneration(BuildGenerationRequest<T>(request), eosTokenId, ct))
+            {
+                if (ct.IsCancellationRequested || emitted >= request.MaxNewTokens) yield break;
+                emitted++;
+                yield return token;
+            }
+            yield break;
+        }
+
+        // Stateless fallback (models without the incremental path): re-forward the full growing context
+        // each step and sample.
         double temperature = request.Temperature;
         double topP = request.TopP;
         int topK = request.TopK;
         double minP = request.MinP;
         // Seeded per request id when present so greedy stays deterministic and sampling is reproducible.
         var rng = new Random(request.RequestId?.GetHashCode() ?? 0);
-
-        if (gm.SupportsIncrementalGeneration)
+        var context = new List<int>(request.InputTokens);
+        for (int step = 0; step < request.MaxNewTokens; step++)
         {
-            using var session = gm.BeginGeneration(request.InputTokens);
-            int prefillStart = session.CachedPromptTokens;
-            int suffixLength = request.InputTokens.Length - prefillStart;
-
-            Tensor<T> logits;
-            if (gm.SupportsBatchedPrefill && suffixLength > 1)
-            {
-                var suffix = new int[suffixLength];
-                for (int i = 0; i < suffixLength; i++)
-                {
-                    suffix[i] = request.InputTokens[prefillStart + i];
-                }
-                logits = session.Forward(TokensToTensor<T>(suffix));
-            }
-            else
-            {
-                logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[prefillStart] }));
-                for (int i = prefillStart + 1; i < request.InputTokens.Length; i++)
-                {
-                    logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[i] }));
-                }
-            }
-
-            for (int step = 0; step < request.MaxNewTokens; step++)
-            {
-                if (ct.IsCancellationRequested) yield break;
-                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, minP, rng);
-                if (next == eosTokenId) yield break;
-                yield return next;
-                logits = session.Forward(TokensToTensor<T>(new[] { next }));
-            }
+            if (ct.IsCancellationRequested) yield break;
+            var logits = gm.Forward(TokensToTensor<T>(context));
+            int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, minP, rng);
+            if (next == eosTokenId) yield break;
+            yield return next;
+            context.Add(next);
         }
-        else
+    }
+
+    /// <summary>
+    /// Maps a serving-layer <see cref="SpeculativeDecodingRequest"/> to the engine's
+    /// <see cref="GenerationRequest{T}"/>. Sampling parameters travel with the request (a shared engine
+    /// serves many requests): temperature (0 =&gt; greedy), top-p/top-k/min-p, per-request EOS, and the
+    /// speculation draft depth (<see cref="SpeculativeDecodingRequest.NumDraftTokens"/>; 0 disables it).
+    /// The RNG seed is derived from the request id when present (reproducible), else null (a seedless
+    /// request at temperature &gt; 0 samples non-deterministically, matching industry serving defaults).
+    /// </summary>
+    private static GenerationRequest<T> BuildGenerationRequest<T>(SpeculativeDecodingRequest request)
+    {
+        return new GenerationRequest<T>
         {
-            // Stateless fallback: re-forward the full growing context each step.
-            var context = new List<int>(request.InputTokens);
-            for (int step = 0; step < request.MaxNewTokens; step++)
-            {
-                if (ct.IsCancellationRequested) yield break;
-                var logits = gm.Forward(TokensToTensor<T>(context));
-                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, minP, rng);
-                if (next == eosTokenId) yield break;
-                yield return next;
-                context.Add(next);
-            }
-        }
+            PromptTokenIds = new List<int>(request.InputTokens),
+            MaxNewTokens = request.MaxNewTokens,
+            Temperature = (float)request.Temperature,
+            TopP = (float)request.TopP,
+            TopK = request.TopK,
+            MinP = (float)request.MinP,
+            EosTokenId = request.EosTokenId,
+            SpeculationDepth = request.NumDraftTokens,
+            Seed = request.RequestId is { } id ? id.GetHashCode() : (int?)null
+        };
     }
 
     /// <summary>Extracts the last-position vocabulary row of a logits tensor as doubles.</summary>
@@ -292,21 +295,53 @@ public sealed class TextGenerationService : ITextGenerationService
             };
         }
 
-        // Preferred path: KV-cached incremental decode over a per-request session (each request gets
-        // its own paged-cache sequence id, so concurrent requests to the same model are isolated and
-        // each decode step only pays for the new token instead of recomputing the full context).
-        // On any failure, fall through to the proven full-context path below so a model whose
-        // incremental path misbehaves still serves correct (if slower) results.
-        if (generativeModel.SupportsIncrementalGeneration)
+        // Preferred path: the ONE shared continuous-batching engine (paged KV cache, RadixAttention
+        // prefix sharing, greedy-exact prompt-lookup speculation, per-request sampling). All requests to
+        // this model co-batch on the same engine; each gets an isolated paged-cache sequence and only
+        // pays for the new token per decode step. On any failure, fall through to the proven full-context
+        // path below so a model whose incremental path misbehaves still serves correct (if slower) results.
+        if (model is ServableModelWrapper<T> wrapper && wrapper.SupportsIncrementalGeneration)
         {
             try
             {
-                return GenerateIncremental(modelName, generativeModel, request, cancellationToken);
+                int eos = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId;
+                var genResult = wrapper.RunGeneration(BuildGenerationRequest<T>(request), cancellationToken);
+
+                var genTokens = new List<int>(genResult.GeneratedTokens);
+                // The engine emits EOS as a terminating token; it is not part of the completion content.
+                if (genTokens.Count > 0 && genTokens[genTokens.Count - 1] == eos)
+                {
+                    genTokens.RemoveAt(genTokens.Count - 1);
+                }
+                // Honor the MaxNewTokens contract exactly at the serving boundary (defensive cap).
+                if (genTokens.Count > request.MaxNewTokens)
+                {
+                    genTokens = genTokens.Take(request.MaxNewTokens).ToList();
+                }
+
+                var all = new List<int>(request.InputTokens);
+                all.AddRange(genTokens);
+                return new SpeculativeDecodingResponse
+                {
+                    AllTokens = all.ToArray(),
+                    GeneratedTokens = genTokens.ToArray(),
+                    NumGenerated = genTokens.Count,
+                    AcceptanceRate = wrapper.SpeculationAcceptanceRate ?? 0.0,
+                    RequestId = request.RequestId
+                };
+            }
+            catch (OperationCanceledException)
+            {
+                return new SpeculativeDecodingResponse
+                {
+                    Error = "Text generation was cancelled.",
+                    RequestId = request.RequestId
+                };
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex,
-                    "Incremental generation failed for model '{ModelName}'; falling back to full-context decode.",
+                    "Batched incremental generation failed for model '{ModelName}'; falling back to full-context decode.",
                     modelName);
             }
         }
@@ -390,247 +425,6 @@ public sealed class TextGenerationService : ITextGenerationService
         };
     }
 
-    /// <summary>
-    /// KV-cached incremental decode: prefill the prompt, then decode one token at a time over the
-    /// session's paged KV cache (each step forwards only the new token). The session owns a distinct
-    /// cache sequence id, so concurrent requests to the same model are isolated.
-    /// </summary>
-    private SpeculativeDecodingResponse GenerateIncremental<T>(
-        string modelName,
-        IServableGenerativeModel<T> model,
-        SpeculativeDecodingRequest request,
-        CancellationToken cancellationToken)
-    {
-        int eosTokenId = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId;
-        var generated = new List<int>(request.MaxNewTokens);
-
-        // Prefix sharing (RadixAttention): the session may start with a registered prompt prefix
-        // already in its KV cache (forked copy-on-write); we then forward only the remaining suffix.
-        using var session = model.BeginGeneration(request.InputTokens);
-        int prefillStart = session.CachedPromptTokens; // 0..InputTokens.Length-1 (strict prefix)
-
-        // Prefill the (remaining) prompt. When the model accepts a multi-token forward, do it in a
-        // SINGLE batched pass (per-position logits, take the last); otherwise one token at a time
-        // (universally compatible with fixed single-token-step models). There is always >= 1 suffix
-        // token because any shared prefix is strict. Exceptions propagate to the caller's fallback
-        // (full-context decode); cancellation returns a cancelled response directly.
-        int suffixLength = request.InputTokens.Length - prefillStart;
-        Tensor<T> logits;
-        if (model.SupportsBatchedPrefill && suffixLength > 1)
-        {
-            var suffix = new int[suffixLength];
-            for (int i = 0; i < suffixLength; i++)
-            {
-                suffix[i] = request.InputTokens[prefillStart + i];
-            }
-            logits = session.Forward(TokensToTensor<T>(suffix));
-        }
-        else
-        {
-            logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[prefillStart] }));
-            for (int i = prefillStart + 1; i < request.InputTokens.Length; i++)
-            {
-                logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[i] }));
-            }
-        }
-
-        // Register this prompt as a reusable prefix so later requests that extend it can fork its KV.
-        session.RegisterPromptPrefix(request.InputTokens);
-
-        // Running token stream (prompt + generated) — used both for the response and as the corpus for
-        // prompt-lookup speculative drafting.
-        var allTokens = new List<int>(request.InputTokens.Length + request.MaxNewTokens);
-        allTokens.AddRange(request.InputTokens);
-
-        // Speculative decoding composes with the paged KV cache only when the model produces per-position
-        // logits (a multi-token verify forward is the whole point) — the same capability batched prefill
-        // requires. We use draft-model-free PROMPT-LOOKUP speculation (n-gram match against the running
-        // stream): no second model, exact-greedy output, and a real speed-up on repetitive text.
-        double acceptanceRate = 0.0;
-        bool speculative = request.NumDraftTokens > 0 && model.SupportsBatchedPrefill;
-        if (speculative)
-        {
-            acceptanceRate = SpeculativeDecodeLoop(
-                session, logits, request, eosTokenId, generated, allTokens, cancellationToken,
-                out bool cancelled);
-            if (cancelled)
-            {
-                return new SpeculativeDecodingResponse { Error = "Text generation was cancelled.", RequestId = request.RequestId };
-            }
-        }
-        else
-        {
-            for (int step = 0; step < request.MaxNewTokens; step++)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return new SpeculativeDecodingResponse { Error = "Text generation was cancelled.", RequestId = request.RequestId };
-                }
-
-                int next = ArgMaxLastPosition(logits);
-                if (next == eosTokenId)
-                {
-                    break;
-                }
-
-                generated.Add(next);
-                allTokens.Add(next);
-
-                // Decode: forward only the new token; the KV cache supplies the prior context.
-                logits = session.Forward(TokensToTensor<T>(new[] { next }));
-            }
-        }
-
-        return new SpeculativeDecodingResponse
-        {
-            AllTokens = allTokens.ToArray(),
-            GeneratedTokens = generated.ToArray(),
-            NumGenerated = generated.Count,
-            AcceptanceRate = acceptanceRate,
-            RequestId = request.RequestId
-        };
-    }
-
-    /// <summary>
-    /// Exact-greedy speculative decode over the per-sequence paged cache, using prompt-lookup (n-gram)
-    /// drafting. Each round: draft up to <c>NumDraftTokens</c> tokens, verify them in ONE multi-token
-    /// forward (per-position logits), accept the greedy-matching prefix, and on rejection roll the KV
-    /// cache back so the corrected token overwrites the rejected drafts. The emitted tokens are
-    /// byte-for-byte identical to plain greedy decode; speculation only changes how many forwards it takes.
-    /// </summary>
-    /// <returns>The fraction of drafted tokens that were accepted (0 when nothing was ever drafted).</returns>
-    private static double SpeculativeDecodeLoop<T>(
-        IGenerationSession<T> session,
-        Tensor<T> prefillLogits,
-        SpeculativeDecodingRequest request,
-        int eosTokenId,
-        List<int> generated,
-        List<int> allTokens,
-        CancellationToken cancellationToken,
-        out bool cancelled)
-    {
-        cancelled = false;
-        int maxNew = request.MaxNewTokens;
-        int k = Math.Max(1, request.NumDraftTokens);
-        var nextLogits = prefillLogits; // predicts the next position to emit
-        long drafted = 0, accepted = 0;
-
-        while (generated.Count < maxNew)
-        {
-            if (cancellationToken.IsCancellationRequested) { cancelled = true; return Ratio(accepted, drafted); }
-
-            int greedy = ArgMaxLastPosition(nextLogits);
-            var draft = PromptLookupDraft(allTokens, k);
-
-            if (draft.Count == 0)
-            {
-                // No n-gram match this round: take a single ordinary greedy step.
-                if (greedy == eosTokenId) break;
-                generated.Add(greedy); allTokens.Add(greedy);
-                if (generated.Count >= maxNew) break;
-                nextLogits = session.Forward(TokensToTensor<T>(new[] { greedy }));
-                continue;
-            }
-
-            // Verify the K draft tokens in ONE forward. They occupy positions pos..pos+K-1; row j of the
-            // returned logits predicts position pos+j+1 given the prefix + draft[0..j].
-            int posBefore = session.Position;
-            var verifyLogits = session.Forward(TokensToTensor<T>(draft));
-            drafted += draft.Count;
-
-            // Accept the longest greedy-matching prefix: expected_0 = greedy(prefill);
-            // expected_{j+1} = argmax(verify row j).
-            int expected = greedy;
-            int nAccept = 0;
-            for (int j = 0; j < draft.Count; j++)
-            {
-                if (draft[j] != expected) break;
-                nAccept++;
-                expected = ArgMaxAtPosition(verifyLogits, j);
-            }
-            accepted += nAccept;
-
-            // Emit accepted drafts (their KV at pos..pos+nAccept-1 is correct — real tokens as context).
-            bool stop = false;
-            for (int j = 0; j < nAccept; j++)
-            {
-                if (draft[j] == eosTokenId) { stop = true; break; }
-                generated.Add(draft[j]); allTokens.Add(draft[j]);
-                if (generated.Count >= maxNew) { stop = true; break; }
-            }
-            if (stop) break;
-
-            // Drop the rejected drafts' KV (positions pos+nAccept..), then emit + commit the correction
-            // (target's own greedy at the divergence, or the bonus token after a full accept).
-            session.Truncate(posBefore + nAccept);
-            if (expected == eosTokenId) break;
-            generated.Add(expected); allTokens.Add(expected);
-            if (generated.Count >= maxNew) break;
-            nextLogits = session.Forward(TokensToTensor<T>(new[] { expected }));
-        }
-
-        return Ratio(accepted, drafted);
-
-        static double Ratio(long a, long d) => d > 0 ? (double)a / d : 0.0;
-    }
-
-    /// <summary>
-    /// Prompt-lookup draft: find the most recent earlier occurrence of the last <c>ngram</c> tokens in
-    /// the running stream and propose the up-to-<paramref name="k"/> tokens that followed it. Returns an
-    /// empty list when no match exists (the caller then takes a plain greedy step). No draft model needed.
-    /// </summary>
-    private static List<int> PromptLookupDraft(IReadOnlyList<int> tokens, int k, int ngram = 2)
-    {
-        int n = tokens.Count;
-        var draft = new List<int>(k);
-        if (n < ngram + 1)
-        {
-            return draft;
-        }
-
-        // Scan backwards for the most recent earlier match of the trailing ngram.
-        for (int start = n - ngram - 1; start >= 0; start--)
-        {
-            bool match = true;
-            for (int g = 0; g < ngram; g++)
-            {
-                if (tokens[start + g] != tokens[n - ngram + g]) { match = false; break; }
-            }
-            if (!match) continue;
-
-            int src = start + ngram;
-            for (int i = 0; i < k && src + i < n; i++)
-            {
-                draft.Add(tokens[src + i]);
-            }
-            return draft;
-        }
-        return draft;
-    }
-
-    /// <summary>Argmax over vocab at output position <paramref name="posIndex"/> of a per-position logits
-    /// tensor (<c>[1, positions, vocab]</c> or <c>[positions, vocab]</c>).</summary>
-    private static int ArgMaxAtPosition<T>(Tensor<T> logits, int posIndex)
-    {
-        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        int rank = logits.Shape.Length;
-        int vocab = logits.Shape[rank - 1];
-        int baseOffset = posIndex * vocab;
-
-        var flat = logits.AsSpan();
-        int best = 0;
-        T bestVal = flat[baseOffset];
-        for (int v = 1; v < vocab; v++)
-        {
-            if (numOps.GreaterThan(flat[baseOffset + v], bestVal))
-            {
-                bestVal = flat[baseOffset + v];
-                best = v;
-            }
-        }
-        return best;
-    }
-
     /// <summary>Builds a <c>[1, n]</c> token-id tensor from token IDs.</summary>
     private static Tensor<T> TokensToTensor<T>(IReadOnlyList<int> tokens)
     {
@@ -643,35 +437,4 @@ public sealed class TextGenerationService : ITextGenerationService
         return tensor;
     }
 
-    /// <summary>
-    /// Returns the argmax token id of the last position of a logits tensor, handling
-    /// <c>[1, seq, vocab]</c>, <c>[seq, vocab]</c>, <c>[1, vocab]</c>, and <c>[vocab]</c> shapes.
-    /// </summary>
-    private static int ArgMaxLastPosition<T>(Tensor<T> logits)
-    {
-        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        int rank = logits.Shape.Length;
-        int vocab = logits.Shape[rank - 1];
-
-        // Flat offset of the last position's vocab row.
-        int positions = 1;
-        for (int d = 0; d < rank - 1; d++)
-        {
-            positions *= logits.Shape[d];
-        }
-        int baseOffset = (positions - 1) * vocab;
-
-        var flat = logits.AsSpan();
-        int best = 0;
-        T bestVal = flat[baseOffset];
-        for (int v = 1; v < vocab; v++)
-        {
-            if (numOps.GreaterThan(flat[baseOffset + v], bestVal))
-            {
-                bestVal = flat[baseOffset + v];
-                best = v;
-            }
-        }
-        return best;
-    }
 }

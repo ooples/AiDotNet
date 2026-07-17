@@ -36,6 +36,14 @@ public class ContinuousBatcherConfig
     public int MaxContextLength { get; set; } = 4096;
 
     /// <summary>
+    /// Whether the paged incremental model accepts a multi-token forward that yields per-position logits
+    /// (batched prefill / speculative verification). False for sequence-collapsing models (e.g. those
+    /// with a Flatten before the head), which MUST be prefilled one token at a time so a shape-dependent
+    /// head does not re-fit its weights to a varying flattened width. Default true.
+    /// </summary>
+    public bool SupportsBatchedPrefill { get; set; } = true;
+
+    /// <summary>
     /// Whether to enable speculative decoding.
     /// </summary>
     public bool EnableSpeculativeDecoding { get; set; } = false;

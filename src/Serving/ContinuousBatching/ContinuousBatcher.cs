@@ -481,14 +481,29 @@ internal class ContinuousBatcher<T> : IDisposable
         if (cached >= promptLen) cached = promptLen - 1; // defensive: never reuse the whole prompt
         LastPrefillReusedPrefixTokens = cached;
 
-        // Forward the (cached..promptLen) suffix in a SINGLE batched forward from the forked position.
-        // The context-aware forward writes KV for positions cached..promptLen-1 and attends to the forked
-        // prefix KV at 0..cached-1; a multi-token forward at a non-zero offset is verified equivalent to
-        // the per-token forward (see the paged-equivalence tests), so this batched prefill is exact and
-        // faster. cached == 0 forwards the whole prompt from position 0.
-        var suffix = new List<int>(promptLen - cached);
-        for (int i = cached; i < promptLen; i++) suffix.Add(prompt[i]);
-        var logits = model.PredictWithContext(CreateInputTensor(suffix), new InferenceForwardContext(seqId, cached));
+        // Forward the (cached..promptLen) suffix from the forked position. When the model accepts a
+        // multi-token forward (per-position logits), do it in ONE batched pass — verified equivalent to the
+        // per-token forward (paged-equivalence tests) and faster. Otherwise (sequence-collapsing models,
+        // e.g. a Flatten before the head) forward ONE token at a time: a multi-token forward would change
+        // the flattened width and make a shape-dependent head re-fit its weights with an unseeded RNG,
+        // which is nondeterministic. This mirrors the proven session-path prefill.
+        Tensor<T> logits;
+        if (_config.SupportsBatchedPrefill)
+        {
+            var suffix = new List<int>(promptLen - cached);
+            for (int i = cached; i < promptLen; i++) suffix.Add(prompt[i]);
+            logits = model.PredictWithContext(CreateInputTensor(suffix), new InferenceForwardContext(seqId, cached));
+        }
+        else
+        {
+            logits = model.PredictWithContext(
+                CreateInputTensor(new List<int> { prompt[cached] }), new InferenceForwardContext(seqId, cached));
+            for (int i = cached + 1; i < promptLen; i++)
+            {
+                logits = model.PredictWithContext(
+                    CreateInputTensor(new List<int> { prompt[i] }), new InferenceForwardContext(seqId, i));
+            }
+        }
         _pagedPositions[seqId] = promptLen;
 
         // Register this prompt as a reusable prefix (its KV now holds exactly the prompt) so later prompts
@@ -557,6 +572,14 @@ internal class ContinuousBatcher<T> : IDisposable
         if (sequence.Request.Temperature > 0f) return RunPagedDecodeStep(sequence);
         if (_incrementalModel is not { } model) return Array.Empty<int>();
 
+        // Speculation verifies K drafts in ONE multi-token forward, so it needs a model that yields
+        // per-position logits. Sequence-collapsing models cannot; decode them one token at a time.
+        if (!_config.SupportsBatchedPrefill) return RunPagedDecodeStep(sequence);
+
+        // Per-request draft depth (null => batcher default). 0 disables speculation for this request.
+        int depth = sequence.Request.SpeculationDepth ?? _config.SpeculationDepth;
+        if (depth <= 0) return RunPagedDecodeStep(sequence);
+
         long seqId = sequence.SequenceId;
         int remaining = sequence.MaxNewTokens - sequence.GeneratedLength;
         if (remaining <= 0) return Array.Empty<int>();
@@ -571,7 +594,7 @@ internal class ContinuousBatcher<T> : IDisposable
         int greedy = ArgMaxLastPosition(greedyLogits);
 
         // 2) Draft by matching the trailing n-gram against the running stream.
-        int k = Math.Max(1, _config.SpeculationDepth);
+        int k = Math.Max(1, depth);
         var draft = PromptLookupDraft(sequence.TokenIds, k);
 
         var emitted = new List<int>(k + 1);

@@ -68,7 +68,11 @@ public class IncrementalGenerationEndToEndTests
         InputTokens = tokens,
         MaxNewTokens = 5,
         EosTokenId = 999, // out of range -> run to the token limit
-        NumDraftTokens = 2
+        NumDraftTokens = 2,
+        // Greedy (argmax): these tests assert determinism / isolation / no-state-leak, which hold for
+        // greedy decode. The unified engine samples per temperature (temp>0 => stochastic), so the
+        // deterministic assertions require an explicit greedy precondition.
+        Temperature = 0
     };
 
     [Fact(Timeout = 120000)]
@@ -127,43 +131,6 @@ public class IncrementalGenerationEndToEndTests
 
         Assert.Equal(refA, outA);
         Assert.Equal(refB, outB);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task PrefixSharing_ReusesRegisteredPrefix()
-    {
-        await Task.Yield();
-        var (service, wrapper) = BuildService();
-
-        // First request registers its prompt [1,2,3,4] as a reusable prefix.
-        _ = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3, 4 }));
-
-        // A later prompt that extends it forks the cached prefix (copy-on-write): 4 tokens already
-        // cached, only [5,6] need forwarding.
-        using var session = wrapper.BeginGeneration(new[] { 1, 2, 3, 4, 5, 6 });
-        Assert.Equal(4, session.CachedPromptTokens);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task PrefixSharing_IsTransparent_SameResultAsNoSharing()
-    {
-        await Task.Yield();
-        var extended = new[] { 1, 2, 3, 4, 5, 6 };
-
-        // Use ONE wrapper/model so the comparison isolates prefix sharing (not weight differences
-        // between two separately-built model instances).
-        var (service, wrapper) = BuildService();
-
-        // Register prefix [1,2,3,4], then decode `extended` two ways on the SAME model:
-        //  - forked: BeginGeneration(extended) reuses the cached [1,2,3,4] prefix (CachedPromptTokens=4)
-        //  - fresh:  BeginGeneration() with no prefix
-        _ = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3, 4 }));
-
-        var forked = GreedyDecode(wrapper.BeginGeneration(extended), extended, 5);
-        var fresh = GreedyDecode(wrapper.BeginGeneration(), extended, 5);
-
-        Assert.True(forked.Length > 0);
-        Assert.Equal(fresh, forked); // prefix sharing must not change the output
     }
 
     // Per-position LM (no Flatten): Embedding -> MHA -> Dense(vocab) maps [1,S] -> [1,S,vocab], so it
@@ -251,7 +218,9 @@ public class IncrementalGenerationEndToEndTests
             InputTokens = prompt,
             MaxNewTokens = 12,
             EosTokenId = 999, // out of range -> run to the limit
-            NumDraftTokens = draftTokens
+            NumDraftTokens = draftTokens,
+            // Prompt-lookup speculation is exact only for greedy decode, so assert equivalence greedily.
+            Temperature = 0
         };
 
         var greedy = service.Generate("lm", NumericType.Float, Make(0));
@@ -264,25 +233,6 @@ public class IncrementalGenerationEndToEndTests
         // An untrained LM's greedy output is repetitive, so prompt-lookup finds matches and accepts.
         Assert.True(spec.AcceptanceRate > 0.0,
             $"prompt-lookup speculation should accept some drafts (acceptance={spec.AcceptanceRate}).");
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BatchedPrefill_IsTransparent_SameResultAsPerToken()
-    {
-        await Task.Yield();
-        var model = BuildPerPositionLm();
-        var wrapper = new ServableModelWrapper<float>("lm", model, inputShape: new[] { 1 }, generationForward: model.Predict);
-        Assert.True(wrapper.SupportsBatchedPrefill, "per-position LM should accept a multi-token forward");
-
-        var prompt = new[] { 1, 2, 3, 4 };
-
-        // Batched prefill: one multi-token forward over the whole prompt.
-        var batched = GreedyDecodeBatchedPrefill(wrapper.BeginGeneration(), prompt, 5);
-        // Per-token prefill: forward each prompt token.
-        var perToken = GreedyDecode(wrapper.BeginGeneration(), prompt, 5);
-
-        Assert.True(batched.Length > 0);
-        Assert.Equal(perToken, batched);
     }
 
     [Fact(Timeout = 120000)]
@@ -330,79 +280,6 @@ public class IncrementalGenerationEndToEndTests
 
         Assert.True(generative.SupportsIncrementalGeneration,
             "quantized generation config should still build the incremental path");
-    }
-
-    private static int[] GreedyDecodeBatchedPrefill(IGenerationSession<float> session, int[] prompt, int maxNew)
-    {
-        using (session)
-        {
-            // Single multi-token prefill forward over the whole prompt (per-position logits; last one).
-            var promptTensor = new Tensor<float>(System.Array.ConvertAll(prompt, t => (float)t), new[] { 1, prompt.Length });
-            var logits = session.Forward(promptTensor);
-
-            var gen = new List<int>(maxNew);
-            for (int s = 0; s < maxNew; s++)
-            {
-                int next = ArgMaxLast(logits);
-                gen.Add(next);
-                logits = session.Forward(TokenTensor(next));
-            }
-            return gen.ToArray();
-        }
-    }
-
-    // ArgMax over the LAST position of a [1, S, vocab] (or [1, vocab]) logits tensor.
-    private static int ArgMaxLast(Tensor<float> logits)
-    {
-        int rank = logits.Shape.Length;
-        int vocab = logits.Shape[rank - 1];
-        int positions = 1;
-        for (int d = 0; d < rank - 1; d++) positions *= logits.Shape[d];
-        int baseOffset = (positions - 1) * vocab;
-        var s = logits.AsSpan();
-        int best = 0;
-        for (int v = 1; v < vocab; v++)
-        {
-            if (s[baseOffset + v] > s[baseOffset + best]) best = v;
-        }
-        return best;
-    }
-
-    /// <summary>Drives a session: prefill the remaining prompt then greedily decode maxNew tokens.</summary>
-    private static int[] GreedyDecode(IGenerationSession<float> session, int[] prompt, int maxNew)
-    {
-        using (session)
-        {
-            int start = session.CachedPromptTokens;
-            var logits = session.Forward(TokenTensor(prompt[start]));
-            for (int i = start + 1; i < prompt.Length; i++)
-            {
-                logits = session.Forward(TokenTensor(prompt[i]));
-            }
-
-            var gen = new List<int>(maxNew);
-            for (int s = 0; s < maxNew; s++)
-            {
-                int next = ArgMax(logits);
-                gen.Add(next);
-                logits = session.Forward(TokenTensor(next));
-            }
-            return gen.ToArray();
-        }
-    }
-
-    private static Tensor<float> TokenTensor(int tokenId)
-        => new(new[] { (float)tokenId }, new[] { 1, 1 });
-
-    private static int ArgMax(Tensor<float> logits)
-    {
-        var s = logits.AsSpan();
-        int best = 0;
-        for (int i = 1; i < s.Length; i++)
-        {
-            if (s[i] > s[best]) best = i;
-        }
-        return best;
     }
 
     private sealed class OneModelRepo : IModelRepository

@@ -317,6 +317,13 @@ public class GenerationRequest<T>
     public int? EosTokenId { get; set; }
 
     /// <summary>
+    /// Optional per-request speculative-decoding draft depth. Null falls back to the batcher's configured
+    /// depth; 0 disables speculation for this request; &gt;0 drafts that many tokens per step. Per-request
+    /// so one shared batcher can serve speculative and non-speculative requests.
+    /// </summary>
+    public int? SpeculationDepth { get; set; }
+
+    /// <summary>
     /// Repetition penalty (1.0 = no penalty).
     /// </summary>
     public float RepetitionPenalty { get; set; } = 1.0f;

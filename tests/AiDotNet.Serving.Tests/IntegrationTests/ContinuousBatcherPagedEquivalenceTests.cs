@@ -1,8 +1,8 @@
 // Copyright (c) AiDotNet. All rights reserved.
 // Phase 1c: prove the continuous-batching engine's PAGED incremental path produces byte-for-byte
-// identical greedy output to the proven GenerationSession path, driven over the SAME optimized model
+// identical greedy output to a direct model forward (the ground truth), over the SAME optimized model
 // and SAME shared PagedKVCache. This de-risks routing the live serving path (TextGenerationService)
-// through ONE shared batcher: the batcher must match the session before it replaces it.
+// through ONE shared batcher: the batcher is the single decode engine.
 
 using System;
 using System.Collections.Generic;
@@ -59,7 +59,7 @@ public class ContinuousBatcherPagedEquivalenceTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task PagedBatcher_GreedyOutput_MatchesSessionPath()
+    public async Task PagedBatcher_GreedyOutput_MatchesDirectModel()
     {
         await Task.Yield();
         var wrapper = BuildWrapper();
@@ -69,16 +69,16 @@ public class ContinuousBatcherPagedEquivalenceTests
         var prompt = new[] { 1, 2, 3 };
         const int maxNew = 8;
 
-        // Reference: the proven GenerationSession path — one batched prefill forward over the whole
+        // Reference: a direct model forward (ground truth) — one batched prefill over the whole
         // prompt, then greedy (argmax) decode of maxNew tokens.
-        int[] sessionTokens = SessionGreedy(wrapper, prompt, maxNew);
+        int[] modelTokens = ModelGreedy(wrapper, prompt, maxNew);
 
         // Under test: the continuous-batching engine driving the SAME optimized model + SAME paged cache
         // via its paged incremental path (RunPagedPrefill/RunPagedDecodeStep + SampleFromLogits greedy).
         int[] batcherTokens = BatcherGreedy(wrapper, prompt, maxNew);
 
-        Assert.Equal(maxNew, sessionTokens.Length);
-        Assert.Equal(sessionTokens, batcherTokens);
+        Assert.Equal(maxNew, modelTokens.Length);
+        Assert.Equal(modelTokens, batcherTokens);
     }
 
     [Fact(Timeout = 120000)]
@@ -98,8 +98,8 @@ public class ContinuousBatcherPagedEquivalenceTests
         var promptB = new[] { 7, 8 };
         const int maxNew = 6;
 
-        int[] refA = SessionGreedy(wrapper, promptA, maxNew);
-        int[] refB = SessionGreedy(wrapper, promptB, maxNew);
+        int[] refA = ModelGreedy(wrapper, promptA, maxNew);
+        int[] refB = ModelGreedy(wrapper, promptB, maxNew);
 
         // Two sequences live in ONE batcher over the shared cache, interleaved at step granularity — the
         // continuous-batching case. Each is isolated by sequence id and must match its sequential greedy.
@@ -294,22 +294,43 @@ public class ContinuousBatcherPagedEquivalenceTests
         return task.GetAwaiter().GetResult().GeneratedTokens.ToArray();
     }
 
-    // Reference greedy over the GenerationSession path: one batched prefill forward over the whole
-    // prompt (per-position logits, take the last), then greedy decode of maxNew tokens.
-    private static int[] SessionGreedy(ServableModelWrapper<float> wrapper, int[] prompt, int maxNew)
+    // Reference greedy directly over the incremental model + a fresh paged-cache sequence — the ground
+    // truth the batcher must reproduce: one batched prefill forward over the whole prompt (per-position
+    // logits, take the last), then greedy decode of maxNew tokens.
+    private static int[] ModelGreedy(ServableModelWrapper<float> wrapper, int[] prompt, int maxNew)
     {
-        using var session = wrapper.BeginGeneration();
-        var promptTensor = new Tensor<float>(Array.ConvertAll(prompt, t => (float)t), new[] { 1, prompt.Length });
-        var logits = session.Forward(promptTensor);
-
-        var gen = new List<int>(maxNew);
-        for (int s = 0; s < maxNew; s++)
+        var model = wrapper.IncrementalModel;
+        var cache = wrapper.IncrementalCache;
+        if (model is null || cache is null)
         {
-            int next = ArgMaxLast(logits);
-            gen.Add(next);
-            logits = session.Forward(new Tensor<float>(new[] { (float)next }, new[] { 1, 1 }));
+            Assert.Fail("wrapper must expose the incremental model + paged cache");
+            return Array.Empty<int>();
         }
-        return gen.ToArray();
+
+        const long seqId = 900_000; // distinct from the batcher's (small, positive) sequence ids
+        cache.AllocateSequence(seqId, 0);
+        try
+        {
+            var promptTensor = new Tensor<float>(Array.ConvertAll(prompt, t => (float)t), new[] { 1, prompt.Length });
+            var logits = model.PredictWithContext(promptTensor, new AiDotNet.Inference.InferenceForwardContext(seqId, 0));
+
+            int pos = prompt.Length;
+            var gen = new List<int>(maxNew);
+            for (int s = 0; s < maxNew; s++)
+            {
+                int next = ArgMaxLast(logits);
+                gen.Add(next);
+                logits = model.PredictWithContext(
+                    new Tensor<float>(new[] { (float)next }, new[] { 1, 1 }),
+                    new AiDotNet.Inference.InferenceForwardContext(seqId, pos));
+                pos++;
+            }
+            return gen.ToArray();
+        }
+        finally
+        {
+            cache.FreeSequence(seqId);
+        }
     }
 
     // ArgMax over the LAST position of a [1, S, vocab] (or [1, vocab]) logits tensor.

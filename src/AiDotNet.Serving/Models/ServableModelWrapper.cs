@@ -11,7 +11,7 @@ namespace AiDotNet.Serving.Models;
 /// This allows any model with a Predict method to be served via the REST API.
 /// </summary>
 /// <typeparam name="T">The numeric type used by the model</typeparam>
-public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenceOptions, IServableGenerativeModel<T>
+public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenceOptions, IServableGenerativeModel<T>, System.IDisposable
 {
     private readonly Func<Vector<T>, Vector<T>> _predictFunc;
     private readonly Func<Matrix<T>, Matrix<T>>? _predictBatchFunc;
@@ -27,7 +27,17 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     private readonly AiDotNet.NeuralNetworks.NeuralNetworkBase<T>? _incrementalModel;
     private readonly AiDotNet.Inference.PagedAttention.PagedKVCache<T>? _incrementalCache;
     private readonly bool _supportsBatchedPrefill;
-    private long _nextSequenceId;
+
+    // The ONE shared continuous-batching engine for this model (built lazily over the incremental model +
+    // paged cache). All generation requests are submitted to it and co-batch; its background loop is the
+    // single thread that runs model forwards, so concurrent requests never race per-forward layer scratch.
+    private AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<T>? _sharedBatcher;
+    private readonly object _batcherInitLock = new();
+    // Only one thread drives the engine's Step() at a time. Whoever holds it advances the WHOLE batch, so
+    // concurrent requests co-batch; a request returns as soon as its own result task completes. Driving
+    // synchronously (no background loop) keeps generation deterministic and serializes model forwards.
+    private readonly object _engineLock = new();
+    private bool _disposed;
 
     // The optimized, context-aware model backing incremental decode (writes/reads paged KV per sequence
     // id via PredictWithContext), or null when this model has no incremental path. Exposed to the
@@ -40,23 +50,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     // incremental path. Same instance the GenerationSession path allocates its sequences in.
     internal AiDotNet.Inference.PagedAttention.PagedKVCache<T>? IncrementalCache => _incrementalCache;
 
-    // Concurrent generation sessions share ONE optimized model instance. Its KV state is isolated
-    // per sequence id (paged cache), but the layers carry per-forward scratch (e.g. _lastInput), so
-    // two threads cannot run the forward simultaneously without corrupting each other. Inference on a
-    // single in-memory model is inherently one-forward-at-a-time (as on a single device); we serialize
-    // each forward STEP here, not the whole request — sessions still interleave at step granularity,
-    // and the memory win of a shared per-sequence paged cache is preserved. Cross-request parallelism
-    // is the batching engine's job (one thread, one batched forward), not parallel forwards.
-    private readonly object _forwardLock = new();
 
-    // RadixAttention-style prefix sharing (#99 Stage 2 integration): maps a prompt-prefix key to a
-    // base KV-cache sequence whose cache holds exactly that prefix. New requests fork from the
-    // longest registered strict-prefix (copy-on-write), reusing the prefix's KV. LRU-capped; evicted
-    // bases are freed (existing forks keep shared blocks alive via block ref-counting).
-    private const int PrefixRegistryCapacity = 64;
-    private readonly object _prefixLock = new();
-    private readonly System.Collections.Generic.Dictionary<string, long> _prefixRegistry = new();
-    private readonly System.Collections.Generic.LinkedList<string> _prefixLru = new();
 
     private readonly string _modelName;
     private readonly int _inputDimension;
@@ -701,231 +695,193 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <inheritdoc/>
     public bool SupportsBatchedPrefill => _supportsBatchedPrefill;
 
-    /// <inheritdoc/>
-    public IGenerationSession<T> BeginGeneration()
+
+    /// <summary>
+    /// The ONE shared continuous-batching engine for this model, built lazily over the incremental model
+    /// and paged cache. Returns null when the model has no incremental path. Its background loop is the
+    /// single thread that runs forwards, so concurrent submitted requests co-batch and never race.
+    /// </summary>
+    internal AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<T>? EnsureBatcher()
     {
-        if (_incrementalModel is null || _incrementalCache is null)
+        if (_incrementalModel is not { } model || _incrementalCache is not { } cache)
         {
-            throw new NotSupportedException(
-                $"Model '{_modelName}' does not support incremental generation.");
+            return null;
         }
 
-        long sequenceId = AllocateSessionSequence(_incrementalCache);
-        return new GenerationSession(this, _incrementalModel, _incrementalCache, sequenceId, cachedPromptTokens: 0);
-    }
-
-    /// <inheritdoc/>
-    public IGenerationSession<T> BeginGeneration(System.Collections.Generic.IReadOnlyList<int> promptTokens)
-    {
-        Guard.NotNull(promptTokens);
-        if (_incrementalModel is null || _incrementalCache is null)
+        if (_sharedBatcher is { } existing)
         {
-            throw new NotSupportedException(
-                $"Model '{_modelName}' does not support incremental generation.");
+            return existing;
         }
 
-        long sequenceId = AllocateSessionSequence(_incrementalCache);
-        int cachedPromptTokens = 0;
-
-        // Reuse the longest registered prompt prefix that is a STRICT prefix of this prompt (so at
-        // least the last token is still forwarded, producing the first next-token logits). Fork it
-        // copy-on-write so the shared prefix KV is reused and only the suffix allocates new blocks.
-        lock (_prefixLock)
+        lock (_batcherInitLock)
         {
-            for (int len = promptTokens.Count - 1; len >= 1; len--)
+            if (_sharedBatcher is null)
             {
-                string key = PrefixKey(promptTokens, len);
-                if (_prefixRegistry.TryGetValue(key, out long baseSeqId) &&
-                    _incrementalCache.ForkSequence(baseSeqId, sequenceId))
+                var config = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig
                 {
-                    cachedPromptTokens = len;
-                    TouchPrefix(key);
-                    break;
-                }
+                    // Requests drive Step() synchronously under the engine lock (no background loop), so
+                    // generation is deterministic and forwards are serialized.
+                    AutoStart = false,
+                    // Per-request GenerationRequest.SpeculationDepth overrides this; a positive default keeps
+                    // greedy-exact prompt-lookup speculation available to greedy requests that don't specify one.
+                    // Sequence-collapsing models (SupportsBatchedPrefill=false) must prefill/decode one
+                    // token at a time; a multi-token forward would re-fit a shape-dependent head.
+                    SupportsBatchedPrefill = _supportsBatchedPrefill,
+                    EnableSpeculativeDecoding = true,
+                    SpeculationDepth = 4
+                };
+                _sharedBatcher = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<T>(config, model, cache);
             }
+            return _sharedBatcher;
         }
-
-        return new GenerationSession(this, _incrementalModel, _incrementalCache, sequenceId, cachedPromptTokens);
     }
 
     /// <summary>
-    /// Registers a base sequence (forked from <paramref name="sourceSequenceId"/>, which must hold
-    /// exactly the prompt's KV) under the full prompt key, so later prompts that extend it can fork.
+    /// Submits a request to the shared batcher and blocks until it completes, returning the result. The
+    /// batcher's background loop drives generation; concurrent callers co-batch on the same engine.
     /// </summary>
-    private void RegisterPrefix(System.Collections.Generic.IReadOnlyList<int> promptTokens, long sourceSequenceId)
+    internal AiDotNet.Serving.ContinuousBatching.GenerationResult<T> RunGeneration(
+        AiDotNet.Serving.ContinuousBatching.GenerationRequest<T> request,
+        System.Threading.CancellationToken cancellationToken)
     {
-        if (_incrementalCache is null || promptTokens.Count == 0)
+        Guard.NotNull(request);
+        var batcher = EnsureBatcher()
+            ?? throw new NotSupportedException($"Model '{_modelName}' does not support incremental generation.");
+        var task = batcher.GenerateAsync(request, cancellationToken);
+        DriveUntilComplete(batcher, task, request, cancellationToken);
+        return task.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Cooperatively drives the shared engine until <paramref name="task"/> completes. Whoever holds the
+    /// engine lock advances the whole batch (so concurrent requests co-batch); a caller whose task another
+    /// thread is already driving spins until its own task completes. Forwards are serialized by the lock.
+    /// </summary>
+    private void DriveUntilComplete(
+        AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<T> batcher,
+        System.Threading.Tasks.Task task,
+        AiDotNet.Serving.ContinuousBatching.GenerationRequest<T> request,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        // Generous upper bound on Step() calls for this driver: each Step advances every scheduled sequence
+        // (including this request's) by >= 1 token, so this request completes well within it. Guards against
+        // a wedged sequence that never makes progress instead of spinning forever.
+        long maxSteps = ((long)request.MaxNewTokens + request.PromptTokenIds.Count + 64) * 8L;
+        var spin = new System.Threading.SpinWait();
+
+        while (!task.IsCompleted)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (System.Threading.Monitor.TryEnter(_engineLock))
+            {
+                try
+                {
+                    while (!task.IsCompleted)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        batcher.Step();
+                        if (--maxSteps <= 0)
+                        {
+                            throw new TimeoutException(
+                                $"Generation for model '{_modelName}' did not complete within the step budget.");
+                        }
+                    }
+                }
+                finally
+                {
+                    System.Threading.Monitor.Exit(_engineLock);
+                }
+            }
+            else
+            {
+                // Another thread is driving (and advancing this request's sequence too); wait for my task.
+                spin.SpinOnce();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The shared batcher's cumulative speculative-decoding acceptance rate (fraction of drafted tokens
+    /// accepted), or null when speculation has not run. Exposed for serving-layer telemetry.
+    /// </summary>
+    internal double? SpeculationAcceptanceRate => _sharedBatcher?.SpeculationAcceptanceRate;
+
+    /// <summary>
+    /// Submits a request to the shared batcher and streams generated token ids as they are produced. The
+    /// end-of-sequence token is not yielded. Enumeration ends when generation completes or is cancelled.
+    /// </summary>
+    internal System.Collections.Generic.IEnumerable<int> StreamGeneration(
+        AiDotNet.Serving.ContinuousBatching.GenerationRequest<T> request,
+        int eosTokenId,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        Guard.NotNull(request);
+        var batcher = EnsureBatcher();
+        if (batcher is null)
+        {
+            yield break;
+        }
+
+        // Tokens are captured as the engine produces them and yielded (outside the engine lock) as they
+        // become available. The consumer itself helps drive the shared engine one Step at a time.
+        var queue = new System.Collections.Concurrent.ConcurrentQueue<int>();
+        request.OnTokenGenerated = token => queue.Enqueue(token);
+        var task = batcher.GenerateAsync(request, cancellationToken);
+
+        while (true)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                yield break;
+            }
+
+            // Advance the batch by one Step if we can grab the engine (another streaming/blocking caller
+            // may currently hold it — its Steps still advance this request's sequence).
+            if (System.Threading.Monitor.TryEnter(_engineLock))
+            {
+                try
+                {
+                    if (!task.IsCompleted)
+                    {
+                        batcher.Step();
+                    }
+                }
+                finally
+                {
+                    System.Threading.Monitor.Exit(_engineLock);
+                }
+            }
+
+            // Drain and yield any tokens produced so far (EOS terminates the stream, not yielded).
+            while (queue.TryDequeue(out int token))
+            {
+                if (token == eosTokenId)
+                {
+                    yield break;
+                }
+                yield return token;
+            }
+
+            if (task.IsCompleted)
+            {
+                yield break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Stops the shared batching engine (if started) and releases its resources.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
         {
             return;
         }
-
-        string key = PrefixKey(promptTokens, promptTokens.Count);
-        lock (_prefixLock)
-        {
-            if (_prefixRegistry.ContainsKey(key))
-            {
-                TouchPrefix(key);
-                return;
-            }
-
-            long baseSeqId = System.Threading.Interlocked.Increment(ref _nextSequenceId);
-            if (!_incrementalCache.ForkSequence(sourceSequenceId, baseSeqId))
-            {
-                return; // best-effort: skip registration if the fork fails
-            }
-
-            _prefixRegistry[key] = baseSeqId;
-            _prefixLru.AddLast(key);
-            EvictPrefixesIfNeeded();
-        }
-    }
-
-    // Caller must hold _prefixLock.
-    private void TouchPrefix(string key)
-    {
-        _prefixLru.Remove(key);
-        _prefixLru.AddLast(key);
-    }
-
-    // Caller must hold _prefixLock.
-    private void EvictPrefixesIfNeeded()
-    {
-        while (_prefixRegistry.Count > PrefixRegistryCapacity && _prefixLru.First is not null)
-        {
-            string oldest = _prefixLru.First.Value;
-            _prefixLru.RemoveFirst();
-            if (_prefixRegistry.TryGetValue(oldest, out long evictedBase))
-            {
-                _prefixRegistry.Remove(oldest);
-                _incrementalCache?.FreeSequence(evictedBase);
-            }
-        }
-    }
-
-    private static string PrefixKey(System.Collections.Generic.IReadOnlyList<int> tokens, int length)
-    {
-        var sb = new System.Text.StringBuilder(length * 4);
-        for (int i = 0; i < length; i++)
-        {
-            sb.Append(tokens[i]);
-            sb.Append(',');
-        }
-        return sb.ToString();
-    }
-
-    private long AllocateSessionSequence(AiDotNet.Inference.PagedAttention.PagedKVCache<T> cache)
-    {
-        for (int attempt = 0; attempt < 4096; attempt++)
-        {
-            long id = System.Threading.Interlocked.Increment(ref _nextSequenceId);
-            if (cache.AllocateSequence(id, 0))
-            {
-                return id;
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Unable to allocate a KV-cache sequence for model '{_modelName}' (cache exhausted).");
-    }
-
-    /// <summary>
-    /// Per-request KV-cached generation session over the shared optimized model + paged cache,
-    /// isolated by its own sequence id.
-    /// </summary>
-    private sealed class GenerationSession : IGenerationSession<T>
-    {
-        private readonly ServableModelWrapper<T> _owner;
-        private readonly AiDotNet.NeuralNetworks.NeuralNetworkBase<T> _model;
-        private readonly AiDotNet.Inference.PagedAttention.PagedKVCache<T> _cache;
-        private readonly long _sequenceId;
-        private int _position;
-        private bool _disposed;
-
-        public GenerationSession(
-            ServableModelWrapper<T> owner,
-            AiDotNet.NeuralNetworks.NeuralNetworkBase<T> model,
-            AiDotNet.Inference.PagedAttention.PagedKVCache<T> cache,
-            long sequenceId,
-            int cachedPromptTokens)
-        {
-            _owner = owner;
-            _model = model;
-            _cache = cache;
-            _sequenceId = sequenceId;
-            // A forked session starts decoding after the shared prefix already in its KV cache.
-            _position = cachedPromptTokens;
-            CachedPromptTokens = cachedPromptTokens;
-        }
-
-        public int CachedPromptTokens { get; }
-
-        public int Position => _position;
-
-        public void Truncate(int newPosition)
-        {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(GenerationSession));
-            }
-            if (newPosition < 0 || newPosition > _position)
-            {
-                throw new ArgumentOutOfRangeException(nameof(newPosition),
-                    $"Truncate position {newPosition} must be in [0, {_position}].");
-            }
-            // Roll back the shared cache's logical length for THIS sequence under the forward lock, so a
-            // concurrent session's forward can't observe a half-rewound length for the same model.
-            lock (_owner._forwardLock)
-            {
-                _cache.TruncateSequence(_sequenceId, newPosition);
-            }
-            _position = newPosition;
-        }
-
-        public Tensor<T> Forward(Tensor<T> newTokenIds)
-        {
-            Guard.NotNull(newTokenIds);
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(GenerationSession));
-            }
-
-            int newLength = newTokenIds.Shape[newTokenIds.Shape.Length - 1];
-            var context = new AiDotNet.Inference.InferenceForwardContext(_sequenceId, _position);
-            // Serialize the forward step across concurrent sessions on the shared model instance
-            // (per-forward layer scratch is not reentrant); KV isolation is by sequence id, not by lock.
-            Tensor<T> logits;
-            lock (_owner._forwardLock)
-            {
-                logits = _model.PredictWithContext(newTokenIds, context);
-            }
-            _position += newLength;
-            return logits;
-        }
-
-        public void RegisterPromptPrefix(System.Collections.Generic.IReadOnlyList<int> promptTokens)
-        {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(GenerationSession));
-            }
-
-            // Only meaningful right after prefill, when this session's KV holds exactly the prompt.
-            if (_position == promptTokens.Count)
-            {
-                _owner.RegisterPrefix(promptTokens, _sequenceId);
-            }
-        }
-
-        public void Dispose()
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _disposed = true;
-            _cache.FreeSequence(_sequenceId);
-        }
+        _disposed = true;
+        _sharedBatcher?.Dispose();
+        System.GC.SuppressFinalize(this);
     }
 
     /// <inheritdoc/>
