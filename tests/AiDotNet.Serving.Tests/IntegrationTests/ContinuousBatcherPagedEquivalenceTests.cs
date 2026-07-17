@@ -233,6 +233,38 @@ public class ContinuousBatcherPagedEquivalenceTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task PagedBatcher_ChunkedPrefill_MatchesWholePromptPrefill()
+    {
+        await Task.Yield();
+        var wrapper = BuildWrapper();
+        var model = wrapper.IncrementalModel;
+        var cache = wrapper.IncrementalCache;
+        if (model is null || cache is null)
+        {
+            Assert.Fail("wrapper must expose the incremental model + paged cache");
+            return;
+        }
+
+        var prompt = new[] { 1, 2, 3, 4, 5, 6, 7 };
+        const int maxNew = 8;
+
+        int[] Drive(int chunkTokens)
+        {
+            var config = new ContinuousBatcherConfig { AutoStart = false, EosTokenId = 999, MaxPrefillChunkTokens = chunkTokens };
+            using var batcher = new ContinuousBatcher<float>(config, model, cache);
+            return DriveGreedy(batcher, prompt, maxNew);
+        }
+
+        // Whole-prompt prefill (chunking off) vs 2-token-chunked prefill of the SAME 7-token prompt must
+        // produce byte-identical output — chunking only changes how many steps prefill takes.
+        int[] whole = Drive(0);
+        int[] chunked = Drive(2);
+
+        Assert.Equal(maxNew, whole.Length);
+        Assert.Equal(whole, chunked);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task PagedBatcher_MultiSequence_CoBatchesDecode_AndMatchesReferences()
     {
         await Task.Yield();

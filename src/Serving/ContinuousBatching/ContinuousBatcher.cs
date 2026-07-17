@@ -320,7 +320,7 @@ internal class ContinuousBatcher<T> : IDisposable
         // more than one new (non-empty) sequence, prefill them ALL in ONE right-padded batched forward
         // (Phase 2); fall back to per-sequence prefill otherwise or if the batched attempt can't allocate.
         bool batchedPrefillDone = false;
-        if (UsePagedPath && prefillSequences.Count > 1)
+        if (UsePagedPath && _config.MaxPrefillChunkTokens <= 0 && prefillSequences.Count > 1)
         {
             var batchedPrefill = RunBatchedPagedPrefill(prefillSequences);
             if (batchedPrefill is not null)
@@ -475,12 +475,16 @@ internal class ContinuousBatcher<T> : IDisposable
     private int? RunPrefill(SequenceState<T> sequence)
     {
         sequence.Status = SequenceStatus.Prefilling;
-        sequence.GenerationStartedAt = DateTime.UtcNow;
+        sequence.GenerationStartedAt ??= DateTime.UtcNow;
 
         int? firstToken = null;
+        bool complete = true;
         if (UsePagedPath && sequence.TokenIds.Count > 0)
         {
             firstToken = RunPagedPrefill(sequence);
+            // Chunked prefill: complete only once the cursor has consumed the whole prompt. A partial
+            // chunk (or an allocation retry) leaves the sequence Prefilling for the next step.
+            complete = sequence.PrefillCursor >= sequence.PromptLength;
         }
         else if (_model != null && sequence.TokenIds.Count > 0)
         {
@@ -492,13 +496,19 @@ internal class ContinuousBatcher<T> : IDisposable
             firstToken = nextToken;
         }
 
-        sequence.PrefillComplete = true;
-        sequence.Status = SequenceStatus.Generating;
+        if (complete)
+        {
+            sequence.PrefillComplete = true;
+            sequence.Status = SequenceStatus.Generating;
+        }
         return firstToken;
     }
 
-    // Paged prefill: write the whole prompt's KV into this sequence's paged cache in one context-aware forward,
-    // then sample the first token. Positions 0..promptLen-1 are now cached; decode continues from promptLen.
+    // Paged prefill (chunk-aware): write the next CHUNK of the prompt's KV into this sequence's paged cache,
+    // advancing PrefillCursor. When the cursor reaches the prompt end the prompt is fully cached, so the
+    // first token is sampled and returned; otherwise null is returned and the sequence stays Prefilling for
+    // its next chunk (interleaving a long prefill with ongoing decode). Chunking (MaxPrefillChunkTokens>0)
+    // applies to the batched-prefill path; sequence-collapsing models prefill per-token in one step.
     private int? RunPagedPrefill(SequenceState<T> sequence)
     {
         if (_pagedCache is not { } cache || _incrementalModel is not { } model) return null;
@@ -507,45 +517,51 @@ internal class ContinuousBatcher<T> : IDisposable
         var prompt = sequence.TokenIds;
         int promptLen = prompt.Count;
 
-        // Allocate this sequence's own cache slot (0 initial tokens; the prefix fork / prefill fills it).
-        if (!cache.AllocateSequence(seqId, 0)) return null; // cache exhausted / id in use
+        // First chunk: allocate the cache slot and reuse the longest registered STRICT prefix
+        // (copy-on-write), which sets the starting cursor. cached < promptLen always.
+        if (sequence.PrefillCursor == 0)
+        {
+            if (!cache.AllocateSequence(seqId, 0)) return null; // cache exhausted / id in use — retry next step
+            int cached = _prefixCache is { } prefixCache ? prefixCache.TryForkLongestPrefix(prompt, seqId) : 0;
+            if (cached >= promptLen) cached = promptLen - 1;
+            LastPrefillReusedPrefixTokens = cached;
+            sequence.PrefillCursor = cached;
+        }
 
-        // RadixAttention prefix reuse: fork the longest registered STRICT prefix (copy-on-write) into this
-        // sequence, then forward only the remaining suffix from that position. cached == 0 => no reusable
-        // prefix, forward the whole prompt. Only a strict prefix is reused, so cached < promptLen always.
-        int cached = _prefixCache is { } prefixCache ? prefixCache.TryForkLongestPrefix(prompt, seqId) : 0;
-        if (cached >= promptLen) cached = promptLen - 1; // defensive: never reuse the whole prompt
-        LastPrefillReusedPrefixTokens = cached;
+        int start = sequence.PrefillCursor;
 
-        // Forward the (cached..promptLen) suffix from the forked position. When the model accepts a
-        // multi-token forward (per-position logits), do it in ONE batched pass — verified equivalent to the
-        // per-token forward (paged-equivalence tests) and faster. Otherwise (sequence-collapsing models,
-        // e.g. a Flatten before the head) forward ONE token at a time: a multi-token forward would change
-        // the flattened width and make a shape-dependent head re-fit its weights with an unseeded RNG,
-        // which is nondeterministic. This mirrors the proven session-path prefill.
+        // Forward the next piece of the prompt from `start`. Batched-prefill models take a multi-token
+        // chunk in one pass (verified equivalent to per-token); sequence-collapsing (Flatten) models must
+        // go one token at a time (a multi-token forward re-fits a shape-dependent head) and aren't chunked.
         Tensor<T> logits;
         if (_config.SupportsBatchedPrefill)
         {
-            var suffix = new List<int>(promptLen - cached);
-            for (int i = cached; i < promptLen; i++) suffix.Add(prompt[i]);
-            logits = model.PredictWithContext(CreateInputTensor(suffix), new InferenceForwardContext(seqId, cached));
+            int remaining = promptLen - start;
+            int chunk = _config.MaxPrefillChunkTokens > 0 ? Math.Min(remaining, _config.MaxPrefillChunkTokens) : remaining;
+            var piece = new List<int>(chunk);
+            for (int i = 0; i < chunk; i++) piece.Add(prompt[start + i]);
+            logits = model.PredictWithContext(CreateInputTensor(piece), new InferenceForwardContext(seqId, start));
+            sequence.PrefillCursor = start + chunk;
         }
         else
         {
             logits = model.PredictWithContext(
-                CreateInputTensor(new List<int> { prompt[cached] }), new InferenceForwardContext(seqId, cached));
-            for (int i = cached + 1; i < promptLen; i++)
+                CreateInputTensor(new List<int> { prompt[start] }), new InferenceForwardContext(seqId, start));
+            for (int i = start + 1; i < promptLen; i++)
             {
                 logits = model.PredictWithContext(
                     CreateInputTensor(new List<int> { prompt[i] }), new InferenceForwardContext(seqId, i));
             }
+            sequence.PrefillCursor = promptLen;
         }
-        _pagedPositions[seqId] = promptLen;
+        _pagedPositions[seqId] = sequence.PrefillCursor;
 
-        // Register this prompt as a reusable prefix (its KV now holds exactly the prompt) so later prompts
-        // that extend it can fork. Best-effort; a failed fork or duplicate key is a no-op.
+        // More chunks remain: emit no token this step; the sequence stays Prefilling.
+        if (sequence.PrefillCursor < promptLen) return null;
+
+        // Prefill complete: register the prompt as a reusable prefix (KV now holds exactly the prompt),
+        // then sample the first token.
         _prefixCache?.Register(prompt, seqId);
-
         int nextToken = SampleFromLogits(logits, sequence);
         sequence.AppendToken(nextToken);
         return nextToken;

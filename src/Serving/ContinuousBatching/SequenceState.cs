@@ -92,6 +92,13 @@ public class SequenceState<T>
     public bool PrefillComplete { get; set; } = false;
 
     /// <summary>
+    /// Number of prompt tokens whose KV has been prefilled so far. Advances across steps for CHUNKED
+    /// prefill (a long prompt is prefilled in <c>MaxPrefillChunkTokens</c>-sized pieces so it does not
+    /// block ongoing decode in one huge forward). Reaches <see cref="PromptLength"/> when prefill is done.
+    /// </summary>
+    public int PrefillCursor { get; set; } = 0;
+
+    /// <summary>
     /// Stop reason if generation is complete.
     /// </summary>
     public StopReason? FinishReason { get; set; }
