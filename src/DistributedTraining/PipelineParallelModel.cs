@@ -188,18 +188,20 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         _schedule = schedule ?? new GPipeSchedule<T>();
         _checkpointConfig = checkpointConfig ?? new ActivationCheckpointConfig();
 
-        // Activation checkpointing recomputation strategies (Selective, Full) require
-        // layer-level forward pass decomposition that is not yet implemented.
-        // Only interval-based checkpoint storage is currently functional.
-        if (_checkpointConfig.Enabled &&
-            _checkpointConfig.RecomputeStrategy != RecomputeStrategy.None)
+        // Activation-recompute (Selective/Full) needs layer-level forward decomposition, so it is only
+        // available when the wrapped model exposes its layers (ILayeredModel). For such a model the stage
+        // forward runs through GradientCheckpointing over the layer segments (activations dropped in the
+        // forward, recomputed in the backward). A black-box model cannot be decomposed, so recompute is
+        // still rejected there — honestly, rather than silently ignoring the setting.
+        if (_checkpointConfig.Enabled
+            && _checkpointConfig.RecomputeStrategy != RecomputeStrategy.None
+            && wrappedModel is not ILayeredModel<T>)
         {
             throw new NotSupportedException(
                 $"Activation checkpointing with RecomputeStrategy.{_checkpointConfig.RecomputeStrategy} " +
-                "is not currently supported on PipelineParallelModel. The Selective and Full recompute " +
-                "strategies require layer-level forward-pass decomposition that hasn't shipped yet. " +
-                "Use RecomputeStrategy.None to enable checkpoint storage without recomputation, or " +
-                "disable checkpointing entirely. (Tracked for follow-up in audit-2026-05 phase 2 work.)");
+                "requires a layer-introspectable model (ILayeredModel) so the forward can be decomposed into " +
+                "recomputable segments. The wrapped model is a black box; use RecomputeStrategy.None " +
+                "(checkpoint storage without recomputation) or wrap a layered neural network instead.");
         }
     }
 
@@ -754,6 +756,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 accumulatedGradients[i] = NumOps.Divide(accumulatedGradients[i], microBatchCount);
             }
 
+            // ZeRO Stage-2 offload for the accumulated gradient — bring the
+            // micro-batch-averaged grads to CPU and drop the GPU cache
+            // entry before ApplyGradients (which uses whatever engine is
+            // current). No-op when CpuOffloadGradients is off.
+            OffloadGradientsToCpu(accumulatedGradients);
             InterfaceGuard.Parameterizable(WrappedModel).SetParameters(parametersBefore);
             InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(accumulatedGradients, Config.LearningRate);
         }
@@ -773,6 +780,10 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             SynchronizeGradients();
         }
+
+        // ZeRO Stage-3 param offload: drop GPU-cached params so the next
+        // stage forward re-uploads. No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu();
     }
 
     /// <summary>
@@ -806,12 +817,47 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         forwardInputs[opKey] = stageInput;
 
-        // Forward pass through the model
-        var stageOutput = WrappedModel.Predict(stageInput);
+        // Forward pass through the model. When activation RECOMPUTE is configured AND the wrapped model
+        // exposes its layers, run the forward through GradientCheckpointing so interior activations are
+        // dropped and recomputed in the backward (real activation checkpointing); otherwise the plain
+        // forward.
+        var stageOutput = ForwardStage(stageInput);
         forwardOutputs[opKey] = stageOutput;
 
         // Send activations to the next stage in the pipeline
         SendActivationsForward(stageOutput, op.MicroBatchIndex, op.VirtualStageIndex);
+    }
+
+    /// <summary>
+    /// Runs this stage's forward pass. When activation recompute (Selective/Full) is configured and the
+    /// wrapped model exposes its layers, the forward runs through
+    /// <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing{T}"/> over the layer sequence:
+    /// each checkpoint segment's interior activations are NOT retained by the tape during the forward and
+    /// are recomputed on demand in the backward (the torch.utils.checkpoint model), trading compute for
+    /// activation memory. Otherwise runs the plain wrapped-model forward. The constructor already rejects
+    /// recompute for a black-box (non-layered) model, so this only takes the checkpointed path for a model
+    /// it can actually decompose.
+    /// </summary>
+    private TOutput ForwardStage(TInput stageInput)
+    {
+        if (_checkpointConfig.Enabled
+            && _checkpointConfig.RecomputeStrategy != RecomputeStrategy.None
+            && WrappedModel is ILayeredModel<T> layered && layered.LayerCount > 0
+            && stageInput is Tensor<T> tin)
+        {
+            var layerFns = new List<Func<Tensor<T>, Tensor<T>>>(layered.LayerCount);
+            foreach (var layer in layered.Layers)
+            {
+                var captured = layer;
+                layerFns.Add(x => captured.Forward(x));
+            }
+            // Segment granularity: CheckpointEveryNLayers layers per recomputable segment (>= 1).
+            int segmentSize = Math.Max(1, _checkpointConfig.CheckpointEveryNLayers);
+            var output = AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(layerFns, tin, segmentSize);
+            return (TOutput)(object)output;
+        }
+
+        return WrappedModel.Predict(stageInput);
     }
 
     /// <summary>

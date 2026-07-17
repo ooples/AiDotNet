@@ -138,6 +138,11 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
                 "Gradients have not been computed. Call Train() before SynchronizeGradients().");
         }
 
+        // ZeRO Stage-2 offload: drain any deferred GPU download and drop the
+        // GPU cache entry before the reduce. No-op when CpuOffloadGradients
+        // is off.
+        OffloadGradientsToCpu(_computedGradients);
+
         // In DDP, we AllReduce the full gradient vector
         // This averages gradients across all processes
         Config.CommunicationBackend.AllReduce(_computedGradients, ReductionOperation.Average);
@@ -189,6 +194,12 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
             InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
             LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         }
+
+        // Optional param offload — DDP replicates the full parameters on every
+        // rank, so this drops the local GPU cache between steps if the caller
+        // wants params paged to CPU (rare for DDP but valid; the flag primarily
+        // targets FSDP/ZeRO2/ZeRO3). No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu();
     }
 
     /// <inheritdoc/>

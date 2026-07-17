@@ -49,23 +49,43 @@ public class TensorParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        if (inputData == null)
-            throw new ArgumentNullException(nameof(inputData));
-
         Config.CommunicationBackend.Barrier();
 
-        // Optimize on local tensor-parallel shard
-        var result = WrappedOptimizer.Optimize(inputData);
-
-        // Synchronize across tensor-parallel group
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        // The closing barrier is a collective: every rank MUST reach it, or ranks that
+        // succeeded will block forever waiting on a rank that threw in the post-step work
+        // (validation, wrapped step, parameter sync, or offload). Run the whole body — INCLUDING
+        // the null validation — under try/finally so the barrier executes unconditionally and a
+        // rank that receives null cannot strand its peers.
+        try
         {
-            SynchronizeParameters(result.BestSolution);
+            if (inputData == null)
+                throw new ArgumentNullException(nameof(inputData));
+
+            // Optimize on local tensor-parallel shard. RunWrappedOptimizerStep
+            // engages IShardingConfiguration.CpuOffloadOptimizer: Adam m/v state
+            // + step run on CpuEngine.
+            var result = RunWrappedOptimizerStep(inputData);
+
+            // AUDIT (no double-reduce): this optimizer is the black-box PARAMETER-REPLICATION fallback for
+            // models that cannot be layer-partitioned. It averages PARAMETERS across the tensor-parallel
+            // group — it does NOT reduce gradients — so it cannot double-count against the real Megatron-LM
+            // gradient reduction, which lives at the LAYER level (the f/ḡ conjugate all-reduce inside
+            // ColumnParallelLinear/RowParallelLinear, exercised end-to-end and guarded against a duplicate
+            // reduce by the MegatronMLP_TwoRank == NonParallel invariant). A model built from those layer
+            // primitives already produces correct gradients on the tape and does not need this wrapper;
+            // wrapping it anyway is redundant (averaging already-identical replicas) but not incorrect.
+            if (Config.AutoSyncGradients && result.BestSolution != null)
+            {
+                SynchronizeParameters(result.BestSolution);
+            }
+
+            OffloadParamsToCpu(result.BestSolution);
+            return result;
         }
-
-        Config.CommunicationBackend.Barrier();
-
-        return result;
+        finally
+        {
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>

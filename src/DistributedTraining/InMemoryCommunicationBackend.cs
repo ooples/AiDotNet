@@ -18,7 +18,7 @@ namespace AiDotNet.DistributedTraining;
 /// <item>NOT suitable for production multi-process scenarios - use MPI/NCCL backends instead</item>
 /// </list>
 /// <para>
-/// The static state includes: _sharedBuffers, _barrierCounters, _barrierGenerations, _operationCounters, _messageQueues.
+/// The static state includes: _sharedBuffers, _barrierCounters, _barrierGenerations, _messageQueues.
 /// These are namespaced by environmentId to enable concurrent independent sessions, but tests must ensure
 /// unique environmentIds or run serially.
 /// </para>
@@ -61,6 +61,18 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     private readonly int _worldSize;
     private readonly string _environmentId;
 
+    // Per-RANK (per-instance) collective sequence counters, one per collective type. The previous SHARED
+    // per-environment counter (_operationCounters) was incremented only when the LAST consumer of a
+    // collective finished, so a fast rank could race into its next collective while the counter was still
+    // stale, reuse the same buffer key, and combine two different collectives' data — producing a
+    // wrong-but-clean result (not a timeout). Because every rank issues the SAME collective sequence
+    // (SPMD), a per-rank per-type counter produces identical buffer keys across ranks with NO cross-rank
+    // staleness: rank r's Nth AllReduce and rank s's Nth AllReduce both key to "{env}_allreduce_{N-1}".
+    private int _allReduceCount;
+    private int _allGatherCount;
+    private int _broadcastCount;
+    private int _scatterCount;
+
     // Shared state for simulating collective operations
     //
     // IMPORTANT: While these dictionaries are static (shared across all InMemoryCommunicationBackend instances),
@@ -86,7 +98,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     private static readonly Dictionary<string, int> _barrierCounters = new();
     private static readonly Dictionary<string, int> _barrierReleaseCounts = new();
     private static readonly Dictionary<string, int> _barrierGenerations = new();
-    private static readonly Dictionary<string, int> _operationCounters = new();
 
     // Point-to-point message queues for Send/Receive operations
     // Key format: "{environmentId}_msg_{sourceRank}_{destRank}_{tag}"
@@ -162,10 +173,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             {
                 _barrierGenerations[_environmentId] = 0;
             }
-            if (!_operationCounters.ContainsKey(_environmentId))
-            {
-                _operationCounters[_environmentId] = 0;
-            }
         }
     }
 
@@ -206,8 +213,17 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
     private static void ClearEnvironmentState(string environmentId)
     {
-        // Remove all keys that belong to this environment
-        var buffersToRemove = _sharedBuffers.Keys.Where(k => k.StartsWith($"{environmentId}_")).ToList();
+        // Remove this environment's shared buffers — but NOT any collective that is still IN FLIGHT (a
+        // buffer with pending consumers). This backend simulates separate processes with shared static
+        // state, so one rank calling Shutdown() right after it finishes a collective must NOT nuke the
+        // buffer while a PEER rank — woken from Monitor.Wait but not yet past its reduction/read — still
+        // needs it. If it did, that peer would find the buffer gone and silently skip the reduce, keeping
+        // its own un-reduced data (a wrong result, not a crash). In-flight buffers are left for the
+        // collective's own pending-consumer protocol to remove when the last rank finishes.
+        var buffersToRemove = _sharedBuffers.Keys
+            .Where(k => k.StartsWith($"{environmentId}_"))
+            .Where(k => !_pendingConsumers.TryGetValue(k, out int pending) || pending <= 0)
+            .ToList();
         foreach (var key in buffersToRemove)
         {
             _sharedBuffers.Remove(key);
@@ -225,7 +241,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             _messageQueues.Remove(key);
         }
 
-        var consumersToRemove = _pendingConsumers.Keys.Where(k => k.StartsWith($"{environmentId}_")).ToList();
+        // Only drop consumer counters for collectives that are NOT in flight; an in-flight collective's
+        // counter is owned by its pending-consumer protocol and removed when the last rank finishes.
+        var consumersToRemove = _pendingConsumers.Keys
+            .Where(k => k.StartsWith($"{environmentId}_"))
+            .Where(k => _pendingConsumers[k] <= 0)
+            .ToList();
         foreach (var key in consumersToRemove)
         {
             _pendingConsumers.Remove(key);
@@ -239,7 +260,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
         // Reset environment counters
         _barrierGenerations[environmentId] = 0;
-        _operationCounters[environmentId] = 0;
     }
 
     /// <inheritdoc/>
@@ -339,8 +359,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
         lock (_globalLock)
         {
-            // Use shared operation counter so all ranks target same buffer key
-            int currentCounter = _operationCounters[_environmentId];
+            // Per-rank collective counter (SPMD-consistent) so all ranks target the same buffer key.
+            int currentCounter = _allReduceCount++;
 
             // Use environment-prefixed buffer ID
             string bufferId = $"{_environmentId}_allreduce_{currentCounter}";
@@ -400,7 +420,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                         // All ranks have consumed the result, safe to cleanup
                         _sharedBuffers.Remove(bufferId);
                         _pendingConsumers.Remove(bufferId);
-                        _operationCounters[_environmentId]++;
                     }
                 }
 
@@ -429,8 +448,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
         lock (_globalLock)
         {
-            // Use shared operation counter so all ranks target same buffer key
-            int currentCounter = _operationCounters[_environmentId];
+            // Per-rank collective counter (SPMD-consistent) so all ranks target the same buffer key.
+            int currentCounter = _allGatherCount++;
 
             // Use environment-prefixed buffer ID
             string bufferId = $"{_environmentId}_allgather_{currentCounter}";
@@ -500,7 +519,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                         // All ranks have consumed the result, safe to cleanup
                         _sharedBuffers.Remove(bufferId);
                         _pendingConsumers.Remove(bufferId);
-                        _operationCounters[_environmentId]++;
                     }
                 }
 
@@ -547,7 +565,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         lock (_globalLock)
         {
             // Use shared operation counter so all ranks target same buffer key
-            int currentCounter = _operationCounters[_environmentId];
+            int currentCounter = _broadcastCount++;
 
             // Use environment-prefixed buffer ID
             string bufferId = $"{_environmentId}_broadcast_{currentCounter}";
@@ -610,7 +628,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     {
                         _sharedBuffers.Remove(bufferId);
                         _pendingConsumers.Remove(bufferId);
-                        _operationCounters[_environmentId]++;
                     }
                 }
 
@@ -639,8 +656,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
         lock (_globalLock)
         {
-            // Use shared operation counter so all ranks target same buffer key
-            int currentCounter = _operationCounters[_environmentId];
+            // Per-rank collective counter (SPMD-consistent) so all ranks target the same buffer key.
+            int currentCounter = _scatterCount++;
 
             // Use environment-prefixed buffer ID
             string bufferId = $"{_environmentId}_scatter_{currentCounter}";
@@ -715,7 +732,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     {
                         _sharedBuffers.Remove(bufferId);
                         _pendingConsumers.Remove(bufferId);
-                        _operationCounters[_environmentId]++;
                     }
                 }
 

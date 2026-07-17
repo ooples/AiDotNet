@@ -120,6 +120,12 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
         // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
         {
+            // ZeRO Stage-2 offload: drain any deferred GPU download into the
+            // managed gradient array and drop its GPU cache entry so the
+            // AllReduce reads live CPU values. No-op when CpuOffloadGradients
+            // is off.
+            OffloadGradientsToCpu(_computedGradients);
+
             // Average gradients across all processes
             // All ranks receive the same averaged gradients
             Config.CommunicationBackend.AllReduce(_computedGradients, ReductionOperation.Average);
@@ -150,6 +156,12 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
         // Note: Cache is already invalidated by UpdateLocalShardFromFull.
         // If AutoSyncGradients is false, subsequent predictions can benefit from
         // cached full parameters without repeated gathering.
+
+        // ZeRO Stage-3 offload: after the update, drop any GPU-cached copy of
+        // the parameters so the next forward re-uploads from the CPU-resident
+        // (updated) values. No-op when CpuOffloadParams is off — the standard
+        // FSDP contract is "params live on CPU between steps".
+        OffloadParamsToCpu();
     }
 
     /// <inheritdoc/>
@@ -178,6 +190,10 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
             throw new InvalidOperationException(
                 "Gradients have not been computed. Call Train() before SynchronizeGradients().");
         }
+
+        // ZeRO Stage-2 offload: bring gradients to CPU and drop the GPU cache
+        // entry before the reduce.
+        OffloadGradientsToCpu(_computedGradients);
 
         // Perform AllReduce on the gradient vector
         // This averages gradients across all processes
