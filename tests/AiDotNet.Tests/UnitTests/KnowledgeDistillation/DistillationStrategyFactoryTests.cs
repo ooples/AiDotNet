@@ -1,33 +1,39 @@
-using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Strategies;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using System;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 
 /// <summary>
-/// Unit tests for the DistillationStrategyFactory class.
+/// Unit tests for the DistillationStrategyFactory class. The strategy IS the parameter:
+/// each named strategy is a public factory method; null resolves to the response-based default.
 /// </summary>
 public class DistillationStrategyFactoryTests
 {
-    [Theory]
-    [InlineData(DistillationStrategyType.ResponseBased)]
-    //     [InlineData(DistillationStrategyType.FeatureBased)]
-    [InlineData(DistillationStrategyType.AttentionBased)]
-    [InlineData(DistillationStrategyType.RelationBased)]
-    [InlineData(DistillationStrategyType.ContrastiveBased)]
-    [InlineData(DistillationStrategyType.SimilarityPreserving)]
-    [InlineData(DistillationStrategyType.ProbabilisticTransfer)]
-    [InlineData(DistillationStrategyType.VariationalInformation)]
-    [InlineData(DistillationStrategyType.FactorTransfer)]
-    [InlineData(DistillationStrategyType.NeuronSelectivity)]
-    [InlineData(DistillationStrategyType.Hybrid)]
-    public void CreateStrategy_WithAllStrategyTypes_ReturnsValidStrategy(DistillationStrategyType strategyType)
+    public static TheoryData<Func<IDistillationStrategy<double>>> AllStrategyFactories() => new()
     {
-        // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(strategyType);
+        () => DistillationStrategyFactory<double>.CreateResponseBasedStrategy(),
+        () => DistillationStrategyFactory<double>.CreateAttentionBasedStrategy(),
+        () => DistillationStrategyFactory<double>.CreateRelationBasedStrategy(),
+        () => DistillationStrategyFactory<double>.CreateContrastiveStrategy(),
+        () => DistillationStrategyFactory<double>.CreateSimilarityPreservingStrategy(),
+        () => DistillationStrategyFactory<double>.CreateProbabilisticStrategy(),
+        () => DistillationStrategyFactory<double>.CreateVariationalStrategy(),
+        () => DistillationStrategyFactory<double>.CreateFactorTransferStrategy(),
+        () => DistillationStrategyFactory<double>.CreateNeuronSelectivityStrategy(),
+        () => DistillationStrategyFactory<double>.CreateHybridStrategy(),
+    };
+
+    [Theory]
+    [MemberData(nameof(AllStrategyFactories))]
+    public async Task CreateStrategy_WithAllStrategyTypes_ReturnsValidStrategy(Func<IDistillationStrategy<double>> factory)
+    {
+        // Act
+        var strategy = factory();
 
         // Assert
         Assert.NotNull(strategy);
@@ -36,11 +42,35 @@ public class DistillationStrategyFactoryTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task ResolveStrategy_Null_ReturnsResponseBasedDefault()
+    {
+        // Arrange & Act: null strategy resolves to the response-based (Hinton) default
+        var strategy = DistillationStrategyFactory<double>.ResolveStrategy(null, temperature: 4.0, alpha: 0.5);
+
+        // Assert
+        Assert.IsType<DistillationLoss<double>>(strategy);
+        Assert.Equal(4.0, strategy.Temperature);
+        Assert.Equal(0.5, strategy.Alpha);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ResolveStrategy_NonNull_ReturnsSuppliedStrategy()
+    {
+        // Arrange
+        var supplied = DistillationStrategyFactory<double>.CreateAttentionBasedStrategy();
+
+        // Act
+        var resolved = DistillationStrategyFactory<double>.ResolveStrategy(supplied);
+
+        // Assert
+        Assert.Same(supplied, resolved);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task CreateStrategy_ResponseBased_ReturnsDistillationLoss()
     {
         // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.ResponseBased,
+        var strategy = DistillationStrategyFactory<double>.CreateResponseBasedStrategy(
             temperature: 4.0,
             alpha: 0.5);
 
@@ -55,9 +85,7 @@ public class DistillationStrategyFactoryTests
     {
         // Arrange & Act & Assert
         var exception = Assert.Throws<NotSupportedException>(() =>
-            DistillationStrategyFactory<double>.CreateStrategy(
-                DistillationStrategyType.FeatureBased,
-                featureWeight: 0.7));
+            DistillationStrategyFactory<double>.CreateFeatureBasedStrategy(featureWeight: 0.7));
 
         Assert.Contains("FeatureDistillationStrategy", exception.Message);
     }
@@ -66,8 +94,7 @@ public class DistillationStrategyFactoryTests
     public async Task CreateStrategy_AttentionBased_ReturnsAttentionDistillationStrategy()
     {
         // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.AttentionBased,
+        var strategy = DistillationStrategyFactory<double>.CreateAttentionBasedStrategy(
             attentionWeight: 0.6);
 
         // Assert
@@ -78,8 +105,7 @@ public class DistillationStrategyFactoryTests
     public async Task CreateStrategy_Hybrid_ReturnsHybridStrategy()
     {
         // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.Hybrid);
+        var strategy = DistillationStrategyFactory<double>.CreateHybridStrategy();
 
         // Assert
         Assert.IsType<HybridDistillationStrategy<double>>(strategy);
@@ -89,8 +115,7 @@ public class DistillationStrategyFactoryTests
     public async Task CreateStrategy_Probabilistic_ReturnsProbabilisticStrategy()
     {
         // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.ProbabilisticTransfer);
+        var strategy = DistillationStrategyFactory<double>.CreateProbabilisticStrategy();
 
         // Assert
         Assert.IsType<ProbabilisticDistillationStrategy<double>>(strategy);
@@ -100,8 +125,7 @@ public class DistillationStrategyFactoryTests
     public async Task CreateStrategy_Variational_ReturnsVariationalStrategy()
     {
         // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.VariationalInformation);
+        var strategy = DistillationStrategyFactory<double>.CreateVariationalStrategy();
 
         // Assert
         Assert.IsType<VariationalDistillationStrategy<double>>(strategy);
@@ -111,8 +135,7 @@ public class DistillationStrategyFactoryTests
     public async Task CreateStrategy_FactorTransfer_ReturnsFactorTransferStrategy()
     {
         // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.FactorTransfer);
+        var strategy = DistillationStrategyFactory<double>.CreateFactorTransferStrategy();
 
         // Assert
         Assert.IsType<FactorTransferDistillationStrategy<double>>(strategy);
@@ -122,8 +145,7 @@ public class DistillationStrategyFactoryTests
     public async Task CreateStrategy_NeuronSelectivity_ReturnsNeuronSelectivityStrategy()
     {
         // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.NeuronSelectivity);
+        var strategy = DistillationStrategyFactory<double>.CreateNeuronSelectivityStrategy();
 
         // Assert
         Assert.IsType<NeuronSelectivityDistillationStrategy<double>>(strategy);
@@ -133,8 +155,7 @@ public class DistillationStrategyFactoryTests
     public async Task CreateStrategy_WithCustomParameters_AppliesParameters()
     {
         // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.ResponseBased,
+        var strategy = DistillationStrategyFactory<double>.CreateResponseBasedStrategy(
             temperature: 5.0,
             alpha: 0.8);
 
@@ -142,59 +163,4 @@ public class DistillationStrategyFactoryTests
         Assert.Equal(5.0, strategy.Temperature);
         Assert.Equal(0.8, strategy.Alpha);
     }
-
-    [Fact(Timeout = 60000)]
-    public async Task FluentBuilder_ConfiguresStrategyCorrectly()
-    {
-        // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>
-            .Configure(DistillationStrategyType.ResponseBased)
-            .WithTemperature(4.5)
-            .WithAlpha(0.4)
-            .Build();
-
-        // Assert
-        Assert.NotNull(strategy);
-        Assert.Equal(4.5, strategy.Temperature);
-        Assert.Equal(0.4, strategy.Alpha);
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task FluentBuilder_FeatureBased_ConfiguresFeatureWeight()
-    {
-        // Arrange & Act & Assert
-        var exception = Assert.Throws<NotSupportedException>(() =>
-            DistillationStrategyFactory<double>
-                .Configure(DistillationStrategyType.FeatureBased)
-                .WithFeatureWeight(0.8)
-                .Build());
-
-        Assert.Contains("FeatureDistillationStrategy", exception.Message);
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task FluentBuilder_AttentionBased_ConfiguresAttentionWeight()
-    {
-        // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>
-            .Configure(DistillationStrategyType.AttentionBased)
-            .WithAttentionWeight(0.7)
-            .Build();
-
-        // Assert
-        Assert.IsType<AttentionDistillationStrategy<double>>(strategy);
-    }
-
-    // [Fact(Timeout = 60000)]
-    // public void FluentBuilder_Contrastive_ConfiguresLossType()
-    // {
-    //     // Arrange & Act
-    //     var strategy = DistillationStrategyFactory<double>
-    //         .Configure(DistillationStrategyType.ContrastiveBased)
-    //         .WithContrastiveLossType(ContrastiveLossType.TripletLoss)
-    //         .Build();
-
-    //     // Assert
-    //     Assert.IsType<ContrastiveDistillationStrategy<double>>(strategy);
-    // }
 }

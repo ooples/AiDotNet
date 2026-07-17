@@ -47,8 +47,90 @@ namespace AiDotNet.TimeSeries;
 /// - Website traffic prediction
 /// </para>
 /// </remarks>
-public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape
+public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
+    ITrainingEpochReporter<T>
 {
+    /// <summary>
+    /// Replaces the loss this model trains against, for the models that can accept one.
+    /// </summary>
+    /// <param name="lossFunction">The loss to adopt.</param>
+    /// <remarks>
+    /// <para>
+    /// The base deliberately does <b>not</b> implement <see cref="ISupportsLossFunction{T}"/>: the
+    /// TimeSeries family is split on whether an arbitrary loss is even meaningful. DeepAR trains a
+    /// Gaussian likelihood over its own (mean, scale) head, the Temporal Fusion Transformer's
+    /// quantile pinball loss defines the shape of its [B, H*Q] output, and DLinear fuses an analytic
+    /// MSE gradient into its update — for those, a substituted loss trains the wrong objective, not
+    /// merely a worse one.
+    /// </para>
+    /// <para>
+    /// So the capability is declared per model: point forecasters (NBEATS, N-HiTS, Informer,
+    /// Autoformer) implement <see cref="ISupportsLossFunction{T}"/> and delegate here; the intrinsic
+    /// ones simply don't implement it, and the type system reports that rather than a runtime throw.
+    /// </para>
+    /// </remarks>
+    protected void ApplyLossFunction(ILossFunction<T> lossFunction)
+    {
+        if (lossFunction is null)
+        {
+            throw new ArgumentNullException(nameof(lossFunction));
+        }
+
+        if (IsTrained)
+        {
+            throw new InvalidOperationException(
+                "The loss function cannot be changed after training; construct a new model instead.");
+        }
+
+        if (lossFunction is not LossFunctions.LossFunctionBase<T>)
+        {
+            throw new ArgumentException(
+                $"Loss function '{lossFunction.GetType().Name}' must derive from LossFunctionBase<T>: " +
+                "tape-based training needs ComputeTapeLoss, which ILossFunction<T> does not declare.",
+                nameof(lossFunction));
+        }
+
+        _defaultLossFunction = lossFunction;
+
+        // Mirror onto the options so a TrainCore that reads Options.LossFunction and the
+        // DefaultLossFunction/ComputeGradients path cannot disagree about which loss is in use.
+        Options.LossFunction = lossFunction;
+    }
+
+    /// <summary>
+    /// The training loss, as the tape-capable type the gradient loops require.
+    /// </summary>
+    /// <remarks>
+    /// The tape paths call <c>ComputeTapeLoss</c>, which lives on
+    /// <see cref="LossFunctions.LossFunctionBase{T}"/> rather than on <see cref="ILossFunction{T}"/>.
+    /// Resolving it here yields one legible error instead of an <see cref="InvalidCastException"/>
+    /// surfacing from inside a backward pass. Defaults to the model's configured loss, which is
+    /// mean squared error unless the caller supplied another.
+    /// </remarks>
+    protected LossFunctions.LossFunctionBase<T> TrainingLoss =>
+        DefaultLossFunction as LossFunctions.LossFunctionBase<T>
+        ?? throw new InvalidOperationException(
+            $"Loss function '{DefaultLossFunction.GetType().Name}' must derive from LossFunctionBase<T> " +
+            "for tape-based training; ILossFunction<T> alone does not provide ComputeTapeLoss.");
+
+    /// <inheritdoc />
+    public Func<TrainingProgress<T>, bool>? TrainingEpochCallback { get; set; }
+
+    /// <summary>Wall-clock start of the current training run, for progress snapshots.</summary>
+    private DateTime _trainingStartedUtc;
+
+    /// <summary>Best monitored loss seen so far in this run; drives the patience counter.</summary>
+    private double _bestMonitoredLoss;
+
+    /// <summary>Consecutive epochs without an improvement of at least EarlyStoppingMinDelta.</summary>
+    private int _epochsWithoutImprovement;
+
+    /// <summary>
+    /// Why the current run stopped before exhausting its epoch budget, or null if it ran to
+    /// completion. Useful for diagnostics and surfaced in tests.
+    /// </summary>
+    public string? TrainingStopReason { get; private set; }
+
     /// <summary>
     /// Configuration options for the time series model.
     /// </summary>
@@ -227,7 +309,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// <summary>
     /// The default loss function used for gradient computation.
     /// </summary>
-    private readonly ILossFunction<T> _defaultLossFunction;
+    /// <summary>
+    /// The loss reported by <see cref="DefaultLossFunction"/> and used by <c>ComputeGradients</c>.
+    /// Not readonly so <see cref="SetLossFunction"/> can replace it; see that method for why a
+    /// model whose loss is intrinsic to its architecture must override and reject.
+    /// </summary>
+    private ILossFunction<T> _defaultLossFunction;
 
     /// <summary>
     /// Gets the last computed error metrics when the model was evaluated.
@@ -398,6 +485,11 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         }
         TrainingCancellationToken = linkedCts.Token;
 
+        _trainingStartedUtc = DateTime.UtcNow;
+        _bestMonitoredLoss = double.PositiveInfinity;
+        _epochsWithoutImprovement = 0;
+        TrainingStopReason = null;
+
         try
         {
             // Zero-alloc training after warmup (AiDotNet #1804): activate a
@@ -433,6 +525,89 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
         // Mark the model as trained (even after early cancellation)
         IsTrained = true;
+    }
+
+    /// <summary>
+    /// Reports a completed training epoch, and reports whether training should continue.
+    /// </summary>
+    /// <param name="epoch">The zero-based index of the epoch that just finished.</param>
+    /// <param name="totalEpochs">The planned epoch budget, or 0 when unknown/unbounded.</param>
+    /// <param name="monitoredLoss">
+    /// The epoch's loss. Pass validation loss when a validation split is in use, otherwise the mean
+    /// training loss — this is the quantity early stopping watches.
+    /// </param>
+    /// <returns><c>true</c> to keep training; <c>false</c> to stop after this epoch.</returns>
+    /// <remarks>
+    /// <para>
+    /// Derived classes that own an epoch loop should call this once per epoch and <c>break</c> when
+    /// it returns <c>false</c>. It deliberately does not cancel
+    /// <see cref="TrainingCancellationToken"/>: loops throw on that token, which would skip the
+    /// best-epoch-weights restore that runs after the loop and leave a diverged model behind. An
+    /// early stop must leave the model in its best usable state, so it is reported as a return
+    /// value for the loop to break on.
+    /// </para>
+    /// <para>
+    /// A non-finite loss (NaN/Infinity) never counts as an improvement, so a diverged run exhausts
+    /// its patience and stops rather than training on to the epoch budget.
+    /// </para>
+    /// </remarks>
+    protected bool ReportEpoch(int epoch, int totalEpochs, T monitoredLoss)
+    {
+        string? stopReason = null;
+
+        // (a) Let anything observing the build (the facade's ConfigureTrainingCallback chain) see
+        //     the epoch and veto further training.
+        var callback = TrainingEpochCallback;
+        if (callback is not null)
+        {
+            var progress = new TrainingProgress<T>(
+                epoch: epoch,
+                totalEpochs: totalEpochs,
+                loss: monitoredLoss,
+                metrics: null,
+                elapsed: DateTime.UtcNow - _trainingStartedUtc);
+
+            if (!callback(progress))
+            {
+                stopReason = $"training callback requested abort at epoch {epoch}";
+            }
+        }
+
+        // (b) Apply patience-based early stopping to the monitored loss. A NaN/Infinity loss fails
+        //     this comparison, so it counts as a non-improving epoch.
+        if (Options.UseEarlyStopping)
+        {
+            double loss = NumOps.ToDouble(monitoredLoss);
+            if (loss < _bestMonitoredLoss - Options.EarlyStoppingMinDelta)
+            {
+                _bestMonitoredLoss = loss;
+                _epochsWithoutImprovement = 0;
+            }
+            else if (++_epochsWithoutImprovement >= Options.EarlyStoppingPatience)
+            {
+                stopReason ??=
+                    $"early stopping at epoch {epoch}: no improvement greater than " +
+                    $"{Options.EarlyStoppingMinDelta} for {Options.EarlyStoppingPatience} epochs";
+            }
+        }
+
+        if (stopReason is not null)
+        {
+            TrainingStopReason ??= stopReason;
+            return false;
+        }
+
+        // A wall-clock/caller cancellation also stops the run before its epoch budget; record why so
+        // TrainingStopReason honours its "null only if it ran to completion" contract.
+        if (TrainingCancellationToken.IsCancellationRequested)
+        {
+            TrainingStopReason ??=
+                $"training stopped at epoch {epoch}: cancellation requested (e.g. MaxTrainingTimeSeconds " +
+                "elapsed or caller cancellation)";
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>

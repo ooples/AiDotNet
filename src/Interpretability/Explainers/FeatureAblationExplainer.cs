@@ -37,7 +37,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - Debugging models by finding unexpected important features
 /// </para>
 /// </remarks>
-public class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExplanation<T>>, IGlobalExplainer<T, GlobalFeatureAblationResult<T>>, IGPUAcceleratedExplainer<T>
+public class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExplanation<T>>, IGlobalExplainer<T, GlobalFeatureAblationResult<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -368,6 +368,10 @@ public class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExp
     /// <summary>
     /// Explains a batch of inputs (ILocalExplainer interface).
     /// </summary>
+    /// <inheritdoc />
+    public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
+        => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
+
     public FeatureAblationExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var results = new FeatureAblationExplanation<T>[instances.Rows];
@@ -383,7 +387,7 @@ public class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExp
 /// Result of feature ablation for a single input.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class FeatureAblationExplanation<T>
+public class FeatureAblationExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -403,6 +407,9 @@ public class FeatureAblationExplanation<T>
     /// </para>
     /// </remarks>
     public Vector<T> Attributions { get; }
+
+    /// <inheritdoc />
+    public Vector<T> GetFeatureAttributions() => Attributions;
 
     /// <summary>
     /// Gets the baseline values used.

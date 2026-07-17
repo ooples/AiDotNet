@@ -85,6 +85,22 @@ public class AiModelDataPipeline<T, TInput, TOutput> : IAiModelDataPipeline<T, T
     }
 
     /// <inheritdoc/>
+    public void AddPreprocessingStep(IDataTransformer<T, TInput, TInput> transformer, string name)
+    {
+        if (transformer is null) throw new ArgumentNullException(nameof(transformer));
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Step name cannot be null or whitespace.", nameof(name));
+
+        var pipeline = PreprocessingPipeline ?? new PreprocessingPipeline<T, TInput, TInput>();
+
+        string unique = name;
+        int suffix = 1;
+        while (pipeline.GetStep(unique) is not null) unique = $"{name}_{suffix++}";
+        pipeline.Add(unique, transformer);
+
+        PreprocessingPipeline = pipeline;
+    }
+
+    /// <inheritdoc/>
     public void ConfigurePostprocessing(Action<PostprocessingPipeline<T, TOutput, TOutput>>? pipelineBuilder)
     {
         var pipeline = new PostprocessingPipeline<T, TOutput, TOutput>();

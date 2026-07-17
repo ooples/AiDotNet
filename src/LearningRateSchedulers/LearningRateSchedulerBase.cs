@@ -71,6 +71,15 @@ public abstract class LearningRateSchedulerBase : ILearningRateScheduler
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Step-driven schedules ignore the metric, so the default defers to <see cref="Step()"/>.
+    /// Metric-driven schedules (reduce-on-plateau, adaptive) override this; overriding
+    /// <see cref="Step()"/> alone would leave them unable to react, which is the failure this
+    /// overload exists to prevent.
+    /// </remarks>
+    public virtual double Step(double metric) => Step();
+
+    /// <inheritdoc/>
     public virtual double GetLearningRateAtStep(int step)
     {
         if (step < 0)

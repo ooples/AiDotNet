@@ -133,53 +133,30 @@ public class Bucket9_AdvancedAITests : ConfigureMethodTestBase
     /// </remarks>
     [Fact]
     [Trait("category", "integration-configure-method")]
-    public async Task ConfigureKnowledgeDistillation_RegularTrainingPath_ThrowsUntilTapeIntegrationLands()
+    public async Task ConfigureKnowledgeDistillation_WithoutATeacher_FailsClearly()
     {
+        // Distillation on the regular training path now runs instead of throwing "not yet integrated
+        // with the tape-based training flow" — the end-to-end training proof (the distillation loss
+        // decreasing) lives in KnowledgeDistillationBuildTests. Here we pin the reachability of that
+        // path from the ConfigureMethod coverage suite via its clearest observable: a KD build with
+        // no teacher configured now fails with a specific "requires a teacher" error from inside the
+        // KD path, which it could not reach before because the gate threw first.
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
 
-        var kdOptions = new KnowledgeDistillationOptions<float, Tensor<float>, Tensor<float>>
-        {
-            Temperature = 7.0, // non-default sentinel
-        };
-
-        // Canary Transformer is a NeuralNetworkBase + IParameterizable,
-        // and the test does not configure LoRA — so UseDirectTrainingPath
-        // returns false and BuildAsync routes to the regular training
-        // path where the KD-not-integrated throw fires.
-        var ex = await Assert.ThrowsAsync<System.NotSupportedException>(async () =>
+        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(async () =>
         {
             await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureModel(model)
                 .ConfigureDataLoader(loader)
-                .ConfigureKnowledgeDistillation(kdOptions)
+                .ConfigureKnowledgeDistillation(new KnowledgeDistillationOptions<float, Tensor<float>, Tensor<float>>
+                {
+                    Temperature = 7.0,
+                })
                 .BuildAsync();
         });
 
-        // Assert by exception TYPE + origin (TargetSite namespace in
-        // AiDotNet — confirms the throw came from production code, not
-        // from a runtime / framework-level NRE) rather than by message
-        // substring. The message text is human-readable and can be
-        // rephrased by a future maintainer without breaking behavior —
-        // type+namespace assertions don't drift (this PR's review C6WMo).
-        //
-        // Narrowed: require the throw to originate INSIDE the
-        // AiModelBuilder method that gates the KD-on-regular-training-path
-        // contract, not just anywhere under AiDotNet.* — any unrelated
-        // NotSupportedException thrown deeper in the build would satisfy
-        // the broader namespace check (this PR's review C8eiD). The KD
-        // throw lives in AiModelBuilder.BuildSupervisedInternalAsync;
-        // the type-and-method assertion below pins it to that gate.
-        Assert.IsType<System.NotSupportedException>(ex);
-        bool fromBuilder = ex.TargetSite?.DeclaringType?.FullName?
-            .StartsWith("AiDotNet.AiModelBuilder", System.StringComparison.Ordinal) == true;
-        bool stackThroughBuilder = ex.StackTrace?
-            .Contains("AiDotNet.AiModelBuilder", System.StringComparison.Ordinal) == true;
-        Assert.True(
-            fromBuilder || stackThroughBuilder,
-            $"Expected the KD-not-integrated throw to originate inside AiDotNet.AiModelBuilder " +
-            $"(the supervised-path KD gate). Got TargetSite={ex.TargetSite?.DeclaringType?.FullName ?? "<null>"} | " +
-            $"message={ex.Message}");
+        Assert.Contains("teacher", ex.Message, System.StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -72,8 +72,15 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting", "https://arxiv.org/abs/2201.12886", Year = 2023, Authors = "Cristian Challu, Kin G. Olivares, Boris N. Oreshkin, Federico Garza, Max Mergenthaler-Canseco, Armin Dubrawski")]
-public class NHiTSModel<T> : TimeSeriesModelBase<T>
+public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// N-HiTS is a point forecaster: its head emits a single value per horizon step, so any
+    /// pointwise loss is meaningful. Defaults to mean squared error when none is configured.
+    /// </remarks>
+    public void SetLossFunction(ILossFunction<T> lossFunction) => ApplyLossFunction(lossFunction);
+
     private readonly NHiTSOptions<T> _options;
     private Vector<T> _trainingSeries = Vector<T>.Empty();
     private readonly List<NHiTSStackTensor<T>> _stacks;
@@ -262,7 +269,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         var allStacks = _stacks.Cast<Interfaces.ILayer<T>>().ToList();
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allStacks, -1);
 
-        var trainingLoss = new MeanSquaredErrorLoss<T>();
+        var trainingLoss = TrainingLoss;
 
         int lookback = _options.LookbackWindow;
         int horizon = _options.ForecastHorizon;
@@ -396,16 +403,22 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
             // would measure a mix of intra-epoch weight states, not the snapshot, so
             // a late-diverging epoch (good early batches, bad end weights) could be
             // wrongly selected as best. The extra pass is forward-only (no backprop).
-            if (epochSampleCount > 0)
+            double epochLoss = epochSampleCount > 0
+                ? ValidationMse(checkpointWindows, yNorm, lookback, horizon)
+                : double.PositiveInfinity;
+            if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
             {
-                double epochLoss = ValidationMse(checkpointWindows, yNorm, lookback, horizon);
-                if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
-                {
-                    bestLoss = epochLoss;
-                    bestSnapshot = new List<Vector<T>>(_stacks.Count);
-                    foreach (var stack in _stacks)
-                        bestSnapshot.Add(stack.GetParameters());
-                }
+                bestLoss = epochLoss;
+                bestSnapshot = new List<Vector<T>>(_stacks.Count);
+                foreach (var stack in _stacks)
+                    bestSnapshot.Add(stack.GetParameters());
+            }
+
+            // Surface the epoch to facade callbacks / patience-based early stopping (a diverged epoch reports
+            // a non-finite loss, which counts as non-improving). Break on a callback/early-stopping veto.
+            if (!ReportEpoch(epoch, timeBounded ? 0 : _options.Epochs, NumOps.FromDouble(epochLoss)))
+            {
+                break;
             }
         }
 
@@ -521,7 +534,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         if (trainWindows.Count < batchSize) return false;
 
         var layers = _stacks.Cast<ITrainableLayer<T>>().ToList();
-        var trainingLoss = new MeanSquaredErrorLoss<T>();
+        var trainingLoss = TrainingLoss;
 
         Tensor<T> ForwardStack(Tensor<T> input) => RunForwardBatched(input)!;
         Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>
@@ -549,6 +562,9 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
             TrainingCancellationToken.ThrowIfCancellationRequested();
             var order = trainWindows.OrderBy(_ => random.Next()).ToList();
             int fullBatches = order.Count / batchSize;
+
+            double epochLossSum = 0;
+            int epochBatchCount = 0;
 
             for (int b = 0; b < fullBatches; b++)
             {
@@ -590,6 +606,17 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
                     diverged = true;
                     break;
                 }
+
+                epochLossSum += stepLossD;
+                epochBatchCount++;
+            }
+
+            // Surface the resident epoch to facade callbacks / early stopping; break on veto (the post-loop
+            // baseline validation still decides whether to keep the resident attempt).
+            if (!diverged && epochBatchCount > 0 &&
+                !ReportEpoch(epoch, _options.Epochs, NumOps.FromDouble(epochLossSum / epochBatchCount)))
+            {
+                break;
             }
         }
 

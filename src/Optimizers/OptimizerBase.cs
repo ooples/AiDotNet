@@ -1645,6 +1645,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// The momentum helps maintain direction through flat or noisy areas.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Called whenever a fitness score is observed, so a subclass can forward it to whatever reacts
+    /// to it. Base implementation does nothing; gradient optimizers route it to their schedule.
+    /// </summary>
+    /// <param name="fitness">The fitness score, in the fitness calculator's direction.</param>
+    protected virtual void OnFitnessObserved(T fitness)
+    {
+    }
+
     protected virtual void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         if (Options.UseAdaptiveLearningRate)
@@ -1652,29 +1661,34 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             // Adaptive-LR semantics:
             //   improving fitness → reduce LR (we are converging; take smaller, finer steps)
             //   stagnant or worse → increase LR (we are stuck; take larger steps to escape)
-            // The counter pair tracks improvement/stagnation streaks for the
-            // adaptive-momentum logic further below; correct mapping is
-            // "improving ⇒ IterationsWithImprovement++". The previous code
-            // had both branches reversed: improving fitness incremented
-            // `IterationsWithoutImprovement` and vice versa, which broke
-            // every downstream branch that keys off these counters
-            // (adaptive momentum, scheduler step decisions).
+            //
+            // The rate itself is NOT written here. That rule now lives in AdaptiveFitnessScheduler,
+            // which gradient optimizers install automatically when this flag is set and no explicit
+            // scheduler was configured (see GradientBasedOptimizerBase). Keeping it here as well
+            // meant two mechanisms wrote CurrentLearningRate: any attached scheduler set a rate and
+            // this branch immediately overwrote it, so a configured schedule silently did nothing.
+            // One writer, one schedule — and an explicit scheduler simply replaces this one instead
+            // of fighting it.
+            //
+            // The counter pair still belongs here: it tracks improvement/stagnation streaks for the
+            // adaptive-momentum logic below and for scheduler step decisions, neither of which the
+            // scheduler owns. Correct mapping is "improving ⇒ IterationsWithImprovement++"; earlier
+            // code had both branches reversed, which broke every downstream branch keyed off them.
             if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
             {
-                CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
                 IterationsWithImprovement++;
                 IterationsWithoutImprovement = 0;
             }
             else
             {
-                CurrentLearningRate = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
                 IterationsWithoutImprovement++;
                 IterationsWithImprovement = 0;
             }
-
-            CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(Options.MinLearningRate),
-                MathHelper.Min(NumOps.FromDouble(Options.MaxLearningRate), CurrentLearningRate));
         }
+
+        // Hand the schedule the value it reacts to. Done unconditionally: an explicitly configured
+        // scheduler is metric-driven regardless of whether UseAdaptiveLearningRate was set.
+        OnFitnessObserved(currentStepData.FitnessScore);
 
         if (Options.UseAdaptiveMomentum)
         {

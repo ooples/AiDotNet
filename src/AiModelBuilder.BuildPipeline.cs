@@ -38,6 +38,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         /// <summary>Zero-based index of the last epoch observed.</summary>
         public int LastEpoch { get; private set; }
 
+        /// <summary>
+        /// How many epochs have been reported. Lets the direct-training path tell whether the model
+        /// reported its own epochs (see <see cref="ITrainingEpochReporter{T}"/>) or trained opaquely
+        /// and still needs its single synthetic epoch.
+        /// </summary>
+        public int EpochsObserved { get; private set; }
+
         /// <summary>Loss reported for the last epoch observed.</summary>
         public T LastLoss { get; private set; }
 
@@ -69,18 +76,1968 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         /// Drives one completed epoch. Returns true to continue, false to request an abort.
         /// Suitable as the delegate passed to <c>OptimizerBase.SetEpochProgressCallback</c>.
         /// </summary>
-        public bool OnEpoch(int epoch, T epochLoss)
+        public bool OnEpoch(int epoch, T epochLoss) => OnEpoch(epoch, 0, epochLoss);
+
+        /// <summary>
+        /// Drives one completed epoch, using the reporter's own epoch budget. A real epoch reporter knows its
+        /// total (e.g. a time-series model's configured <c>Epochs</c>); the optimizer-derived <c>_totalEpochs</c>
+        /// is meaningless on the direct-training path, so forward the reporter's value when it supplies one.
+        /// </summary>
+        /// <param name="epoch">The completed epoch index.</param>
+        /// <param name="totalEpochs">The reporter's epoch budget, or 0 when unknown (falls back to the seeded total).</param>
+        /// <param name="epochLoss">The epoch's monitored loss.</param>
+        public bool OnEpoch(int epoch, int totalEpochs, T epochLoss)
         {
             LastEpoch = epoch;
             LastLoss = epochLoss;
+            EpochsObserved++;
+            int effectiveTotal = totalEpochs > 0 ? totalEpochs : _totalEpochs;
             bool shouldContinue = _owner.InvokeTrainingEpoch(
-                epoch, _totalEpochs, epochLoss, _monitorSessionId, Elapsed, _cancellationToken, out var reason);
+                epoch, effectiveTotal, epochLoss, _monitorSessionId, Elapsed, _cancellationToken, out var reason);
             if (!shouldContinue)
             {
                 EarlyStopTriggered = true;
                 StopReason ??= reason;
             }
             return shouldContinue;
+        }
+    }
+
+    /// <summary>
+    /// Per-epoch losses accumulated for a configured <c>IStoppingCriterion</c>, which decides from
+    /// history rather than a single value.
+    /// </summary>
+    private readonly List<T> _stoppingLossHistory = new();
+
+    /// <summary>
+    /// Computes the metrics supplied to <c>ConfigureRegressionMetric</c> /
+    /// <c>ConfigureClassificationMetric</c> and records them on the result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Evaluated on the TEST partition. A configured metric read off the training data would measure
+    /// memorization rather than the generalization the caller asked about, and would quietly
+    /// disagree with the model's reported test error.
+    /// </para>
+    /// <para>
+    /// Uses the predictions the optimizer already produced for the test partition rather than
+    /// re-running Predict on the raw test matrix. Feature selection means the trained model expects
+    /// only the selected columns, so re-predicting on the full matrix fails outright ("Number of
+    /// columns in the matrix must equal the length of the vector") — and were the shapes ever to
+    /// line up by accident, the metric would describe a different input than the model's own
+    /// reported error.
+    /// </para>
+    /// <para>
+    /// Both metric interfaces take <c>ReadOnlySpan&lt;T&gt;</c> of predictions and actuals, so this
+    /// only applies where predictions and targets flatten to a vector.
+    /// </para>
+    /// </remarks>
+    private void ComputeConfiguredMetrics(
+        AiModelResult<T, TInput, TOutput> result,
+        OptimizationResult<T, TInput, TOutput>.DatasetResult testResult)
+    {
+        if (_configuredRegressionMetric is null && _configuredClassificationMetric is null
+            && _configuredDistanceMetric is null && _configuredSimilarityMetric is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(testResult.Predictions);
+            var actual = ConversionsHelper.ConvertToVector<T, TOutput>(testResult.Y);
+
+            if (predicted.Length == 0 || predicted.Length != actual.Length)
+            {
+                throw new InvalidOperationException(
+                    $"predictions ({predicted.Length}) and targets ({actual.Length}) do not line up.");
+            }
+
+            var p = predicted.ToArray().AsSpan();
+            var a = actual.ToArray().AsSpan();
+
+            if (_configuredRegressionMetric is not null)
+            {
+                result.SetConfiguredMetric(
+                    _configuredRegressionMetric.Name,
+                    _configuredRegressionMetric.Compute(p, a));
+            }
+
+            if (_configuredClassificationMetric is not null)
+            {
+                result.SetConfiguredMetric(
+                    _configuredClassificationMetric.Name,
+                    _configuredClassificationMetric.Compute(p, a));
+            }
+
+            // A distance/similarity metric reports how far predictions sit from targets under that
+            // metric — the configured distance between the prediction and target vectors. Auto-computed
+            // whenever one is configured, alongside the regression/classification metrics.
+            if (_configuredDistanceMetric is not null)
+            {
+                result.SetConfiguredMetric(
+                    _configuredDistanceMetric.Name,
+                    _configuredDistanceMetric.Compute(predicted, actual));
+            }
+
+            if (_configuredSimilarityMetric is not null)
+            {
+                result.SetConfiguredMetric(
+                    _configuredSimilarityMetric.GetType().Name,
+                    _configuredSimilarityMetric.Calculate(predicted, actual));
+            }
+        }
+        catch (Exception ex)
+        {
+            // A metric is a report, not the model: a failure here must not discard a completed
+            // training run. Surfaced rather than dropped, so an absent metric is explained.
+            System.Diagnostics.Trace.TraceWarning(
+                $"Configured metric could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; the metric is absent from AiModelResult.ConfiguredMetrics.");
+        }
+    }
+
+    /// <summary>
+    /// Auto-evaluates a clustering model's result with cluster-validity indices and attaches them to
+    /// <see cref="AiModelResult{T, TInput, TOutput}.ClusteringEvaluation"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every clustering model is evaluated: the standard internal indices (Silhouette, Davies-Bouldin,
+    /// Calinski-Harabasz, Dunn, Connectivity) run without any configuration, computed on the fitted data
+    /// and the model's learned cluster assignments. Cluster validity is intrinsically in-sample — it
+    /// scores the geometry of the assignments the model produced — so this uses the training data, not a
+    /// held-out partition. Non-clustering models are skipped.
+    /// </para>
+    /// <para>
+    /// <c>ConfigureClusterMetric</c> / <c>ConfigureExternalClusterMetric</c> add a custom index to the
+    /// default set rather than replacing it. External indices (Adjusted Rand, NMI, V-Measure,
+    /// Fowlkes-Mallows) compare assignments to ground-truth labels; they run only when the build carries
+    /// one integer-valued label per row. Continuous targets are treated as "no ground truth" so an
+    /// external index is never computed against values that are not class labels.
+    /// </para>
+    /// <para>
+    /// Each index is also mirrored, by name, into <see cref="AiModelResult{T, TInput,
+    /// TOutput}.ConfiguredMetrics"/>. Like the supervised metrics, a failure here is surfaced as a
+    /// warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeClusterEvaluation(
+        AiModelResult<T, TInput, TOutput> result,
+        TInput preparedX, TOutput preparedY)
+    {
+        if (_model is not Clustering.Base.ClusteringBase<T> clustering)
+        {
+            return;
+        }
+
+        try
+        {
+            var data = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX);
+            var labels = clustering.Labels ?? clustering.Predict(data);
+            if (labels is null || labels.Length != data.Rows)
+            {
+                throw new InvalidOperationException(
+                    $"cluster labels ({labels?.Length ?? 0}) do not line up with data rows ({data.Rows}).");
+            }
+
+            var evaluator = new Clustering.Evaluation.ClusteringEvaluator<T>();
+            if (_configuredClusterMetric is not null)
+            {
+                evaluator.AddInternalMetric(_configuredClusterMetric);
+            }
+
+            if (_configuredExternalClusterMetric is not null)
+            {
+                evaluator.AddExternalMetric(_configuredExternalClusterMetric);
+            }
+
+            var trueLabels = TryExtractClusterGroundTruth(preparedY, data.Rows);
+            var evaluation = evaluator.EvaluateAll(data, labels, trueLabels);
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            foreach (var kv in evaluation.InternalMetrics)
+            {
+                result.SetConfiguredMetric(kv.Key, numOps.FromDouble(kv.Value));
+            }
+
+            foreach (var kv in evaluation.ExternalMetrics)
+            {
+                result.SetConfiguredMetric(kv.Key, numOps.FromDouble(kv.Value));
+            }
+
+            result.SetClusteringEvaluation(evaluation);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Clustering evaluation could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ClusteringEvaluation is null.");
+        }
+    }
+
+    /// <summary>
+    /// Calibrates the configured drift detector on the training residuals, checks it against the test
+    /// residuals, and attaches the attributed <see cref="DriftDetection.DriftReport"/> plus the live
+    /// <see cref="DriftDetection.DriftMonitor{T}"/> to the result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The monitor watches two lenses in one pass: the configured detector on the error stream
+    /// (<c>|predicted - actual|</c>) for concept drift, and a windowed mean-shift test on the predictions
+    /// for covariate drift. It is primed on the training predictions/targets so "normal" is the model's
+    /// own training behaviour, then the held-out test stream is checked through it — reporting whether the
+    /// held-out data already drifts and attributing it to concept vs covariate shift. The calibrated
+    /// monitor is surfaced so production can keep streaming live pairs through the same instance.
+    /// </para>
+    /// <para>
+    /// Skipped when no detector was configured or when train/test predictions are unavailable. Like the
+    /// metric reports, a failure here is surfaced as a warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeDriftMonitoring(
+        AiModelResult<T, TInput, TOutput> result,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredDriftDetector is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var trainPredicted = ConversionsHelper.ConvertToVector<T, TOutput>(optimizationResult.TrainingResult.Predictions);
+            var trainActual = ConversionsHelper.ConvertToVector<T, TOutput>(optimizationResult.TrainingResult.Y);
+            var testPredicted = ConversionsHelper.ConvertToVector<T, TOutput>(optimizationResult.TestResult.Predictions);
+            var testActual = ConversionsHelper.ConvertToVector<T, TOutput>(optimizationResult.TestResult.Y);
+
+            if (trainPredicted.Length == 0 || testPredicted.Length == 0
+                || trainPredicted.Length != trainActual.Length || testPredicted.Length != testActual.Length)
+            {
+                throw new InvalidOperationException(
+                    "train/test predictions and targets are unavailable or do not line up.");
+            }
+
+            var monitor = new DriftDetection.DriftMonitor<T>(_configuredDriftDetector);
+            monitor.Prime(trainPredicted, trainActual);
+            var report = monitor.Check(testPredicted, testActual);
+            result.SetDriftMonitoring(report, monitor);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Drift monitoring could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.DriftReport is null.");
+        }
+    }
+
+    /// <summary>
+    /// Runs the configured active-learning strategy over the unlabeled pool (or the held-out test
+    /// partition) and attaches a diversity-aware selection to the result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The strategy scores each pool sample's informativeness; the batch is then chosen with a diversity
+    /// penalty (see <see cref="ActiveLearning.BatchActiveLearner{T}"/>) in the strongest representation
+    /// space available (BADGE gradient embeddings, a model representation, or input features) so it covers
+    /// the pool instead of collecting redundant uncertain samples. Applies only when the model is an
+    /// <c>IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c> — the strategy interface's constraint.
+    /// A failure is surfaced as a warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeActiveLearningSelection(
+        AiModelResult<T, TInput, TOutput> result,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredActiveLearningStrategy is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_model is not IFullModel<T, Tensor<T>, Tensor<T>> tensorModel)
+            {
+                throw new NotSupportedException(
+                    "active learning requires a Tensor-typed model (IFullModel<T, Tensor<T>, Tensor<T>>).");
+            }
+
+            var pool = _activeLearningPool
+                ?? (optimizationResult.TestResult.X as Tensor<T>)
+                ?? throw new InvalidOperationException(
+                    "no unlabeled pool was configured and the held-out test partition is not a Tensor.");
+
+            if (pool.Shape.Length < 1 || pool.Shape[0] == 0)
+            {
+                throw new InvalidOperationException("the unlabeled pool is empty.");
+            }
+
+            var scores = _configuredActiveLearningStrategy.ComputeInformativenessScores(tensorModel, pool);
+            var (representation, space) = ActiveLearning.ActiveLearningRepresentation.Build(tensorModel, pool);
+            var selection = new ActiveLearning.BatchActiveLearner<T>(_activeLearningDiversityWeight)
+                .Select(scores, representation, _activeLearningBatchSize, _configuredActiveLearningStrategy.Name, space);
+            result.SetActiveLearningSelection(selection);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Active-learning selection could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ActiveLearningSelection is null.");
+        }
+    }
+
+    /// <summary>
+    /// Runs the configured (generic) query strategy over its unlabeled pool and attaches a diversity-aware
+    /// selection to the result — the input-type-generic twin of <see cref="ComputeActiveLearningSelection"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The strategy's <c>ComputeScores</c> supplies per-sample informativeness; the same
+    /// <see cref="ActiveLearning.BatchActiveLearner{T}"/> then chooses a diverse batch, with redundancy
+    /// measured via the generic three-tier representation cascade. Requires an explicit per-sample pool
+    /// (query strategies are generic over the input type, so the pool cannot be split from the batched
+    /// training data). Skipped when <see cref="ComputeActiveLearningSelection"/> already produced a
+    /// selection, so the two do not overwrite each other. A failure is surfaced as a warning.
+    /// </para>
+    /// </remarks>
+    private void ComputeQueryStrategySelection(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_configuredQueryStrategy is null || _queryStrategyPool is null || _model is null
+            || result.ActiveLearningSelection is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_queryStrategyPool.Count == 0)
+            {
+                throw new InvalidOperationException("the unlabeled pool is empty.");
+            }
+
+            var model = _model;
+            var inputs = new TInput[_queryStrategyPool.Count];
+            for (int i = 0; i < inputs.Length; i++) inputs[i] = _queryStrategyPool[i];
+            var dataset = new ActiveLearning.Data.InMemoryDataset<T, TInput, TOutput>(
+                inputs, new TOutput[inputs.Length], hasLabels: false);
+
+            var scores = _configuredQueryStrategy.ComputeScores(model, dataset);
+            var (representation, space) = ActiveLearning.ActiveLearningRepresentation.BuildForSamples<T, TInput, TOutput>(
+                model, _queryStrategyPool, s => ConversionsHelper.ConvertToVector<T, TInput>(s));
+            var selection = new ActiveLearning.BatchActiveLearner<T>(_queryStrategyDiversityWeight)
+                .Select(scores, representation, _queryStrategyBatchSize, _configuredQueryStrategy.Name, space);
+            result.SetActiveLearningSelection(selection);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Query-strategy selection could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ActiveLearningSelection is null.");
+        }
+    }
+
+    /// <summary>
+    /// Extracts one ground-truth label per row from the target, or <c>null</c> when the target is not a
+    /// per-row integer label set suitable for external cluster metrics.
+    /// </summary>
+    /// <remarks>
+    /// External cluster metrics treat their inputs as categorical class labels, so only a target that
+    /// flattens to exactly <paramref name="rows"/> integer-valued entries qualifies. A continuous or
+    /// wrong-length target returns <c>null</c>, which suppresses external metrics rather than scoring
+    /// against values that are not labels.
+    /// </remarks>
+    private static Vector<T>? TryExtractClusterGroundTruth(TOutput target, int rows)
+    {
+        Vector<T> vector;
+        switch (target)
+        {
+            case Vector<T> v:
+                vector = v;
+                break;
+            case Tensor<T> t:
+                if (t.Length != rows)
+                {
+                    return null;
+                }
+
+                vector = t.ToVector();
+                break;
+            default:
+                return null;
+        }
+
+        if (vector.Length != rows)
+        {
+            return null;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double value = numOps.ToDouble(vector[i]);
+            if (Math.Abs(value - Math.Round(value)) > 1e-9)
+            {
+                return null;
+            }
+        }
+
+        return vector;
+    }
+
+    /// <summary>
+    /// Trains a student in place by knowledge distillation against the configured teacher.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Distillation cannot go through the optimizer's supervised loop: its loss combines a soft term
+    /// against the teacher's logits with a hard term against the true label, and the optimizer's
+    /// (predicted, actual) loss contract carries no teacher. So this drives the student's own
+    /// gradient surface directly. Each epoch, for each sample: run the teacher to get its logits, ask
+    /// the configured <see cref="IDistillationStrategy{T}"/> for the gradient of the combined loss
+    /// with respect to the student output (via <see cref="DistillationLossAdapter{T}"/>), and
+    /// backpropagate it through the student with <c>ComputeGradients</c>/<c>ApplyGradients</c>.
+    /// </para>
+    /// <para>
+    /// The teacher is fixed during student training, so its logits are computed per step from
+    /// whichever teacher the options supply (an explicit forward delegate, an <c>IFullModel</c>
+    /// teacher, or an <c>ITeacherModel</c>). The strategy defaults to response-based distillation
+    /// built from the options' temperature and alpha when none is configured.
+    /// </para>
+    /// </remarks>
+    private void RunKnowledgeDistillationTraining(
+        IGradientComputable<T, TInput, TOutput> student,
+        TInput xTrain, TOutput yTrain,
+        IOptimizer<T, TInput, TOutput> optimizer)
+    {
+        var kd = _knowledgeDistillationOptions!;
+
+        if (xTrain is not Tensor<T> studentInputs || yTrain is not Tensor<T> studentTargets)
+        {
+            throw new NotSupportedException(
+                "Knowledge distillation requires tensor-shaped training data (Tensor<T> inputs and " +
+                $"targets); this build supplied {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+        }
+
+        var teacherForward = ResolveTeacherForward(kd);
+        var strategy = kd.Strategy
+            ?? KnowledgeDistillation.DistillationStrategyFactory<T>.CreateResponseBasedStrategy(
+                kd.Temperature, kd.Alpha);
+        var lossAdapter = new KnowledgeDistillation.DistillationLossAdapter<T>(strategy);
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rows = studentInputs.Shape[0];
+        int epochs = optimizer.GetOptions()?.MaxIterations ?? kd.Epochs;
+        var lr = numOps.FromDouble(optimizer.GetOptions()?.InitialLearningRate ?? 0.01);
+
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            for (int row = 0; row < rows; row++)
+            {
+                var inputRow = RowTensor(studentInputs, row);
+                var teacherOutput = teacherForward(inputRow);
+
+                // The hard-label term (when the strategy uses it) reads the true label for this row.
+                lossAdapter.CurrentTrueLabel = RowTensor(studentTargets, row).ToVector();
+
+                // ComputeGradients routes an ILossFunction (not a LossFunctionBase) through its
+                // CalculateDerivative fallback, so the adapter's derivative — the distillation
+                // gradient — is what gets backpropagated. The teacher output is the target. The casts
+                // are safe: xTrain/yTrain were confirmed Tensor<T> above, so TInput/TOutput are too.
+                var gradients = student.ComputeGradients(
+                    (TInput)(object)inputRow, (TOutput)(object)teacherOutput, lossAdapter);
+                student.ApplyGradients(gradients, lr);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolves the teacher into a single forward function, whichever way the options express it.
+    /// </summary>
+    private Func<Tensor<T>, Tensor<T>> ResolveTeacherForward(
+        KnowledgeDistillationOptions<T, TInput, TOutput> kd)
+    {
+        if (kd.TeacherForward is not null)
+        {
+            return input => (Tensor<T>)(object)kd.TeacherForward((TInput)(object)input)!;
+        }
+
+        if (kd.TeacherModel is not null)
+        {
+            return input => (Tensor<T>)(object)kd.TeacherModel.Predict((TInput)(object)input)!;
+        }
+
+        if (kd.Teacher is not null)
+        {
+            return input => (Tensor<T>)(object)kd.Teacher.GetLogits((TInput)(object)input)!;
+        }
+
+        throw new InvalidOperationException(
+            "ConfigureKnowledgeDistillation requires a teacher. Set one of KnowledgeDistillationOptions." +
+            "Teacher, .TeacherModel, or .TeacherForward.");
+    }
+
+    /// <summary>
+    /// Runs the default self-supervised pretraining loop when a method was configured without an explicit
+    /// pretrain action: pretrains over the unlabeled inputs, watches for representation collapse, and
+    /// probes representation quality. Returns the report, or <c>null</c> when it could not run.
+    /// </summary>
+    private SelfSupervisedLearning.SelfSupervisedLearningPretrainingResult<T>? RunDefaultSelfSupervisedLearningPretraining(
+        SelfSupervisedLearning.SelfSupervisedLearningConfig<T> config, TInput x, TOutput y)
+    {
+        try
+        {
+            if (x is not Tensor<T> data)
+            {
+                throw new NotSupportedException(
+                    $"default self-supervised pretraining requires Tensor inputs (got {typeof(TInput).Name}).");
+            }
+
+            // Targets feed the optional linear probe; only use them when they line up one-per-sample.
+            Tensors.LinearAlgebra.Vector<T>? targets = null;
+            try
+            {
+                var candidate = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+                if (candidate.Length == data.Shape[0]) targets = candidate;
+            }
+            catch
+            {
+                targets = null;
+            }
+
+            var method = config.Method;
+            if (method is null)
+            {
+                return null;
+            }
+
+            int epochs = config.PretrainingEpochs ?? 5;
+            int batchSize = config.BatchSize ?? 32;
+            return SelfSupervisedLearning.SelfSupervisedLearningPretrainer.Run(
+                method, data, targets, epochs, batchSize);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Default self-supervised pretraining could not run: {ex.Message}. Main training proceeds " +
+                "on the un-pretrained model; AiModelResult.SelfSupervisedLearningPretrainingResult is null.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Surfaces the configured model explainer on the result and auto-audits explanation faithfulness —
+    /// whether the features the explanation highlights actually drive the model's output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The audit (see <see cref="Interpretability.FaithfulnessAuditor{T}"/>) runs deletion/insertion and
+    /// comprehensiveness/sufficiency perturbation tests against the TRAINED model, which mainstream
+    /// explainability libraries omit. It covers tabular models (Matrix input, Vector output): the
+    /// configured explainer's global attributions are audited when it implements
+    /// <see cref="Interpretability.IGlobalAttributionExplainer{T}"/>, and the model's own feature
+    /// importances are audited when they align to the inputs. A failure is surfaced as a warning and never
+    /// discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeExplanationFaithfulness(
+        AiModelResult<T, TInput, TOutput> result,
+        TInput preparedX,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredModelExplainer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // Full-feature training inputs are the audit data; the score function reduces each row to the
+            // model's selected features before predicting (perturbing a dropped feature then correctly
+            // shows no effect). The test partition (TestResult.X) is not always populated for tabular
+            // models, so prepared training data is the reliable source.
+            AiDotNet.Tensors.LinearAlgebra.Matrix<T>? testMatrix = null;
+            try { testMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX); } catch { testMatrix = null; }
+
+            // Use the TRAINED model (the optimizer's best solution), not the possibly-untrained _model.
+            if (optimizationResult.BestSolution is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
+                || testMatrix is null || testMatrix.Rows == 0)
+            {
+                // Non-tabular models: surface the explainer for on-demand use; no uniform audit path.
+                result.SetExplainability(_configuredModelExplainer, null);
+                return;
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            // Find the input width the model's Predict actually accepts (models differ in whether they
+            // expect the raw features, a selected subset, or an intercept-augmented matrix). Probe widths
+            // from the full column count downward using the first columns of a row; skip gracefully if
+            // none work.
+            int width = -1;
+            var probeRow = GetRow(testMatrix, 0);
+            for (int w = testMatrix.Columns; w >= 1; w--)
+            {
+                try
+                {
+                    var pm = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, w);
+                    for (int j = 0; j < w; j++) pm[0, j] = probeRow[j];
+                    _ = tabularModel.Predict(pm);
+                    width = w;
+                    break;
+                }
+                catch { /* try a narrower width */ }
+            }
+
+            if (width < 0)
+            {
+                result.SetExplainability(_configuredModelExplainer, null);
+                return;
+            }
+
+            int scoreWidth = width;
+            double Score(AiDotNet.Tensors.LinearAlgebra.Vector<T> row)
+            {
+                var m = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, scoreWidth);
+                for (int j = 0; j < scoreWidth; j++) m[0, j] = row[j];
+                var output = tabularModel.Predict(m);
+                return output.Length > 0 ? numOps.ToDouble(output[0]) : 0.0;
+            }
+
+            // Reduce the audit data and attributions to the model's accepted input width, so perturbations,
+            // predictions, and attributions all live in the same feature space.
+            var auditMatrix = FirstColumns(testMatrix, width);
+            var auditor = new Interpretability.FaithfulnessAuditor<T>();
+
+            Interpretability.FaithfulnessReport<T>? explainerFaithfulness = null;
+            if (_configuredModelExplainer is Interpretability.IGlobalAttributionExplainer<T> globalExplainer)
+            {
+                var attributions = globalExplainer.ComputeGlobalAttributions(testMatrix);
+                if (attributions.Length >= width)
+                {
+                    explainerFaithfulness = auditor.Audit(Score, auditMatrix, FirstElements(attributions, width, numOps));
+                }
+            }
+
+            Interpretability.FaithfulnessReport<T>? modelImportanceFaithfulness = null;
+            var importance = TryGetAlignedFeatureImportance(tabularModel, width, numOps);
+            if (importance is not null)
+            {
+                modelImportanceFaithfulness = auditor.Audit(Score, auditMatrix, importance);
+            }
+
+            result.SetExplainability(_configuredModelExplainer, new Interpretability.ExplanationFaithfulnessReport<T>
+            {
+                ExplainerFaithfulness = explainerFaithfulness,
+                ExplainerName = _configuredModelExplainer.GetType().Name,
+                ModelImportanceFaithfulness = modelImportanceFaithfulness,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Explanation faithfulness could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ExplanationFaithfulness is null.");
+            result.SetExplainability(_configuredModelExplainer, null);
+        }
+    }
+
+    /// <summary>
+    /// Builds a feature-importance vector aligned to the input columns from the model's built-in
+    /// <c>GetFeatureImportance()</c>, or <c>null</c> when it does not line up.
+    /// </summary>
+    private static AiDotNet.Tensors.LinearAlgebra.Vector<T>? TryGetAlignedFeatureImportance(
+        IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> model,
+        int columns, INumericOperations<T> numOps)
+    {
+        try
+        {
+            var importance = model.GetFeatureImportance();
+            if (importance is null || importance.Count != columns) return null;
+
+            // Prefer "feature_i"/"i"-style names to place values in column order; otherwise use insertion order.
+            var vector = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(columns);
+            int idx = 0;
+            bool placedByIndex = true;
+            foreach (var kv in importance)
+            {
+                int col = ExtractTrailingIndex(kv.Key);
+                if (col >= 0 && col < columns) vector[col] = kv.Value;
+                else { placedByIndex = false; break; }
+            }
+
+            if (placedByIndex) return vector;
+
+            var fallback = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(columns);
+            foreach (var kv in importance)
+            {
+                if (idx >= columns) break;
+                fallback[idx++] = kv.Value;
+            }
+
+            return fallback;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static int ExtractTrailingIndex(string name)
+    {
+        int i = name.Length - 1;
+        while (i >= 0 && char.IsDigit(name[i])) i--;
+        return i < name.Length - 1 && int.TryParse(name.Substring(i + 1), out int idx) ? idx : -1;
+    }
+
+    /// <summary>
+    /// Runs the configured adversarial attack against the trained model over a sweep of perturbation
+    /// budgets and surfaces an empirical robustness report (accuracy-vs-budget curve + robustness margin).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reports more than the single robust-accuracy number typical of robustness tooling: a robustness
+    /// curve across budgets (falling back to a single point if the attack ignores live budget changes), the
+    /// clean-vs-robust gap, the attack success rate, and the mean perturbation needed to fool the model.
+    /// Covers tabular models; a failure (including attacks whose predict contract does not fit the model)
+    /// is surfaced as a warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeAdversarialRobustness(
+        AiModelResult<T, TInput, TOutput> result, TInput preparedX, TOutput preparedY,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredAdversarialAttack is null)
+        {
+            return;
+        }
+
+        try
+        {
+            AiDotNet.Tensors.LinearAlgebra.Matrix<T>? dataMatrix = null;
+            AiDotNet.Tensors.LinearAlgebra.Vector<T>? labelVector = null;
+            try
+            {
+                dataMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX);
+                labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY);
+            }
+            catch { dataMatrix = null; }
+
+            if (optimizationResult.BestSolution is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
+                || dataMatrix is null || labelVector is null || dataMatrix.Rows == 0
+                || labelVector.Length != dataMatrix.Rows)
+            {
+                return; // robustness audit currently covers tabular models only.
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            // Probe the model's accepted input width (feature selection / intercept augmentation).
+            int width = -1;
+            var probeRow = GetRow(dataMatrix, 0);
+            for (int w = dataMatrix.Columns; w >= 1; w--)
+            {
+                try
+                {
+                    var pm = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, w);
+                    for (int j = 0; j < w; j++) pm[0, j] = probeRow[j];
+                    _ = tabularModel.Predict(pm);
+                    width = w;
+                    break;
+                }
+                catch { }
+            }
+
+            if (width < 0) return;
+
+            // Correctness band for regression: within a fraction of the label standard deviation.
+            double labelMean = 0;
+            for (int i = 0; i < labelVector.Length; i++) labelMean += numOps.ToDouble(labelVector[i]);
+            labelMean /= labelVector.Length;
+            double labelVar = 0;
+            for (int i = 0; i < labelVector.Length; i++) { double dv = numOps.ToDouble(labelVector[i]) - labelMean; labelVar += dv * dv; }
+            double tolerance = Math.Max(1e-9, 0.25 * Math.Sqrt(labelVar / Math.Max(1, labelVector.Length - 1)));
+
+            double PredictScalar(AiDotNet.Tensors.LinearAlgebra.Matrix<T> sample)
+            {
+                var reduced = FirstColumns(sample, width);
+                var outp = tabularModel.Predict(reduced);
+                return outp.Length > 0 ? numOps.ToDouble(outp[0]) : 0.0;
+            }
+
+            // Build per-sample inputs/labels in the attack's (TInput, TOutput) space (Matrix row / Vector).
+            int n = dataMatrix.Rows;
+            var inputs = new TInput[n];
+            var labels = new TOutput[n];
+            var cleanCorrect = new bool[n];
+            for (int i = 0; i < n; i++)
+            {
+                var sample = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, dataMatrix.Columns);
+                for (int j = 0; j < dataMatrix.Columns; j++) sample[0, j] = dataMatrix[i, j];
+                var lbl = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(1) { [0] = labelVector[i] };
+                inputs[i] = (TInput)(object)sample;
+                labels[i] = (TOutput)(object)lbl;
+                cleanCorrect[i] = Math.Abs(PredictScalar(sample) - numOps.ToDouble(labelVector[i])) <= tolerance;
+            }
+
+            double cleanAccuracy = cleanCorrect.Count(c => c) / (double)n;
+            var attackModel = (IFullModel<T, TInput, TOutput>)(object)tabularModel;
+            double baseEpsilon = _configuredAdversarialAttack.GetOptions().Epsilon;
+            if (baseEpsilon <= 0) baseEpsilon = 0.1;
+
+            var curve = new List<AdversarialRobustness.RobustnessCurvePoint<T>>();
+            double[] multipliers = { 0.25, 0.5, 1.0, 2.0 };
+            double robustAtBase = cleanAccuracy;
+            double successAtBase = 0;
+            double perturbSum = 0; int perturbCount = 0;
+
+            foreach (double mult in multipliers)
+            {
+                _configuredAdversarialAttack.GetOptions().Epsilon = baseEpsilon * mult;
+                TInput[] adversarial;
+                try { adversarial = _configuredAdversarialAttack.GenerateAdversarialBatch(inputs, labels, attackModel); }
+                catch { break; } // attack could not run (e.g. predict contract) — stop the sweep.
+
+                int correct = 0, flipped = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    var advInput = adversarial[i];
+                    if (advInput is null) continue;
+                    var adv = (AiDotNet.Tensors.LinearAlgebra.Matrix<T>)(object)advInput;
+                    bool advCorrect = Math.Abs(PredictScalar(adv) - numOps.ToDouble(labelVector[i])) <= tolerance;
+                    if (advCorrect) correct++;
+                    if (Math.Abs(mult - 1.0) < 1e-9)
+                    {
+                        if (cleanCorrect[i] && !advCorrect)
+                        {
+                            flipped++;
+                            if (_configuredAdversarialAttack.CalculatePerturbation(inputs[i], advInput)
+                                is AiDotNet.Tensors.LinearAlgebra.Matrix<T> perturbation)
+                            {
+                                perturbSum += FrobeniusNorm(perturbation, numOps);
+                                perturbCount++;
+                            }
+                        }
+                    }
+                }
+
+                double robustAcc = correct / (double)n;
+                curve.Add(new AdversarialRobustness.RobustnessCurvePoint<T> { Epsilon = baseEpsilon * mult, RobustAccuracy = robustAcc });
+                if (Math.Abs(mult - 1.0) < 1e-9)
+                {
+                    robustAtBase = robustAcc;
+                    successAtBase = cleanCorrect.Count(c => c) > 0 ? flipped / (double)cleanCorrect.Count(c => c) : 0;
+                }
+            }
+
+            _configuredAdversarialAttack.GetOptions().Epsilon = baseEpsilon; // restore
+
+            if (curve.Count == 0)
+            {
+                return; // attack never ran successfully.
+            }
+
+            bool sweepAvailable = curve.Count > 1 && curve.Select(p => p.RobustAccuracy).Distinct().Count() > 1;
+            double auc = curve.Average(p => p.RobustAccuracy);
+
+            result.SetAdversarialRobustnessReport(new AdversarialRobustness.AdversarialRobustnessReport<T>
+            {
+                AttackName = _configuredAdversarialAttack.GetType().Name,
+                CleanAccuracy = cleanAccuracy,
+                RobustAccuracy = robustAtBase,
+                CleanVsRobustGap = cleanAccuracy - robustAtBase,
+                AttackSuccessRate = successAtBase,
+                MeanPerturbationToFool = perturbCount > 0 ? perturbSum / perturbCount : 0,
+                RobustnessCurve = curve,
+                RobustAccuracyAuc = auc,
+                SweepAvailable = sweepAvailable,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Adversarial robustness could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.AdversarialRobustness is null.");
+        }
+    }
+
+    /// <summary>
+    /// Runs the configured certified defense over the test data and surfaces certified accuracy plus, when
+    /// an adversarial attack is also configured, the certified-vs-empirical robustness sandwich.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Certifies at the same perturbation budget the empirical attack uses (its epsilon), so certified
+    /// accuracy (guaranteed lower bound) and empirical robust accuracy (attack upper bound) sandwich the
+    /// true robustness like-for-like. Covers tabular models; a failure is surfaced as a warning and never
+    /// discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeCertifiedRobustness(
+        AiModelResult<T, TInput, TOutput> result, TInput preparedX, TOutput preparedY,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredCertifiedDefense is null)
+        {
+            return;
+        }
+
+        try
+        {
+            AiDotNet.Tensors.LinearAlgebra.Matrix<T>? dataMatrix = null;
+            AiDotNet.Tensors.LinearAlgebra.Vector<T>? labelVector = null;
+            try
+            {
+                dataMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX);
+                labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY);
+            }
+            catch { dataMatrix = null; }
+
+            if (optimizationResult.BestSolution is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
+                || dataMatrix is null || labelVector is null || dataMatrix.Rows == 0
+                || labelVector.Length != dataMatrix.Rows)
+            {
+                return;
+            }
+
+            int n = dataMatrix.Rows;
+            var inputs = new TInput[n];
+            var labels = new TOutput[n];
+            for (int i = 0; i < n; i++)
+            {
+                var sample = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, dataMatrix.Columns);
+                for (int j = 0; j < dataMatrix.Columns; j++) sample[0, j] = dataMatrix[i, j];
+                inputs[i] = (TInput)(object)sample;
+                labels[i] = (TOutput)(object)new AiDotNet.Tensors.LinearAlgebra.Vector<T>(1) { [0] = labelVector[i] };
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            // Certify at the empirical attack's budget so the two bounds are comparable; else a default.
+            double radius = _configuredAdversarialAttack is not null && _configuredAdversarialAttack.GetOptions().Epsilon > 0
+                ? _configuredAdversarialAttack.GetOptions().Epsilon
+                : 0.1;
+
+            var certModel = (IFullModel<T, TInput, TOutput>)(object)tabularModel;
+            var metrics = _configuredCertifiedDefense.EvaluateCertifiedAccuracy(inputs, labels, certModel, numOps.FromDouble(radius));
+
+            // Sandwich: certified accuracy (lower bound) vs the empirical robust accuracy (upper bound) at
+            // the same budget, when the adversarial attack audit is available.
+            double? empirical = result.AdversarialRobustness?.RobustAccuracy;
+            bool sandwich = empirical.HasValue;
+
+            result.SetCertifiedRobustnessReport(new AdversarialRobustness.CertifiedRobustnessReport<T>
+            {
+                DefenseName = _configuredCertifiedDefense.GetType().Name,
+                RadiusUsed = radius,
+                Metrics = metrics,
+                EmpiricalRobustAccuracy = empirical,
+                CertifiedEmpiricalGap = empirical.HasValue ? empirical.Value - metrics.CertifiedAccuracy : (double?)null,
+                SandwichAvailable = sandwich,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Certified robustness could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.CertifiedRobustness is null.");
+        }
+    }
+
+    /// <summary>
+    /// Applies the configured compression strategy to the trained weights and surfaces the true
+    /// size-versus-accuracy trade-off: a magnitude-ranked Pareto frontier whose every point rebuilds the model
+    /// from decompressed weights and re-evaluates it on the prepared data, plus reconstruction error and the
+    /// knee (most compression within a retention tolerance).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The operating points come from compressing the smallest-magnitude fraction of weights first (the least
+    /// important) and keeping the rest exact — a sensitivity-aware curve computed with only the strategy's
+    /// <c>Compress</c>/<c>Decompress</c> contract, so it works uniformly for every strategy. Accuracy retention
+    /// is measured by loading the decompressed weights back into a rebuilt model and re-running it, not by a
+    /// weight-error proxy. Models with no compressible parameters (e.g. trees, clustering) are skipped, and any
+    /// failure is surfaced as a warning that never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeModelCompression(
+        AiModelResult<T, TInput, TOutput> result, TInput preparedX, TOutput preparedY,
+        OptimizationResult<T, TInput, TOutput> optimizationResult)
+    {
+        if (_configuredModelCompressionStrategy is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (optimizationResult.BestSolution is not IFullModel<T, TInput, TOutput> model
+                || model is not IParameterizable<T, TInput, TOutput> parameterizable
+                || parameterizable.ParameterCount <= 0)
+            {
+                return; // nothing to compress (e.g. trees / clustering expose no trainable weights).
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var original = parameterizable.GetParameters();
+            int len = original.Length;
+            if (len == 0)
+            {
+                return;
+            }
+
+            // Baseline predictive loss (RMSE on the prepared data) of the uncompressed, trained model.
+            AiDotNet.Tensors.LinearAlgebra.Vector<T>? targets;
+            try { targets = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY); }
+            catch { targets = null; }
+            if (targets is null || targets.Length == 0)
+            {
+                return; // cannot score retention without comparable targets.
+            }
+
+            double baselineLoss = PredictionRmse(model, preparedX, targets, numOps);
+            if (double.IsNaN(baselineLoss))
+            {
+                return;
+            }
+
+            // Rank weights by magnitude ascending: compress the least important (smallest) first.
+            var order = new int[len];
+            for (int i = 0; i < len; i++) order[i] = i;
+            var magnitude = new double[len];
+            for (int i = 0; i < len; i++) magnitude[i] = Math.Abs(numOps.ToDouble(original[i]));
+            Array.Sort(order, (a, b) => magnitude[a].CompareTo(magnitude[b]));
+
+            int bytesPerElement = typeof(T) == typeof(float) ? 4 : typeof(T) == typeof(decimal) ? 16 : 8;
+            long originalBytes = (long)len * bytesPerElement;
+            double retentionTolerance = 0.95;
+
+            double[] fractions = { 0.25, 0.5, 0.75, 1.0 };
+            var frontier = new List<AiDotNet.ModelCompression.CompressionFrontierPoint<T>>();
+            CompressionOperatingPoint? fullPoint = null;
+
+            foreach (double fraction in fractions)
+            {
+                int k = (int)Math.Round(fraction * len);
+                if (k <= 0) continue;
+                if (k > len) k = len;
+
+                // Gather the k smallest-magnitude weights, compress + decompress just those.
+                var sub = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(k);
+                for (int i = 0; i < k; i++) sub[i] = original[order[i]];
+
+                (AiDotNet.Tensors.LinearAlgebra.Vector<T> compressed, ICompressionMetadata<T> meta) packed;
+                try { packed = _configuredModelCompressionStrategy.Compress(sub); }
+                catch { continue; }
+
+                AiDotNet.Tensors.LinearAlgebra.Vector<T> decompressed;
+                try { decompressed = _configuredModelCompressionStrategy.Decompress(packed.compressed, packed.meta); }
+                catch { continue; }
+                if (decompressed.Length != k) continue;
+
+                // Scatter the decompressed weights back over the compressed positions; keep the rest exact.
+                var mixed = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(len);
+                for (int i = 0; i < len; i++) mixed[i] = original[i];
+                double sqErr = 0;
+                for (int i = 0; i < k; i++)
+                {
+                    int idx = order[i];
+                    mixed[idx] = decompressed[i];
+                    double d = numOps.ToDouble(original[idx]) - numOps.ToDouble(decompressed[i]);
+                    sqErr += d * d;
+                }
+                double reconstructionError = Math.Sqrt(sqErr / len);
+
+                long compressedBytes;
+                try { compressedBytes = _configuredModelCompressionStrategy.GetCompressedSize(packed.compressed, packed.meta); }
+                catch { continue; }
+                compressedBytes += (long)(len - k) * bytesPerElement; // the exact remainder still costs bytes.
+                double ratio = _configuredModelCompressionStrategy.CalculateCompressionRatio(originalBytes, Math.Max(1, compressedBytes));
+
+                // Rebuild the model from the (partially) compressed weights and re-evaluate for real.
+                IFullModel<T, TInput, TOutput> rebuilt;
+                try { rebuilt = parameterizable.WithParameters(mixed); }
+                catch { continue; }
+                double compressedLoss = PredictionRmse(rebuilt, preparedX, targets, numOps);
+                if (double.IsNaN(compressedLoss)) continue;
+
+                double retained = baselineLoss <= 1e-12
+                    ? (compressedLoss <= 1e-12 ? 1.0 : 0.0)
+                    : baselineLoss / Math.Max(compressedLoss, baselineLoss);
+
+                frontier.Add(new AiDotNet.ModelCompression.CompressionFrontierPoint<T>
+                {
+                    Fraction = fraction,
+                    CompressionRatio = ratio,
+                    CompressedSizeBytes = compressedBytes,
+                    AccuracyRetained = retained,
+                    ReconstructionError = reconstructionError,
+                });
+
+                if (Math.Abs(fraction - 1.0) < 1e-9)
+                {
+                    fullPoint = new CompressionOperatingPoint
+                    {
+                        CompressedBytes = compressedBytes,
+                        Ratio = ratio,
+                        Retained = retained,
+                        ReconstructionError = reconstructionError,
+                        CompressedLoss = compressedLoss,
+                    };
+                }
+            }
+
+            if (frontier.Count == 0)
+            {
+                return; // strategy could not compress this model's weights.
+            }
+
+            // Full-compression headline: prefer the p=1.0 point, else the most-compressed point measured.
+            var headline = fullPoint ?? new CompressionOperatingPoint
+            {
+                CompressedBytes = frontier[frontier.Count - 1].CompressedSizeBytes,
+                Ratio = frontier[frontier.Count - 1].CompressionRatio,
+                Retained = frontier[frontier.Count - 1].AccuracyRetained,
+                ReconstructionError = frontier[frontier.Count - 1].ReconstructionError,
+                CompressedLoss = baselineLoss,
+            };
+
+            // Knee: the most compression (highest ratio) that still clears the retention tolerance; if none do,
+            // fall back to the point that retains the most accuracy.
+            AiDotNet.ModelCompression.CompressionFrontierPoint<T>? knee = null;
+            foreach (var p in frontier)
+            {
+                if (p.AccuracyRetained >= retentionTolerance && (knee is null || p.CompressionRatio > knee.CompressionRatio))
+                {
+                    knee = p;
+                }
+            }
+            if (knee is null)
+            {
+                foreach (var p in frontier)
+                {
+                    if (knee is null || p.AccuracyRetained > knee.AccuracyRetained) knee = p;
+                }
+            }
+
+            result.SetModelCompressionReport(new AiDotNet.ModelCompression.ModelCompressionReport<T>
+            {
+                StrategyName = _configuredModelCompressionStrategy.GetType().Name,
+                ParameterCount = parameterizable.ParameterCount,
+                OriginalSizeBytes = originalBytes,
+                CompressedSizeBytes = headline.CompressedBytes,
+                CompressionRatio = headline.Ratio,
+                AccuracyRetained = headline.Retained,
+                ReconstructionError = headline.ReconstructionError,
+                BaselineLoss = baselineLoss,
+                CompressedLoss = headline.CompressedLoss,
+                Frontier = frontier,
+                KneeFraction = knee?.Fraction ?? 0,
+                KneeCompressionRatio = knee?.CompressionRatio ?? 0,
+                KneeAccuracyRetained = knee?.AccuracyRetained ?? 0,
+                RetentionTolerance = retentionTolerance,
+                SweepAvailable = frontier.Count > 1,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Model compression audit could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.ModelCompression is null.");
+        }
+    }
+
+    /// <summary>A compressed model's headline metrics at one operating point.</summary>
+    private sealed class CompressionOperatingPoint
+    {
+        public long CompressedBytes { get; init; }
+        public double Ratio { get; init; }
+        public double Retained { get; init; }
+        public double ReconstructionError { get; init; }
+        public double CompressedLoss { get; init; }
+    }
+
+    /// <summary>Root-mean-square error between a model's predictions on <paramref name="preparedX"/> and the targets.</summary>
+    private static double PredictionRmse(
+        IFullModel<T, TInput, TOutput> model, TInput preparedX,
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> targets, INumericOperations<T> numOps)
+    {
+        try
+        {
+            var predictions = model.Predict(preparedX);
+            var predVector = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
+            int m = Math.Min(predVector.Length, targets.Length);
+            if (m == 0) return double.NaN;
+            double sum = 0;
+            for (int i = 0; i < m; i++)
+            {
+                double d = numOps.ToDouble(predVector[i]) - numOps.ToDouble(targets[i]);
+                sum += d * d;
+            }
+            return Math.Sqrt(sum / m);
+        }
+        catch
+        {
+            return double.NaN;
+        }
+    }
+
+    /// <summary>
+    /// Grades the configured time-series decomposition and surfaces it on <c>AiModelResult.TimeSeriesDecomposition</c>:
+    /// trend/seasonal strength, residual whiteness, additive reconstruction fidelity, and a held-out forecast-skill
+    /// comparison of decomposition-based forecasting against a random-walk baseline.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Re-decomposes the model's actual training target when the configured method can be re-instantiated on a new
+    /// series; otherwise it grades the configured instance's own components and says so via the analyzed-series
+    /// source. Any failure is surfaced as a warning and never discards the trained model.
+    /// </para>
+    /// </remarks>
+    private void ComputeTimeSeriesDecomposition(
+        AiModelResult<T, TInput, TOutput> result, TOutput preparedY)
+    {
+        if (_configuredTimeSeriesDecomposition is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            // Prefer re-decomposing the model's own target series; fall back to the configured instance.
+            var source = DecompositionMethods.TimeSeriesDecomposition.DecompositionAnalysisSource.ConfiguredInstance;
+            ITimeSeriesDecomposition<T> decomposition = _configuredTimeSeriesDecomposition;
+            AiDotNet.Tensors.LinearAlgebra.Vector<T>? target = null;
+            try { target = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY); }
+            catch { target = null; }
+            if (target is not null && target.Length >= 8)
+            {
+                var redecomposed = TryRedecompose(_configuredTimeSeriesDecomposition, target);
+                if (redecomposed is not null)
+                {
+                    decomposition = redecomposed;
+                    source = DecompositionMethods.TimeSeriesDecomposition.DecompositionAnalysisSource.TargetSeries;
+                }
+            }
+
+            var series = ToDoubleArray(decomposition.TimeSeries, numOps);
+            int n = series.Length;
+            if (n < 4)
+            {
+                return;
+            }
+
+            var present = new List<DecompositionComponentType>();
+            foreach (var kv in decomposition.GetComponents())
+            {
+                if (kv.Value is AiDotNet.Tensors.LinearAlgebra.Vector<T> cv && cv.Length == n) present.Add(kv.Key);
+            }
+
+            double[]? trend = GetComponentArray(decomposition, numOps, n, DecompositionComponentType.Trend, DecompositionComponentType.TrendCycle);
+            double[]? seasonal = GetComponentArray(decomposition, numOps, n, DecompositionComponentType.Seasonal);
+            double[]? residual = GetComponentArray(decomposition, numOps, n, DecompositionComponentType.Residual, DecompositionComponentType.Irregular);
+
+            bool residualPresent = residual is not null;
+            // Derive a residual for the strength measures when the method did not expose one.
+            if (residual is null)
+            {
+                residual = new double[n];
+                for (int i = 0; i < n; i++)
+                {
+                    double t = trend?[i] ?? 0;
+                    double s = seasonal?[i] ?? 0;
+                    residual[i] = series[i] - t - s;
+                }
+            }
+
+            double varR = VarianceD(residual);
+            double trendStrength = 0, seasonalStrength = 0;
+            if (trend is not null)
+            {
+                var tr = new double[n];
+                for (int i = 0; i < n; i++) tr[i] = trend[i] + residual[i];
+                double v = VarianceD(tr);
+                trendStrength = v <= 1e-12 ? 0 : Math.Max(0, 1 - varR / v);
+            }
+            if (seasonal is not null)
+            {
+                var sr = new double[n];
+                for (int i = 0; i < n; i++) sr[i] = seasonal[i] + residual[i];
+                double v = VarianceD(sr);
+                seasonalStrength = v <= 1e-12 ? 0 : Math.Max(0, 1 - varR / v);
+            }
+
+            double residualAcf1 = Acf1D(residual);
+            double whiteBand = 2.0 / Math.Sqrt(n);
+            bool residualHasStructure = Math.Abs(residualAcf1) > whiteBand;
+
+            // Reconstruction fidelity only means something when the method exposed a real residual (else it is
+            // tautologically exact because we derived the residual from the series).
+            double reconstructionError = 0;
+            bool reconstructionAvailable = residualPresent && trend is not null;
+            if (reconstructionAvailable && trend is not null)
+            {
+                double sq = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    double recon = trend[i] + (seasonal?[i] ?? 0) + residual[i];
+                    double d = series[i] - recon;
+                    sq += d * d;
+                }
+                reconstructionError = Math.Sqrt(sq / n);
+            }
+
+            // Held-out forecast value: decomposition-based forecast vs a random-walk baseline on a tail.
+            int horizon = Math.Max(1, Math.Min(n / 5, 24));
+            int trainEnd = n - horizon;
+            bool forecastEvaluated = false;
+            double decompRmse = 0, naiveRmse = 0, forecastSkill = 0;
+            if (trainEnd >= 4)
+            {
+                int period = DetectPeriod(seasonal ?? series, trainEnd);
+                // Linear trend extrapolation from the tail of the training region.
+                double[] trendSource = trend ?? series;
+                int fitLen = Math.Min(trainEnd, Math.Max(2 * period, 10));
+                (double slope, double intercept) = FitLine(trendSource, trainEnd - fitLen, fitLen);
+
+                double sqD = 0, sqN = 0;
+                double lastTrain = series[trainEnd - 1];
+                for (int i = 0; i < horizon; i++)
+                {
+                    double trendPred = slope * (fitLen + i) + intercept;
+                    double seasonalPred = 0;
+                    if (seasonal is not null && period >= 1)
+                    {
+                        int idx = trainEnd - period + (i % period);
+                        if (idx >= 0 && idx < n) seasonalPred = seasonal[idx];
+                    }
+                    double actual = series[trainEnd + i];
+                    double dPred = trendPred + seasonalPred;
+                    sqD += (actual - dPred) * (actual - dPred);
+                    sqN += (actual - lastTrain) * (actual - lastTrain);
+                }
+                decompRmse = Math.Sqrt(sqD / horizon);
+                naiveRmse = Math.Sqrt(sqN / horizon);
+                forecastSkill = naiveRmse <= 1e-12 ? 0 : 1 - decompRmse / naiveRmse;
+                forecastEvaluated = true;
+            }
+
+            result.SetTimeSeriesDecompositionReport(new DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionReport<T>
+            {
+                MethodName = _configuredTimeSeriesDecomposition.GetType().Name,
+                SeriesLength = n,
+                AnalyzedSeries = source,
+                ComponentsPresent = present,
+                TrendStrength = trendStrength,
+                SeasonalStrength = seasonalStrength,
+                ResidualAutocorrelation = residualAcf1,
+                ResidualHasStructure = residualHasStructure,
+                ReconstructionError = reconstructionError,
+                ReconstructionAvailable = reconstructionAvailable,
+                ForecastHorizon = forecastEvaluated ? horizon : 0,
+                DecompositionForecastRmse = decompRmse,
+                NaiveForecastRmse = naiveRmse,
+                ForecastSkill = forecastSkill,
+                ForecastEvaluated = forecastEvaluated,
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Time-series decomposition audit could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.TimeSeriesDecomposition is null.");
+        }
+    }
+
+    /// <summary>Re-instantiates a decomposition of the same concrete type over a new series, or null if not possible.</summary>
+    private static ITimeSeriesDecomposition<T>? TryRedecompose(
+        ITimeSeriesDecomposition<T> template, AiDotNet.Tensors.LinearAlgebra.Vector<T> series)
+    {
+        var type = template.GetType();
+        var ctors = type.GetConstructors();
+        Array.Sort(ctors, (a, b) => a.GetParameters().Length.CompareTo(b.GetParameters().Length));
+        foreach (var ctor in ctors)
+        {
+            var ps = ctor.GetParameters();
+            if (ps.Length == 0 || ps[0].ParameterType != typeof(AiDotNet.Tensors.LinearAlgebra.Vector<T>)) continue;
+
+            var args = new object?[ps.Length];
+            args[0] = series;
+            bool ok = true;
+            for (int i = 1; i < ps.Length; i++)
+            {
+                if (ps[i].HasDefaultValue) args[i] = ps[i].DefaultValue;
+                else { ok = false; break; }
+            }
+            if (!ok) continue;
+            try { return ctor.Invoke(args) as ITimeSeriesDecomposition<T>; }
+            catch { }
+        }
+
+        return null;
+    }
+
+    private static double[]? GetComponentArray(
+        ITimeSeriesDecomposition<T> d, INumericOperations<T> numOps, int n, params DecompositionComponentType[] types)
+    {
+        foreach (var t in types)
+        {
+            if (d.GetComponent(t) is AiDotNet.Tensors.LinearAlgebra.Vector<T> v && v.Length == n)
+                return ToDoubleArray(v, numOps);
+        }
+
+        return null;
+    }
+
+    private static double[] ToDoubleArray(AiDotNet.Tensors.LinearAlgebra.Vector<T> v, INumericOperations<T> numOps)
+    {
+        var a = new double[v.Length];
+        for (int i = 0; i < v.Length; i++) a[i] = numOps.ToDouble(v[i]);
+        return a;
+    }
+
+    private static double VarianceD(double[] x)
+    {
+        if (x.Length < 2) return 0;
+        double mean = 0;
+        for (int i = 0; i < x.Length; i++) mean += x[i];
+        mean /= x.Length;
+        double s = 0;
+        for (int i = 0; i < x.Length; i++) { double d = x[i] - mean; s += d * d; }
+        return s / (x.Length - 1);
+    }
+
+    private static double Acf1D(double[] x)
+    {
+        int n = x.Length;
+        if (n < 2) return 0;
+        double mean = 0;
+        for (int i = 0; i < n; i++) mean += x[i];
+        mean /= n;
+        double num = 0, den = 0;
+        for (int i = 0; i < n; i++) { double d = x[i] - mean; den += d * d; }
+        for (int i = 1; i < n; i++) num += (x[i] - mean) * (x[i - 1] - mean);
+        return den <= 1e-12 ? 0 : num / den;
+    }
+
+    private static double AcfLagD(double[] x, int lag, int count)
+    {
+        if (count <= lag + 1) return 0;
+        double mean = 0;
+        for (int i = 0; i < count; i++) mean += x[i];
+        mean /= count;
+        double num = 0, den = 0;
+        for (int i = 0; i < count; i++) { double d = x[i] - mean; den += d * d; }
+        for (int i = lag; i < count; i++) num += (x[i] - mean) * (x[i - lag] - mean);
+        return den <= 1e-12 ? 0 : num / den;
+    }
+
+    /// <summary>Estimates the seasonal period as the lag (2..count/2) of strongest autocorrelation, else 1.</summary>
+    private static int DetectPeriod(double[] x, int count)
+    {
+        int best = 1;
+        double bestAcf = 0.2; // require meaningful periodicity to claim a season.
+        int maxLag = count / 2;
+        for (int lag = 2; lag <= maxLag; lag++)
+        {
+            double a = AcfLagD(x, lag, count);
+            if (a > bestAcf) { bestAcf = a; best = lag; }
+        }
+
+        return best;
+    }
+
+    /// <summary>Least-squares line (slope, intercept) over <paramref name="len"/> points of <paramref name="x"/> from <paramref name="start"/>, with local index 0..len-1.</summary>
+    private static (double slope, double intercept) FitLine(double[] x, int start, int len)
+    {
+        if (len < 2) return (0, len == 1 ? x[start] : 0);
+        double sx = 0, sy = 0, sxy = 0, sxx = 0;
+        for (int i = 0; i < len; i++)
+        {
+            double xi = i;
+            double yi = x[start + i];
+            sx += xi; sy += yi; sxy += xi * yi; sxx += xi * xi;
+        }
+        double denom = len * sxx - sx * sx;
+        if (Math.Abs(denom) < 1e-12) return (0, sy / len);
+        double slope = (len * sxy - sx * sy) / denom;
+        double intercept = (sy - slope * sx) / len;
+        return (slope, intercept);
+    }
+
+    private static double FrobeniusNorm(AiDotNet.Tensors.LinearAlgebra.Matrix<T> m, INumericOperations<T> numOps)
+    {
+        double sum = 0;
+        for (int i = 0; i < m.Rows; i++)
+            for (int j = 0; j < m.Columns; j++) { double v = numOps.ToDouble(m[i, j]); sum += v * v; }
+        return Math.Sqrt(sum);
+    }
+
+    private static AiDotNet.Tensors.LinearAlgebra.Vector<T> GetRow(AiDotNet.Tensors.LinearAlgebra.Matrix<T> m, int row)
+    {
+        var v = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(m.Columns);
+        for (int j = 0; j < m.Columns; j++) v[j] = m[row, j];
+        return v;
+    }
+
+    private static AiDotNet.Tensors.LinearAlgebra.Matrix<T> FirstColumns(AiDotNet.Tensors.LinearAlgebra.Matrix<T> m, int width)
+    {
+        if (width >= m.Columns) return m;
+        var reduced = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(m.Rows, width);
+        for (int i = 0; i < m.Rows; i++)
+            for (int j = 0; j < width; j++) reduced[i, j] = m[i, j];
+        return reduced;
+    }
+
+    private static AiDotNet.Tensors.LinearAlgebra.Vector<T> FirstElements(
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> v, int width, INumericOperations<T> numOps)
+    {
+        if (v.Length == width) return v;
+        var reduced = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(width);
+        for (int j = 0; j < width && j < v.Length; j++) reduced[j] = v[j];
+        return reduced;
+    }
+
+    /// <summary>Extracts a single row of a 2-D tensor as a [1, features] tensor.</summary>
+    private static Tensor<T> RowTensor(Tensor<T> matrix, int row)
+    {
+        int cols = matrix.Shape[1];
+        var result = new Tensor<T>(new[] { 1, cols });
+        for (int c = 0; c < cols; c++)
+        {
+            result[0, c] = matrix[row, c];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Trains the configured model on the current task through a continual learner (built around that same
+    /// model), preserving prior tasks, and stashes the task result plus the all-tasks retention report.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// There is one model: the continual learner is constructed around <paramref name="model"/> (from
+    /// ConfigureModel), so training this task updates that model in place with anti-forgetting. The
+    /// strategy defaults to Elastic Weight Consolidation with experience replay (a regularization+rehearsal
+    /// hybrid). After learning, all tasks seen so far are re-evaluated into a retention report.
+    /// </para>
+    /// </remarks>
+    private void RunContinualLearningTraining(IFullModel<T, TInput, TOutput> model, TInput xTrain, TOutput yTrain)
+    {
+        var lossFunction = _configuredLossFunction ?? model.DefaultLossFunction;
+        var config = _continualLearningConfig ?? new ContinualLearning.Config.ContinualLearnerConfig<T>();
+        var learner = ContinualLearning.ContinualLearningTrainerFactory.Create(
+            _continualLearningStrategy, model, lossFunction, config);
+
+        var taskData = BuildContinualTaskDataset(xTrain, yTrain);
+        _continualLearningTaskResult = learner.LearnTask(taskData);
+
+        try
+        {
+            _continualLearningRetention = learner.EvaluateAllTasks();
+        }
+        catch (Exception ex)
+        {
+            // The retention report is a diagnostic; a failure here must not discard a completed task.
+            System.Diagnostics.Trace.TraceWarning(
+                $"Continual-learning retention report could not be computed: {ex.Message}.");
+        }
+    }
+
+    /// <summary>
+    /// Builds a per-sample dataset for the current continual-learning task from the batched training data.
+    /// </summary>
+    /// <remarks>
+    /// Continual learners iterate per sample, so the batched <paramref name="xTrain"/>/<paramref
+    /// name="yTrain"/> are split into individual rows. Supported for Tensor-shaped inputs/targets (the
+    /// neural-network case); other shapes throw a clear error.
+    /// </remarks>
+    private ActiveLearning.Data.InMemoryDataset<T, TInput, TOutput> BuildContinualTaskDataset(TInput xTrain, TOutput yTrain)
+    {
+        if (xTrain is not Tensor<T> xTensor || yTrain is not Tensor<T> yTensor)
+        {
+            throw new NotSupportedException(
+                "continual learning currently requires Tensor-shaped training inputs and targets " +
+                $"(got {typeof(TInput).Name}/{typeof(TOutput).Name}).");
+        }
+
+        int rows = xTensor.Shape[0];
+        var inputs = new TInput[rows];
+        var outputs = new TOutput[rows];
+        for (int i = 0; i < rows; i++)
+        {
+            inputs[i] = (TInput)(object)RowTensor(xTensor, i);
+            outputs[i] = (TOutput)(object)RowTensor(yTensor, i);
+        }
+
+        return new ActiveLearning.Data.InMemoryDataset<T, TInput, TOutput>(inputs, outputs, hasLabels: true);
+    }
+
+    /// <summary>
+    /// Runs a cross-validator supplied to <c>ConfigureCrossValidation</c> and attaches its result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Cross-validation runs on the FULL prepared data, not the train partition: it does its own
+    /// per-fold splitting, so handing it an already-split partition would nest one split inside
+    /// another and shrink every fold. It runs after the main fit so the returned model is the one
+    /// the caller asked for — the cross-validation reports how that configuration generalizes rather
+    /// than replacing it.
+    /// </para>
+    /// <para>
+    /// A cross-validator failing must not destroy a completed training run, so the failure is
+    /// surfaced and the result is left null — matching the documented "not performed" meaning.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Why a configured cross-validator failed, if it did. Kept so the failure is inspectable
+    /// rather than inferred from a null result.
+    /// </summary>
+    internal Exception? _crossValidationFailure;
+
+    private void RunConfiguredCrossValidation(
+        AiModelResult<T, TInput, TOutput> result,
+        TInput preparedX, TOutput preparedY,
+        IOptimizer<T, TInput, TOutput>? optimizer)
+    {
+        if (_crossValidator is null || _model is null || optimizer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            result.CrossValidationResult = _crossValidator.Validate(_model, preparedX, preparedY, optimizer);
+        }
+        catch (Exception ex)
+        {
+            // Surfaced, not swallowed silently: a caller who configured cross-validation and gets a
+            // null result would otherwise read it as "not performed" (per its own docs) with no clue
+            // that it ran and failed. The trained model is deliberately left intact.
+            System.Diagnostics.Trace.TraceWarning(
+                $"Configured cross-validator '{_crossValidator.GetType().Name}' failed: {ex}. " +
+                "The trained model is unaffected; CrossValidationResult is left unset.");
+            _crossValidationFailure = ex;
+
+            // Surface the failure on the result so facade users can distinguish "ran and failed" from
+            // "never performed" (a null CrossValidationResult reads the same for both otherwise).
+            result.CrossValidationError = ex;
+        }
+    }
+
+    /// <summary>
+    /// Pushes a loss supplied to <c>ConfigureLossFunction</c> into the model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The loss is set on the MODEL rather than kept in the facade, because the facade's own loss
+    /// variable is only used to report an epoch metric — gradients come from the model's loss. Once
+    /// the model's <c>DefaultLossFunction</c> reflects the caller's choice,
+    /// <c>GradientBasedOptimizerBase.OnModelChanged</c> adopts it into the optimizer too, so the
+    /// loss that is optimized and the loss that is reported are the same object.
+    /// </para>
+    /// <para>
+    /// A model whose loss is intrinsic to its architecture throws from <c>SetLossFunction</c>; a
+    /// model that does not implement <see cref="ISupportsLossFunction{T}"/> at all is reported here.
+    /// Both are preferable to accepting the call and ignoring it.
+    /// </para>
+    /// </remarks>
+    private void ApplyConfiguredLossFunction()
+    {
+        if (_configuredLossFunction is null || _model is null)
+        {
+            return;
+        }
+
+        if (_model is not ISupportsLossFunction<T> supportsLoss)
+        {
+            throw new NotSupportedException(
+                $"ConfigureLossFunction was called, but model '{_model.GetType().Name}' does not support " +
+                "replacing its loss function, so the configured loss would have been ignored. Remove the " +
+                "call, or supply the loss through the model's own constructor/options.");
+        }
+
+        supportsLoss.SetLossFunction(_configuredLossFunction);
+    }
+
+    /// <summary>
+    /// Pushes a scheduler supplied to <c>ConfigureLearningRateScheduler</c> into the optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Gradient optimizers already own scheduler support — they read
+    /// <c>GradientBasedOptimizerOptions.LearningRateScheduler</c> on construction and tick it from
+    /// <c>OnEpochEnd</c>/<c>OnBatchEnd</c>. So the scheduler is handed to the optimizer's options
+    /// rather than stepped from here. The facade deliberately does not touch the learning rate
+    /// itself: an earlier version decayed a facade-local rate per epoch alongside the optimizer's
+    /// own schedule and bypassed <c>Step()</c>, which is the duplicate-decay bug documented above
+    /// the streaming loop.
+    /// </para>
+    /// <para>
+    /// There is no conflict to arbitrate with <c>UseAdaptiveLearningRate</c>: that flag is itself a
+    /// schedule (shrink while improving, grow while stalled), and the optimizer now expresses it as
+    /// an <c>AdaptiveFitnessScheduler</c> rather than a second rule writing the same field. An
+    /// explicitly configured scheduler simply replaces it, so nothing has to throw and nothing is
+    /// silently overwritten.
+    /// </para>
+    /// </remarks>
+    private void ApplyConfiguredLearningRateScheduler()
+    {
+        if (_configuredLearningRateScheduler is null)
+        {
+            return;
+        }
+
+        if (_optimizer is null)
+        {
+            throw new InvalidOperationException(
+                "ConfigureLearningRateScheduler requires an optimizer; call ConfigureOptimizer with a " +
+                "gradient-based optimizer, otherwise the scheduler would have no learning rate to drive.");
+        }
+
+        if (_optimizer.GetOptions() is not GradientBasedOptimizerOptions<T, TInput, TOutput> gradientOptions)
+        {
+            throw new NotSupportedException(
+                $"ConfigureLearningRateScheduler requires a gradient-based optimizer; " +
+                $"'{_optimizer.GetType().Name}' has no learning rate to schedule.");
+        }
+
+        gradientOptions.LearningRateScheduler = _configuredLearningRateScheduler;
+    }
+
+    /// <summary>
+    /// Splits the data with the splitter supplied to <c>ConfigureDataSplitter</c>, if there is one.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> when a configured splitter produced the partitions; <c>false</c> when no splitter
+    /// is configured, in which case the caller falls back to the built-in ratio split.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Wiring this is what makes every implementation under
+    /// <c>Preprocessing/DataPreparation/Splitting</c> reachable — walk-forward, purged k-fold,
+    /// combinatorial purged, stratified, grouped — all of which already derive
+    /// <c>DataSplitterBase&lt;T&gt;</c> and were simply unreachable while the configured value was
+    /// dropped.
+    /// </para>
+    /// <para>
+    /// <see cref="IDataSplitter{T}"/> covers both shapes: <c>Split</c> for Matrix/Vector and
+    /// <c>SplitTensor</c> for Tensor/Tensor. Anything else (e.g. multi-output Matrix/Matrix) has no
+    /// corresponding contract method, so it is reported rather than silently ignored.
+    /// </para>
+    /// <para>
+    /// When the splitter yields no validation partition, one is produced by re-applying <b>the same
+    /// splitter</b> to its own training partition. That keeps the caller's methodology at both
+    /// levels: a purged outer split gets a purged inner split, so early stopping can never validate
+    /// against a set built by a leakier rule than the one they chose. Only if that inner split is
+    /// impossible does the validation slot fall back to mirroring test.
+    /// </para>
+    /// </remarks>
+    private bool TrySplitWithConfiguredSplitter(
+        TInput preparedX, TOutput preparedY,
+        out TInput xTrain, out TOutput yTrain,
+        out TInput xVal, out TOutput yVal,
+        out TInput xTest, out TOutput yTest)
+    {
+        xTrain = default!; yTrain = default!;
+        xVal = default!; yVal = default!;
+        xTest = default!; yTest = default!;
+
+        var splitter = _configuredDataSplitter;
+        if (splitter is null)
+        {
+            return false;
+        }
+
+        // A multi-fold splitter yields one train/test partition on this path. That is a real
+        // reduction of what was asked for, so say so instead of quietly using fold 0 — k-fold
+        // training belongs to ConfigureCrossValidation, which drives the folds properly.
+        if (splitter.NumSplits > 1)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Splitter '{splitter.Description}' defines {splitter.NumSplits} folds, but the " +
+                "supervised build trains once and uses the first split only. Use " +
+                "ConfigureCrossValidation to train across every fold.");
+        }
+
+        if (preparedX is Matrix<T> x)
+        {
+            var y = preparedY as Vector<T>;
+            if (splitter.RequiresLabels && y is null)
+            {
+                throw new InvalidOperationException(
+                    $"Splitter '{splitter.Description}' requires labels, but the targets are " +
+                    $"{typeof(TOutput).Name} rather than Vector<T>.");
+            }
+
+            var r = splitter.Split(x, y);
+            xTrain = (TInput)(object)r.XTrain;
+            xTest = (TInput)(object)r.XTest;
+            yTrain = (TOutput)(object)(r.yTrain ?? Vector<T>.Empty());
+            yTest = (TOutput)(object)(r.yTest ?? Vector<T>.Empty());
+
+            if (r.XValidation is not null)
+            {
+                xVal = (TInput)(object)r.XValidation;
+                yVal = (TOutput)(object)(r.yValidation ?? Vector<T>.Empty());
+                return true;
+            }
+
+            // Nested inner split: same methodology, applied to the training partition.
+            if (TryInnerSplit(splitter, r.XTrain, r.yTrain, out var innerX, out var innerY,
+                    out var valX, out var valY))
+            {
+                xTrain = (TInput)(object)innerX;
+                yTrain = (TOutput)(object)(innerY ?? Vector<T>.Empty());
+                xVal = (TInput)(object)valX;
+                yVal = (TOutput)(object)(valY ?? Vector<T>.Empty());
+                return true;
+            }
+
+            xVal = (TInput)(object)r.XTest;
+            yVal = (TOutput)(object)(r.yTest ?? Vector<T>.Empty());
+            return true;
+        }
+
+        if (preparedX is Tensor<T> xt)
+        {
+            var yt = preparedY as Tensor<T>;
+            if (splitter.RequiresLabels && yt is null)
+            {
+                throw new InvalidOperationException(
+                    $"Splitter '{splitter.Description}' requires labels, but the targets are " +
+                    $"{typeof(TOutput).Name} rather than Tensor<T>.");
+            }
+
+            var r = splitter.SplitTensor(xt, yt);
+            xTrain = (TInput)(object)r.XTrain;
+            xTest = (TInput)(object)r.XTest;
+            yTrain = (TOutput)(object)r.yTrain!;
+            yTest = (TOutput)(object)r.yTest!;
+            if (r.XValidation is not null)
+            {
+                xVal = (TInput)(object)r.XValidation;
+                yVal = r.yValidation is not null ? (TOutput)(object)r.yValidation : yTest;
+                return true;
+            }
+
+            // Nested inner split on the training partition (same splitter methodology) so validation never
+            // reuses the test partition — the tensor equivalent of the Matrix branch's TryInnerSplit, so
+            // purged/embargoed splitters keep their methodology instead of validating on the test set.
+            if (TryInnerSplitTensor(splitter, r.XTrain, r.yTrain, out var innerTX, out var innerTY,
+                    out var valTX, out var valTY))
+            {
+                xTrain = (TInput)(object)innerTX;
+                if (innerTY is not null) yTrain = (TOutput)(object)innerTY;
+                xVal = (TInput)(object)valTX;
+                yVal = valTY is not null ? (TOutput)(object)valTY : yTest;
+                return true;
+            }
+
+            xVal = (TInput)(object)r.XTest;
+            yVal = yTest;
+            return true;
+        }
+
+        throw new NotSupportedException(
+            $"ConfigureDataSplitter was given '{splitter.GetType().Name}', but IDataSplitter<T> only " +
+            $"splits Matrix<T>/Vector<T> or Tensor<T>/Tensor<T>; this build uses " +
+            $"{typeof(TInput).Name}/{typeof(TOutput).Name}, so the splitter could not be applied. " +
+            "Remove it rather than have it silently ignored.");
+    }
+
+    /// <summary>
+    /// Re-applies a splitter to its own training partition to carve out a validation set.
+    /// </summary>
+    /// <returns><c>false</c> when the inner split is not possible or degenerate.</returns>
+    /// <remarks>
+    /// Using the same splitter is the point: the validation set is then built by the same rule as
+    /// the outer split (purged stays purged, stratified stays stratified), rather than by a generic
+    /// tail carve-out that could leak across a label window — the flaw in the conventional
+    /// "hold out the last x%" approach.
+    /// </remarks>
+    private static bool TryInnerSplit(
+        IDataSplitter<T> splitter, Matrix<T> trainX, Vector<T>? trainY,
+        out Matrix<T> innerX, out Vector<T>? innerY,
+        out Matrix<T> valX, out Vector<T>? valY)
+    {
+        innerX = trainX; innerY = trainY;
+        valX = trainX; valY = trainY;
+
+        // Too little data to split again: two rows cannot yield a usable train and validation set.
+        if (trainX.Rows < 4)
+        {
+            return false;
+        }
+
+        try
+        {
+            var inner = splitter.Split(trainX, trainY);
+            if (inner.XTrain.Rows == 0 || inner.XTest.Rows == 0)
+            {
+                return false;
+            }
+
+            innerX = inner.XTrain;
+            innerY = inner.yTrain;
+            valX = inner.XValidation ?? inner.XTest;
+            valY = inner.yValidation ?? inner.yTest;
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // The splitter cannot subdivide this partition (too few rows for its fold/embargo
+            // geometry, say). Fall back rather than fail the whole build over a validation set.
+            System.Diagnostics.Trace.TraceWarning(
+                $"Splitter '{splitter.Description}' could not subdivide its training partition for a " +
+                $"validation set ({ex.Message}); validation will mirror the test partition.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Tensor counterpart of <see cref="TryInnerSplit"/>: re-applies the splitter to its own tensor training
+    /// partition to carve out a validation set with the same methodology, so early stopping never validates
+    /// against the outer test partition.
+    /// </summary>
+    /// <returns><c>false</c> when the inner split is not possible or degenerate.</returns>
+    private static bool TryInnerSplitTensor(
+        IDataSplitter<T> splitter, Tensor<T> trainX, Tensor<T>? trainY,
+        out Tensor<T> innerX, out Tensor<T>? innerY,
+        out Tensor<T> valX, out Tensor<T>? valY)
+    {
+        innerX = trainX; innerY = trainY;
+        valX = trainX; valY = trainY;
+
+        static int Rows(Tensor<T>? t) => t is null || t.Shape.Length == 0 ? 0 : t.Shape[0];
+
+        // Too little data to split again.
+        if (Rows(trainX) < 4)
+        {
+            return false;
+        }
+
+        try
+        {
+            var inner = splitter.SplitTensor(trainX, trainY);
+            if (Rows(inner.XTrain) == 0 || Rows(inner.XTest) == 0)
+            {
+                return false;
+            }
+
+            innerX = inner.XTrain;
+            innerY = inner.yTrain;
+            valX = inner.XValidation ?? inner.XTest;
+            valY = inner.yValidation ?? inner.yTest;
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Splitter '{splitter.Description}' could not subdivide its tensor training partition for a " +
+                $"validation set ({ex.Message}); validation will mirror the test partition.");
+            return false;
         }
     }
 
@@ -195,14 +2152,39 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
-        // (c) Honor the caller's cancellation token.
+        // (c) Consult a configured stopping criterion.
+        if (_configuredStoppingCriterion is not null)
+        {
+            _stoppingLossHistory.Add(epochLoss);
+
+            // IStoppingCriterion is defined over an active-learning context, whose labeling fields
+            // (budget, unlabeled pool) have no meaning for a supervised epoch loop. The criteria
+            // that read iteration/loss/elapsed — convergence, performance plateau, time budget —
+            // work against exactly what is populated here; ones that key off the labeling fields
+            // will read them as zero and are not meaningful on this path.
+            var stoppingContext = new ActiveLearning.Interfaces.ActiveLearningContext<T>
+            {
+                CurrentIteration = epoch,
+                LossHistory = _stoppingLossHistory,
+                ElapsedTime = elapsed,
+            };
+
+            if (_configuredStoppingCriterion.ShouldStop(stoppingContext))
+            {
+                shouldContinue = false;
+                stopReason ??=
+                    $"stopping criterion '{_configuredStoppingCriterion.Name}' requested stop at epoch {epoch}";
+            }
+        }
+
+        // (d) Honor the caller's cancellation token.
         if (cancellationToken.IsCancellationRequested)
         {
             shouldContinue = false;
             stopReason ??= $"cancellation requested at epoch {epoch}";
         }
 
-        // (c) Consult the monitor's NaN/divergence/stall detector.
+        // (e) Consult the monitor's NaN/divergence/stall detector.
         if (_trainingMonitor is not null && monitorSessionId is not null)
         {
             List<string> issues;
@@ -673,6 +2655,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             TextVectorizer = _configuredTextVectorizer,
+            EmbeddingModel = _configuredEmbeddingModel,
             PreprocessingInfo = (_preprocessingPipeline is not null && pipelineFitted) || _targetPipeline is not null
                 ? new PreprocessingInfo<T, TInput, TOutput>
                 {
@@ -1079,10 +3062,61 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="x">Matrix of input features.</param>
     /// <param name="y">Vector of output values.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <summary>
+    /// Builds a <c>DatasetResult</c> by evaluating <paramref name="model"/> on the given partition, or
+    /// <c>null</c> when the partition is empty (e.g. no held-out split was produced). Used to populate the
+    /// direct-training branch's TestResult so configured test metrics have data to evaluate.
+    /// </summary>
+    private OptimizationResult<T, TInput, TOutput>.DatasetResult? BuildDirectBranchDatasetResult(
+        IFullModel<T, TInput, TOutput> model, TInput dataX, TOutput dataY, int featureCount)
+    {
+        if (!HasRows(dataX))
+        {
+            return null;
+        }
+
+        try
+        {
+            var predictions = model.Predict(dataX);
+            var predictedVec = ConversionsHelper.ConvertToVector<T, TOutput>(predictions);
+            var actualVec = ConversionsHelper.ConvertToVector<T, TOutput>(dataY);
+            return new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            {
+                X = dataX,
+                Y = dataY,
+                Predictions = predictions,
+                ErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+                {
+                    Actual = actualVec, Predicted = predictedVec, FeatureCount = featureCount
+                }),
+                PredictionStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+                {
+                    Actual = actualVec, Predicted = predictedVec, NumberOfParameters = featureCount
+                }),
+            };
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null; // fall back to the training partition rather than crash the build.
+        }
+    }
+
+    private static bool HasRows(TInput data) => data switch
+    {
+        AiDotNet.Tensors.LinearAlgebra.Matrix<T> m => m.Rows > 0,
+        AiDotNet.Tensors.LinearAlgebra.Tensor<T> t => t.Length > 0,
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> v => v.Length > 0,
+        _ => false,
+    };
+
     private async Task<AiModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(
         TInput x, TOutput y, CancellationToken cancellationToken)
     {
         // SUPERVISED TRAINING PATH
+
+        // Reset per-run stopping state so a second BuildAsync() on the same builder does not evaluate a
+        // configured stopping criterion against loss history left over from the previous run.
+        _stoppingLossHistory.Clear();
 
         // Create profiler session if profiling is enabled
         var profilerSession = CreateProfilerSession();
@@ -1090,6 +3124,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
+
+        // Push configured training components into the model/optimizer before anything trains.
+        ApplyConfiguredLossFunction();
+        ApplyConfiguredLearningRateScheduler();
 
         // ============================================================================
         // Training Infrastructure Initialization
@@ -1139,6 +3177,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // Engine resolves to: the one from ConfigureAutoML(options), else the model if it's an
         // IAutoMLModel, else a built-in RandomSearch default.
         bool concreteModelPinned = _model != null && _model is not IAutoMLModel<T, TInput, TOutput>;
+
+        // A configured loss can only be honoured on a concrete model (ApplyConfiguredLossFunction above set it
+        // on the pinned model). AutoML constructs and trains its candidate models internally, so there is no
+        // model here to receive the loss — fail loudly rather than silently training against the wrong loss.
+        if (_configuredLossFunction is not null && !concreteModelPinned)
+        {
+            throw new NotSupportedException(
+                "ConfigureLossFunction requires a concrete model pinned via ConfigureModel: it cannot be " +
+                "applied to an AutoML search, which builds and trains candidate models internally. Pin a model, " +
+                "or supply the loss through that model's constructor/options.");
+        }
+
         if (!concreteModelPinned)
         {
             _autoMLModel ??= (_model as IAutoMLModel<T, TInput, TOutput>)
@@ -1294,19 +3344,28 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // method (SimCLR / MoCo / BYOL / DINO / MAE / Barlow Twins) over its
         // pretraining batches and returning the model that should feed into main
         // supervised training (typically the same model with its encoder updated).
-        // The single-argument overload (Action<SSLConfig>) stores configuration
+        // The single-argument overload (Action<SelfSupervisedLearningConfig<T>>) stores configuration
         // without running any pretraining stage — that path is config-only.
         // ============================================================================
-        if (_sslPretrainAction is not null)
+        if (_selfSupervisedLearningPretrainAction is not null)
         {
-            if (_sslConfig is null)
+            if (_selfSupervisedLearningConfig is null)
                 throw new InvalidOperationException(
-                    "_sslPretrainAction was set without _sslConfig — internal builder invariant violated.");
-            _model = await _sslPretrainAction(_model, _sslConfig, CancellationToken.None).ConfigureAwait(false);
+                    "_selfSupervisedLearningPretrainAction was set without _selfSupervisedLearningConfig — internal builder invariant violated.");
+            _model = await _selfSupervisedLearningPretrainAction(_model, _selfSupervisedLearningConfig, CancellationToken.None).ConfigureAwait(false);
             if (_model is null)
                 throw new InvalidOperationException(
                     "ConfigureSelfSupervisedLearning's pretrainAction returned null. " +
                     "The hook must return a non-null IFullModel<T, TInput, TOutput> for main training to proceed.");
+        }
+        else if (_selfSupervisedLearningConfig?.Method is not null)
+        {
+            // An SSL method configured without an explicit pretrain action still runs: a default loop
+            // pretrains the method on the unlabeled inputs, watching for representation collapse and
+            // probing representation quality. If the method was built around the model's encoder, the
+            // model is pretrained in place; otherwise the pretrained encoder is on the method
+            // (GetEncoder). The result is surfaced on AiModelResult.SelfSupervisedLearningPretrainingResult.
+            _selfSupervisedLearningPretrainingResult = RunDefaultSelfSupervisedLearningPretraining(_selfSupervisedLearningConfig, x, y);
         }
 
         // Wire instance-level preprocessing/postprocessing onto DocumentNeuralNetworkBase models.
@@ -1819,8 +3878,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // impossible to know which original rows landed in the training partition, so groups
             // force an order-preserving split: training rows = the first floor(0.7·n) rows.
             bool shuffleBeforeSplit = !isTimeSeriesModel && _trainingGroups is null;
-            (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
-                preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
+
+            // An explicitly configured splitter wins over the built-in ratio split. Without this,
+            // ConfigureDataSplitter silently dropped its argument — which also left every splitter
+            // under Preprocessing/DataPreparation/Splitting (walk-forward, purged k-fold,
+            // combinatorial purged, ...) unreachable from the facade despite being implemented.
+            if (!TrySplitWithConfiguredSplitter(preparedX, preparedY,
+                    out XTrain, out yTrain, out XVal, out yVal, out XTest, out yTest))
+            {
+                (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
+                    preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
+            }
 
             // Apply data preparation (SMOTE, outlier removal, etc.) to training data ONLY after split.
             // Applying before split would leak test/validation information via synthetic samples.
@@ -2291,6 +4359,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         bool trainingDispatchCompleted = false;
         try
         {
+        // A distillation strategy configured without ConfigureKnowledgeDistillation still expresses
+        // intent to distill; engage the KD path (which fails clearly if no teacher was supplied) rather
+        // than silently training as if the strategy were never configured.
+        if (_configuredDistillationStrategy is not null && _knowledgeDistillationOptions is null)
+        {
+            _knowledgeDistillationOptions = new KnowledgeDistillationOptions<T, TInput, TOutput>
+            {
+                Strategy = _configuredDistillationStrategy,
+            };
+        }
+
         // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
         if (_federatedLearningOptions != null)
         {
@@ -2335,6 +4414,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 effectiveClientCount = clientPartitions.Count;
             }
 
+            var advancedFederatedCapabilities = new AiDotNet.FederatedLearning.FederatedAdvancedCapabilities<T>(
+                contribution: _federatedContributionEvaluator,
+                fairness: _federatedFairnessConstraint,
+                drift: _federatedDriftDetector,
+                unlearner: _federatedUnlearner,
+                tee: _federatedTeeProvider,
+                zk: _federatedZkProofSystem,
+                mpc: _federatedSecureComputationProtocol,
+                psi: _federatedPrivateSetIntersection);
+
             var trainer = new AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer<T, TInput, TOutput>(
                 optimizerPrototype: finalOptimizer,
                 learningRateOverride: flOptions.LearningRate,
@@ -2345,7 +4434,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 clientSelectionStrategy: _federatedClientSelectionStrategy,
                 serverOptimizer: _federatedServerOptimizer,
                 heterogeneityCorrection: _federatedHeterogeneityCorrection,
-                homomorphicEncryptionProvider: _federatedHomomorphicEncryptionProvider);
+                homomorphicEncryptionProvider: _federatedHomomorphicEncryptionProvider,
+                advancedCapabilities: advancedFederatedCapabilities);
 
             var aggregationStrategy = _federatedAggregationStrategy ?? CreateDefaultFederatedAggregationStrategy(flOptions);
             trainer.SetAggregationStrategy(aggregationStrategy);
@@ -2369,9 +4459,32 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // (non-parametric models, ClusteringBase, NN + LoRA).
             if (_knowledgeDistillationOptions is not null)
             {
+                // A gradient-computable student on the direct path (e.g. a LoRA-wrapped neural
+                // network) can distill exactly as on the regular path. Genuinely non-parametric
+                // models (density clustering, most time-series) cannot: distillation is soft-label
+                // gradient matching, which those don't do.
+                if (model is IGradientComputable<T, TInput, TOutput> directDistillable)
+                {
+                    RunKnowledgeDistillationTraining(directDistillable, XTrain, yTrain, finalOptimizer);
+                    int distInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+                    optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                    {
+                        BestSolution = model,
+                        Iterations = 1,
+                        SelectedFeatureIndices = Enumerable.Range(0, distInputSize).ToList(),
+                        TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                        {
+                            X = XTrain, Y = yTrain, Predictions = model.Predict(XTrain),
+                        },
+                    };
+                    goto knowledgeDistillationHandled;
+                }
+
                 throw new NotSupportedException(
-                    "Knowledge distillation is not supported for non-parametric models. " +
-                    "Remove the ConfigureKnowledgeDistillation() call.");
+                    $"Knowledge distillation requires a gradient-computable student, but the model on the " +
+                    $"direct-training path ('{model.GetType().Name}') is not one. Distillation is soft-label " +
+                    "gradient matching, which non-parametric models (density clustering, most time series) " +
+                    "do not perform. Remove the ConfigureKnowledgeDistillation() call for this model.");
             }
 
             // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
@@ -2444,7 +4557,38 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 });
             }
 
-            model.Train(directX, directY);
+            // Models on this path run their own epoch loop inside Train(), so the facade cannot see
+            // their epochs. Hand the bridge to any model that can report them, so
+            // ConfigureTrainingCallback/ConfigureTrainingMonitor observe real per-epoch progress and
+            // a callback returning false actually stops training — rather than being handed one
+            // synthetic epoch after training has already finished, which no veto can affect.
+            var epochReporter = model as ITrainingEpochReporter<T>;
+            Func<TrainingProgress<T>, bool>? previousEpochCallback = null;
+            bool bridgedEpochCallback = false;
+            if (epochReporter is not null && epochBridge is not null)
+            {
+                previousEpochCallback = epochReporter.TrainingEpochCallback;
+                // Forward the reporter's own epoch budget (progress.TotalEpochs) so the reported total reflects
+                // the model's configured epochs, not the optimizer's unrelated MaxIterations.
+                epochReporter.TrainingEpochCallback =
+                    progress => epochBridge.OnEpoch(progress.Epoch, progress.TotalEpochs, progress.Loss);
+                bridgedEpochCallback = true;
+            }
+
+            try
+            {
+                model.Train(directX, directY);
+            }
+            finally
+            {
+                // Only touch the callback if THIS build attached the bridge, and restore whatever the caller
+                // had set — nulling unconditionally would wipe a callback the caller attached directly to a
+                // model instance they still hold and then ran through the builder without configuring one.
+                if (bridgedEpochCallback && epochReporter is not null)
+                {
+                    epochReporter.TrainingEpochCallback = previousEpochCallback;
+                }
+            }
 
             // Compute evaluation metrics
             int inputSize = InputHelper<T, TInput>.GetInputSize(directX);
@@ -2465,53 +4609,104 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 NumberOfParameters = inputSize
             });
 
-            // The direct-training path runs a single training pass; drive the per-epoch
-            // callbacks/monitor once so this path still streams metrics and honors abort/
-            // cancellation signals uniformly with the optimizer path. No-op when no
-            // monitor/callback is configured (bridge is null → default path untouched).
-            epochBridge?.OnEpoch(0, trainErrorStats.MSE);
+            // Models that train opaquely report nothing, so drive the per-epoch callbacks/monitor
+            // once for them: this path still streams metrics and honors abort/cancellation signals
+            // uniformly with the optimizer path. No-op when no monitor/callback is configured
+            // (bridge is null → default path untouched), and skipped when the model already
+            // reported its own epochs above, which would otherwise append a bogus extra epoch 0.
+            if (epochBridge is { EpochsObserved: 0 })
+            {
+                epochBridge.OnEpoch(0, trainErrorStats.MSE);
+            }
 
             // trainPredOutput is already TOutput from model.Predict
+
+            var directTrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            {
+                X = directX, Y = directY, Predictions = trainPredOutput,
+                ErrorStats = trainErrorStats,
+                PredictionStats = trainPredStats
+            };
+
+            // Populate TestResult on the direct-training path too: without it, configured test metrics
+            // (ConfigureRegressionMetric/ConfigureClassificationMetric) have nothing to evaluate and the
+            // conversion downstream fails. Evaluate the held-out test partition when the split produced one,
+            // otherwise fall back to the training partition so the result is always well-formed.
+            var directTestResult = BuildDirectBranchDatasetResult(model, XTest, yTest, inputSize)
+                ?? directTrainingResult;
 
             optimizationResult = new OptimizationResult<T, TInput, TOutput>
             {
                 BestSolution = model,
                 Iterations = 1,
                 SelectedFeatureIndices = Enumerable.Range(0, inputSize).ToList(),
-                TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
-                {
-                    X = directX, Y = directY, Predictions = trainPredOutput,
-                    ErrorStats = trainErrorStats,
-                    PredictionStats = trainPredStats
-                }
+                TrainingResult = directTrainingResult,
+                TestResult = directTestResult
             };
         }
         else
         {
+            // CONTINUAL LEARNING PATH: train the configured model on this task through a continual
+            // learner built around it, preserving prior tasks. Replaces standard optimizer training,
+            // which would overwrite earlier tasks.
+            if (_continualLearningEnabled)
+            {
+                RunContinualLearningTraining(model, XTrain, yTrain);
+
+                int clInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+                var clPredictions = model.Predict(XTrain);
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                    Iterations = 1,
+                    SelectedFeatureIndices = Enumerable.Range(0, clInputSize).ToList(),
+                    TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                    {
+                        X = XTrain, Y = yTrain, Predictions = clPredictions,
+                    },
+                };
+
+                goto knowledgeDistillationHandled;
+            }
+
             // REGULAR TRAINING PATH
             if (_knowledgeDistillationOptions is not null)
             {
-                // Knowledge-distillation tape integration is still pending
-                // (the teacher-aware loss combiner needs a tape-aware
-                // wrapper around the standard loss to keep gradients
-                // flowing through both terms). Until that lands, surface
-                // a runtime warning so users discover the gap early
-                // rather than after Build returns silently. Restore the
-                // hard contract: a user who called ConfigureKnowledgeDistillation
-                // expects KD to actually run; downgrading the original
-                // NotSupportedException to a Trace warning silently broke
-                // that contract (review #1368). The configured options
-                // still round-trip onto AiModelResult.KnowledgeDistillationOptions
-                // for consumers who want to drive distillation manually,
-                // but they must opt out of automatic Build-time KD by
-                // omitting ConfigureKnowledgeDistillation OR by switching
-                // to a model path that supports it.
-                throw new NotSupportedException(
-                    "ConfigureKnowledgeDistillation is not yet integrated with the tape-based training flow " +
-                    "for this model path. Either omit ConfigureKnowledgeDistillation, switch to a model " +
-                    "type that supports it (parametric-model branch), or drive distillation manually " +
-                    "post-build via AiModelResult.KnowledgeDistillationOptions. Track upstream integration " +
-                    "in the AiDotNet repo issues.");
+                // Knowledge distillation trains the student against a combined objective: a soft term
+                // matching the teacher's logits plus a hard term against the true label. That signal
+                // cannot travel through the optimizer's (predicted, actual) loss contract, which
+                // carries no teacher, so distillation runs its own gradient loop here rather than
+                // through finalOptimizer.Optimize. The gradient is produced by the configured
+                // IDistillationStrategy and applied through the student's own IGradientComputable
+                // surface via DistillationLossAdapter (see that type for why it deliberately routes
+                // through the CalculateDerivative fallback rather than the tape loss).
+                if (model is not IGradientComputable<T, TInput, TOutput> distillableStudent)
+                {
+                    throw new NotSupportedException(
+                        $"ConfigureKnowledgeDistillation requires a gradient-computable student, but model " +
+                        $"'{model.GetType().Name}' does not implement IGradientComputable<T, TInput, TOutput>. " +
+                        "Use a neural-network student, or drive distillation manually post-build via " +
+                        "AiModelResult.KnowledgeDistillationOptions.");
+                }
+
+                RunKnowledgeDistillationTraining(distillableStudent, XTrain, yTrain, finalOptimizer);
+
+                // The student is trained in place; report it as the built model, mirroring the other
+                // in-place training branches.
+                int distInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+                var distPredictions = model.Predict(XTrain);
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                    Iterations = 1,
+                    SelectedFeatureIndices = Enumerable.Range(0, distInputSize).ToList(),
+                    TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                    {
+                        X = XTrain, Y = yTrain, Predictions = distPredictions,
+                    },
+                };
+
+                goto knowledgeDistillationHandled;
             }
 
             // Ensure the optimizer has the model configured before optimization
@@ -2699,6 +4894,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
             }
         }
+
+        // Knowledge distillation trains the student in place above and jumps here, skipping the
+        // optimizer dispatch and its epoch-bridge handling (distillation runs its own gradient loop).
+        knowledgeDistillationHandled:
 
         // ============================================================================
         // FINE-TUNING (#1357 / #1361) — applies preference learning, RLHF, SFT, etc.
@@ -3112,6 +5311,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             TextVectorizer = _configuredTextVectorizer,
+            EmbeddingModel = _configuredEmbeddingModel,
             PreprocessingInfo = preprocessingInfo,
             PostprocessingPipeline = _postprocessingPipeline,
             KnowledgeDistillationOptions = _knowledgeDistillationOptions,
@@ -3175,6 +5375,31 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         };
 
         var finalResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
+
+        // Run a configured cross-validator and surface its result. Without this, ConfigureCrossValidation
+        // dropped its argument and AiModelResult.CrossValidationResult stayed null — which its own
+        // documentation reads as "cross-validation was not performed", so a caller who asked for it was
+        // told it had not run.
+        RunConfiguredCrossValidation(finalResult, preparedX, preparedY, optimizer);
+        ComputeConfiguredMetrics(finalResult, optimizationResult.TestResult);
+        ComputeClusterEvaluation(finalResult, preparedX, preparedY);
+        ComputeDriftMonitoring(finalResult, optimizationResult);
+        ComputeActiveLearningSelection(finalResult, optimizationResult);
+        ComputeQueryStrategySelection(finalResult);
+        if (_continualLearningTaskResult is not null)
+        {
+            finalResult.SetContinualLearning(_continualLearningTaskResult, _continualLearningRetention);
+        }
+        if (_selfSupervisedLearningPretrainingResult is not null)
+        {
+            finalResult.SetSelfSupervisedLearningPretrainingResult(_selfSupervisedLearningPretrainingResult);
+        }
+        ComputeExplanationFaithfulness(finalResult, preparedX, optimizationResult);
+        ComputeAdversarialRobustness(finalResult, preparedX, preparedY, optimizationResult);
+        ComputeCertifiedRobustness(finalResult, preparedX, preparedY, optimizationResult);
+        ComputeModelCompression(finalResult, preparedX, preparedY, optimizationResult);
+        ComputeTimeSeriesDecomposition(finalResult, preparedY);
+        finalResult.SetConfiguredTools(_configuredTools);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);

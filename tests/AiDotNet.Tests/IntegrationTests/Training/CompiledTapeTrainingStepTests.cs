@@ -127,18 +127,47 @@ public class CompiledTapeTrainingStepTests
             CompiledTapeTrainingStep<float>.Step(layers, input, target, lr, forward, mseLoss);
         }
 
-        var eagerSw = System.Diagnostics.Stopwatch.StartNew();
-        for (int i = 0; i < 20; i++)
-            TapeTrainingStep<float>.Step(layers, input, target, lr, forward, mseLoss);
-        eagerSw.Stop();
+        // Measure both variants INTERLEAVED and keep the fastest round of each.
+        //
+        // Timing eager to completion and then compiled to completion puts the two measurements in
+        // different windows, so any unrelated load arriving in between is charged entirely to the
+        // second one. On a busy machine that is enough to fail a 3x bound on a variant that is not
+        // actually slower, which is how this test came to fail intermittently. Alternating the order
+        // each round cancels drift, and the minimum is the round least contaminated by other work —
+        // an average would fold the interference back in.
+        const int rounds = 5;
+        const int stepsPerRound = 20;
+        double bestEagerMs = double.MaxValue;
+        double bestCompiledMs = double.MaxValue;
 
-        var compiledSw = System.Diagnostics.Stopwatch.StartNew();
-        for (int i = 0; i < 20; i++)
-            CompiledTapeTrainingStep<float>.Step(layers, input, target, lr, forward, mseLoss);
-        compiledSw.Stop();
+        for (int round = 0; round < rounds; round++)
+        {
+            bool eagerFirst = round % 2 == 0;
 
-        Assert.True(compiledSw.Elapsed.TotalMilliseconds < eagerSw.Elapsed.TotalMilliseconds * 3,
-            $"Compiled ({compiledSw.Elapsed.TotalMilliseconds:F1}ms) should not be 3x slower than eager ({eagerSw.Elapsed.TotalMilliseconds:F1}ms)");
+            for (int phase = 0; phase < 2; phase++)
+            {
+                bool runEager = phase == 0 ? eagerFirst : !eagerFirst;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                for (int i = 0; i < stepsPerRound; i++)
+                {
+                    if (runEager)
+                        TapeTrainingStep<float>.Step(layers, input, target, lr, forward, mseLoss);
+                    else
+                        CompiledTapeTrainingStep<float>.Step(layers, input, target, lr, forward, mseLoss);
+                }
+
+                sw.Stop();
+
+                if (runEager)
+                    bestEagerMs = Math.Min(bestEagerMs, sw.Elapsed.TotalMilliseconds);
+                else
+                    bestCompiledMs = Math.Min(bestCompiledMs, sw.Elapsed.TotalMilliseconds);
+            }
+        }
+
+        Assert.True(bestCompiledMs < bestEagerMs * 3,
+            $"Compiled ({bestCompiledMs:F1}ms) should not be 3x slower than eager ({bestEagerMs:F1}ms); " +
+            $"best of {rounds} interleaved rounds of {stepsPerRound} steps each.");
     }
 
     private static (List<DenseLayer<float>> layers, Func<Tensor<float>, Tensor<float>> forward) BuildMLP()

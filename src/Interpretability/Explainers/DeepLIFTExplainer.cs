@@ -39,7 +39,7 @@ namespace AiDotNet.Interpretability.Explainers;
 ///   compared to the reference
 /// </para>
 /// </remarks>
-public class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanation<T>>, IGPUAcceleratedExplainer<T>
+public class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanation<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -252,6 +252,10 @@ public class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanation<T>>, 
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc />
+    public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
+        => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
+
     public DeepLIFTExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new DeepLIFTExplanation<T>[instances.Rows];
@@ -441,7 +445,7 @@ public enum DeepLIFTRule
 /// Represents the result of a DeepLIFT analysis.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class DeepLIFTExplanation<T>
+public class DeepLIFTExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -449,6 +453,9 @@ public class DeepLIFTExplanation<T>
     /// Gets or sets the feature attributions.
     /// </summary>
     public Vector<T> Attributions { get; set; } = new Vector<T>(0);
+
+    /// <inheritdoc />
+    public Vector<T> GetFeatureAttributions() => Attributions;
 
     /// <summary>
     /// Gets or sets the baseline used.

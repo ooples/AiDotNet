@@ -82,8 +82,8 @@ public static class KnowledgeDistillationExample
             // Provide the teacher model
             TeacherModel = teacherModel,
 
-            // Strategy: Response-Based (standard Hinton distillation)
-            StrategyType = DistillationStrategyType.ResponseBased,
+            // Strategy: null => Response-Based (standard Hinton distillation) default
+            Strategy = null,
 
             // Temperature: Softens probability distributions (2-5 typical)
             // Higher = softer predictions = more information transfer
@@ -99,7 +99,7 @@ public static class KnowledgeDistillationExample
             LearningRate = 0.001
         };
 
-        Console.WriteLine($"  Strategy: {kdOptions.StrategyType}");
+        Console.WriteLine($"  Strategy: {kdOptions.Strategy?.GetType().Name ?? "ResponseBased (default)"}");
         Console.WriteLine($"  Temperature: {kdOptions.Temperature} (softer predictions)");
         Console.WriteLine($"  Alpha: {kdOptions.Alpha} (70% from teacher)");
         Console.WriteLine($"  Epochs: {kdOptions.Epochs}");

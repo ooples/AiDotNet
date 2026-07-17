@@ -7,9 +7,8 @@
 
 using AiDotNet;
 using AiDotNet.Data.Loaders;
-using AiDotNet.Enums;                    // SSLMethodType
 using AiDotNet.Regression;               // RidgeRegression
-using AiDotNet.SelfSupervisedLearning;   // SSLConfig
+using AiDotNet.SelfSupervisedLearning;   // SSLConfig<T>
 using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("===========================================");
@@ -47,7 +46,9 @@ try
         .ConfigureModel(new RidgeRegression<double>())
         .ConfigureSelfSupervisedLearning(cfg =>
         {
-            cfg.Method = SSLMethodType.SimCLR;
+            // cfg.Method is left null: SimCLR is the default. Name a method
+            // (cfg.Method = MoCoV2<double>.Create(...)) only when you want another —
+            // including one the library does not ship.
             cfg.PretrainingEpochs = 1;
         })
         .BuildAsync();

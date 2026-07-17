@@ -33,6 +33,10 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// <para><b>Reference:</b> Chen et al., "A Simple Framework for Contrastive Learning of Visual
 /// Representations" (ICML 2020)</para>
+///
+/// <para><b>Best for:</b> Simple setup, strong performance, research baselines.</para>
+/// <para><b>Pros:</b> Simple architecture, strong performance, well-understood.</para>
+/// <para><b>Cons:</b> Requires large batch sizes for best performance.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -41,16 +45,16 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
-public class SimCLR<T> : SSLMethodBase<T>
+public class SimCLR<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly NTXentLoss<T> _loss;
-    private readonly SSLAugmentationPolicies<T> _augmentation;
+    private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
 
     /// <inheritdoc />
     public override string Name => "SimCLR";
 
     /// <inheritdoc />
-    public override SSLMethodCategory Category => SSLMethodCategory.Contrastive;
+    public override SelfSupervisedLearningMethodCategory Category => SelfSupervisedLearningMethodCategory.Contrastive;
 
     /// <inheritdoc />
     public override bool RequiresMemoryBank => false;
@@ -67,12 +71,12 @@ public class SimCLR<T> : SSLMethodBase<T>
     public SimCLR(
         INeuralNetwork<T> encoder,
         IProjectorHead<T> projector,
-        SSLConfig? config = null)
-        : base(encoder, projector, config ?? new SSLConfig { Method = SSLMethodType.SimCLR })
+        SelfSupervisedLearningConfig<T>? config = null)
+        : base(encoder, projector, config ?? new SelfSupervisedLearningConfig<T>())
     {
         var temperature = _config.Temperature ?? 0.1;
         _loss = new NTXentLoss<T>(temperature);
-        _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
+        _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
     private void UpdateWithGradients(T learningRate, Vector<T> encoderGrads, Vector<T> projectorGrads)
