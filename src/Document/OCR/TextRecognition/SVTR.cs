@@ -63,7 +63,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _embedDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -134,7 +134,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int numLayers = 8,
         int numHeads = 6,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SVTROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -187,7 +187,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int numLayers = 8,
         int numHeads = 6,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SVTROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -208,11 +208,8 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         // Wire SVTR's optimizer into the base tape-training loop. base.Train drives training through
         // the base training optimizer, not this private field, so without this a caller-supplied
-        // optimizer would be silently ignored (the field and the base trainer would disagree). The
-        // field is the broad IOptimizer; the base loop needs a gradient-based optimizer — the default
-        // (and any real training optimizer) is one, and a non-gradient optimizer falls back to null
-        // (the base then lazily builds its default Adam).
-        SetBaseTrainOptimizer(_optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        // optimizer would be silently ignored (the field and the base trainer would disagree).
+        SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
         InitializeEmbeddings();

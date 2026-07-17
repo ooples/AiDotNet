@@ -2422,6 +2422,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 64, outputSize: 256))";
             }
+            else if (model.ClassName == "StepAudio" && model.TypeParameterCount == 1)
+            {
+                // StepAudio (Step-Audio codec-LM TTS) defaults to a foundation-scale CodecLM — LLMDim 1024,
+                // 12 LLM + 6 text-encoder layers, and an 8x1024 = 8192-entry codebook vocabulary. Lazily
+                // allocating that stack's weights OutOfMemory-crashes the 16 GB runner before a single
+                // forward runs (Output_ShouldBeNonEmpty etc. all threw OOM). Build the SAME architecture
+                // (text encoder -> codec-LM transformer -> reconstruction/forecast heads) at CI-smoke
+                // width/depth/vocab via a small StepAudioOptions; only the scale shrinks. The native-training
+                // ctor's InitializeLayers reads these option dims, so this is the single point that controls
+                // model size. numHeads (2) divides LLMDim (32).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 64), " +
+                    "new AiDotNet.TextToSpeech.MultiModal.StepAudioOptions { TextEncoderDim = 32, LLMDim = 32, " +
+                    "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 2, CodebookSize = 16 })";
+            }
             else if (model.ClassName == "AnimateDiff" && model.TypeParameterCount == 1)
             {
                 // AnimateDiff is a motion MODULE inserted into a pre-trained image-diffusion UNet — a
