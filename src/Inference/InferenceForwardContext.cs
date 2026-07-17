@@ -30,12 +30,47 @@ internal sealed class InferenceForwardContext
     public int Position { get; set; }
 
     /// <summary>
-    /// Creates a context for the given sequence at the given start position.
+    /// When non-null, this forward is BATCHED: batch row <c>b</c> of a <c>[batch, seqLen, dim]</c> input
+    /// belongs to sequence <c>SequenceIds[b]</c> at start position <c>Positions[b]</c>. This drives one
+    /// batched decode step across many independent sequences over the shared paged KV cache (the
+    /// continuous-batching throughput win). Null => single-sequence mode using
+    /// <see cref="SequenceId"/>/<see cref="Position"/> (and batch size 1).
+    /// </summary>
+    public long[]? SequenceIds { get; }
+
+    /// <summary>Per-row start positions, parallel to <see cref="SequenceIds"/>. Null in single-sequence mode.</summary>
+    public int[]? Positions { get; }
+
+    /// <summary>True when this context addresses one sequence per batch row (batched decode).</summary>
+    public bool IsBatched => SequenceIds is not null;
+
+    /// <summary>
+    /// Creates a context for the given sequence at the given start position (single-sequence mode).
     /// </summary>
     public InferenceForwardContext(long sequenceId, int position = 0)
     {
         SequenceId = sequenceId;
         Position = position;
+    }
+
+    /// <summary>
+    /// Creates a BATCHED context: batch row <c>b</c> maps to sequence <paramref name="sequenceIds"/>[b] at
+    /// <paramref name="positions"/>[b]. The <see cref="SequenceId"/>/<see cref="Position"/> scalars mirror
+    /// row 0 for back-compatibility with single-sequence code paths.
+    /// </summary>
+    public InferenceForwardContext(long[] sequenceIds, int[] positions)
+    {
+        Guard.NotNull(sequenceIds);
+        Guard.NotNull(positions);
+        if (sequenceIds.Length == 0 || sequenceIds.Length != positions.Length)
+        {
+            throw new ArgumentException(
+                $"sequenceIds ({sequenceIds.Length}) and positions ({positions.Length}) must be non-empty and equal length.");
+        }
+        SequenceIds = sequenceIds;
+        Positions = positions;
+        SequenceId = sequenceIds[0];
+        Position = positions[0];
     }
 }
 

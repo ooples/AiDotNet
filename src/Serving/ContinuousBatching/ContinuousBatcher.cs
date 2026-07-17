@@ -83,6 +83,10 @@ internal class ContinuousBatcher<T> : IDisposable
     // most recent paged prefill (0 => no prefix reused). Exposed for prefix-sharing tests/telemetry.
     internal int LastPrefillReusedPrefixTokens { get; private set; }
 
+    // Number of sequences served together in the most recent batched paged decode step (1 or 0 => no
+    // batched decode ran this step). Exposed for continuous-batching tests/telemetry.
+    internal int LastBatchedDecodeCount { get; private set; }
+
     /// <summary>
     /// Fraction of drafted tokens accepted by the target model, or null when speculative
     /// decoding has not run for this batcher. Exposed for serving-layer telemetry. Covers both the
@@ -322,20 +326,34 @@ internal class ContinuousBatcher<T> : IDisposable
             }
         }
 
-        // Run a decode step for sequences that were already generating in prior iterations.
-        foreach (var seq in decodeSequences)
+        // Run a decode step for sequences that were already generating in prior iterations. When the paged
+        // path is active, speculation is off, and more than one sequence is decoding, serve them ALL in ONE
+        // batched forward (true continuous batching) instead of one forward per sequence — the Phase 2
+        // throughput win. Otherwise decode per sequence (speculation, single-sequence, or stateless path).
+        var generating = decodeSequences.Where(s => s.Status == SequenceStatus.Generating).ToList();
+        if (UsePagedPath && !useSpeculation && generating.Count > 1)
         {
-            if (seq.Status != SequenceStatus.Generating)
-                continue;
-
-            var newTokens = useSpeculation ? RunDecodeStepSpeculative(seq) : RunDecodeStep(seq);
-            foreach (var newToken in newTokens)
+            foreach (var (seq, token) in RunBatchedPagedDecodeStep(generating))
             {
-                tokensGenerated += AccountForToken(seq, newToken, useSpeculation);
+                tokensGenerated += AccountForToken(seq, token, useSpeculation);
+            }
+        }
+        else
+        {
+            foreach (var seq in decodeSequences)
+            {
+                if (seq.Status != SequenceStatus.Generating)
+                    continue;
 
-                // Stop processing further tokens once the sequence has completed.
-                if (seq.Status == SequenceStatus.Completed)
-                    break;
+                var newTokens = useSpeculation ? RunDecodeStepSpeculative(seq) : RunDecodeStep(seq);
+                foreach (var newToken in newTokens)
+                {
+                    tokensGenerated += AccountForToken(seq, newToken, useSpeculation);
+
+                    // Stop processing further tokens once the sequence has completed.
+                    if (seq.Status == SequenceStatus.Completed)
+                        break;
+                }
             }
         }
 
@@ -555,6 +573,45 @@ internal class ContinuousBatcher<T> : IDisposable
         int nextToken = SampleFromLogits(logits, sequence);
         sequence.AppendToken(nextToken);
         return new[] { nextToken };
+    }
+
+    /// <summary>
+    /// Batched paged decode (Phase 2 — true continuous batching): forward the last token of EVERY given
+    /// sequence in ONE batched pass ([batch, 1] input, per-row sequence id + position), then sample each
+    /// sequence's next token from its own row. One forward serves the whole decode batch instead of one
+    /// forward per sequence. Per-row output is byte-identical to a single-sequence decode (verified).
+    /// </summary>
+    private List<(SequenceState<T> Sequence, int Token)> RunBatchedPagedDecodeStep(List<SequenceState<T>> sequences)
+    {
+        var results = new List<(SequenceState<T>, int)>(sequences.Count);
+        if (_incrementalModel is not { } model || sequences.Count == 0) return results;
+
+        int batch = sequences.Count;
+        LastBatchedDecodeCount = batch;
+        var seqIds = new long[batch];
+        var positions = new int[batch];
+        var input = new Tensor<T>([batch, 1]);
+        for (int i = 0; i < batch; i++)
+        {
+            var seq = sequences[i];
+            long seqId = seq.SequenceId;
+            int position = _pagedPositions.TryGetValue(seqId, out var p) ? p : seq.PromptLength;
+            seqIds[i] = seqId;
+            positions[i] = position;
+            input[[i, 0]] = ConvertToT(seq.TokenIds[seq.TokenIds.Count - 1]);
+        }
+
+        var logits = model.PredictWithContext(input, new InferenceForwardContext(seqIds, positions));
+
+        for (int i = 0; i < batch; i++)
+        {
+            var seq = sequences[i];
+            int nextToken = SampleFromLogits(logits, seq, batchIndex: i);
+            seq.AppendToken(nextToken);
+            _pagedPositions[seq.SequenceId] = positions[i] + 1;
+            results.Add((seq, nextToken));
+        }
+        return results;
     }
 
     /// <summary>
@@ -1030,11 +1087,12 @@ internal class ContinuousBatcher<T> : IDisposable
         return MathHelper.GetNumericOperations<T>().FromDouble(value);
     }
 
-    private int SampleFromLogits(Tensor<T> logits, SequenceState<T> sequence)
+    private int SampleFromLogits(Tensor<T> logits, SequenceState<T> sequence, int batchIndex = 0)
     {
         var request = sequence.Request;
 
-        // Get last position logits (shape is typically [batch, seq, vocab])
+        // Get last position logits (shape is typically [batch, seq, vocab]). batchIndex selects the row for
+        // a BATCHED decode forward ([B, seq, vocab] / [B, vocab]); it is 0 for a single-sequence forward.
         int vocabSize = logits.Shape[^1];
         int lastPos = logits.Shape.Length > 2 ? logits.Shape[^2] - 1 : 0;
 
@@ -1043,8 +1101,8 @@ internal class ContinuousBatcher<T> : IDisposable
         for (int i = 0; i < vocabSize; i++)
         {
             int[] indices = logits.Shape.Length > 2
-                ? [0, lastPos, i]
-                : [0, i];
+                ? [batchIndex, lastPos, i]
+                : [batchIndex, i];
             lastLogits[i] = Convert.ToSingle(logits[indices]);
         }
 

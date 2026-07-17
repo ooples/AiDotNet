@@ -232,6 +232,124 @@ public class ContinuousBatcherPagedEquivalenceTests
         return task.GetAwaiter().GetResult().GeneratedTokens.ToArray();
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task PagedBatcher_MultiSequence_CoBatchesDecode_AndMatchesReferences()
+    {
+        await Task.Yield();
+        var wrapper = BuildWrapper();
+        var model = wrapper.IncrementalModel;
+        var cache = wrapper.IncrementalCache;
+        if (model is null || cache is null)
+        {
+            Assert.Fail("wrapper must expose the incremental model + paged cache");
+            return;
+        }
+
+        var prompts = new[] { new[] { 1, 2, 3 }, new[] { 4, 5 }, new[] { 7, 8, 9, 10 } };
+        const int maxNew = 6;
+
+        // Per-sequence greedy references (decoded one at a time).
+        var refs = new int[prompts.Length][];
+        for (int i = 0; i < prompts.Length; i++) refs[i] = ModelGreedy(wrapper, prompts[i], maxNew);
+
+        // Enqueue all sequences into ONE batcher; speculation off => decode co-batches into one forward.
+        var config = new ContinuousBatcherConfig { AutoStart = false, EosTokenId = 999 };
+        using var batcher = new ContinuousBatcher<float>(config, model, cache);
+        var tasks = new System.Threading.Tasks.Task<GenerationResult<float>>[prompts.Length];
+        for (int i = 0; i < prompts.Length; i++) tasks[i] = batcher.GenerateAsync(GreedyRequest(prompts[i], maxNew));
+
+        int maxCoBatched = 0;
+        int guard = maxNew * prompts.Length + prompts.Length * 6 + 32;
+        while (guard-- > 0)
+        {
+            bool allDone = true;
+            foreach (var t in tasks) if (!t.IsCompleted) { allDone = false; break; }
+            if (allDone) break;
+            batcher.Step();
+            if (batcher.LastBatchedDecodeCount > maxCoBatched) maxCoBatched = batcher.LastBatchedDecodeCount;
+        }
+
+        for (int i = 0; i < prompts.Length; i++)
+        {
+            Assert.True(tasks[i].IsCompleted, $"sequence {i} did not complete");
+            Assert.Equal(refs[i], (await tasks[i]).GeneratedTokens.ToArray());
+        }
+        Assert.True(maxCoBatched >= 2,
+            $"expected decode to co-batch >= 2 sequences in one forward (max seen = {maxCoBatched}).");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BatchedDecodeForward_MatchesPerSequenceDecode()
+    {
+        await Task.Yield();
+        // ONE batched decode forward across two independent sequences must produce, per row, exactly the
+        // logits each sequence would get from its own single-sequence decode forward (the Phase 2
+        // batched-attention correctness invariant). Uses 4 sequences on one model+cache: A/B decoded
+        // singly as the reference, C/D (prefilled identically) decoded together in one batched forward.
+        var wrapper = BuildWrapper();
+        var model = wrapper.IncrementalModel;
+        var cache = wrapper.IncrementalCache;
+        if (model is null || cache is null)
+        {
+            Assert.Fail("wrapper must expose the incremental model + paged cache");
+            return;
+        }
+
+        var promptA = new[] { 1, 2, 3 };
+        var promptB = new[] { 7, 8 };
+
+        (int tok, int pos) Prefill(long seqId, int[] prompt)
+        {
+            cache.AllocateSequence(seqId, 0);
+            var logits = model.PredictWithContext(
+                new Tensor<float>(Array.ConvertAll(prompt, t => (float)t), new[] { 1, prompt.Length }),
+                new AiDotNet.Inference.InferenceForwardContext(seqId, 0));
+            return (ArgMaxLast(logits), prompt.Length);
+        }
+
+        var (tA, pA) = Prefill(5000, promptA);
+        var (tB, pB) = Prefill(5001, promptB);
+        var (tC, pC) = Prefill(5002, promptA); // identical to A
+        var (tD, pD) = Prefill(5003, promptB); // identical to B
+        Assert.Equal(tA, tC);
+        Assert.Equal(tB, tD);
+
+        // Reference: decode A and B one at a time (single-sequence context).
+        float[] refA = VocabRow(model.PredictWithContext(TokenTensor(tA), new AiDotNet.Inference.InferenceForwardContext(5000, pA)), 0);
+        float[] refB = VocabRow(model.PredictWithContext(TokenTensor(tB), new AiDotNet.Inference.InferenceForwardContext(5001, pB)), 0);
+
+        // Under test: decode C and D TOGETHER in one batched forward ([2,1] input, per-row seq ids/positions).
+        var batchedInput = new Tensor<float>(new[] { (float)tC, (float)tD }, new[] { 2, 1 });
+        var batchedCtx = new AiDotNet.Inference.InferenceForwardContext(new long[] { 5002, 5003 }, new[] { pC, pD });
+        var batchedLogits = model.PredictWithContext(batchedInput, batchedCtx);
+
+        float[] rowC = VocabRow(batchedLogits, 0);
+        float[] rowD = VocabRow(batchedLogits, 1);
+
+        Assert.Equal(refA.Length, rowC.Length);
+        for (int i = 0; i < refA.Length; i++)
+        {
+            Assert.Equal(refA[i], rowC[i], 5);
+            Assert.Equal(refB[i], rowD[i], 5);
+        }
+    }
+
+    private static Tensor<float> TokenTensor(int tokenId) => new(new[] { (float)tokenId }, new[] { 1, 1 });
+
+    // Extracts the vocab row for batch index b at the LAST position from a [batch, seq, vocab] logits tensor.
+    private static float[] VocabRow(Tensor<float> logits, int b)
+    {
+        int rank = logits.Shape.Length;
+        int vocab = logits.Shape[rank - 1];
+        int seq = rank >= 3 ? logits.Shape[rank - 2] : 1;
+        int perBatch = seq * vocab;
+        int baseOffset = b * perBatch + (seq - 1) * vocab;
+        var s = logits.AsSpan();
+        var row = new float[vocab];
+        for (int v = 0; v < vocab; v++) row[v] = s[baseOffset + v];
+        return row;
+    }
+
     // --- helpers -----------------------------------------------------------------------------------
 
     private static GenerationRequest<float> GreedyRequest(int[] prompt, int maxNew) => new()

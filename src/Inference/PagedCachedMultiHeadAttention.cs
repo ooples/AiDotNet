@@ -178,7 +178,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         }
 
         // Single-sequence legacy path: use the instance's SequenceId/position and advance it.
-        var legacyOutput = ComputePagedAttention(input, SequenceId, _currentPosition);
+        var legacyOutput = ComputePagedAttention(input, new[] { SequenceId }, new[] { _currentPosition });
         _currentPosition += input.Shape[1];
         _lastOutput = legacyOutput;
         return legacyOutput;
@@ -196,13 +196,21 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         // Concurrency-safe: sequence id + start position come from the per-call context; no shared
         // instance fields are mutated (no _currentPosition/_lastInput/_lastOutput writes), so many
         // sequences can drive one shared layer + KV cache at once, isolated by sequence id.
-        return ComputePagedAttention(input, ctx.SequenceId, ctx.Position);
+        // Batched context: batch row b belongs to SequenceIds[b] at Positions[b] (one batched decode step
+        // across many sequences); otherwise a single sequence occupies the whole (batch=1) input.
+        if (ctx.SequenceIds is { } batchSeqIds && ctx.Positions is { } batchPositions)
+        {
+            return ComputePagedAttention(input, batchSeqIds, batchPositions);
+        }
+        return ComputePagedAttention(input, new[] { ctx.SequenceId }, new[] { ctx.Position });
     }
 
-    private Tensor<T> ComputePagedAttention(Tensor<T> input, long sequenceId, int startPosition)
+    private Tensor<T> ComputePagedAttention(Tensor<T> input, long[] seqIds, int[] basePositions)
     {
-        // Inference mode: update cache and compute attention token-by-token.
-        // This supports both prefill (seqLen>1) and decode (seqLen==1) by iterating tokens.
+        // Inference mode: update cache and compute attention token-by-token. Supports both prefill
+        // (seqLen>1 for one sequence) and BATCHED decode: batch row b belongs to seqIds[b] starting at
+        // basePositions[b], so ONE forward serves many independent sequences over the shared paged cache
+        // (the continuous-batching throughput win). Each row is isolated by its own sequence id.
         if (input.Shape.Length < 3)
         {
             throw new ArgumentException("Expected input shape [batch, seqLen, embeddingDim].", nameof(input));
@@ -217,11 +225,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
             throw new ArgumentException($"Expected embeddingDim={_embeddingDimension}, got {embDim}.", nameof(input));
         }
 
-        if (batchSize != 1)
+        if (seqIds.Length != batchSize || basePositions.Length != batchSize)
         {
-            // PagedAttentionKernel supports batched attention, but this layer's state model is per-sequence.
-            // Keep it strict for now to avoid cache mixing.
-            throw new NotSupportedException("PagedCachedMultiHeadAttention currently supports batchSize==1 per sequence.");
+            throw new ArgumentException(
+                $"seqIds/basePositions length must equal batch size {batchSize} (got {seqIds.Length}/{basePositions.Length}).");
         }
 
         var output = new Tensor<T>([batchSize, seqLen, embDim]);
@@ -306,15 +313,18 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
                 var valueSpan = valueBuf.AsSpan(0, projDim);
                 var attnOutput = attnBuf.AsSpan(0, projDim);
 
-                // Position advances locally from the supplied start; the instance _currentPosition
-                // is NOT touched here, so concurrent sequences (each with their own context) do not
-                // collide on position state.
-                int position = startPosition;
+                // Each batch row is an INDEPENDENT sequence (seqIds[b]) at its own start position
+                // (basePositions[b]); position advances locally per row, and the instance _currentPosition
+                // is NOT touched here, so concurrent sequences do not collide on position state.
+                for (int b = 0; b < batchSize; b++)
+                {
+                long sequenceId = seqIds[b];
+                int position = basePositions[b];
                 for (int t = 0; t < seqLen; t++)
                 {
                     for (int d = 0; d < embDim; d++)
                     {
-                        hidden[d] = Convert.ToSingle(input[0, t, d]);
+                        hidden[d] = Convert.ToSingle(input[b, t, d]);
                     }
 
                     if (_ropeLayer != null || _alibiLayer != null)
@@ -390,12 +400,13 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
                     {
                         T value = NumOps.FromDouble(tokenOut[d]);
                         value = NumOps.Add(value, _outputBias[d]);
-                        output[0, t, d] = activation.Activate(value);
+                        output[b, t, d] = activation.Activate(value);
                     }
 
                     // Advance the LOCAL position (the per-call context owns position now). The legacy
                     // Forward path advances the instance _currentPosition itself after this returns.
                     position++;
+                }
                 }
             }
             finally
