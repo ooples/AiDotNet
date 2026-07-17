@@ -3409,6 +3409,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumFeatures = 8, NumResBlocks = 1, ScaleFactor = 2, " +
                     "NumFrames = 2, LearningRate = 2e-4, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "RVRT" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // RVRT (Liang et al. 2022) — recurrent video restoration transformer with guided deformable
+                // attention. Production defaults (120 features, 4 blocks, scale x4) build the heavy VSR stack
+                // whose <double> Train() step is multi-second, so every training invariant times out. Same
+                // fix as DAMVSR/FlashVSR: a small legal CI fixture (2 RGB frames @ 8x8, 8 features, 1 block,
+                // 2x scale, 2 heads) that keeps the recurrent-transformer architecture but runs at CI-smoke
+                // cost. Only the model SCALE is reduced; the LearningRate default (4e-4) is retained.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.RVRTOptions { NumFeatures = 8, NumBlocks = 1, ScaleFactor = 2, " +
+                    "NumFrameGroups = 1, NumHeads = 2 })";
+            }
+            else if (model.ClassName == "RealisVSR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // RealisVSR — diffusion-based realistic VSR. Production defaults (320 features, 25 denoising
+                // steps, scale x4) make one forward run 25 denoise iterations over a heavy conv stack, so
+                // every training invariant times out at <double>. Same fix as DAMVSR/FlashVSR: a small legal
+                // CI fixture (2 RGB frames @ 8x8, 8 features, 1 res block, 2 denoising steps, 2x scale) that
+                // keeps the diffusion-VSR architecture but runs at CI-smoke cost. Only the model scale shrinks.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.RealisVSROptions { NumFeatures = 8, NumResBlocks = 1, " +
+                    "ScaleFactor = 2, NumDenoisingSteps = 2 })";
+            }
             else if (model.ClassName == "FlashVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
