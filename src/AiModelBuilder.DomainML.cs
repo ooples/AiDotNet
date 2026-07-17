@@ -48,6 +48,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEffect(IAudioEffect<T> audioEffect)
     {
         _configuredAudioEffect = audioEffect;
+        // Apply the effect as a composable preprocessing step (augmentation) over audio-tensor inputs.
+        _dataPipeline.AddPreprocessingStep(
+            new Preprocessing.Audio.AudioEffectTransformer<T, TInput>(audioEffect), "audio_effect");
+        _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;
         return this;
     }
 

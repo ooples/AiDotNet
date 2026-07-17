@@ -68,6 +68,16 @@ public interface IAiModelDataPipeline<T, TInput, TOutput>
     /// <summary>Configures preprocessing from a pre-built pipeline. <c>null</c> applies AutoML defaults.</summary>
     void ConfigurePreprocessing(PreprocessingPipeline<T, TInput, TInput>? pipeline);
 
+    /// <summary>
+    /// Appends a transformer step to the preprocessing pipeline, creating the pipeline if none exists yet.
+    /// Unlike <see cref="ConfigurePreprocessing(IDataTransformer{T, TInput, TInput})"/>, which replaces the
+    /// pipeline, this composes: the step runs after any already-configured steps. The step name is made unique
+    /// if it collides with an existing step.
+    /// </summary>
+    /// <param name="transformer">The transformer step to append.</param>
+    /// <param name="name">A descriptive step name (suffixed to stay unique).</param>
+    void AddPreprocessingStep(IDataTransformer<T, TInput, TInput> transformer, string name);
+
     /// <summary>Configures postprocessing using a pipeline-builder callback. <c>null</c> leaves the pipeline empty.</summary>
     void ConfigurePostprocessing(Action<PostprocessingPipeline<T, TOutput, TOutput>>? pipelineBuilder);
 

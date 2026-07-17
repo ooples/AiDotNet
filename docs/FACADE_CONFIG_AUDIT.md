@@ -36,7 +36,9 @@ Tracking issue: #1876. Related PR: #1875.
 
 - **TimeSeriesDecomposition** — grades the configured decomposition rather than only returning components, surfaced on `AiModelResult.TimeSeriesDecomposition`. Re-decomposes the model's **training target** (best-effort re-instantiation; falls back to the configured instance and reports which via an analyzed-series source), then reports trend strength F_T and seasonal strength F_S (Wang/Hyndman), residual whiteness (leftover lag-1 autocorrelation vs the white-noise band = "the decomposition missed structure"), additive reconstruction fidelity, and a **held-out forecast-skill** comparison of decomposition-based forecasting (trend extrapolation + seasonal-naive) against a random-walk baseline — so the user learns whether decomposing the series is worth it.
 
-Remaining Tier 4/6: AudioEffect, AudioEnhancer, Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
+- **AudioEffect + AudioEnhancer** — wired through the **existing preprocessing pipeline** rather than a bespoke hook: each is wrapped in an `IDataTransformer` adapter (`AudioEffectTransformer` / `AudioEnhancementTransformer`, in `Preprocessing/Audio/`) and appended as a composable pipeline step via a new `AiModelDataPipeline.AddPreprocessingStep` primitive (append, not the replace semantics of `ConfigurePreprocessing`). The adapters apply the processor to audio-tensor inputs and pass non-audio through unchanged; the enhancer's `Fit` estimates the noise profile from the training audio so train and inference are cleaned consistently (a data-consistency guarantee a one-off enhancement pass lacks). The adapters are public for direct `ConfigurePreprocessing` use; the existing facade methods stay (non-breaking) but now feed the pipeline.
+
+Remaining Tier 4/6: Tool — plus the `PARTIAL` federated/hyperparameter/pipeline fields. (AdversarialDefense already wired.)
 
 ---
 

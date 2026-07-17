@@ -500,6 +500,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEnhancer(IAudioEnhancer<T> enhancer)
     {
         _configuredAudioEnhancer = enhancer;
+        // Apply enhancement as a composable, fitted preprocessing step over audio-tensor inputs; its Fit
+        // estimates the noise profile from the training audio so train and inference are cleaned consistently.
+        _dataPipeline.AddPreprocessingStep(
+            new Preprocessing.Audio.AudioEnhancementTransformer<T, TInput>(enhancer), "audio_enhancer");
+        _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;
         return this;
     }
 
