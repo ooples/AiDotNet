@@ -4,6 +4,8 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.DistributedTraining.Layers;
 
 namespace AiDotNet.DistributedTraining;
 
@@ -44,10 +46,15 @@ namespace AiDotNet.DistributedTraining;
 /// - Limitation: Requires fast communication (high overhead on slow networks)
 /// </para>
 /// <para><b>Implementation Note:</b>
-/// This is a production-ready framework implementation. Full tensor parallelism requires
-/// model-specific layer partitioning (column-parallel vs row-parallel strategy for different
-/// layer types). This implementation provides the infrastructure. For production use with
-/// specific models (e.g., transformers), extend this class with layer-aware partitioning.
+/// This wrapper is a PARAMETER-REPLICATION fallback for arbitrary (black-box) models: it shards
+/// parameters for storage but reconstructs the full vector for each forward/backward and averages
+/// gradients within the tensor-parallel group (data-parallel semantics over the TP group). It is
+/// NOT compute-partitioned Megatron tensor parallelism. Genuine tensor parallelism — each rank
+/// computing only its slice of every layer with in-layer AllReduce — is provided by
+/// <see cref="AiDotNet.DistributedTraining.Layers.ColumnParallelLinear{T}"/> and
+/// <see cref="AiDotNet.DistributedTraining.Layers.RowParallelLinear{T}"/> (Shoeybi et al. 2019),
+/// whose f/ḡ conjugate operators carry the collectives on the autodiff tape; build models from
+/// those layers for real TP.
 /// </para>
 /// <para><b>⚠️ IMPORTANT LIMITATION - Memory Efficiency:</b>
 /// This implementation gathers the full parameter vector on every Train() and Predict() call
@@ -95,6 +102,15 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
 {
     private int _tensorParallelSize;
     private List<int> _tensorParallelGroup = new();
+
+    // Real Megatron compute-partitioned path. Populated only when the wrapped model exposes its layers
+    // (ILayeredModel via NeuralNetworkBase) and at least one linear layer is safely partitionable. Each
+    // rank builds its OWN partitioned model holding only its Column/Row weight shards; Predict/Train then
+    // run true compute-partitioned tensor parallelism (per-rank matmuls + in-layer f/ḡ collectives) instead
+    // of the parameter-replication fallback. Null => the replication fallback is used (black-box models).
+    private NeuralNetwork<T>? _partitionedModel;
+    private bool _computePartitioned;
+    private string _partitionLog = string.Empty;
 
     /// <summary>
     /// Creates a new Tensor Parallel model.
@@ -150,6 +166,39 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         LocalShard = new Vector<T>(shardData);
 
         CachedFullParameters = null;
+
+        // Attempt REAL compute-partitioned tensor parallelism (Megatron-LM) when the wrapped model exposes
+        // its layers. The partitioner substitutes linear layers with Column/Row-parallel primitives that
+        // each hold only this rank's weight shard and carry the f/ḡ collectives on the autodiff tape. If it
+        // finds nothing safely partitionable (or the model is a black box), _computePartitioned stays false
+        // and the parameter-replication fallback above is used.
+        TryBuildComputePartitionedModel();
+    }
+
+    /// <summary>
+    /// Builds this rank's real Megatron compute-partitioned model from the wrapped model's layers, when
+    /// the wrapped model is a layer-introspectable neural network. No-op for black-box models.
+    /// </summary>
+    private void TryBuildComputePartitionedModel()
+    {
+        _computePartitioned = false;
+        _partitionedModel = null;
+
+        if (_tensorParallelSize <= 1) return;                       // nothing to partition on a single rank
+        if (WrappedModel is not ILayeredModel<T> layered || layered.LayerCount == 0) return;
+        if (WrappedModel is not NeuralNetworkBase<T> nnBase) return; // need the source Architecture
+
+        var partition = TensorParallelLayerPartitioner<T>.Partition(layered.Layers, Config.CommunicationBackend);
+        _partitionLog = partition.Log;
+        if (partition.PartitionedLinearCount == 0) return;          // nothing partitionable -> use fallback
+
+        var srcArch = nnBase.Architecture;
+        var arch = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>(
+            srcArch.InputType, srcArch.TaskType,
+            inputSize: srcArch.InputSize, inputHeight: srcArch.InputHeight, inputWidth: srcArch.InputWidth,
+            inputDepth: srcArch.InputDepth, outputSize: srcArch.OutputSize, layers: partition.Layers);
+        _partitionedModel = new NeuralNetwork<T>(arch);
+        _computePartitioned = true;
     }
 
     /// <summary>
@@ -349,13 +398,25 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // Tensor parallel training:
-        // 1. Each rank has a slice of the layer weights
-        // 2. Forward: compute partial outputs, then AllReduce or AllGather depending on layer type
-        // 3. Backward: similar communication pattern in reverse
+        EnsureShardingInitialized();
 
-        // For this framework implementation, we provide simplified pattern
-        // Production usage would implement layer-specific forward/backward logic
+        // REAL compute-partitioned tensor parallelism: when the wrapped model was layer-partitionable, this
+        // rank trains its OWN partitioned model, which holds only its Column/Row weight shards and computes
+        // per-rank matmuls with the in-layer f/ḡ AllReduce carried on the autodiff tape (Megatron-LM). No
+        // full-parameter gather or data-parallel replication is involved.
+        if (_computePartitioned && _partitionedModel is not null
+            && input is Tensor<T> tin && expectedOutput is Tensor<T> tout)
+        {
+            _partitionedModel.Train(tin, tout);
+            InvalidateCache();
+            return;
+        }
+
+        // FALLBACK (black-box wrapped model that cannot be layer-partitioned): parameter replication with
+        // data-parallel gradient averaging over the tensor-parallel group. Every rank holds the full
+        // parameters, computes full-model gradients on its own data, and the gradients are averaged within
+        // the group (SubgroupAllReduce below). This is correct distributed training but NOT compute
+        // partitioning; genuine Megatron TP is taken above when the model exposes its layers.
 
         // Gather full parameters before training
         var originalParams = GatherFullParameters();
@@ -364,6 +425,11 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         // Compute true gradients using the model's gradient computation
         // This provides accurate gradients before optimizer updates are applied
         var gradVec = InterfaceGuard.GradientComputable(WrappedModel).ComputeGradients(input, expectedOutput);
+
+        // ZeRO Stage-2 offload: bring gradients to CPU + drop the GPU cache
+        // entry before either the subgroup reduce or ApplyGradients runs.
+        // No-op when CpuOffloadGradients is off.
+        OffloadGradientsToCpu(gradVec);
 
         // Synchronize gradients across tensor-parallel group
         if (Config.AutoSyncGradients)
@@ -383,12 +449,26 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         // Extract shard from final parameters
         UpdateLocalShardFromFull(updatedParams);
         InvalidateCache();
+
+        // ZeRO Stage-3 param offload: drop GPU-cached params so the next
+        // forward re-uploads. No-op when CpuOffloadParams is off.
+        OffloadParamsToCpu();
     }
 
     /// <inheritdoc/>
     public override TOutput Predict(TInput input)
     {
-        // Tensor parallel inference
+        EnsureShardingInitialized();
+
+        // REAL compute-partitioned inference: run this rank's partitioned model (per-rank matmuls + in-layer
+        // ḡ AllReduce). Column-split with no forward comm feeds the row-parallel layer, which reduces the
+        // partial sums to the full output — bit-identical to the non-parallel forward.
+        if (_computePartitioned && _partitionedModel is not null && input is Tensor<T> tin)
+        {
+            return (TOutput)(object)_partitionedModel.Predict(tin);
+        }
+
+        // FALLBACK: replicate the full parameters and run the black-box model.
         var fullParams = GatherFullParameters();
         InterfaceGuard.Parameterizable(WrappedModel).SetParameters(fullParams);
         return WrappedModel.Predict(input);
@@ -403,8 +483,35 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         metadata.SetProperty("WorldSize", WorldSize);
         metadata.SetProperty("Rank", Rank);
         metadata.SetProperty("TensorParallelSize", _tensorParallelSize);
-        metadata.SetProperty("PartitioningStyle", "Column-wise (simplified)");
+        metadata.SetProperty("ComputePartitioned", _computePartitioned);
+        metadata.SetProperty("PartitioningStyle",
+            _computePartitioned ? "Megatron column/row (compute-partitioned)" : "Parameter replication (fallback)");
+        if (_computePartitioned)
+            metadata.SetProperty("PartitionLog", _partitionLog);
         return metadata;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        EnsureShardingInitialized();
+        // In compute-partitioned mode the authoritative parameters are this rank's Column/Row weight shards
+        // held by the partitioned model, not the flat LocalShard of the replication fallback.
+        if (_computePartitioned && _partitionedModel is not null)
+            return _partitionedModel.GetParameters();
+        return base.GetParameters();
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        EnsureShardingInitialized();
+        if (_computePartitioned && _partitionedModel is not null)
+        {
+            _partitionedModel.SetParameters(parameters);
+            return;
+        }
+        base.SetParameters(parameters);
     }
 
     /// <inheritdoc/>

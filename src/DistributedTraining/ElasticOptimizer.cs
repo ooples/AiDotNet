@@ -126,22 +126,28 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
             if (inputData == null)
                 throw new ArgumentNullException(nameof(inputData));
 
-            // Check for world size changes (workers joined/left)
-            if (DetectWorldSizeChange())
+            // Check for world size changes (workers joined/left). CRITICAL: the decision must be COLLECTIVE
+            // — a rank-local DetectWorldSizeChange() would let some ranks enter HandleWorkerChange's
+            // collectives while others go straight to the gradient reduce, producing a divergent collective
+            // sequence (deadlock/corruption). AllReduce(Max) over a 1/0 flag makes every rank agree that a
+            // membership change occurred before any rank branches into the rendezvous.
+            var changed = new Vector<T>(new[] { DetectWorldSizeChange() ? NumOps.One : NumOps.Zero });
+            Config.CommunicationBackend.AllReduce(changed, ReductionOperation.Max);
+            if (!NumOps.Equals(changed[0], NumOps.Zero))
             {
-                HandleWorkerChange();
+                HandleWorkerChange(inputData);
             }
 
-            // Optimize with current workers
-            var result = WrappedOptimizer.Optimize(inputData);
+            // When cross-rank synchronization is off, fall back to a plain local step.
+            if (!Config.AutoSyncGradients)
+                return RunWrappedOptimizerStep(inputData);
 
-            // Synchronize parameters
-            if (Config.AutoSyncGradients && result.BestSolution != null)
-            {
-                SynchronizeParameters(result.BestSolution);
-            }
-
-            return result;
+            // Elastic DDP: on top of the elastic membership handling above, each surviving step is a true
+            // synchronous DDP step (per-step gradient all-reduce). RunDataParallelStep computes the
+            // backward-only gradient, averages it across the CURRENT worker set, and applies one update
+            // from the original parameters — so all replicas stay bit-identical without a separate
+            // parameter-averaging pass (which is why the old SynchronizeParameters call is gone).
+            return RunDataParallelStep(inputData, ReductionOperation.Average);
         }
         finally
         {
@@ -157,31 +163,38 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Not supported as a standalone call. Between membership changes this optimizer replicates parameters
+    /// and the wrapped optimizer's Adam m/v state is identical on every rank (no per-step exchange needed);
+    /// the only state movement is the parameter broadcast in HandleWorkerChange on a membership change.
+    /// A general "synchronize optimizer state" — including transferring serialized Adam state to a newly
+    /// joined worker — is a full elastic state-transfer protocol that this optimizer does not implement, so
+    /// it fails fast here rather than silently reporting success.
+    /// </remarks>
     public override void SynchronizeOptimizerState()
-    {
-        // When world size changes, optimizer states must be re-sharded
-        // This is handled in HandleWorkerChange()
-    }
+        => throw new NotSupportedException(
+            "ElasticOptimizer does not support standalone optimizer-state synchronization. Parameter " +
+            "re-sync happens in HandleWorkerChange on a membership change; transferring serialized optimizer " +
+            "(Adam m/v) state to newly joined workers is not implemented.");
 
     /// <summary>
-    /// Detects if the world size has changed.
+    /// Detects if the world size has changed since the last handled membership event.
     /// </summary>
+    /// <remarks>
+    /// The communication backend is the authority on the current worker set (in a production deployment it
+    /// is fed by the rendezvous/membership service such as etcd or the torchelastic agent). A change is any
+    /// difference between the backend's reported world size and the size we last re-sharded for.
+    /// </remarks>
     private bool DetectWorldSizeChange()
     {
-        // In production, this would:
-        // 1. Query membership service (etcd, etc.)
-        // 2. Detect if workers joined or left
-        // 3. Trigger rendezvous if change detected
-
-        // Framework placeholder
         int newWorldSize = Config.CommunicationBackend.WorldSize;
         return newWorldSize != _currentWorldSize;
     }
 
     /// <summary>
-    /// Handles worker addition or removal.
+    /// Handles worker addition or removal by re-sharding onto the new worker set.
     /// </summary>
-    private void HandleWorkerChange()
+    private void HandleWorkerChange(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         int newWorldSize = Config.CommunicationBackend.WorldSize;
 
@@ -192,17 +205,85 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
                 $"World size {newWorldSize} outside allowed range [{_minWorkers}, {_maxWorkers}]");
         }
 
-        // In production elastic training:
-        // 1. Checkpoint current state
-        // 2. All workers synchronize at rendezvous point
-        // 3. Re-shard parameters and optimizer states across new worker set
-        // 4. Broadcast/scatter state to new workers
-        // 5. Resume training with new configuration
+        // Elastic rendezvous re-sharding (torch.distributed.elastic): when the worker set changes, every
+        // surviving AND newly-joined worker must resume from a single consistent copy of the parameters.
+        // Rank 0 is the survivor that carries the authoritative state across the rendezvous; broadcasting it
+        // guarantees a worker that just joined does not train from stale or uninitialised parameters. This
+        // strategy replicates parameters across workers, so re-sharding is a full broadcast; a
+        // parameter-sharded strategy would additionally re-partition the flat parameter/optimizer-state
+        // vectors by the new world size (each rank taking its ceil(N / newWorldSize) slice).
+        //
+        // CRITICAL: the broadcast is a COLLECTIVE — it must NOT be gated on rank-local InitialSolution, or a
+        // rank that happened to receive a model would enter Broadcast while a rank that did not would skip it
+        // and race ahead to the closing barrier, deadlocking the worker set. Resolve a model on every rank
+        // and require ALL ranks to have one (an AllReduce(Min) over a 1/0 availability flag) BEFORE any rank
+        // broadcasts. A missing model on any rank makes every rank throw identically (no divergence).
+        var model = inputData.InitialSolution
+            ?? (WrappedOptimizer as OptimizerBase<T, TInput, TOutput>)?.Model;
+        var available = new Vector<T>(new[] { model is null ? NumOps.Zero : NumOps.One });
+        Config.CommunicationBackend.AllReduce(available, ReductionOperation.Min);
+        if (model is null || NumOps.Equals(available[0], NumOps.Zero))
+        {
+            throw new InvalidOperationException(
+                "Elastic rendezvous requires every worker to provide a model (OptimizationInputData.InitialSolution " +
+                "or a wrapped OptimizerBase whose Model is set) so the authoritative parameters can be broadcast.");
+        }
 
-        // Framework placeholder for re-sharding logic
+        ResynchronizeParametersAcrossWorkers(model);
+        ResynchronizeOptimizerStateAcrossWorkers();
+
         _currentWorldSize = newWorldSize;
+    }
 
-        // Would call: ReshardParameters() and ReshardOptimizerState()
+    /// <summary>
+    /// Transfers the wrapped optimizer's serialized state (e.g. Adam's m/v moment buffers) from rank 0 (the
+    /// designated survivor) to every worker, so a newly-joined worker resumes with the authoritative
+    /// optimizer state and not just the parameters. The serialized bytes are carried over the Vector-typed
+    /// communication backend as one element per byte (a length header is broadcast first). This is a
+    /// COLLECTIVE — every rank must call it — and is invoked from HandleWorkerChange after the parameter
+    /// re-sync. (Full survivor election across an arbitrary surviving set is a separate torchelastic-scale
+    /// feature; rank 0 is the designated survivor here.)
+    /// </summary>
+    internal void ResynchronizeOptimizerStateAcrossWorkers()
+    {
+        var backend = Config.CommunicationBackend;
+
+        // Rank 0 (survivor) provides the authoritative serialized optimizer state; other ranks contribute a
+        // placeholder that Broadcast overwrites. Broadcast the length first so non-root ranks size the buffer.
+        byte[] rootBytes = Rank == 0 ? WrappedOptimizer.Serialize() : System.Array.Empty<byte>();
+        var header = backend.Broadcast(new Vector<T>(new[] { NumOps.FromDouble(rootBytes.Length) }), root: 0);
+        int length = NumOps.ToInt32(header[0]);
+        if (length <= 0)
+            return; // optimizer has no serialized state to transfer
+
+        var payload = new T[length];
+        if (Rank == 0)
+            for (int i = 0; i < length; i++) payload[i] = NumOps.FromDouble(rootBytes[i]);
+        var received = backend.Broadcast(new Vector<T>(payload), root: 0);
+
+        var stateBytes = new byte[length];
+        for (int i = 0; i < length; i++) stateBytes[i] = (byte)(NumOps.ToInt32(received[i]) & 0xFF);
+        WrappedOptimizer.Deserialize(stateBytes);
+    }
+
+    /// <summary>Test hook: returns the wrapped optimizer's serialized state so an invariant can verify the
+    /// elastic optimizer-state transfer made every rank's state identical to rank 0's.</summary>
+    internal byte[] SerializeWrappedOptimizerForTest() => WrappedOptimizer.Serialize();
+
+    /// <summary>
+    /// Re-synchronizes the model parameters across all workers by broadcasting rank 0's authoritative copy.
+    /// This is the parameter re-sharding step of an elastic membership change and is exposed internally so
+    /// it can be verified directly (a broadcast makes every rank's parameters identical to rank 0's).
+    /// </summary>
+    /// <param name="model">The model whose parameters are re-synchronized in place.</param>
+    internal void ResynchronizeParametersAcrossWorkers(IFullModel<T, TInput, TOutput> model)
+    {
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        var parameterizable = InterfaceGuard.Parameterizable(model);
+        Vector<T> authoritative = Config.CommunicationBackend.Broadcast(parameterizable.GetParameters(), root: 0);
+        parameterizable.SetParameters(authoritative);
     }
 
     /// <summary>

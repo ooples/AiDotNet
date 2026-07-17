@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
 
 
@@ -265,6 +266,56 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
 
         // Invalidate cached full parameters
         CachedFullParameters = null;
+    }
+
+    /// <summary>
+    /// Runtime side of <see cref="IShardingConfiguration{T}.CpuOffloadGradients"/>.
+    /// Forces a gradient vector to fully materialize on the CPU (draining any
+    /// pending deferred GPU download) and drops the GPU-cached buffer for its
+    /// backing array. Called by sharded models before the AllReduce /
+    /// ReduceScatter that fans gradients out — the reduction operates on the
+    /// managed backing array directly, so after this call it reads current
+    /// gradient values (not a not-yet-materialized deferred-download stub) and
+    /// no GPU cache pins a stale pre-reduce copy. No-op when the flag is off
+    /// or the current engine isn't a GPU engine.
+    /// </summary>
+    protected void OffloadGradientsToCpu(Vector<T>? gradients)
+    {
+        if (!Config.CpuOffloadGradients || gradients is null || gradients.Length == 0) return;
+        var array = gradients.GetDataArray();
+        if (array is null) return;
+        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        if (AiDotNetEngine.Current is DirectGpuTensorEngine gpu)
+        {
+            gpu.InvalidateWeightCache(array);
+        }
+    }
+
+    /// <summary>
+    /// Runtime side of <see cref="IShardingConfiguration{T}.CpuOffloadParams"/>.
+    /// After a parameter update, drops the GPU-cached buffer for the wrapped
+    /// model's parameters so the next forward re-uploads from the just-updated
+    /// CPU-resident values. Called at the tail of the sharded model's Train
+    /// path. No-op when the flag is off or the current engine isn't a GPU
+    /// engine.
+    /// </summary>
+    protected void OffloadParamsToCpu()
+    {
+        if (!Config.CpuOffloadParams) return;
+        // Invalidate the sharded-model gather cache FIRST, unconditionally — its bytes
+        // otherwise still reflect the pre-update parameters and the next Predict/Train
+        // would serve them. This must happen even on CPU execution (no GPU engine), where
+        // there is no weight cache to invalidate but the gather cache is just as stale.
+        CachedFullParameters = null;
+        if (AiDotNetEngine.Current is not DirectGpuTensorEngine gpu) return;
+        Vector<T>? parameters;
+        try { parameters = InterfaceGuard.Parameterizable(WrappedModelInternal).GetParameters(); }
+        catch { return; }
+        if (parameters is null || parameters.Length == 0) return;
+        var array = parameters.GetDataArray();
+        if (array is null) return;
+        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        gpu.InvalidateWeightCache(array);
     }
 
     /// <summary>
