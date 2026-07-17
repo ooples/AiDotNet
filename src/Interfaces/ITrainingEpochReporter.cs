@@ -31,7 +31,8 @@ public interface ITrainingEpochReporter<T>
     /// </value>
     /// <remarks>
     /// Set by the facade during the build. A model must treat a <c>false</c> return as a request
-    /// to stop after the current epoch and leave itself in a usable, trained state.
+    /// to stop after the current epoch and leave itself in a usable, trained state. Custom models that own
+    /// their epoch loop implement this so the facade can drive their epochs like any other model.
     /// </remarks>
     Func<TrainingProgress<T>, bool>? TrainingEpochCallback { get; set; }
 }

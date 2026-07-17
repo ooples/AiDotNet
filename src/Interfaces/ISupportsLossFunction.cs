@@ -29,7 +29,7 @@ namespace AiDotNet.Interfaces;
 /// doing nothing.
 /// </para>
 /// </remarks>
-internal interface ISupportsLossFunction<T>
+public interface ISupportsLossFunction<T>
 {
     /// <summary>
     /// Replaces the loss function this model trains against.
