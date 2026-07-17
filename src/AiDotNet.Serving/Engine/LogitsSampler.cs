@@ -72,6 +72,72 @@ public static class LogitsSampler
         return SampleFromCandidates(candidates, probabilities, rng);
     }
 
+    /// <summary>
+    /// Computes the full-vocabulary probability distribution this sampler would draw from under the given
+    /// parameters: penalties → temperature → softmax → top-k / min-p / top-p, with zero mass outside the kept
+    /// set (renormalized to sum to 1). Greedy parameters yield a point mass at the argmax. This is the exact
+    /// target distribution speculative decoding must preserve.
+    /// </summary>
+    public static double[] ComputeProbabilities<T>(
+        Vector<T> logits, SamplingParameters parameters, IReadOnlyList<int> contextTokenIds)
+    {
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        int vocab = logits.Length;
+        if (vocab == 0) throw new ArgumentException("Logits must be non-empty.", nameof(logits));
+
+        var scores = new double[vocab];
+        for (int i = 0; i < vocab; i++) scores[i] = Convert.ToDouble(logits[i]);
+        ApplyPenalties(scores, parameters, contextTokenIds);
+
+        var dist = new double[vocab];
+        if (parameters.IsGreedy)
+        {
+            dist[ArgMax(scores)] = 1.0;
+            return dist;
+        }
+
+        double temperature = parameters.Temperature;
+        for (int i = 0; i < vocab; i++) scores[i] /= temperature;
+        var probabilities = Softmax(scores);
+
+        var candidates = new List<int>(vocab);
+        for (int i = 0; i < vocab; i++) candidates.Add(i);
+        candidates.Sort((a, b) => probabilities[b].CompareTo(probabilities[a]));
+        ApplyTopK(candidates, parameters.TopK);
+        ApplyMinP(candidates, probabilities, parameters.MinP);
+        ApplyTopP(candidates, probabilities, parameters.TopP);
+
+        double total = 0.0;
+        foreach (int id in candidates) total += probabilities[id];
+        if (total <= 0.0) { dist[candidates[0]] = 1.0; return dist; }
+        foreach (int id in candidates) dist[id] = probabilities[id] / total;
+        return dist;
+    }
+
+    /// <summary>Draws an index from a probability distribution using the given RNG (inverse-CDF).</summary>
+    public static int SampleFromDistribution(double[] probabilities, Random rng)
+    {
+        if (probabilities is null) throw new ArgumentNullException(nameof(probabilities));
+        if (rng is null) throw new ArgumentNullException(nameof(rng));
+
+        double total = 0.0;
+        for (int i = 0; i < probabilities.Length; i++) total += probabilities[i];
+        if (total <= 0.0) return 0;
+
+        double threshold = rng.NextDouble() * total;
+        double accumulated = 0.0;
+        int last = 0;
+        for (int i = 0; i < probabilities.Length; i++)
+        {
+            if (probabilities[i] <= 0.0) continue;
+            last = i;
+            accumulated += probabilities[i];
+            if (threshold <= accumulated) return i;
+        }
+        return last;
+    }
+
     private static void ApplyPenalties(double[] scores, SamplingParameters p, IReadOnlyList<int> context)
     {
         bool anyPenalty = Math.Abs(p.RepetitionPenalty - 1.0) > 1e-12

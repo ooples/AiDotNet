@@ -6,6 +6,8 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Engine.Speculative;
 
+// RandomHelper (AiDotNet.Tensors.Helpers) provides seeded/secure RNG; MathHelper provides numeric ops.
+
 /// <summary>Counters describing how effective speculation was over a generation run.</summary>
 public sealed class SpeculationStatistics
 {
@@ -32,11 +34,12 @@ public sealed class SpeculationStatistics
 }
 
 /// <summary>
-/// Greedy speculative decoding over any <see cref="ICausalLmModel{T}"/> (Leviathan 2023 / Chen 2023): a cheap
+/// Speculative decoding over any <see cref="ICausalLmModel{T}"/> (Leviathan 2023 / Chen 2023): a cheap
 /// <see cref="ISpeculativeDrafter"/> proposes several next tokens, the target model verifies them all in one
-/// forward pass (its logits already cover every drafted position), and the longest correct prefix is accepted —
-/// plus one guaranteed correction or bonus token per round. The emitted sequence is <b>bit-identical</b> to
-/// plain greedy decoding; only the number of expensive target passes drops.
+/// forward pass (its logits already cover every drafted position), and each is accepted or corrected — plus one
+/// guaranteed bonus token per fully-accepted round. Supports both greedy decoding (output <b>bit-identical</b>
+/// to plain greedy) and stochastic sampling (the emitted-token distribution is provably <b>exactly</b> the
+/// target's sampling distribution). Either way only the number of expensive target passes drops.
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> normally a model makes one token per (slow) step. Here a fast guesser proposes,
@@ -79,15 +82,14 @@ public sealed class SpeculativeGenerator<T>
         if (promptTokenIds.Count == 0) throw new ArgumentException("Prompt must be non-empty.", nameof(promptTokenIds));
         if (sampling is null) throw new ArgumentNullException(nameof(sampling));
         sampling.Validate();
-        if (!sampling.IsGreedy)
-            throw new NotSupportedException(
-                "SpeculativeGenerator currently supports greedy decoding only (temperature 0). Use the " +
-                "standard generation path for stochastic sampling.");
 
         statistics = new SpeculationStatistics();
         var context = new List<int>(promptTokenIds);
         var generated = new List<int>();
         int vocab = _target.VocabularySize;
+        var rng = sampling.Seed is { } seed
+            ? RandomHelper.CreateSeededRandom(seed)
+            : RandomHelper.CreateSecureRandom();
 
         while (generated.Count < sampling.MaxTokens)
         {
@@ -103,36 +105,87 @@ public sealed class SpeculativeGenerator<T>
             statistics.TargetForwardPasses++;
 
             int basePos = context.Count - 1; // position whose logits predict the first continuation token
-            bool stopped = false;
-
-            // Accept the longest prefix of the draft that matches the target's greedy choice.
-            int i = 0;
-            for (; i < d; i++)
-            {
-                int targetToken = ArgMaxAt(logits, basePos + i, vocab);
-                if (targetToken != draft[i])
-                {
-                    // Reject here: emit the target's own token instead, then end this round.
-                    if (Emit(targetToken, context, generated, statistics, sampling)) stopped = true;
-                    break;
-                }
-                statistics.AcceptedTokens++;
-                if (Emit(draft[i], context, generated, statistics, sampling)) { stopped = true; i++; break; }
-            }
-
-            if (!stopped && i == d)
-            {
-                // Whole draft accepted (or empty): also emit the bonus token the target predicts after it.
-                int bonus = ArgMaxAt(logits, basePos + d, vocab);
-                Emit(bonus, context, generated, statistics, sampling);
-                // A stop here simply ends the outer loop on the next check.
-                if (IsStop(bonus, generated, sampling)) stopped = true;
-            }
+            bool stopped = sampling.IsGreedy
+                ? GreedyRound(logits, draft, basePos, vocab, context, generated, statistics, sampling)
+                : StochasticRound(logits, draft, basePos, vocab, context, generated, statistics, sampling, rng);
 
             if (stopped) break;
         }
 
         return generated;
+    }
+
+    // Greedy: accept a draft token iff it equals the target's argmax; emit the target's argmax on rejection,
+    // plus a bonus argmax when the whole draft is accepted. Output equals plain greedy decoding.
+    private bool GreedyRound(
+        Tensor<T> logits, IReadOnlyList<int> draft, int basePos, int vocab,
+        List<int> context, List<int> generated, SpeculationStatistics stats, SamplingParameters sampling)
+    {
+        int d = draft.Count;
+        int i = 0;
+        for (; i < d; i++)
+        {
+            int targetToken = ArgMaxAt(logits, basePos + i, vocab);
+            if (targetToken != draft[i])
+            {
+                Emit(targetToken, context, generated, stats, sampling);
+                return generated.Count >= sampling.MaxTokens || IsStop(targetToken, generated, sampling);
+            }
+            stats.AcceptedTokens++;
+            if (Emit(draft[i], context, generated, stats, sampling)) return true;
+        }
+        int bonus = ArgMaxAt(logits, basePos + d, vocab);
+        Emit(bonus, context, generated, stats, sampling);
+        return generated.Count >= sampling.MaxTokens || IsStop(bonus, generated, sampling);
+    }
+
+    // Stochastic speculative sampling (Leviathan 2023 / Chen 2023): with a point-mass drafter, accept draft
+    // token x with probability p(x) under the target's sampling distribution; on rejection sample from the
+    // residual (p with x removed, renormalized); emit a bonus draw from p when the whole draft is accepted. The
+    // emitted-token distribution is exactly the target's sampling distribution.
+    private bool StochasticRound(
+        Tensor<T> logits, IReadOnlyList<int> draft, int basePos, int vocab,
+        List<int> context, List<int> generated, SpeculationStatistics stats, SamplingParameters sampling, Random rng)
+    {
+        int d = draft.Count;
+        int i = 0;
+        for (; i < d; i++)
+        {
+            var p = LogitsSampler.ComputeProbabilities(RowVector(logits, basePos + i, vocab), sampling, context);
+            double acceptProb = p[draft[i]];
+            if (rng.NextDouble() < acceptProb)
+            {
+                stats.AcceptedTokens++;
+                if (Emit(draft[i], context, generated, stats, sampling)) return true;
+            }
+            else
+            {
+                var residual = (double[])p.Clone();
+                residual[draft[i]] = 0.0;
+                int replacement = LogitsSampler.SampleFromDistribution(residual, rng);
+                Emit(replacement, context, generated, stats, sampling);
+                return generated.Count >= sampling.MaxTokens || IsStop(replacement, generated, sampling);
+            }
+        }
+        var bonusP = LogitsSampler.ComputeProbabilities(RowVector(logits, basePos + d, vocab), sampling, context);
+        int bonus = LogitsSampler.SampleFromDistribution(bonusP, rng);
+        Emit(bonus, context, generated, stats, sampling);
+        return generated.Count >= sampling.MaxTokens || IsStop(bonus, generated, sampling);
+    }
+
+    // Extracts the vocabulary logits row at a sequence position as a Vector, tolerating [seq,vocab] / [1,seq,vocab].
+    private static Vector<T> RowVector(Tensor<T> logits, int position, int vocab)
+    {
+        var shape = logits.Shape;
+        var row = new T[vocab];
+        if (shape.Length == 2)
+            for (int v = 0; v < vocab; v++) row[v] = logits[position, v];
+        else if (shape.Length == 3)
+            for (int v = 0; v < vocab; v++) row[v] = logits[0, position, v];
+        else
+            throw new InvalidOperationException(
+                $"Speculative verification needs multi-position logits ([seq, vocab] or [1, seq, vocab]); got rank {shape.Length}.");
+        return new Vector<T>(row);
     }
 
     /// <summary>Convenience overload without statistics.</summary>

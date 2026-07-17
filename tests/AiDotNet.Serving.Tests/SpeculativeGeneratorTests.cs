@@ -144,12 +144,52 @@ public class SpeculativeGeneratorTests
         Assert.Equal(13, gen.Count);
     }
 
-    [Fact]
-    public void NonGreedySampling_Throws()
+    /// <summary>A model whose logits are a fixed distribution at every position (independent of input), so the
+    /// target's per-step sampling distribution is a known constant we can compare the empirical output against.</summary>
+    private sealed class FixedDistLm : ICausalLmModel<double>
     {
-        var spec = new SpeculativeGenerator<double>(new CycleLm());
-        Assert.Throws<NotSupportedException>(() =>
-            spec.Generate(new[] { 1 }, new SamplingParameters { Temperature = 1.0, MaxTokens = 5 }));
+        // softmax([ln .4, ln .3, ln .2, ln .1]) = [.4, .3, .2, .1]; remaining vocab strongly negative.
+        private static readonly double[] Probs = { 0.4, 0.3, 0.2, 0.1 };
+        public int VocabularySize => Vocab;
+        public int? EosTokenId => null;
+        public Tensor<double> ForwardLogits(Tensor<double> tokenIds)
+        {
+            int n = tokenIds.Shape[tokenIds.Shape.Length - 1];
+            var t = new Tensor<double>(new[] { 1, n, Vocab });
+            for (int p = 0; p < n; p++)
+                for (int v = 0; v < Vocab; v++)
+                    t[0, p, v] = v < Probs.Length ? System.Math.Log(Probs[v]) : -50.0;
+            return t;
+        }
+        public static double[] Distribution => Probs;
+    }
+
+    [Fact]
+    public void StochasticSpeculative_OutputDistribution_MatchesTargetDistribution()
+    {
+        // Speculative sampling's guarantee: the emitted-token distribution equals the target's sampling
+        // distribution, regardless of the (point-mass) drafter. Histogram a long run and compare.
+        var spec = new SpeculativeGenerator<double>(new FixedDistLm(), new PromptLookupDrafter(), maxDraftTokens: 4);
+        var gen = spec.Generate(new[] { 0 },
+            new SamplingParameters { Temperature = 1.0, MaxTokens = 6000, Seed = 12345 });
+
+        var counts = new int[4];
+        foreach (int tok in gen) if (tok < 4) counts[tok]++;
+
+        for (int v = 0; v < 4; v++)
+        {
+            double freq = counts[v] / (double)gen.Count;
+            Assert.InRange(freq, FixedDistLm.Distribution[v] - 0.03, FixedDistLm.Distribution[v] + 0.03);
+        }
+    }
+
+    [Fact]
+    public void StochasticSpeculative_Seeded_IsReproducible()
+    {
+        var spec = new SpeculativeGenerator<double>(new FixedDistLm(), new PromptLookupDrafter());
+        var a = spec.Generate(new[] { 0 }, new SamplingParameters { Temperature = 1.0, MaxTokens = 50, Seed = 7 });
+        var b = spec.Generate(new[] { 0 }, new SamplingParameters { Temperature = 1.0, MaxTokens = 50, Seed = 7 });
+        Assert.Equal(a, b);
     }
 
     // ---- Prompt-lookup drafter -----------------------------------------------------------
