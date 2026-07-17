@@ -126,6 +126,19 @@ public class RLTrainingOptions<T>
     public IExplorationStrategy<T>? ExplorationStrategy { get; set; }
 
     /// <summary>
+    /// Gets or sets an optional intrinsic-reward (curiosity) module. When set, its novelty bonus is added
+    /// to the environment reward each step, driving exploration toward unfamiliar states on sparse-reward
+    /// tasks. Null (default) means no intrinsic reward.
+    /// </summary>
+    public ReinforcementLearning.IntrinsicMotivation.IIntrinsicRewardModule<T>? IntrinsicRewardModule { get; set; }
+
+    /// <summary>
+    /// Gets or sets the weight applied to the intrinsic reward before it is added to the extrinsic reward.
+    /// Defaults to 0.5. Ignored when <see cref="IntrinsicRewardModule"/> is null.
+    /// </summary>
+    public double IntrinsicRewardWeight { get; set; } = 0.5;
+
+    /// <summary>
     /// Gets or sets the optional replay buffer for experience storage.
     /// </summary>
     /// <remarks>

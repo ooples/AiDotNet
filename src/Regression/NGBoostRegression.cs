@@ -88,7 +88,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Configuration options.
     /// </summary>
-    private readonly NGBoostRegressionOptions _options;
+    private readonly NGBoostRegressionOptions<T> _options;
 
     /// <summary>
     /// Number of parameters in the distribution.
@@ -118,23 +118,19 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     /// <param name="options">Configuration options for the algorithm.</param>
     /// <param name="regularization">Optional regularization strategy.</param>
-    public NGBoostRegression(NGBoostRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    public NGBoostRegression(NGBoostRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _yMean = NumOps.Zero;
         _yStd = NumOps.Zero;
-        _options = options ?? new NGBoostRegressionOptions();
+        _options = options ?? new NGBoostRegressionOptions<T>();
         _trees = [];
         _initialParameters = new Vector<T>(0);
         _numParams = 0;
 
-        // Initialize scoring rule
-        _scoringRule = _options.ScoringRule switch
-        {
-            NGBoostScoringRuleType.LogScore => new LogScore<T>(),
-            NGBoostScoringRuleType.CRPS => new CRPSScore<T>(),
-            _ => new LogScore<T>()
-        };
+        // Null means the standard rule. NGBoost optimizes the log score by default in the reference
+        // implementation, so that is the default here.
+        _scoringRule = _options.ScoringRule ?? new LogScore<T>();
     }
 
     /// <summary>
@@ -730,7 +726,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 { "NumberOfIterations", _trees.Count },
                 { "NumberOfParameters", _numParams },
                 { "DistributionType", _options.DistributionType.ToString() },
-                { "ScoringRule", _options.ScoringRule.ToString() },
+                { "ScoringRule", _scoringRule.Name },
                 { "LearningRate", _options.LearningRate },
                 { "MaxDepth", _options.MaxDepth },
                 { "UseNaturalGradient", _options.UseNaturalGradient }
@@ -753,7 +749,9 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write(_options.LearningRate);
         writer.Write(_options.SubsampleRatio);
         writer.Write((int)_options.DistributionType);
-        writer.Write((int)_options.ScoringRule);
+        // Persist the rule by name. An ordinal only worked while the choice was a closed enum;
+        // now that any IScoringRule<T> is allowed, the name is what identifies it.
+        writer.Write(_scoringRule.Name);
         writer.Write(_options.UseNaturalGradient);
 
         // Y standardization
@@ -797,7 +795,23 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _options.LearningRate = reader.ReadDouble();
         _options.SubsampleRatio = reader.ReadDouble();
         _options.DistributionType = (NGBoostDistributionType)reader.ReadInt32();
-        _options.ScoringRule = (NGBoostScoringRuleType)reader.ReadInt32();
+        // Rebuild the rule from its name. A rule the library ships round-trips exactly; a custom one
+        // cannot be reconstructed from a name alone, so it falls back to the default and the caller
+        // must re-supply it via Options.ScoringRule — reported rather than silently substituted.
+        string scoringRuleName = reader.ReadString();
+        _options.ScoringRule = scoringRuleName switch
+        {
+            "LogScore" => new LogScore<T>(),
+            "CRPS" => new CRPSScore<T>(),
+            _ => null
+        };
+        if (_options.ScoringRule is null && scoringRuleName != "LogScore")
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Serialized model used the custom scoring rule '{scoringRuleName}', which cannot be " +
+                "reconstructed from its name. Falling back to LogScore; re-supply the rule via " +
+                "Options.ScoringRule if the original is needed.");
+        }
         _options.UseNaturalGradient = reader.ReadBoolean();
 
         // Y standardization

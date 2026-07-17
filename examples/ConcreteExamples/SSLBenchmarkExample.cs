@@ -88,9 +88,8 @@ public class SSLBenchmarkExample
         var encoder = CreateResNetEncoder();
 
         // Create SimCLR method
-        var config = new SSLConfig
+        var config = new SSLConfig<double>
         {
-            Method = SSLMethodType.SimCLR,
             PretrainingEpochs = 100,
             BatchSize = 256,
             LearningRate = 0.3,
@@ -170,9 +169,8 @@ public class SSLBenchmarkExample
         var encoder = CreateResNetEncoder();
 
         // Create MoCo v2 method
-        var config = new SSLConfig
+        var config = new SSLConfig<double>
         {
-            Method = SSLMethodType.MoCoV2,
             PretrainingEpochs = 200,
             BatchSize = 256,
             LearningRate = 0.03,
@@ -241,9 +239,8 @@ public class SSLBenchmarkExample
 
         var encoder = CreateResNetEncoder();
 
-        var config = new SSLConfig
+        var config = new SSLConfig<double>
         {
-            Method = SSLMethodType.BYOL,
             PretrainingEpochs = 300,
             BatchSize = 256,
             LearningRate = 0.2,

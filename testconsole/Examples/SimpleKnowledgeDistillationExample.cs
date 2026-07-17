@@ -34,7 +34,7 @@ public static class SimpleKnowledgeDistillationExample
         var kdOptions = new KnowledgeDistillationOptions<double, Matrix<double>, Vector<double>>
         {
             TeacherModel = teacherModel,
-            StrategyType = DistillationStrategyType.ResponseBased, // Standard KD
+            Strategy = null,        // null => Response-Based (standard Hinton) default
             Temperature = 3.0,      // Soften predictions (2-5 typical)
             Alpha = 0.3,            // 30% hard labels, 70% teacher knowledge
             Epochs = 20,

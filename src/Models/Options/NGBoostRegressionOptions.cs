@@ -1,3 +1,5 @@
+using AiDotNet.Scoring;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -19,7 +21,7 @@ namespace AiDotNet.Models.Options;
 /// This uncertainty information is valuable for decision-making.
 /// </para>
 /// </remarks>
-public class NGBoostRegressionOptions : DecisionTreeOptions
+public class NGBoostRegressionOptions<T> : DecisionTreeOptions
 {
     /// <summary>
     /// Gets or sets the number of boosting iterations (trees).
@@ -99,17 +101,24 @@ public class NGBoostRegressionOptions : DecisionTreeOptions
     public NGBoostDistributionType DistributionType { get; set; } = NGBoostDistributionType.Normal;
 
     /// <summary>
-    /// Gets or sets the type of scoring rule used for optimization.
+    /// Gets or sets the scoring rule used for optimization.
     /// </summary>
-    /// <value>Default is LogScore.</value>
+    /// <value>
+    /// A scoring rule, or <c>null</c> (the default) to use <see cref="LogScore{T}"/> — the standard
+    /// choice, and what NGBoost optimizes by default in the reference implementation.
+    /// </value>
     /// <remarks>
     /// <para>
-    /// The scoring rule defines how to evaluate probabilistic predictions:
-    /// - LogScore (NLL): Most common, optimizes negative log likelihood
-    /// - CRPS: More robust to outliers, has same units as target variable
+    /// The scoring rule defines how a probabilistic prediction is evaluated. The library ships
+    /// <see cref="LogScore{T}"/> (negative log likelihood; the usual choice) and
+    /// <see cref="CRPSScore{T}"/> (continuous ranked probability score; more robust to outliers and
+    /// in the same units as the target). Any other <see cref="IScoringRule{T}"/> works too.
     /// </para>
+    /// <para><b>For Beginners:</b> Leave this null and you get the standard rule. Set it only if you
+    /// want a different one — e.g. <c>new CRPSScore&lt;double&gt;()</c> — or one of your own.</para>
     /// </remarks>
-    public NGBoostScoringRuleType ScoringRule { get; set; } = NGBoostScoringRuleType.LogScore;
+    public IScoringRule<T>? ScoringRule { get; set; }
+
 
     /// <summary>
     /// Gets or sets whether to use natural gradients.
@@ -201,18 +210,3 @@ public enum NGBoostDistributionType
     Gamma
 }
 
-/// <summary>
-/// Types of scoring rules supported by NGBoost.
-/// </summary>
-public enum NGBoostScoringRuleType
-{
-    /// <summary>
-    /// Logarithmic score (negative log likelihood).
-    /// </summary>
-    LogScore,
-
-    /// <summary>
-    /// Continuous Ranked Probability Score.
-    /// </summary>
-    CRPS
-}

@@ -25,7 +25,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - Prediction: $420,000
 /// </para>
 /// </remarks>
-public class SHAPExplanation<T>
+public class SHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -33,6 +33,9 @@ public class SHAPExplanation<T>
     /// Gets the SHAP values for each feature.
     /// </summary>
     public Vector<T> ShapValues { get; }
+
+    /// <inheritdoc />
+    public Vector<T> GetFeatureAttributions() => ShapValues;
 
     /// <summary>
     /// Gets the baseline (expected) prediction value.

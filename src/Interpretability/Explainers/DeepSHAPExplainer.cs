@@ -43,7 +43,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - Works with any differentiable neural network
 /// </para>
 /// </remarks>
-public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, IGPUAcceleratedExplainer<T>
+public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -349,6 +349,10 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc />
+    public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
+        => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
+
     public DeepSHAPExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new DeepSHAPExplanation<T>[instances.Rows];
@@ -492,7 +496,7 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
 /// Represents the result of a DeepSHAP analysis.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class DeepSHAPExplanation<T>
+public class DeepSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -500,6 +504,9 @@ public class DeepSHAPExplanation<T>
     /// Gets or sets the feature attributions (SHAP values).
     /// </summary>
     public Vector<T> Attributions { get; set; } = new Vector<T>(0);
+
+    /// <inheritdoc />
+    public Vector<T> GetFeatureAttributions() => Attributions;
 
     /// <summary>
     /// Gets or sets the expected (baseline) prediction value.

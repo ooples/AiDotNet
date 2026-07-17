@@ -437,7 +437,7 @@ public enum SaliencyMethod
 /// Represents the result of a Saliency Map analysis.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class SaliencyMapExplanation<T>
+public class SaliencyMapExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -445,6 +445,9 @@ public class SaliencyMapExplanation<T>
     /// Gets or sets the raw saliency values.
     /// </summary>
     public Vector<T> Saliency { get; set; } = new Vector<T>(0);
+
+    /// <inheritdoc />
+    public Vector<T> GetFeatureAttributions() => Saliency;
 
     /// <summary>
     /// Gets or sets the normalized saliency values (0 to 1).

@@ -588,7 +588,7 @@ public class TreeSHAPExplainer<T> : ILocalExplainer<T, TreeSHAPExplanation<T>>, 
 /// Represents the result of a TreeSHAP analysis.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class TreeSHAPExplanation<T>
+public class TreeSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -605,6 +605,9 @@ public class TreeSHAPExplanation<T>
     /// </para>
     /// </remarks>
     public Vector<T> ShapValues { get; set; } = new Vector<T>(0);
+
+    /// <inheritdoc />
+    public Vector<T> GetFeatureAttributions() => ShapValues;
 
     /// <summary>
     /// Gets or sets the expected (baseline) prediction value.

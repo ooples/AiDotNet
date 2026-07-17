@@ -39,6 +39,35 @@ public interface ILearningRateScheduler
     double Step();
 
     /// <summary>
+    /// Advances the scheduler using the epoch's monitored metric, and returns the new learning rate.
+    /// </summary>
+    /// <param name="metric">
+    /// The value the schedule reacts to — typically validation loss. Ignored by schedules that
+    /// depend only on step count.
+    /// </param>
+    /// <returns>The updated learning rate for the next step.</returns>
+    /// <remarks>
+    /// <para>
+    /// Metric-driven schedules (reduce-on-plateau, adaptive) must see a number to decide anything;
+    /// step-driven ones (cosine, exponential, step decay) do not. Keeping the metric in the contract
+    /// lets a caller drive every schedule identically, and stops a metric-driven schedule being
+    /// silently starved by a caller that reached for the parameterless overload — the trap in
+    /// libraries where reduce-on-plateau takes a metric while every sibling does not, so calling the
+    /// wrong one quietly does nothing at all.
+    /// </para>
+    /// <para>
+    /// <see cref="LearningRateSchedulerBase"/> implements this as <see cref="Step()"/>, so
+    /// step-driven schedulers inherit the correct behavior and need no change.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Some schedules lower the learning rate on a fixed timetable; others
+    /// lower it when the model stops improving. This hands them "how well is it doing?" so both
+    /// kinds are driven the same way.
+    /// </para>
+    /// </remarks>
+    double Step(double metric);
+
+    /// <summary>
     /// Gets the learning rate for a specific step without advancing the scheduler.
     /// </summary>
     /// <param name="step">The step number to get the learning rate for.</param>

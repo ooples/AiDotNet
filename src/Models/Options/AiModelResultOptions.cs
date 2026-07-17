@@ -114,6 +114,18 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public ITextVectorizer<T>? TextVectorizer { get; set; }
 
     /// <summary>
+    /// The embedding model configured via <c>ConfigureEmbeddingModel(...)</c>, or <c>null</c> when none was.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An embedding model is a preprocessing/transform component (text → dense vector), not a trainable
+    /// predictive model, so the result keeps it for inference-time transforms rather than routing it
+    /// through training. Available on the built result via <c>AiModelResult.EmbeddingModel</c>.
+    /// </para>
+    /// </remarks>
+    public Interfaces.IEmbeddingModel<T>? EmbeddingModel { get; set; }
+
+    /// <summary>
     /// Gets or sets the results of the optimization process that created the model.
     /// </summary>
     /// <remarks>

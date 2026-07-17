@@ -38,7 +38,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - You don't have access to model internals (for DeepSHAP)
 /// </para>
 /// </remarks>
-public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanation<T>>, IGPUAcceleratedExplainer<T>
+public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanation<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -262,6 +262,10 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc />
+    public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
+        => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
+
     public GradientSHAPExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         if (instances == null)
@@ -396,7 +400,7 @@ internal static class RandomExtensions
 /// Represents the result of a GradientSHAP analysis.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class GradientSHAPExplanation<T>
+public class GradientSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -404,6 +408,9 @@ public class GradientSHAPExplanation<T>
     /// Gets or sets the SHAP values (feature attributions).
     /// </summary>
     public Vector<T> Attributions { get; set; } = new Vector<T>(0);
+
+    /// <inheritdoc />
+    public Vector<T> GetFeatureAttributions() => Attributions;
 
     /// <summary>
     /// Gets or sets the variance of attributions across samples.

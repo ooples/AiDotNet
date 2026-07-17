@@ -717,8 +717,8 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_ResponseBased()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.ResponseBased, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateResponseBasedStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<DistillationLoss<double>>(strategy);
@@ -727,8 +727,8 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_ContrastiveBased()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.ContrastiveBased, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateContrastiveStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<ContrastiveDistillationStrategy<double>>(strategy);
@@ -737,8 +737,8 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_RelationBased()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.RelationBased, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateRelationBasedStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<RelationalDistillationStrategy<double>>(strategy);
@@ -747,8 +747,8 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_SimilarityPreserving()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.SimilarityPreserving, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateSimilarityPreservingStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<SimilarityPreservingStrategy<double>>(strategy);
@@ -757,8 +757,8 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_FlowBased()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.FlowBased, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateFlowBasedStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<FlowBasedDistillationStrategy<double>>(strategy);
@@ -767,8 +767,8 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_ProbabilisticTransfer()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.ProbabilisticTransfer, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateProbabilisticStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<ProbabilisticDistillationStrategy<double>>(strategy);
@@ -777,8 +777,8 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_VariationalInformation()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.VariationalInformation, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateVariationalStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<VariationalDistillationStrategy<double>>(strategy);
@@ -787,8 +787,8 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_FactorTransfer()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.FactorTransfer, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateFactorTransferStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<FactorTransferDistillationStrategy<double>>(strategy);
@@ -797,8 +797,8 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_NeuronSelectivity()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.NeuronSelectivity, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateNeuronSelectivityStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<NeuronSelectivityDistillationStrategy<double>>(strategy);
@@ -807,24 +807,23 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationStrategyFactory_CreateStrategy_Hybrid()
     {
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.Hybrid, DefaultTemperature, DefaultAlpha);
+        var strategy = DistillationStrategyFactory<double>.CreateHybridStrategy(
+            DefaultTemperature, DefaultAlpha);
 
         Assert.NotNull(strategy);
         Assert.IsType<HybridDistillationStrategy<double>>(strategy);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task DistillationStrategyFactory_Configure_FluentBuilder()
+    public async Task DistillationStrategyFactory_ResolveStrategy_NullDefaultsToResponseBased()
     {
-        var strategy = DistillationStrategyFactory<double>
-            .Configure(DistillationStrategyType.ResponseBased)
-            .WithTemperature(5.0)
-            .WithAlpha(0.5)
-            .Build();
+        var strategy = DistillationStrategyFactory<double>.ResolveStrategy(
+            null, temperature: 5.0, alpha: 0.5);
 
         Assert.NotNull(strategy);
         Assert.IsType<DistillationLoss<double>>(strategy);
+        Assert.Equal(5.0, strategy.Temperature);
+        Assert.Equal(0.5, strategy.Alpha);
     }
 
     #endregion
