@@ -38,6 +38,10 @@ public sealed class ReferencePagedAttentionRunner<T> : ICausalLmRunner<T>, ICaus
     private readonly double[][][] _kStore;   // [layer][maxBlocks*blockSize][dModel]
     private readonly double[][][] _vStore;
 
+    /// <summary>Number of token positions the paged path has actually computed (prefill + decode). Lets tests
+    /// observe compute savings from prefix caching: a cached prefix is not recomputed.</summary>
+    public long PositionsComputed { get; private set; }
+
     /// <summary>Builds a reference paged runner with deterministic (seeded) weights.</summary>
     public ReferencePagedAttentionRunner(
         int vocabularySize, int dModel = 32, int numLayers = 2, int numHeads = 4, int ffnDim = 64,
@@ -149,6 +153,7 @@ public sealed class ReferencePagedAttentionRunner<T> : ICausalLmRunner<T>, ICaus
     // attending causally over the sequence's cached KV (positions 0..pos via the block table).
     private double[] ForwardPositionPaged(int token, int pos, System.Collections.Generic.IReadOnlyList<int> blockTable)
     {
+        PositionsComputed++;
         var x = AddPos(_embed[token], pos);
         for (int l = 0; l < _numLayers; l++)
         {

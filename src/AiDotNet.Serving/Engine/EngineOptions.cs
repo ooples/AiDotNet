@@ -36,6 +36,16 @@ public sealed class EngineOptions
     public AiDotNet.Configuration.KVCacheQuantizationMode KvCacheQuantization { get; init; }
         = AiDotNet.Configuration.KVCacheQuantizationMode.None;
 
+    /// <summary>
+    /// Enables automatic cross-request prefix caching: a new request that begins with the same tokens as a
+    /// previous one reuses that prompt's cached KV instead of recomputing it (block-aligned prefixes only).
+    /// Off by default. On the paged fast path this is a real compute saving.
+    /// </summary>
+    public bool EnablePrefixCache { get; init; }
+
+    /// <summary>Maximum number of cached prefixes (LRU eviction beyond it). Default 128.</summary>
+    public int PrefixCacheCapacity { get; init; } = 128;
+
     /// <summary>Validates the options, throwing <see cref="ArgumentException"/> on an invalid value.</summary>
     public void Validate()
     {

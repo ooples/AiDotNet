@@ -32,6 +32,7 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
     private readonly IServingModelRunner<T> _runner;
     private readonly EngineOptions _options;
     private readonly BlockManager _blocks;
+    private readonly PrefixCache? _prefixCache;
 
     private readonly object _intakeLock = new();
     private readonly LinkedList<Sequence> _waiting = new();
@@ -55,6 +56,8 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
         _options = options ?? new EngineOptions();
         _options.Validate();
         _blocks = new BlockManager(_options.NumKvBlocks, _options.BlockSize);
+        if (_options.EnablePrefixCache)
+            _prefixCache = new PrefixCache(_blocks, _options.BlockSize, _options.PrefixCacheCapacity);
     }
 
     /// <inheritdoc/>
@@ -97,10 +100,11 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
         // scheduled sequence reserves the KV slot for the token it will generate at schedule time (before
         // prefill admission consumes free blocks), so the post-sample append can never run out of memory.
         var scheduled = new List<Sequence>();
+        var prefillThisStep = new HashSet<Sequence>();
         int batchTokens = 0;
 
         ScheduleDecode(scheduled, ref batchTokens);
-        SchedulePrefill(scheduled, ref batchTokens, touchedRequests);
+        SchedulePrefill(scheduled, prefillThisStep, ref batchTokens, touchedRequests);
 
         if (scheduled.Count == 0)
             return touchedRequests.Count == 0 ? Array.Empty<RequestOutput>() : CollectOutputs(touchedRequests);
@@ -109,7 +113,7 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
         var executions = new List<SequenceExecution<T>>(scheduled.Count);
         foreach (var seq in scheduled)
         {
-            bool isPrefill = seq.NumComputedTokens == 0;
+            bool isPrefill = prefillThisStep.Contains(seq);
             executions.Add(new SequenceExecution<T>(
                 seq.SequenceId,
                 seq.TokenIds,
@@ -127,7 +131,7 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
         // Sample + advance each scheduled sequence.
         for (int i = 0; i < scheduled.Count; i++)
         {
-            AdvanceSequence(scheduled[i], logits[i]);
+            AdvanceSequence(scheduled[i], logits[i], prefillThisStep.Contains(scheduled[i]));
             touchedRequests.Add(scheduled[i].Request.RequestId);
         }
 
@@ -256,7 +260,8 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
         return null;
     }
 
-    private void SchedulePrefill(List<Sequence> scheduled, ref int batchTokens, HashSet<string> touchedRequests)
+    private void SchedulePrefill(
+        List<Sequence> scheduled, HashSet<Sequence> prefillThisStep, ref int batchTokens, HashSet<string> touchedRequests)
     {
         while (_waiting.First is { } node)
         {
@@ -275,18 +280,59 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
             }
 
             if (_running.Count >= _options.MaxNumSequences) break;
-            // Need room for the prompt AND the first generated token's slot.
-            if (_blocks.BlocksForTokens(needed + 1) > _blocks.NumFreeBlocks) break; // wait for memory
-            if (batchTokens + needed > _options.MaxBatchedTokens && scheduled.Count > 0) break; // budget
+
+            // A shared prefix can come from two places: a sibling pre-forked from its prompt owner (already
+            // allocated here), or a cross-request cache hit. Either way we recompute only the non-shared tail.
+            bool preForked = _blocks.Contains(seq.SequenceId);
+            PrefixCache.Hit? hit = null;
+            int sharedLen;
+            if (preForked)
+            {
+                sharedLen = _blocks.GetLength(seq.SequenceId); // aligned prefix already shared for this sibling
+            }
+            else
+            {
+                bool fresh = seq.Length == seq.PromptLength;
+                hit = (_prefixCache is not null && fresh) ? _prefixCache.Lookup(seq.TokenIds) : null;
+                sharedLen = hit?.PrefixLength ?? 0;
+            }
+
+            int totalBlocks = _blocks.BlocksForTokens(needed + 1);
+            int sharedBlocks = sharedLen > 0 ? _blocks.BlocksForTokens(sharedLen) : 0;
+            int newBlocksNeeded = totalBlocks - sharedBlocks; // shared blocks are free-ridden
+            int tokensToCompute = needed - sharedLen;
+
+            // Under memory pressure, release cached prefixes (LRU) rather than stall — pinned cache blocks must
+            // never deadlock live requests.
+            while (newBlocksNeeded > _blocks.NumFreeBlocks && _prefixCache is { Count: > 0 })
+                _prefixCache.TryEvictOne();
+
+            if (newBlocksNeeded > _blocks.NumFreeBlocks) break; // wait for memory
+            if (batchTokens + tokensToCompute > _options.MaxBatchedTokens && scheduled.Count > 0) break; // budget
 
             _waiting.Remove(node);
-            _blocks.Allocate(seq.SequenceId, needed);
-            _blocks.Append(seq.SequenceId, 1); // reserve the generation slot now
+            if (preForked)
+            {
+                _blocks.Append(seq.SequenceId, tokensToCompute + 1); // remaining prompt + gen slot
+                seq.NumComputedTokens = sharedLen;                   // shared prefix KV valid; prefill computes the tail
+            }
+            else if (sharedLen > 0 && hit is { } h)
+            {
+                _blocks.ForkPrefix(h.CacheSequenceId, seq.SequenceId, sharedLen); // share the cached prefix KV
+                _blocks.Append(seq.SequenceId, tokensToCompute + 1);              // remaining prompt + gen slot
+                seq.NumComputedTokens = sharedLen; // cached prefix KV valid; prefill computes [sharedLen, needed)
+            }
+            else
+            {
+                _blocks.Allocate(seq.SequenceId, needed);
+                _blocks.Append(seq.SequenceId, 1); // reserve the generation slot now
+                seq.NumComputedTokens = 0;         // prefill (also re-prefill for recomputed sequences)
+            }
             seq.State = SequenceState.Running;
-            seq.NumComputedTokens = 0; // prefill (also re-prefill for recomputed sequences)
             _running.Add(seq);
             scheduled.Add(seq);
-            batchTokens += needed;
+            prefillThisStep.Add(seq);
+            batchTokens += tokensToCompute;
         }
     }
 
@@ -302,16 +348,19 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
 
     // ---- Advancing a sequence -------------------------------------------------------------
 
-    private void AdvanceSequence(Sequence seq, Vector<T> logits)
+    private void AdvanceSequence(Sequence seq, Vector<T> logits, bool wasPrefill)
     {
         int lengthBefore = seq.Length;
-        bool wasPrefill = seq.NumComputedTokens == 0;
         seq.NumComputedTokens = lengthBefore; // all current tokens now have cached KV
 
         // The prompt owner just finished prefill: fork its now-computed prompt KV to any deferred siblings,
         // which sample their first token from these same final-position logits (prompt computed once).
         if (wasPrefill && seq.SequenceIndex == 0)
             SpawnDeferredSiblings(seq, logits);
+
+        // Register the freshly-computed prompt prefix for cross-request reuse (block-aligned; no-op if cached).
+        if (wasPrefill && _prefixCache is not null && seq.GeneratedLength == 0)
+            _prefixCache.Register(seq.TokenIds, seq.SequenceId);
 
         int tokenId = LogitsSampler.Sample(logits, seq.Request.SamplingParameters, seq.TokenIds, _rngBySequence[seq.SequenceId]);
         // The KV slot for this token was already reserved at schedule time; appending the token now keeps the
@@ -368,9 +417,22 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
             }
             else
             {
+                // Non-block-aligned prompt: share the aligned full-block prefix (no partial-block copy-on-write
+                // hazard) and let the sibling prefill only the short remaining tail. Falls back to fully
+                // independent prefill when there is no whole shared block.
+                int alignedPrefix = promptLen / _options.BlockSize * _options.BlockSize;
+                int tailBlocks = _blocks.BlocksForTokens(promptLen + 1) - _blocks.BlocksForTokens(alignedPrefix);
+                if (alignedPrefix >= _options.BlockSize && _blocks.NumFreeBlocks >= tailBlocks)
+                {
+                    _blocks.ForkPrefix(owner.SequenceId, sibling.SequenceId, alignedPrefix);
+                    // SchedulePrefill sees it is already allocated (pre-forked) and prefills only the tail.
+                }
+                else
+                {
+                    sibling.NumComputedTokens = 0; // fully independent prefill
+                }
                 sibling.State = SequenceState.Waiting;
-                sibling.NumComputedTokens = 0;
-                _waiting.AddLast(sibling); // independent prefill
+                _waiting.AddLast(sibling);
             }
         }
     }
@@ -432,6 +494,7 @@ public sealed class ContinuousBatchingEngine<T> : IInferenceEngine
     {
         if (_disposed) return;
         _disposed = true;
+        _prefixCache?.Clear();
         if (_runner is IDisposable d) d.Dispose();
     }
 }

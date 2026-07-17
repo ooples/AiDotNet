@@ -143,6 +143,39 @@ public class PrefixSharingTests
     }
 
     [Fact]
+    public void ParallelSampling_NonAlignedPrompt_PagedPath_SharesAlignedPrefix_AndAgrees()
+    {
+        // Prompt length 10 with block size 8 -> aligned prefix of 8 tokens is shared; only the 2-token tail is
+        // recomputed per sibling. Uses the paged runner so we can observe the compute savings.
+        var runner = new ReferencePagedAttentionRunner<double>(
+            vocabularySize: 32, dModel: 32, numLayers: 2, numHeads: 4, ffnDim: 64, blockSize: 8, maxBlocks: 128, seed: 7);
+        using var engine = new ContinuousBatchingEngine<double>(new PagedRunnerAdapter<double>(runner),
+            new EngineOptions { BlockSize = 8, NumKvBlocks = 128, MaxNumSequences = 8 });
+
+        var prompt = Enumerable.Range(1, 10).ToArray(); // 10 tokens (not a multiple of 8)
+        engine.AddRequest(new GenerationRequest("r1", prompt,
+            new SamplingParameters { Temperature = 0.0, MaxTokens = 4, N = 3 }));
+
+        RequestOutput? final = null;
+        int steps = 0;
+        while (engine.HasUnfinishedRequests)
+        {
+            if (++steps > 4000) throw new InvalidOperationException("no convergence");
+            foreach (var o in engine.Step()) if (o.IsFinished) final = o;
+        }
+
+        Assert.Equal(3, final!.Outputs.Count);
+        var reference = final.Outputs[0].TokenIds.ToArray();
+        foreach (var completion in final.Outputs)
+            Assert.Equal(reference, completion.TokenIds.ToArray());
+
+        // Owner prefills all 10 prompt positions; each of the 2 siblings recomputes only the 2-token tail (not
+        // the full 10). So total prefill positions is far below 3 * 10 = 30 independent prefills.
+        // owner(10) + 2 siblings * 2 tail + decode steps (3 seqs * up to 4) << 30 + 12.
+        Assert.True(runner.PositionsComputed < 30, $"expected shared aligned prefix; computed {runner.PositionsComputed} positions");
+    }
+
+    [Fact]
     public void ParallelSampling_AbortBeforePrefill_CleansUp()
     {
         using var engine = new ContinuousBatchingEngine<double>(new CounterRunner(),
