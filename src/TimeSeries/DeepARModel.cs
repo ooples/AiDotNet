@@ -78,6 +78,11 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     private T _normMean = MathHelper.GetNumericOperations<T>().Zero;
     private T _normStd = MathHelper.GetNumericOperations<T>().One;
 
+    // Per-covariate standardization stats (zero-mean / unit-variance over the training rows), populated only
+    // when DeepAROptions.CovariateSize > 0. Empty for the default univariate model.
+    private T[] _covMean = Array.Empty<T>();
+    private T[] _covStd = Array.Empty<T>();
+
     /// <summary>
     /// Initializes a new instance of the DeepARModel class.
     /// </summary>
@@ -123,12 +128,12 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     {
         _lstmLayers.Clear();
 
-        // The recurrence consumes one series value per timestep (inputSize = 1). Covariates
-        // are not fed into the recurrence in this univariate formulation; CovariateSize is
-        // retained on the options for API compatibility but does not change the cell shape.
+        // The first layer consumes the series value plus any covariates (inputSize = 1 + CovariateSize);
+        // deeper layers consume the previous hidden state. CovariateSize = 0 (default) is the univariate model.
+        int firstInputSize = 1 + Math.Max(0, _options.CovariateSize);
         for (int i = 0; i < _options.NumLayers; i++)
         {
-            int layerInputSize = (i == 0) ? 1 : _options.HiddenSize;
+            int layerInputSize = (i == 0) ? firstInputSize : _options.HiddenSize;
             _lstmLayers.Add(new DeepARLstmCellTape<T>(layerInputSize, _options.HiddenSize, 42 + i * 1000));
         }
 
@@ -164,13 +169,14 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     /// LSTM) and the Adam optimizer, on the Gaussian negative log-likelihood.
     /// </summary>
     /// <remarks>
-    /// The label vector <paramref name="y"/> is interpreted as the univariate series. Each
-    /// sample unrolls the LSTM over an L-step lookback window and is supervised one-step-ahead
-    /// at every timestep (teacher forcing): the input at step t is y_{s+t} and the target is
-    /// y_{s+t+1}. Autodiff yields gradients for every LSTM gate weight/bias and the Gaussian
-    /// head; the previous implementation used hand-derived per-sample scalar gradients, which
-    /// this rewrite removes entirely. The mean is emitted as a residual on the current
-    /// observation (μ_t = x_t + Δ(h_t)); see <see cref="ForwardTape"/>.
+    /// The label vector <paramref name="y"/> is the univariate series. Each sample unrolls the LSTM over an
+    /// L-step lookback window and is supervised one-step-ahead at every timestep (teacher forcing): the input
+    /// at step t is y_{s+t} and the target is y_{s+t+1}. When <see cref="DeepAROptions{T}.CovariateSize"/> &gt; 0,
+    /// <paramref name="x"/> must supply one covariate row per series index (<c>[N, ≥CovariateSize]</c>, aligned
+    /// to <paramref name="y"/>); those standardized covariates are concatenated to the series value at each
+    /// step, so the recurrence conditions on them. Autodiff yields gradients for every LSTM gate weight/bias
+    /// and the selected distribution head. The head emits the mean as a residual on the current observation
+    /// (μ_t = x_t + Δ(h_t)); see <see cref="ForwardHidden"/> and <see cref="DeepARDistributionHead{T}"/>.
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
@@ -204,6 +210,45 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         var yNorm = new Vector<T>(y.Length);
         for (int i = 0; i < y.Length; i++)
             yNorm[i] = NumOps.Divide(NumOps.Subtract(y[i], yMean), yStd);
+
+        // Covariate contract: when CovariateSize > 0, x must supply one covariate row per series index
+        // (x is [N, >=CovariateSize], aligned to y). Standardize each covariate column so the recurrence sees
+        // well-scaled inputs. When CovariateSize == 0 (default) x is the univariate series-window contract and
+        // is not consumed here.
+        int cov = Math.Max(0, _options.CovariateSize);
+        if (cov > 0)
+        {
+            if (x is null || x.Rows != y.Length || x.Columns < cov)
+            {
+                throw new ArgumentException(
+                    $"DeepAR covariate contract violated: with CovariateSize={cov}, x must be [{y.Length}, >={cov}] " +
+                    $"(one covariate row per series index), but got [{x?.Rows ?? 0}, {x?.Columns ?? 0}].");
+            }
+
+            _covMean = new T[cov];
+            _covStd = new T[cov];
+            for (int c = 0; c < cov; c++)
+            {
+                T m = NumOps.Zero;
+                for (int i = 0; i < x.Rows; i++)
+                    m = NumOps.Add(m, x[i, c]);
+                m = NumOps.Divide(m, NumOps.FromDouble(x.Rows));
+
+                T v = NumOps.Zero;
+                for (int i = 0; i < x.Rows; i++)
+                {
+                    T d = NumOps.Subtract(x[i, c], m);
+                    v = NumOps.Add(v, NumOps.Multiply(d, d));
+                }
+                v = NumOps.Divide(v, NumOps.FromDouble(x.Rows));
+                T s = NumOps.Sqrt(v);
+                if (NumOps.LessThanOrEquals(s, NumOps.FromDouble(1e-10)))
+                    s = NumOps.One;
+
+                _covMean[c] = m;
+                _covStd[c] = s;
+            }
+        }
 
         // Adam optimizer (Salinas et al. 2020 use Adam).
         var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
@@ -265,17 +310,28 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
                 int b = validIndices.Count;
 
-                // Per-timestep input tensors [1, B] and the [B, L] target window.
-                var inputSteps = new Tensor<T>[lookback];
+                // Per-timestep observation [1, B] (drives the residual-mean skip) and LSTM input
+                // [1+cov, B] (series value + standardized covariates), plus the [B, L] target window.
+                int inputDim = 1 + cov;
+                var obsSteps = new Tensor<T>[lookback];
+                var lstmInputSteps = new Tensor<T>[lookback];
                 for (int t = 0; t < lookback; t++)
                 {
-                    var xt = new Tensor<T>(new[] { 1, b });
+                    var obs = new Tensor<T>(new[] { 1, b });
+                    var xt = new Tensor<T>(new[] { inputDim, b });
                     for (int bi = 0; bi < b; bi++)
                     {
                         int idx = validIndices[bi];
-                        xt[0, bi] = yNorm[idx - lookback + t];
+                        int seriesIdx = idx - lookback + t;
+                        T yv = yNorm[seriesIdx];
+                        obs[0, bi] = yv;
+                        xt[0, bi] = yv;
+                        for (int c = 0; c < cov; c++)
+                            xt[1 + c, bi] = NumOps.Divide(NumOps.Subtract(x[seriesIdx, c], _covMean[c]), _covStd[c]);
                     }
-                    inputSteps[t] = xt;
+
+                    obsSteps[t] = obs;
+                    lstmInputSteps[t] = xt;
                 }
 
                 var targetData = new T[b * lookback];
@@ -291,8 +347,8 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
                 // Unroll the LSTM to per-step top hidden states, then let the selected distribution head
                 // build its own likelihood loss (the head owns the residual-mean skip + distribution math).
-                var hiddenSteps = ForwardHidden(inputSteps, b);
-                var batchLoss = _head.ComputeBatchLoss(hiddenSteps, inputSteps, batchTarget);
+                var hiddenSteps = ForwardHidden(lstmInputSteps, b);
+                var batchLoss = _head.ComputeBatchLoss(hiddenSteps, obsSteps, batchTarget);
 
                 var allGrads = tape.ComputeGradients(batchLoss, sources: null);
                 var grads = new Dictionary<Tensor<T>, Tensor<T>>(
@@ -445,6 +501,13 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     private DeepARPredictiveDist<T> PredictDistNorm(Vector<T> input)
     {
+        if (_options.CovariateSize > 0)
+        {
+            throw new InvalidOperationException(
+                "This DeepAR model was trained with covariates (CovariateSize > 0). Use ForecastWithCovariates(...), " +
+                "which supplies the aligned covariate rows — the univariate Predict path cannot fabricate them.");
+        }
+
         // If the window is shorter than the lookback, LEFT-PAD it with its own first value while keeping the
         // caller's real values (in particular the most-recent one, which drives the residual skip at the head).
         // NOTE: this previously replaced the window with a fixed slice of the TRAINING tail — identical for every
@@ -537,13 +600,110 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
             samples.Add(forecast);
         }
 
+        return BuildQuantiles(samples, quantiles);
+    }
+
+    /// <summary>
+    /// Covariate-aware probabilistic forecast: same Monte-Carlo autoregressive rollout as
+    /// <see cref="ForecastWithQuantiles"/>, but each step conditions on covariates. Requires
+    /// <see cref="DeepAROptions{T}.CovariateSize"/> &gt; 0. <paramref name="historyCovariates"/> is the
+    /// <c>[L, CovariateSize]</c> covariate block aligned to <paramref name="history"/>, and
+    /// <paramref name="futureCovariates"/> is the <c>[horizon, CovariateSize]</c> KNOWN-future block used as
+    /// each forecast step is rolled in. This is the inference path for a covariate-trained model.
+    /// </summary>
+    public Dictionary<double, Vector<T>> ForecastWithCovariates(
+        Vector<T> history, Matrix<T> historyCovariates, Matrix<T> futureCovariates, double[] quantiles)
+    {
+        int cov = _options.CovariateSize;
+        if (cov <= 0)
+            throw new InvalidOperationException("ForecastWithCovariates requires CovariateSize > 0; use ForecastWithQuantiles for the univariate model.");
+        ArgumentNullException.ThrowIfNull(history);
+        ArgumentNullException.ThrowIfNull(historyCovariates);
+        ArgumentNullException.ThrowIfNull(futureCovariates);
+
+        int L = history.Length;
+        if (historyCovariates.Rows != L || historyCovariates.Columns < cov)
+            throw new ArgumentException($"historyCovariates must be [{L}, >={cov}]; got [{historyCovariates.Rows}, {historyCovariates.Columns}].");
+        int horizon = _options.ForecastHorizon;
+        if (futureCovariates.Rows < horizon || futureCovariates.Columns < cov)
+            throw new ArgumentException($"futureCovariates must be [>={horizon}, >={cov}]; got [{futureCovariates.Rows}, {futureCovariates.Columns}].");
+
+        var samples = new List<Vector<T>>();
+        for (int s = 0; s < _options.NumSamples; s++)
+        {
+            var winVals = history.Clone();
+            var winCov = new T[L][];
+            for (int i = 0; i < L; i++)
+            {
+                winCov[i] = new T[cov];
+                for (int c = 0; c < cov; c++)
+                    winCov[i][c] = historyCovariates[i, c];
+            }
+
+            var forecast = new Vector<T>(horizon);
+            for (int hStep = 0; hStep < horizon; hStep++)
+            {
+                var dist = PredictDistNormCov(winVals, winCov);
+                T sampleNorm = dist.SampleNorm(_random);
+                T sample = NumOps.Add(NumOps.Multiply(sampleNorm, _normStd), _normMean);
+                forecast[hStep] = sample;
+
+                // Slide the window forward one step: drop the oldest (value, covariate row), append the drawn
+                // sample paired with the known-future covariate row for this step.
+                for (int i = 0; i < L - 1; i++)
+                {
+                    winVals[i] = winVals[i + 1];
+                    for (int c = 0; c < cov; c++)
+                        winCov[i][c] = winCov[i + 1][c];
+                }
+                winVals[L - 1] = sample;
+                for (int c = 0; c < cov; c++)
+                    winCov[L - 1][c] = futureCovariates[hStep, c];
+            }
+
+            samples.Add(forecast);
+        }
+
+        return BuildQuantiles(samples, quantiles);
+    }
+
+    /// <summary>
+    /// Covariate-aware point forecast (the head's mean, in original scale) for the value that follows the
+    /// given <c>[L]</c> series window and its aligned <c>[L, CovariateSize]</c> covariate rows. Deterministic
+    /// (no sampling). Requires <see cref="DeepAROptions{T}.CovariateSize"/> &gt; 0.
+    /// </summary>
+    public T PredictNextWithCovariates(Vector<T> historyWindow, Matrix<T> historyCovariates)
+    {
+        int cov = _options.CovariateSize;
+        if (cov <= 0)
+            throw new InvalidOperationException("PredictNextWithCovariates requires CovariateSize > 0; use PredictSingle for the univariate model.");
+        ArgumentNullException.ThrowIfNull(historyWindow);
+        ArgumentNullException.ThrowIfNull(historyCovariates);
+        if (historyCovariates.Rows != historyWindow.Length || historyCovariates.Columns < cov)
+            throw new ArgumentException($"historyCovariates must be [{historyWindow.Length}, >={cov}]; got [{historyCovariates.Rows}, {historyCovariates.Columns}].");
+
+        var covWindow = new T[historyWindow.Length][];
+        for (int i = 0; i < historyWindow.Length; i++)
+        {
+            covWindow[i] = new T[cov];
+            for (int c = 0; c < cov; c++)
+                covWindow[i][c] = historyCovariates[i, c];
+        }
+
+        var dist = PredictDistNormCov(historyWindow, covWindow);
+        return NumOps.Add(NumOps.Multiply(dist.MeanNorm, _normStd), _normMean);
+    }
+
+    /// <summary>Empirical quantile extraction shared by the univariate and covariate forecast paths.</summary>
+    private Dictionary<double, Vector<T>> BuildQuantiles(List<Vector<T>> samples, double[] quantiles)
+    {
+        var result = new Dictionary<double, Vector<T>>();
         foreach (var q in quantiles)
         {
             var quantileForecast = new Vector<T>(_options.ForecastHorizon);
-
             for (int hStep = 0; hStep < _options.ForecastHorizon; hStep++)
             {
-                var values = new List<double>();
+                var values = new List<double>(samples.Count);
                 foreach (var sample in samples)
                     values.Add(Convert.ToDouble(sample[hStep]));
                 values.Sort();
@@ -559,6 +719,48 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         return result;
     }
 
+    /// <summary>
+    /// Covariate-aware eager unroll (B = 1): runs the LSTM over a <c>[L]</c> series window plus its aligned
+    /// <c>[L][CovariateSize]</c> covariate rows (both original-scale; standardized here with the training
+    /// stats) and returns the head's normalized predictive distribution.
+    /// </summary>
+    private DeepARPredictiveDist<T> PredictDistNormCov(Vector<T> seriesWindow, T[][] covWindow)
+    {
+        int layers = _lstmLayers.Count;
+        int hidden = _options.HiddenSize;
+        int cov = _options.CovariateSize;
+
+        var hState = new Tensor<T>[layers];
+        var cState = new Tensor<T>[layers];
+        for (int l = 0; l < layers; l++)
+        {
+            hState[l] = new Tensor<T>(new[] { hidden, 1 });
+            cState[l] = new Tensor<T>(new[] { hidden, 1 });
+        }
+
+        T lastNorm = NumOps.Zero;
+        for (int t = 0; t < seriesWindow.Length; t++)
+        {
+            T normValue = NumOps.Divide(NumOps.Subtract(seriesWindow[t], _normMean), _normStd);
+            lastNorm = normValue;
+            var xt = new Tensor<T>(new[] { 1 + cov, 1 });
+            xt[0, 0] = normValue;
+            for (int c = 0; c < cov; c++)
+                xt[1 + c, 0] = NumOps.Divide(NumOps.Subtract(covWindow[t][c], _covMean[c]), _covStd[c]);
+
+            Tensor<T> layerInput = xt;
+            for (int l = 0; l < layers; l++)
+            {
+                var (hNew, cNew) = _lstmLayers[l].Step(layerInput, hState[l], cState[l]);
+                hState[l] = hNew;
+                cState[l] = cNew;
+                layerInput = hNew;
+            }
+        }
+
+        return _head.PredictNorm(hState[layers - 1], lastNorm);
+    }
+
     protected override void SerializeCore(BinaryWriter writer)
     {
         writer.Write(_options.HiddenSize);
@@ -567,6 +769,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         // options passed to the deserializing constructor.
         writer.Write(_options.LikelihoodType ?? "Gaussian");
         writer.Write(_options.StudentTDegreesOfFreedom);
+        writer.Write(_options.CovariateSize); // needed before InitializeModel to size the first LSTM layer
 
         writer.Write(_lstmLayers.Count);
         foreach (var lstm in _lstmLayers)
@@ -576,6 +779,14 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
         writer.Write(Convert.ToDouble(_normMean));
         writer.Write(Convert.ToDouble(_normStd));
+
+        // Covariate standardization stats (empty for the univariate model).
+        writer.Write(_covMean.Length);
+        for (int c = 0; c < _covMean.Length; c++)
+        {
+            writer.Write(Convert.ToDouble(_covMean[c]));
+            writer.Write(Convert.ToDouble(_covStd[c]));
+        }
 
         writer.Write(_trainingSeries.Length);
         for (int i = 0; i < _trainingSeries.Length; i++)
@@ -588,6 +799,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         _options.NumLayers = reader.ReadInt32();
         _options.LikelihoodType = reader.ReadString();
         _options.StudentTDegreesOfFreedom = reader.ReadDouble();
+        _options.CovariateSize = reader.ReadInt32();
 
         InitializeModel();
 
@@ -599,6 +811,15 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
         _normMean = NumOps.FromDouble(reader.ReadDouble());
         _normStd = NumOps.FromDouble(reader.ReadDouble());
+
+        int covLen = reader.ReadInt32();
+        _covMean = new T[covLen];
+        _covStd = new T[covLen];
+        for (int c = 0; c < covLen; c++)
+        {
+            _covMean[c] = NumOps.FromDouble(reader.ReadDouble());
+            _covStd[c] = NumOps.FromDouble(reader.ReadDouble());
+        }
 
         try
         {
@@ -650,6 +871,8 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
             clone.ModelParameters = new Vector<T>(ModelParameters);
         clone._normMean = _normMean;
         clone._normStd = _normStd;
+        clone._covMean = (T[])_covMean.Clone();
+        clone._covStd = (T[])_covStd.Clone();
         return clone;
     }
 
