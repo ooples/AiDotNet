@@ -15,8 +15,8 @@ namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 /// <summary>
 /// Regression tests for the three facade-optimization blockers:
 /// <list type="number">
-/// <item>ConfigureMemoryManagement stays concrete-only (documented compat policy); verify it chains fluently on
-/// the concrete builder so consumers casting to it can chain the call.</item>
+/// <item>ConfigureMemoryManagement is declared on IAiModelBuilder; verify it's reachable through the interface
+/// and honours the fluent contract (returns the same builder instance).</item>
 /// <item>Quantization must preserve a model's trained state for families (e.g. gradient-boosted trees) that keep
 /// trained internals outside the parameter vector — previously Predict threw "Model must be trained".</item>
 /// <item>The facade's supervised build must train a rank-3 tensor forecasting model (previously the optimizer's
@@ -29,12 +29,12 @@ public sealed class FacadeOptimizationBlockerTests
 
     [Fact]
     [Trait("category", "integration-configure-method")]
-    public void ConfigureMemoryManagement_chains_fluently_on_the_concrete_builder()
+    public void ConfigureMemoryManagement_is_reachable_through_the_interface_and_fluent()
     {
-        // ConfigureMemoryManagement is intentionally concrete-only (see the IAiModelBuilder note + the
-        // completeness test's allowlist). Verify it honours the fluent contract — returns the SAME builder
-        // instance — so a consumer that casts to the concrete type can chain it.
-        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        // ConfigureMemoryManagement must be callable on IAiModelBuilder<T,TInput,TOutput> (not only the concrete
+        // builder) and honour the fluent contract — return the SAME builder instance for chaining.
+        global::AiDotNet.Interfaces.IAiModelBuilder<double, Matrix<double>, Vector<double>> builder =
+            new AiModelBuilder<double, Matrix<double>, Vector<double>>();
         var chained = builder.ConfigureMemoryManagement(
             global::AiDotNet.Training.Memory.TrainingMemoryConfig.ForTransformers());
         Assert.Same(builder, chained);
