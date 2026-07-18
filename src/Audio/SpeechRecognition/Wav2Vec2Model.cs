@@ -424,16 +424,18 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Layers.Clear();
         Layers.AddRange(layers);
 
-        // Feature encoder: 7 conv layers + 1 projection = 8
-        int featureEncoderCount = 8;
-        // Transformer layers: numTransformerLayers * 3 (selfAttn + ff + ffOut) + 1 CTC projection
-        int transformerCount = _numTransformerLayers * 3;
+        // Feature encoder: 7 Conv1D + 1 feature-projection Dense + 1 feature-projection LayerNorm = 9
+        // (see CreateWav2Vec2Layers — the LayerNorm was added for paper-faithful feature projection).
+        int featureEncoderCount = 9;
+        // Transformer layers: numTransformerLayers residual TransformerEncoderBlocks (one per layer;
+        // each block internally does MHA + FFN + the two LayerNorms), + 1 CTC projection.
+        int transformerCount = _numTransformerLayers;
         int expectedTotal = featureEncoderCount + transformerCount + 1;
 
         if (Architecture.Layers != null && layers.Count != expectedTotal)
         {
             System.Diagnostics.Debug.WriteLine(
-                $"[Wav2Vec2] Warning: Expected {expectedTotal} layers (8 encoder + {transformerCount} transformer + 1 CTC), " +
+                $"[Wav2Vec2] Warning: Expected {expectedTotal} layers (9 encoder + {transformerCount} transformer + 1 CTC), " +
                 $"but got {layers.Count}. Layer distribution may be incorrect.");
         }
 
@@ -445,15 +447,15 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     // so they must be rebuilt whenever Layers is replaced — critically after deserialization, where the
     // base clears Layers and adds freshly-deserialized (trained) layers. Without this, a cloned/loaded
     // model keeps its ctor's random-init sub-list layers and predicts as if untrained (#1221 class:
-    // Clone_AfterTraining). Distribution order matches CreateWav2Vec2Layers: [0..7]=feature encoder,
-    // [8..8+3N-1]=transformer, [^1]=CTC projection.
+    // Clone_AfterTraining). Distribution order matches CreateWav2Vec2Layers: [0..8]=feature encoder,
+    // [9..9+N-1]=transformer (one residual TransformerEncoderBlock each), [^1]=CTC projection.
     private void DistributeLayersToSubLists()
     {
         _featureEncoderLayers.Clear();
         _transformerLayers.Clear();
 
-        int featureEncoderCount = 8;
-        int transformerCount = _numTransformerLayers * 3;
+        int featureEncoderCount = 9;
+        int transformerCount = _numTransformerLayers;
 
         for (int i = 0; i < featureEncoderCount && i < Layers.Count; i++)
             _featureEncoderLayers.Add(Layers[i]);

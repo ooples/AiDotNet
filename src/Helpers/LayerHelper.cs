@@ -30520,7 +30520,6 @@ public static class LayerHelper<T>
         int[]? featureEncoderChannels = null)
     {
         IActivationFunction<T> gelu = new GELUActivation<T>();
-        IActivationFunction<T> identity = new IdentityActivation<T>();
 
         featureEncoderKernelSizes ??= [10, 3, 3, 3, 3, 2, 2];
         featureEncoderStrides ??= [5, 2, 2, 2, 2, 2, 2];
@@ -30543,18 +30542,26 @@ public static class LayerHelper<T>
                 activation: gelu);
         }
 
-        // Feature projection
-        int lastEncoderChannel = featureEncoderChannels[^1];
+        // Feature projection (Baevski et al. 2020 §2 / HF Wav2Vec2FeatureProjection): a LayerNorm on the
+        // encoder output followed by a linear projection to the transformer width. The LayerNorm is
+        // applied AFTER the channels->time transpose (RunModel transposes to [B, T', 512] before running
+        // these), so it normalizes over the feature axis — the paper-faithful placement and a key
+        // stabilizer for the deep transformer that follows. Emitted as [Dense -> LayerNorm]; RunModel
+        // walks both post-transpose.
         yield return new DenseLayer<T>(hiddenDim, gelu);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
 
-        // Transformer layers
+        // Transformer encoder: paper-faithful RESIDUAL blocks (Baevski et al. 2020; Vaswani et al. 2017).
+        // TransformerEncoderBlock is a Post-LN block = residual self-attention + residual GELU-FFN with a
+        // LayerNorm after each sublayer. The residual connections are the gradient highway a 12-deep
+        // encoder needs; the previous residual-FREE MHA + 2x Dense stack (no skip, no LayerNorm) had no
+        // such highway, matching the collapse pattern master #1838 fixed for the BERT/ASR factories.
+        // One block per layer (was three bare layers per layer) — see Wav2Vec2Model's transformerCount.
         int frameRateDivisor = featureEncoderStrides.Aggregate(1, (a, b) => a * b);
         int maxFrames = (sampleRate * maxAudioLengthSeconds) / frameRateDivisor;
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identity);
-            yield return new DenseLayer<T>(ffDim, gelu);
-            yield return new DenseLayer<T>(hiddenDim, identity);
+            yield return new TransformerEncoderBlock<T>(hiddenDim, numHeads, ffDim, dropoutRate: 0.0, ffnActivation: gelu);
         }
 
         // CTC projection
