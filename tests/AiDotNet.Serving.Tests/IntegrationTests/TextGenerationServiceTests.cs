@@ -102,9 +102,13 @@ public class TextGenerationServiceTests
         var response = service.Generate("lm", NumericType.Float, request);
 
         Assert.Null(response.Error);
-        Assert.Equal(1, response.NumGenerated);
-        Assert.Equal(new[] { 2 }, response.GeneratedTokens);
-        Assert.Equal(new[] { 1, 2 }, response.AllTokens);
+        // The EOS token (2) is the terminator, not completion content, so it is excluded from the generated
+        // tokens (and usage) on BOTH generation paths. A model that emits EOS as its first token therefore
+        // yields zero content tokens and stops. (Previously the full-context fallback wrongly kept the EOS
+        // token while the incremental path dropped it — the path-dependent inconsistency CodeRabbit flagged.)
+        Assert.Equal(0, response.NumGenerated);
+        Assert.Empty(response.GeneratedTokens);
+        Assert.Equal(new[] { 1 }, response.AllTokens);
     }
 
     [Fact(Timeout = 120000)]
