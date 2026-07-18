@@ -162,7 +162,8 @@ public sealed class TextGenerationService : ITextGenerationService
             FrequencyPenalty = (float)request.FrequencyPenalty,
             PresencePenalty = (float)request.PresencePenalty,
             IncludeLogProbs = request.Logprobs,
-            TopLogProbs = request.TopLogprobs
+            TopLogProbs = request.TopLogprobs,
+            AdapterId = request.AdapterId
         };
     }
 

@@ -370,6 +370,14 @@ public class GenerationRequest<T>
     public float PresencePenalty { get; set; } = 0.0f;
 
     /// <summary>
+    /// Optional multi-LoRA adapter name to activate for this request (S-LoRA-style serving). Null runs the
+    /// model as-is. When set, the batcher switches the shared base model's multi-LoRA layers to this task
+    /// before the request's forwards. Requests using different adapters are decoded per-sequence rather than
+    /// co-batched, so each sees its own adapter.
+    /// </summary>
+    public string? AdapterId { get; set; }
+
+    /// <summary>
     /// Whether to record per-token log-probabilities during generation (OpenAI <c>logprobs</c>).
     /// </summary>
     public bool IncludeLogProbs { get; set; } = false;

@@ -84,7 +84,10 @@ public sealed class OpenAiController : ControllerBase
         if (request == null || request.Messages == null || request.Messages.Count == 0)
             return OpenAiError(StatusCodes.Status400BadRequest, "'messages' is required and cannot be empty.");
 
-        if (!TryPrepare(request.Model, out var ctx, out var error))
+        // Multi-LoRA: the model field may be "baseModel@adapter" to serve a shared base with a per-request
+        // adapter. Resolve the base model for lookup and carry the adapter through to the engine.
+        (string baseModel, string? adapterId) = SplitModelAndAdapter(request.Model);
+        if (!TryPrepare(baseModel, out var ctx, out var error))
             return error!;
 
         string prompt = ChatTemplate.Render(request.Messages.Select(m => (m.Role, m.TextContent())));
@@ -109,6 +112,7 @@ public sealed class OpenAiController : ControllerBase
         {
             return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "response_format");
         }
+        sdr.AdapterId = adapterId;
         var stops = request.ResolveStop();
         string id = "chatcmpl-" + Guid.NewGuid().ToString("N");
         long created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -393,6 +397,25 @@ public sealed class OpenAiController : ControllerBase
 
     private static string DecodeToken(GenContext ctx, int tokenId)
         => ctx.Tokenizer.Decode(new List<int> { tokenId }, skipSpecialTokens: false) ?? string.Empty;
+
+    /// <summary>Splits an OpenAI <c>model</c> value of the form "baseModel@adapter" into the base model name
+    /// and optional multi-LoRA adapter id. Without an "@", the whole string is the base model and there is no
+    /// adapter.</summary>
+    private static (string BaseModel, string? AdapterId) SplitModelAndAdapter(string model)
+    {
+        if (string.IsNullOrEmpty(model))
+        {
+            return (model ?? string.Empty, null);
+        }
+        int at = model.IndexOf('@');
+        if (at < 0)
+        {
+            return (model, null);
+        }
+        string baseModel = model.Substring(0, at);
+        string adapter = model.Substring(at + 1);
+        return (baseModel, string.IsNullOrWhiteSpace(adapter) ? null : adapter);
+    }
 
     /// <summary>Parses an OpenAI <c>logit_bias</c> map (token-id string -&gt; bias number) into a typed
     /// dictionary. Throws <see cref="ArgumentException"/> for malformed entries so the caller returns 400.</summary>

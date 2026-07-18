@@ -3179,12 +3179,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                             {
                                 modelForSequence = (NeuralNetworkBase<T>)model.Clone();
 
-                                int appliedCount = 0;
-                                foreach (var multi in modelForSequence.Layers.OfType<AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T>>())
-                                {
-                                    multi.SetCurrentTask(_multiLoRATask);
-                                    appliedCount++;
-                                }
+                                // Shared with the serving batcher (AiDotNet.LoRA.LoRAAdapterSelection) so the
+                                // "switch every adapter layer to this task" logic lives in exactly one place.
+                                int appliedCount = AiDotNet.LoRA.LoRAAdapterSelection.SelectTask(modelForSequence, _multiLoRATask);
 
                                 InferenceDiagnostics.RecordDecision(
                                     area: "InferenceSession",

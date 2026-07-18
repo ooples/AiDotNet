@@ -51,6 +51,11 @@ internal class ContinuousBatcher<T> : IDisposable
     // with real KV caching — instead of the stateless full-context recompute above. Falls back to _model when
     // a model cannot build the paged path.
     private readonly NeuralNetworkBase<T>? _incrementalModel;
+
+    // True when the incremental model has multi-LoRA adapter layers, so per-request adapter selection is
+    // possible. When it is, sequences requesting an adapter decode per-sequence (the shared base model's
+    // active adapter is a mutable, global-to-the-model setting) rather than co-batching.
+    private readonly bool _hasMultiLoRA;
     private readonly PagedKVCache<T>? _pagedCache;
     // RadixAttention prompt-prefix sharing over the shared paged cache (built with the paged path). New
     // prompts fork the longest registered strict prefix copy-on-write and forward only the suffix.
@@ -193,6 +198,7 @@ internal class ContinuousBatcher<T> : IDisposable
         Guard.NotNull(pagedCache);
         _config = config;
         _incrementalModel = incrementalModel;
+        _hasMultiLoRA = AiDotNet.LoRA.LoRAAdapterSelection.HasMultiLoRAAdapters(incrementalModel);
         _pagedCache = pagedCache;
         _prefixCache = new RadixPrefixCache<T>(pagedCache);
         _draftModelOverride = draftModel;
@@ -331,7 +337,7 @@ internal class ContinuousBatcher<T> : IDisposable
         // SupportsBatchedPrefill=false) would see the padded width and diverge from a single-prompt
         // forward, so only batch prefill for models that accept a multi-token forward.
         bool batchedPrefillDone = false;
-        if (UsePagedPath && _config.SupportsBatchedPrefill && _config.MaxPrefillChunkTokens <= 0 && prefillSequences.Count > 1)
+        if (UsePagedPath && _config.SupportsBatchedPrefill && _config.MaxPrefillChunkTokens <= 0 && prefillSequences.Count > 1 && !RequiresPerSequenceAdapter(prefillSequences))
         {
             var batchedPrefill = RunBatchedPagedPrefill(prefillSequences);
             if (batchedPrefill is not null)
@@ -360,7 +366,7 @@ internal class ContinuousBatcher<T> : IDisposable
         // batched forward (true continuous batching) instead of one forward per sequence — the Phase 2
         // throughput win. Otherwise decode per sequence (speculation, single-sequence, or stateless path).
         var generating = decodeSequences.Where(s => s.Status == SequenceStatus.Generating).ToList();
-        if (UsePagedPath && generating.Count > 1)
+        if (UsePagedPath && generating.Count > 1 && !RequiresPerSequenceAdapter(generating))
         {
             // One batched forward serves the whole decode batch: plain batched decode when speculation is
             // off, and batched speculative verify (grouped by draft length) when it is on.
@@ -543,6 +549,7 @@ internal class ContinuousBatcher<T> : IDisposable
     private int? RunPagedPrefill(SequenceState<T> sequence)
     {
         if (_pagedCache is not { } cache || _incrementalModel is not { } model) return null;
+        ApplyAdapter(sequence);
 
         long seqId = sequence.SequenceId;
         var prompt = sequence.TokenIds;
@@ -690,6 +697,7 @@ internal class ContinuousBatcher<T> : IDisposable
     private IReadOnlyList<int> RunPagedDecodeStep(SequenceState<T> sequence)
     {
         if (_incrementalModel is not { } model) return Array.Empty<int>();
+        ApplyAdapter(sequence);
 
         long seqId = sequence.SequenceId;
         int position = _pagedPositions.TryGetValue(seqId, out var p) ? p : sequence.PromptLength;
@@ -1516,6 +1524,29 @@ internal class ContinuousBatcher<T> : IDisposable
             sequence.Request.Seed is { } seed
                 ? RandomHelper.CreateSeededRandom(seed)
                 : RandomHelper.CreateSecureRandom());
+
+    // Switches the shared base model to the sequence's requested LoRA adapter before its forward. A no-op
+    // unless the model has multi-LoRA layers and the request named an adapter. The batcher's single-loop
+    // execution means this global-to-the-model selection is race-free between sequential forwards.
+    private void ApplyAdapter(SequenceState<T> sequence)
+    {
+        if (_hasMultiLoRA && _incrementalModel is { } model && sequence.Request.AdapterId is { } adapterId)
+        {
+            AiDotNet.LoRA.LoRAAdapterSelection.SelectTask(model, adapterId);
+        }
+    }
+
+    // True when any sequence in the set requests a specific LoRA adapter — such sequences must decode
+    // per-sequence (each selects its own adapter) rather than through a single co-batched forward.
+    private bool RequiresPerSequenceAdapter(IReadOnlyCollection<SequenceState<T>> sequences)
+    {
+        if (!_hasMultiLoRA) return false;
+        foreach (var s in sequences)
+        {
+            if (s.Request.AdapterId is not null) return true;
+        }
+        return false;
+    }
 
     // Returns log(softmax(logits / temperature)) as a new array. Masked (-inf) logits map to -inf, so they
     // never appear as candidates and contribute nothing to the normalizer.
