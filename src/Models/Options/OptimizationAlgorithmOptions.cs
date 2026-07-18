@@ -159,6 +159,26 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     public double MaxLearningRate { get; set; } = 1.0;
 
     /// <summary>
+    /// Gets or sets how many times the learning rate is REDUCED on a validation/fitness plateau before early
+    /// stopping actually fires (ReduceLROnPlateau coordinated with early stopping — "reduce first, stop only
+    /// once reduction stops helping").
+    /// </summary>
+    /// <value>The maximum plateau reductions, defaulting to 0 (stop immediately on plateau — historical behavior).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When training stops improving, instead of quitting right away this first
+    /// takes smaller steps (a lower learning rate) to see if it can squeeze out a better result, and only quits
+    /// once even the smaller steps stop helping. Each reduction gives training a fresh patience window.</para>
+    /// </remarks>
+    public int MaxLearningRateReductionsOnPlateau { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets the factor the learning rate is multiplied by at each plateau reduction (floored at
+    /// <see cref="MinLearningRate"/>). Only used when <see cref="MaxLearningRateReductionsOnPlateau"/> &gt; 0.
+    /// </summary>
+    /// <value>The plateau reduction factor, defaulting to 0.5 (halve the learning rate).</value>
+    public double PlateauLearningRateReductionFactor { get; set; } = 0.5;
+
+    /// <summary>
     /// Gets or sets whether to automatically adjust the momentum during training.
     /// </summary>
     /// <value>True to use adaptive momentum (default), false otherwise.</value>
