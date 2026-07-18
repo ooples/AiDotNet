@@ -32,12 +32,14 @@ public sealed class OpenAiController : ControllerBase
     private readonly ITokenizerRegistry _tokenizers;
     private readonly ITextGenerationService _textGeneration;
     private readonly ILogger<OpenAiController> _logger;
+    private readonly Configuration.ServingLimitsOptions _limits;
 
     public OpenAiController(
         IModelRepository modelRepository,
         ITokenizerRegistry tokenizers,
         ITextGenerationService textGeneration,
-        ILogger<OpenAiController> logger)
+        ILogger<OpenAiController> logger,
+        Configuration.ServingLimitsOptions? limits = null)
     {
         Guard.NotNull(modelRepository);
         _modelRepository = modelRepository;
@@ -47,6 +49,28 @@ public sealed class OpenAiController : ControllerBase
         _textGeneration = textGeneration;
         Guard.NotNull(logger);
         _logger = logger;
+        // Optional: when no ServingLimitsOptions is registered in DI, the defaults apply (limits stay active).
+        _limits = limits ?? new Configuration.ServingLimitsOptions();
+    }
+
+    // Enforces the configured per-request generation limits at the HTTP boundary. Returns an OpenAI 400
+    // error result when a limit is exceeded (rejected, not silently clamped), or null when within limits.
+    private ObjectResult? CheckLimits(int promptTokens, int requestedMaxTokens, int requestedN)
+    {
+        if (requestedN < 1 || requestedN > _limits.EffectiveMaxN)
+        {
+            return OpenAiError(StatusCodes.Status400BadRequest, $"'n' must be between 1 and {_limits.EffectiveMaxN}.");
+        }
+        if (requestedMaxTokens < 1 || requestedMaxTokens > _limits.EffectiveMaxCompletionTokens)
+        {
+            return OpenAiError(StatusCodes.Status400BadRequest, $"'max_tokens' must be between 1 and {_limits.EffectiveMaxCompletionTokens}.");
+        }
+        if (promptTokens + requestedMaxTokens > _limits.EffectiveMaxContextTokens)
+        {
+            return OpenAiError(StatusCodes.Status400BadRequest,
+                $"prompt ({promptTokens} tokens) + max_tokens ({requestedMaxTokens}) exceeds the maximum context length of {_limits.EffectiveMaxContextTokens} tokens.");
+        }
+        return null;
     }
 
     // ============================ /v1/models ============================
@@ -126,6 +150,15 @@ public sealed class OpenAiController : ControllerBase
             ServingMetrics.RecordRequest(success: false, promptTokens: 0, generationTokens: 0, durationSeconds: sw.Elapsed.TotalSeconds);
             return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "response_format");
         }
+        // Enforce configured generation limits at the HTTP boundary (reject, don't silently clamp). ctx's
+        // prompt-token count is populated by BuildRequest above.
+        var limitError = CheckLimits(ctx.PromptTokenCount, request.ResolveMaxTokens(DefaultMaxTokens), request.N ?? 1);
+        if (limitError is not null)
+        {
+            ServingMetrics.RecordRequest(success: false, promptTokens: ctx.PromptTokenCount, generationTokens: 0, durationSeconds: sw.Elapsed.TotalSeconds);
+            return limitError;
+        }
+
         var stops = request.ResolveStop();
         string id = "chatcmpl-" + Guid.NewGuid().ToString("N");
         long created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -148,8 +181,9 @@ public sealed class OpenAiController : ControllerBase
         {
             // n completions (OpenAI `n`): generate independent completions of the same prompt. At
             // temperature > 0 each draws from its own RNG so they differ; at temperature 0 (greedy) they
-            // are deterministically identical, which is the expected behavior.
-            int n = Math.Clamp(request.N ?? 1, 1, 128);
+            // are deterministically identical, which is the expected behavior. `n` was already validated
+            // against the configured limit above (rejected, not clamped).
+            int n = request.N ?? 1;
             var response = new ChatCompletionResponse { Id = id, Created = created, Model = request.Model };
             int completionTokens = 0;
             for (int i = 0; i < n; i++)
@@ -289,6 +323,14 @@ public sealed class OpenAiController : ControllerBase
             ServingMetrics.RecordRequest(success: false, promptTokens: 0, generationTokens: 0, durationSeconds: sw.Elapsed.TotalSeconds);
             return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "response_format");
         }
+        // Enforce configured generation limits at the HTTP boundary (completions has no `n`, so n = 1).
+        var limitError = CheckLimits(ctx.PromptTokenCount, request.ResolveMaxTokens(DefaultMaxTokens), 1);
+        if (limitError is not null)
+        {
+            ServingMetrics.RecordRequest(success: false, promptTokens: ctx.PromptTokenCount, generationTokens: 0, durationSeconds: sw.Elapsed.TotalSeconds);
+            return limitError;
+        }
+
         var stops = request.ResolveStop();
         string id = "cmpl-" + Guid.NewGuid().ToString("N");
         long created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
