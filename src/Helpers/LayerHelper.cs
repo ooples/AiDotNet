@@ -28379,6 +28379,12 @@ public static class LayerHelper<T>
         int visionDim, int numHeads, int numEncoderLayers, int numDecoderLayers,
         int patchSize, int numClasses, int imageHeight, int imageWidth, double dropRate)
     {
+        // Guard patchSize before the gridH/gridW divisions below (and its use as the patch-embed conv
+        // kernel/stride and the final UpsamplingLayer factor). patchSize == 0 is reachable via
+        // GroundedSAM2Options.PatchSize and would otherwise throw a bare DivideByZeroException instead of
+        // the clear ArgumentOutOfRangeException this helper raises — same guard the sibling
+        // CreateDefaultEfficientTAMLayers uses.
+        ValidatePatchSize(patchSize);
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
         int ffnDim = visionDim * 4;
         int gridH = Math.Max(1, imageHeight / patchSize);

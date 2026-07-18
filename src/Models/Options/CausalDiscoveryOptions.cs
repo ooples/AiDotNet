@@ -26,8 +26,51 @@ namespace AiDotNet.Models.Options;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("CausalDiscovery")]
-public class CausalDiscoveryOptions
+public class CausalDiscoveryOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values (all options null → each algorithm's own default applies).</summary>
+    public CausalDiscoveryOptions() { }
+
+    /// <summary>Initializes a new instance by copying every option from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public CausalDiscoveryOptions(CausalDiscoveryOptions other)
+    {
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        Algorithm = other.Algorithm;
+        SignificanceLevel = other.SignificanceLevel;
+        ConfoundingEvidenceCutoff = other.ConfoundingEvidenceCutoff;
+        SparsityPenalty = other.SparsityPenalty;
+        EdgeThreshold = other.EdgeThreshold;
+        MaxConditioningSetSize = other.MaxConditioningSetSize;
+        MaxIterations = other.MaxIterations;
+        AcyclicityTolerance = other.AcyclicityTolerance;
+        MaxPenalty = other.MaxPenalty;
+        FeatureNames = other.FeatureNames is null ? null : (string[])other.FeatureNames.Clone();
+        MaxParents = other.MaxParents;
+        UseForFeatureSelection = other.UseForFeatureSelection;
+        LossType = other.LossType;
+        LearningRate = other.LearningRate;
+        MaxLag = other.MaxLag;
+        HiddenUnits = other.HiddenUnits;
+        InnerIterations = other.InnerIterations;
+        MaxRank = other.MaxRank;
+        CorrelationThreshold = other.CorrelationThreshold;
+        DirectionalityAsymmetryThreshold = other.DirectionalityAsymmetryThreshold;
+        ConcavityParameter = other.ConcavityParameter;
+        SobolevWeight = other.SobolevWeight;
+        MaxSegments = other.MaxSegments;
+        InitScale = other.InitScale;
+        MaxEpochs = other.MaxEpochs;
+        InitialLogVariance = other.InitialLogVariance;
+        DefaultKlWeight = other.DefaultKlWeight;
+        MaxKlWeight = other.MaxKlWeight;
+        UseKlWarmUp = other.UseKlWarmUp;
+    }
+
     /// <summary>
     /// Which causal discovery algorithm to use. Default: null (auto-select based on data characteristics).
     /// </summary>
@@ -125,10 +168,7 @@ public class CausalDiscoveryOptions
     /// </summary>
     public double? MaxPenalty { get; set; }
 
-    /// <summary>
-    /// Random seed for reproducibility. Default: null (non-deterministic).
-    /// </summary>
-    public int? Seed { get; set; }
+    // Seed is inherited from ModelOptions (random seed for reproducibility; null = non-deterministic).
 
     /// <summary>
     /// Variable/feature names to label the graph nodes. Default: null (auto-generated X0, X1, ...).
@@ -220,7 +260,13 @@ public class CausalDiscoveryOptions
     /// Minimum relative asymmetry (in [0, 1]) between the two cross-map skills of a pair before CCM
     /// prunes the weaker reverse direction as a reconstruction artifact. Default: null (0.2).
     /// </summary>
+    /// <value>
+    /// A finite value in <c>[0, 1]</c>, or <see langword="null"/> to use CCM's default threshold of <c>0.2</c>.
+    /// </value>
     /// <remarks>
+    /// <para><b>For Beginners:</b> Lower values remove weak reverse links more aggressively; higher values
+    /// retain more bidirectional links.</para>
+    /// <para><b>Reference:</b> Sugihara et al., "Detecting Causality in Complex Ecosystems," Science, 2012.</para>
     /// <para>Used by <see cref="AiDotNet.CausalDiscovery.TimeSeries.CCMAlgorithm{T}"/>. For a pair
     /// (X, Y) with forward/backward cross-map skills f and b, the relative asymmetry is
     /// |f - b| / (max(f, b) + eps). When it meets or exceeds this threshold the dominant direction is
