@@ -10326,6 +10326,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (UseCopyOnWriteDeepCopy && TryDeepCopyCopyOnWrite(out var cowCopy))
             return cowCopy;
 
+        // Internal in-memory clone: open a persistence-guard InternalOperation scope for the remainder
+        // of this method so any nested sub-model PUBLIC Serialize()/Deserialize() calls do NOT trip the
+        // ModelPersistenceGuard license gate. Composite models copy their network-specific data by
+        // recursing into child models' public Serialize/Deserialize (e.g. GAN Generator/Discriminator,
+        // BiLSTMCRF), and DeepCopy's own serialize side (SerializeInternalUnchecked) only bypasses the
+        // gate for the TOP model — the nested child calls still hit EnforceBeforeSerialize at depth 0.
+        // Without this scope an internal clone counts as user persistence and throws
+        // LicenseRequiredException whenever the license server is unreachable (ValidationPending — #1802)
+        // or the trial is exhausted, which broke every composite-model Clone/MoreData test in CI. The COW
+        // fast path above shares tensors and never serializes, so it is intentionally left exempt. Covers
+        // both the large/custom-layer copy path (copies network-specific data) and the serialize
+        // roundtrip below; nested InternalOperation scopes are counter-based and compose safely.
+        using var _persistenceGuardScope = ModelPersistenceGuard.InternalOperation();
+
         // DeepCopy is a training-internal in-memory clone, not a user-facing
         // save/load. We route through the private SerializeInternalUnchecked /
         // DeserializeInternalUnchecked helpers rather than the public virtual
