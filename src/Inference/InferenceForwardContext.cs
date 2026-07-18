@@ -53,6 +53,21 @@ internal sealed class InferenceForwardContext
     public bool IsBatched => SequenceIds is not null;
 
     /// <summary>
+    /// When non-null, the LoRA task/adapter name this forward selects for <c>MultiLoRAAdapter</c> layers
+    /// in single-sequence mode (null selects each adapter's default active task). Carried on the context
+    /// so concurrent requests resolve their adapter locally instead of mutating shared layer state.
+    /// </summary>
+    public string? LoraTask { get; set; }
+
+    /// <summary>
+    /// Per-row LoRA task names for a BATCHED forward, parallel to <see cref="SequenceIds"/>: entry <c>b</c>
+    /// (null = default) selects the adapter for batch row <c>b</c>, so sequences requesting different
+    /// adapters can co-batch in a single forward. Null => every row uses <see cref="LoraTask"/> (or the
+    /// default). When non-null its length must equal <see cref="SequenceIds"/>' length.
+    /// </summary>
+    public string?[]? LoraTasks { get; set; }
+
+    /// <summary>
     /// Creates a context for the given sequence at the given start position (single-sequence mode).
     /// </summary>
     public InferenceForwardContext(long sequenceId, int position = 0)
