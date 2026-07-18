@@ -50,8 +50,9 @@ internal static class StructuredOutputFactory
 
             case "json_object":
             {
+                // Unbounded-depth JSON via the pushdown-automaton grammar (not the finite bounded-depth regex).
                 var vocab = GetVocabStrings(tokenizer);
-                return JsonSchemaConstraint.AnyJsonObject(vocab, eosTokenId);
+                return new JsonGrammarConstraint(vocab, eosTokenId);
             }
 
             case "json_schema":

@@ -34,7 +34,7 @@ public class StructuredOutputServingTests
         Assert.Null(StructuredOutputFactory.Build(null, tok, -1));
         Assert.Null(StructuredOutputFactory.Build(JToken.Parse(@"{""type"":""text""}"), tok, -1));
 
-        Assert.IsType<RegexTokenConstraint>(
+        Assert.IsType<JsonGrammarConstraint>(
             StructuredOutputFactory.Build(JToken.Parse(@"{""type"":""json_object""}"), tok, -1));
 
         Assert.IsType<RegexTokenConstraint>(
