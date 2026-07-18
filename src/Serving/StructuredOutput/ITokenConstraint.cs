@@ -15,6 +15,11 @@ namespace AiDotNet.Serving.StructuredOutput;
 /// At every step the model still produces scores for all tokens; the constraint blanks out the ones that
 /// would break the required format so the model is forced to stay on the rails, while still choosing
 /// freely among the tokens that keep the output valid.</para>
+/// <para><b>Implementers:</b> this interface is new in the serving layer and defines both
+/// <see cref="IsComplete"/> (the output so far is a complete valid instance) and <see cref="IsTerminal"/>
+/// (complete AND no valid non-EOS continuation remains — where the engine stops). A custom constraint must
+/// implement both; a common pattern is <c>IsTerminal =&gt; IsComplete &amp;&amp; !HasNonEosContinuation</c>.
+/// The built-in constraints (JSON grammar/schema, regex, token FSM) are the reference implementations.</para>
 /// </remarks>
 public interface ITokenConstraint
 {

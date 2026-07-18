@@ -202,8 +202,21 @@ internal sealed class RegexNfa
     private int _start;
     private int _accept;
 
+    // Total compilation budget. response_format.regex is request-controlled, so cap BOTH the pattern length
+    // and the total automaton size before materialization: capping a single quantifier (see
+    // MaxQuantifierRepetitions) is not enough — a long pattern or many individually-valid quantifiers could
+    // still allocate an unbounded NFA and exhaust memory/CPU. Over-budget patterns throw ArgumentException,
+    // which the serving factory maps to HTTP 400.
+    private const int MaxPatternLength = 100_000;
+    private const int MaxStates = 1_000_000;
+
     private int NewState()
     {
+        if (_match.Count >= MaxStates)
+        {
+            throw new ArgumentException(
+                $"Regex is too complex: it exceeds the maximum of {MaxStates} automaton states. Reduce quantifier repetition or pattern size.");
+        }
         _match.Add(null);
         _matchTarget.Add(-1);
         _epsilon.Add(new List<int>());
@@ -213,6 +226,11 @@ internal sealed class RegexNfa
     /// <summary>Compiles a regex pattern into an NFA (implicitly anchored to match the whole string).</summary>
     public static RegexNfa Compile(string pattern)
     {
+        if (pattern.Length > MaxPatternLength)
+        {
+            throw new ArgumentException(
+                $"Regex pattern is too long ({pattern.Length} characters; maximum {MaxPatternLength}).");
+        }
         var nfa = new RegexNfa();
         var parser = new Parser(pattern, nfa);
         var frag = parser.ParseAlternation();
