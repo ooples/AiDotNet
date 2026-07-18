@@ -1892,15 +1892,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             InterfaceGuard.Parameterizable(trainedQuantized).SetParameters(quantizedParameters);
             quantizedModel = trainedQuantized;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException && ex is not OutOfMemoryException)
         {
-            // Preserving trained state failed. Do NOT fall back to the quantizer's rebuilt model — for families
-            // that keep trained internals outside the parameter vector it is UNTRAINED and would throw at predict
-            // time (the exact defect this path fixes). Skip quantization entirely (return no quantized model) so
-            // the caller keeps the original trained, unquantized model rather than a landmine.
-            Console.WriteLine(
-                $"Warning: could not preserve trained state through quantization ({ex.GetType().Name}: {ex.Message}); " +
-                "skipping quantization and keeping the original trained model.");
+            // Preserving trained state failed for an EXPECTED reason (e.g. a model that can't round-trip via
+            // DeepCopy/SetParameters). Do NOT fall back to the quantizer's rebuilt model — for families that keep
+            // trained internals outside the parameter vector it is UNTRAINED and would throw at predict time (the
+            // exact defect this path fixes). Skip quantization so the caller keeps the original trained,
+            // unquantized model rather than a landmine. Cancellation and out-of-memory are NOT expected here and
+            // propagate so they aren't silently turned into a successful-looking build.
+            _accelerationLogger?.Invoke(
+                $"[AiDotNet] Quantization skipped: could not preserve trained state ({ex.GetType().Name}: {ex.Message}); " +
+                "keeping the original trained model.");
             return (null, null);
         }
 
