@@ -43,6 +43,30 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
 
     public override bool SupportsTraining => true;
 
+    /// <summary>The pre-attention RMSNorm sublayer (exposed for tensor-parallel serving partitioning).</summary>
+    public RMSNormalizationLayer<T> Norm1 => _norm1;
+
+    /// <summary>The pre-FFN RMSNorm sublayer (exposed for tensor-parallel serving partitioning).</summary>
+    public RMSNormalizationLayer<T> Norm2 => _norm2;
+
+    /// <summary>The self-attention sublayer (exposed for tensor-parallel serving partitioning).</summary>
+    public LayerBase<T> AttentionLayer => _attention;
+
+    /// <summary>The FFN up-projection DenseLayer (hidden -&gt; ffnDim, activation).</summary>
+    public DenseLayer<T> FfnUp => _ffnUp;
+
+    /// <summary>The FFN down-projection DenseLayer (ffnDim -&gt; hidden, identity).</summary>
+    public DenseLayer<T> FfnDown => _ffnDown;
+
+    /// <summary>The FFN activation function applied after the up-projection.</summary>
+    public IActivationFunction<T> FfnActivation => _ffnActivation;
+
+    /// <summary>The FFN hidden dimension.</summary>
+    public int FfnDim => _ffnDim;
+
+    /// <summary>The model (input/output) feature dimension.</summary>
+    public int HiddenSize => _hiddenSize;
+
     /// <summary>
     /// Initialises a pre-LN transformer block.
     /// </summary>
