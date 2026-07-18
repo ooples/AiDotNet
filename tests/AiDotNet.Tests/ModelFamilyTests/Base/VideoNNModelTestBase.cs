@@ -112,9 +112,11 @@ public abstract class VideoNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         // A degenerate all-zero (or NaN) output makes both norms zero/non-finite; the old code skipped
         // every assertion in that case, so a broken model passed vacuously. Require finite, non-zero
         // norms first, then assert cosine similarity UNCONDITIONALLY.
-        Assert.True(double.IsFinite(norm1) && norm1 > 1e-15,
+        // Use !IsNaN && !IsInfinity (net471-compatible) rather than double.IsFinite, which does not exist
+        // on .NET Framework 4.7.1 — one of the test project's target frameworks.
+        Assert.True(!double.IsNaN(norm1) && !double.IsInfinity(norm1) && norm1 > 1e-15,
             $"Video model output norm for frame 1 = {norm1:E4} is zero or non-finite — degenerate (all-zero/NaN) output.");
-        Assert.True(double.IsFinite(norm2) && norm2 > 1e-15,
+        Assert.True(!double.IsNaN(norm2) && !double.IsInfinity(norm2) && norm2 > 1e-15,
             $"Video model output norm for frame 2 = {norm2:E4} is zero or non-finite — degenerate (all-zero/NaN) output.");
 
         double cosineSim = dot / (Math.Sqrt(norm1) * Math.Sqrt(norm2));
