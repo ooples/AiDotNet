@@ -465,13 +465,26 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     private (T mean, T scale) PredictDistribution(Vector<T> input)
     {
-        // If the window is shorter than the lookback, pad from the training tail.
-        if (input.Length < _options.LookbackWindow && _trainingSeries.Length >= _options.LookbackWindow)
+        // If the window is shorter than the lookback, LEFT-PAD it with its own first value while keeping the
+        // caller's real values (in particular the most-recent one, which drives the residual skip at the head).
+        // NOTE: this previously replaced the window with a fixed slice of the TRAINING tail — identical for every
+        // row — so the LSTM ran on the same input each call and emitted one constant prediction for the whole
+        // test block. Never overwrite the caller's window with training data.
+        if (input.Length < _options.LookbackWindow)
         {
             var lb = new Vector<T>(_options.LookbackWindow);
-            int start = _trainingSeries.Length - _options.LookbackWindow;
-            for (int j = 0; j < _options.LookbackWindow; j++)
-                lb[j] = _trainingSeries[start + j];
+            int pad = _options.LookbackWindow - input.Length;
+            T fill = input.Length > 0 ? input[0] : NumOps.Zero;
+            for (int j = 0; j < pad; j++)
+            {
+                lb[j] = fill;
+            }
+
+            for (int j = 0; j < input.Length; j++)
+            {
+                lb[pad + j] = input[j];
+            }
+
             input = lb;
         }
 
