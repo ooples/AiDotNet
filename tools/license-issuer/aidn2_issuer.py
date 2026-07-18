@@ -23,7 +23,9 @@ import argparse
 import base64
 import datetime as dt
 import json
+import os
 import sys
+import uuid
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
@@ -36,10 +38,13 @@ def b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
-def build_claims(sub, tier, seats, kid, days) -> bytes:
+def build_claims(sub, tier, seats, kid, days, caps, scope, jti) -> bytes:
     now = dt.datetime.now(dt.timezone.utc)
     exp = now + dt.timedelta(days=days)
     # Field order mirrors LicenseClaims declaration; compact (no spaces) like Formatting.None.
+    # jti + caps are ALWAYS emitted: an absent `caps` means legacy grant-all in the client (a footgun for
+    # a real token), and jti is what the CRL revokes. `scope` is emitted only when set (a scoped token is
+    # rejected on hosts that don't declare the same AIDOTNET_LICENSE_SCOPE — that's the CI-binding).
     claims = {
         "sub": sub,
         "tier": tier,
@@ -48,7 +53,11 @@ def build_claims(sub, tier, seats, kid, days) -> bytes:
         "exp": int(exp.timestamp()),
         "kid": kid,
         "alg": "EdDSA",
+        "jti": jti,
+        "caps": caps,
     }
+    if scope:
+        claims["scope"] = scope
     return json.dumps(claims, separators=(",", ":")).encode("utf-8")
 
 
@@ -60,7 +69,13 @@ def main() -> int:
                     help="license tier (enterprise/pro lift the persistence op cap)")
     ap.add_argument("--seats", type=int, default=1000, help="seat count (advisory for offline tokens)")
     ap.add_argument("--kid", default="ci-2026a", help="key id; must match the embedded public key's kid")
-    ap.add_argument("--days", type=int, default=1825, help="validity in days (default 5 years)")
+    # Short by design: an offline token is only a cache of a fresh online check, so keep it well inside the
+    # client's attestation window and cap it so a leaked token self-expires. CI rotates via --days as needed.
+    ap.add_argument("--days", type=int, default=30, help="validity in days (default 30; keep short, <=30 for CI)")
+    ap.add_argument("--caps", default="model:save,tensors:save,model:encrypt",
+                    help="comma-separated capability grants (empty => legacy grant-all — avoid for real tokens)")
+    ap.add_argument("--scope", default=None,
+                    help="audience binding (e.g. 'ci'); the host must set AIDOTNET_LICENSE_SCOPE to match")
     ap.add_argument("--private-key-pem", default=None,
                     help="path to an existing Ed25519 private key PEM to reuse (else generate a fresh one)")
     ap.add_argument("--out-dir", default=".", help="directory to write private_key.pem + LicensePublicKey.json")
@@ -78,7 +93,9 @@ def main() -> int:
     pub: Ed25519PublicKey = priv.public_key()
     pub_raw = pub.public_bytes_raw()  # 32 bytes
 
-    claims_bytes = build_claims(args.sub, args.tier, args.seats, args.kid, args.days)
+    caps = [c.strip() for c in args.caps.split(",") if c.strip()]
+    jti = str(uuid.uuid4())
+    claims_bytes = build_claims(args.sub, args.tier, args.seats, args.kid, args.days, caps, args.scope, jti)
     signature = priv.sign(claims_bytes)  # Ed25519 -> 64 bytes
     token = "aidn2." + b64url(claims_bytes) + "." + b64url(signature)
 
@@ -87,7 +104,6 @@ def main() -> int:
 
     jwk = {"keys": [{"kty": "OKP", "crv": "Ed25519", "kid": args.kid, "x": b64url(pub_raw)}]}
 
-    import os
     os.makedirs(args.out_dir, exist_ok=True)
     jwk_path = os.path.join(args.out_dir, "LicensePublicKey.json")
     with open(jwk_path, "w", encoding="utf-8") as f:
@@ -95,7 +111,15 @@ def main() -> int:
 
     priv_path = os.path.join(args.out_dir, "private_key.pem")
     if not args.private_key_pem:
-        with open(priv_path, "wb") as f:
+        # Create with owner-only (0600) permissions rather than relying on umask — the file holds an
+        # unencrypted signing key and must not be readable by other local users. (No-op hardening on
+        # Windows, where POSIX mode bits don't apply, but correct on CI/Linux where these keys are minted.)
+        fd = os.open(priv_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass  # fchmod unavailable (e.g. Windows) — the 0o600 create mode already applied where supported
+        with os.fdopen(fd, "wb") as f:
             f.write(priv.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.PKCS8,
@@ -105,6 +129,10 @@ def main() -> int:
     print("=== aidn2 license issued ===")
     print(f"kid:            {args.kid}")
     print(f"tier/seats:     {args.tier} / {args.seats}")
+    print(f"caps:           {caps}")
+    print(f"scope:          {args.scope or '(none)'}")
+    print(f"jti:            {jti}")
+    print(f"expires in:     {args.days} days")
     print(f"claims:         {claims_bytes.decode()}")
     print()
     print("AIDOTNET_LICENSE_KEY (secret) =")

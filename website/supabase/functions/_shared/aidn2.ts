@@ -40,6 +40,29 @@ async function importSigningKey(): Promise<CryptoKey> {
   );
 }
 
+// Require an EXPLICIT signing-key id. A silent default (e.g. "prod-2026a") lets a rotated or
+// mis-configured private key sign under the wrong kid, making every token/CRL it produces unverifiable
+// against the embedded public key selected by that kid — fail loudly at sign time instead.
+function getSigningKeyId(): string {
+  const kid = Deno.env.get("AIDOTNET_LICENSE_KID");
+  if (!kid || kid.trim().length === 0) {
+    throw new Error(
+      "AIDOTNET_LICENSE_KID is not configured — refusing to sign under a defaulted key id. " +
+        "Set it to the kid whose PRIVATE key AIDOTNET_LICENSE_SIGNING_KEY_PKCS8 holds.",
+    );
+  }
+  return kid.trim();
+}
+
+// Validate a validity period BEFORE it becomes a signed exp. NaN/zero/negative/fractional/excessive values
+// would otherwise produce malformed or unsafe lifetimes — especially dangerous for CRLs, whose verification
+// is fail-open (a broken CRL silently revokes nothing). Offline tokens are short by design, so cap at 30d.
+function validateExpDays(expDays: number): void {
+  if (!Number.isSafeInteger(expDays) || expDays < 1 || expDays > 30) {
+    throw new Error(`Validity must be an integer number of days in [1, 30]; got ${expDays}.`);
+  }
+}
+
 export interface Aidn2Claims {
   sub: string;
   tier: string;
@@ -58,7 +81,8 @@ export interface Aidn2Claims {
 /** Mints a signed aidn2 token. Field order mirrors LicenseClaims for readability (verification is
  *  order-agnostic — the signature is over the exact bytes emitted here). */
 export async function signAidn2Token(c: Aidn2Claims): Promise<string> {
-  const kid = Deno.env.get("AIDOTNET_LICENSE_KID") ?? "prod-2026a";
+  const kid = getSigningKeyId();
+  validateExpDays(c.expDays);
   const now = Math.floor(Date.now() / 1000);
   const claims: Record<string, unknown> = {
     sub: c.sub,
@@ -83,7 +107,8 @@ export async function signAidn2Token(c: Aidn2Claims): Promise<string> {
 /** Signs a revocation list (CRL) envelope the SDK's LicenseRevocationProvider verifies:
  *  { kid, payload:base64url({iat,exp,rkids,rjti}), sig:base64url(ed25519 over payload) }. */
 export async function signCrl(revokedJti: string[], revokedKids: string[], expDays: number): Promise<string> {
-  const kid = Deno.env.get("AIDOTNET_LICENSE_KID") ?? "prod-2026a";
+  const kid = getSigningKeyId();
+  validateExpDays(expDays);
   const now = Math.floor(Date.now() / 1000);
   const payload = { iat: now, exp: now + expDays * 86400, rkids: revokedKids, rjti: revokedJti };
   const payloadBytes = new TextEncoder().encode(JSON.stringify(payload));

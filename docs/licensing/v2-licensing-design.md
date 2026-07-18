@@ -81,7 +81,9 @@ Tunables to expose: `exp` per tier, `AttestationValidity` (30d), `OfflineGracePe
 
 ## 6. CRL deny-list (revocation part 2: catch leaks before expiry)
 
-- Server publishes a **signed** revocation list: `{ "revoked_kids": [...], "revoked_jti": [...], "iat", "exp", "sig" }`, signed with the same Ed25519 private key (or a dedicated CRL key), verifiable with the embedded public key.
+- Server publishes a **signed** revocation list as a JWS-style envelope — exactly what `get-revocations` emits and `LicenseRevocationProvider` verifies:
+  `{ "kid": "<signing kid>", "payload": "<base64url(payload_json)>", "sig": "<base64url(Ed25519 sig)>" }`
+  where the base64url-decoded `payload` is `{ "iat", "exp", "rkids": [...], "rjti": [...] }`, and `sig` is the Ed25519 signature over the **raw decoded payload bytes** (the same sign-over-exact-bytes rule as `aidn2` tokens, so there is no JSON-canonicalization ambiguity). Verified with the embedded public key selected by `kid`.
 - Distribution: (a) **embedded/updated with releases** (`AiDotNet.LicenseRevocation` resource, refreshed each release) for pure-offline builds, and (b) **fetched on online refresh** and cached, for connected clients.
 - Verifier rejects a token whose `kid` or `jti` is on a valid (unexpired, signature-verified) CRL.
 - Bounds a leaked token to `min(exp, next release / next online refresh)`.
@@ -102,7 +104,7 @@ Enforcement changes: replace the current "any `Active` lifts the trial cap" with
 
 ## 8. Issuance & key custody
 
-- **Private key: server-side only.** Generate an Ed25519 keypair; store the private half in a Supabase secret (or KMS). Public half → `LicensePublicKey.json` (JWK OKP), embedded at build.
+- **Private key: server-side only.** Generate an Ed25519 keypair; store the private half in a Supabase secret (or KMS). Public half → a **merged `LicensePublicKey.json` JWK OKP set carrying every active `kid`** (e.g. `prod-2026a` + `ci-2026a`), embedded at build. `keygen.py` appends into an existing bundle (rejecting duplicate `kid`s) so running it per key produces one file, not two single-key files that overwrite each other; that merged bundle is the release/CI embed + `AIDOTNET_LICENSE_PUBLIC_KEY_JSON` input.
 - **Issuer = Supabase edge function** `issue-license` (new): authenticates the user, looks up their tier/entitlement, signs a **short-exp** `aidn2` token (with `jti`, `caps`, optional `mach`/`scope`), stores `jti`→license mapping for CRL, returns the token. `register-community-license` and `stripe-webhook` call it instead of emitting `AIDN-*` strings.
 - **kid rotation:** embed multiple public keys (`keys[]`); rotate by issuing under a new `kid` while old tokens still verify.
 - **Reference issuer** (this repo, `tools/license-issuer/aidn2_issuer.py`) is dev/CI-bootstrap only; production signing is the edge function.

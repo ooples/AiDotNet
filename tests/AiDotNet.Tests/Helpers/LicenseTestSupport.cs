@@ -126,11 +126,14 @@ internal static class LicenseTestSupport
         string[]? revokedKids = null,
         DateTimeOffset? exp = null,
         string? kid = null,
-        Org.BouncyCastle.Crypto.AsymmetricKeyParameter? signingKey = null)
+        Org.BouncyCastle.Crypto.AsymmetricKeyParameter? signingKey = null,
+        long? iat = null)
     {
         var payload = new
         {
-            iat = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            // iat is overridable so a test can issue two CRLs with the SAME second (to exercise the
+            // same-iat merge path); otherwise it defaults to now.
+            iat = iat ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             exp = (exp ?? DateTimeOffset.UtcNow.AddDays(1)).ToUnixTimeSeconds(),
             rkids = revokedKids ?? System.Array.Empty<string>(),
             rjti = revokedJti ?? System.Array.Empty<string>()

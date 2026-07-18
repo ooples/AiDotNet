@@ -130,6 +130,33 @@ public class AsymmetricLicenseBindingTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task Aidn2_Revocation_SameSecondCrlsAreMerged_NotDiscarded()
+    {
+        await Task.Yield();
+        try
+        {
+            // Two additive CRLs issued in the SAME second (identical iat): the second must NOT be discarded
+            // as "not newer" — its jti must also be enforced (merged deny-list).
+            long sharedIat = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            LicenseRevocationProvider.OverrideForTesting(null, DateTimeOffset.UtcNow); // start clean
+
+            Assert.True(LicenseRevocationProvider.TryInstallFetched(
+                LicenseTestSupport.SignedCrlV2(revokedJti: new[] { "leaked-A" }, iat: sharedIat),
+                DateTimeOffset.UtcNow));
+            Assert.True(LicenseRevocationProvider.TryInstallFetched(
+                LicenseTestSupport.SignedCrlV2(revokedJti: new[] { "leaked-B" }, iat: sharedIat),
+                DateTimeOffset.UtcNow));
+
+            Assert.Equal(LicenseKeyStatus.Revoked, Validate(LicenseTestSupport.SignedKeyV2(jti: "leaked-A")).Status);
+            Assert.Equal(LicenseKeyStatus.Revoked, Validate(LicenseTestSupport.SignedKeyV2(jti: "leaked-B")).Status);
+        }
+        finally
+        {
+            LicenseRevocationProvider.OverrideForTesting(null, DateTimeOffset.UtcNow);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Aidn2_Revocation_ExpiredCrlIsIgnored_TokenStaysActive()
     {
         await Task.Yield();
