@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.IntegrationTests.Training;
 /// <remarks>
 /// Neural networks reach training through the optimizer path, which already drives the facade's
 /// per-epoch seam (OptimizerBase.SetEpochProgressCallback -> InvokeTrainingEpoch). TimeSeries models
-/// instead own their epoch loop inside Train(), which the facade calls once � so their callbacks fired
+/// instead own their epoch loop inside Train(), which the facade calls once — so their callbacks fired
 /// a single synthetic epoch after training had finished, and no veto could take effect. These tests
 /// assert the neural side genuinely works, so that the two families cannot silently diverge again.
 /// </remarks>
