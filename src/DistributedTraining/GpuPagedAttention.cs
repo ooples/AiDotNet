@@ -1,5 +1,4 @@
 using System;
-using System.Reflection;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
@@ -13,23 +12,17 @@ namespace AiDotNet.DistributedTraining;
 /// head-group attention runs on the device.
 /// </summary>
 /// <remarks>
-/// Tensors 0.115.1 exposes <c>PagedAttentionDecode/Prefill</c> on the concrete backends but NOT via a shared
-/// interface (the <c>IPagedAttentionBackend</c> capability of #806 is not in this release), so the kernels are
-/// invoked by cached reflection off the resolved backend. The kernels RETURN the output buffer (the query buffer
-/// is input-only). Attention runs in FP32 (the GPU kernels' precision), so results match a double CPU model only
-/// within float tolerance — the industry-standard serving precision.
+/// The kernels are invoked through the public <see cref="IDirectGpuBackend"/> interface
+/// (<c>PagedAttentionDecode/Prefill</c>, exposed on the interface as of AiDotNet.Tensors 0.116.0) and RETURN the
+/// output buffer (the query buffer is input-only). Attention runs in FP32 (the GPU kernels' precision), so results
+/// match a double CPU model only within float tolerance — the industry-standard serving precision.
 /// </remarks>
 internal sealed class GpuPagedAttention : IDisposable
 {
-    private static MethodInfo? _decode;
-    private static MethodInfo? _prefill;
-    private static Type? _resolvedBackendType;
-
     private readonly IDirectGpuBackend _backend;
     private readonly DevicePagedKVCache _cache;
     private readonly int _heads;
     private readonly int _headDim;
-    private readonly int _dim;
     private readonly int _blockSize;
     private readonly float _scale;
 
@@ -38,7 +31,6 @@ internal sealed class GpuPagedAttention : IDisposable
         _backend = backend;
         _heads = heads;
         _headDim = headDim;
-        _dim = heads * headDim;
         _blockSize = blockSize;
         _scale = 1.0f / (float)Math.Sqrt(headDim);
         _cache = new DevicePagedKVCache(backend, maxBlocks, blockSize, heads, headDim);
@@ -67,14 +59,6 @@ internal sealed class GpuPagedAttention : IDisposable
         if (AiDotNetEngine.Current is not DirectGpuTensorEngine gpu || !gpu.IsGpuAvailable) return false;
         var b = gpu.GetBackend();
         if (b is null) return false;
-        var type = b.GetType();
-        if (!ReferenceEquals(type, _resolvedBackendType))
-        {
-            _decode = type.GetMethod("PagedAttentionDecode");
-            _prefill = type.GetMethod("PagedAttentionPrefill");
-            _resolvedBackendType = type;
-        }
-        if (_decode is null || _prefill is null) return false;
         backend = b;
         return true;
     }
@@ -92,12 +76,9 @@ internal sealed class GpuPagedAttention : IDisposable
     public float[] Decode(int seqId, float[] query, int seqLen)
     {
         var qBuf = _backend.AllocateBuffer(query);
-        var ret = _decode!.Invoke(_backend, new object[]
-        {
+        var outBuf = _backend.PagedAttentionDecode(
             qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
-            _heads, _headDim, _blockSize, seqLen, _scale
-        });
-        var outBuf = ret as IGpuBuffer ?? qBuf;
+            _heads, _headDim, _blockSize, seqLen, _scale);
         return _backend.DownloadBuffer(outBuf);
     }
 
@@ -109,12 +90,9 @@ internal sealed class GpuPagedAttention : IDisposable
     public float[] Prefill(int seqId, float[] queries, int numQueries, int startPos)
     {
         var qBuf = _backend.AllocateBuffer(queries);
-        var ret = _prefill!.Invoke(_backend, new object[]
-        {
+        var outBuf = _backend.PagedAttentionPrefill(
             qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
-            _heads, _headDim, _blockSize, numQueries, startPos, _scale
-        });
-        var outBuf = ret as IGpuBuffer ?? qBuf;
+            _heads, _headDim, _blockSize, numQueries, startPos, _scale);
         return _backend.DownloadBuffer(outBuf);
     }
 

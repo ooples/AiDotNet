@@ -24,8 +24,6 @@ public sealed class GpuPagedAttentionKernelTests
             return; // no GPU on this box — nothing to verify
 
         var backend = gpu.GetBackend();
-        var decode = backend.GetType().GetMethod("PagedAttentionDecode");
-        Assert.NotNull(decode);
 
         const int heads = 2, headDim = 4, blockSize = 16, seqLen = 5;
         int dim = heads * headDim;
@@ -46,13 +44,10 @@ public sealed class GpuPagedAttentionKernelTests
 
         var query = RandVec(rng, dim);
         var qBuf = backend.AllocateBuffer(query);
-        var ret = decode!.Invoke(backend, new object[]
-        {
+        // Kernel via the public IDirectGpuBackend interface (0.116.0); it RETURNS the output buffer (q is input-only).
+        var outBuf = backend.PagedAttentionDecode(
             qBuf, cache.KeyBlocks, cache.ValueBlocks, cache.GetBlockTableBuffer(seqId),
-            heads, headDim, blockSize, seqLen, scale
-        });
-        // The kernel returns the output buffer (q is input-only); fall back to q if it's void/in-place.
-        var outBuf = ret as IGpuBuffer ?? qBuf;
+            heads, headDim, blockSize, seqLen, scale);
         var gpuOut = backend.DownloadBuffer(outBuf);
 
         // CPU oracle: per head, softmax(scale * q·k_j) · v_j over j.
