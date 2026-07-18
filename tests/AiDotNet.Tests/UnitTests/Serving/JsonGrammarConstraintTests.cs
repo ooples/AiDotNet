@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.UnitTests.Serving;
 
 /// <summary>
 /// Correctness tests for <see cref="JsonGrammarConstraint"/> (the unbounded-depth JSON pushdown automaton).
-/// Acceptance is validated by exhaustive comparison against Newtonsoft's parser over a small JSON alphabet,
+/// Acceptance is validated by exhaustive comparison against System.Text.Json.JsonDocument over a small JSON alphabet,
 /// plus targeted deep-nesting and prefix-feasibility checks.
 /// </summary>
 public class JsonGrammarConstraintTests
@@ -71,7 +71,7 @@ public class JsonGrammarConstraintTests
     }
 
     [Fact]
-    public void MatchesNewtonsoft_Exhaustively()
+    public void MatchesJsonDocument_Exhaustively()
     {
         // Structure + one string/key letter + a digit + sign. Exhaustive to length 4 keeps this fast while
         // covering objects, arrays, strings, numbers, nesting, and every malformed permutation.
@@ -83,10 +83,12 @@ public class JsonGrammarConstraintTests
         {
             bool mine = MatchesViaConstraint(v, s);
             bool theirs = IsValidJson(s);
-            Assert.True(mine == theirs, $"input '{s}': mine={mine} newtonsoft={theirs}");
+            Assert.True(mine == theirs, $"input '{s}': mine={mine} jsondoc={theirs}");
             checkedCount++;
         }
-        Assert.True(checkedCount > 1000);
+        // Prove AllStrings enumerated EVERY string through length 4 (a truncated enumeration would still
+        // pass a loose '> 1000'): 10-char alphabet over lengths 1..4 = 10 + 100 + 1000 + 10000 = 11110.
+        Assert.Equal(11110, checkedCount);
     }
 
     [Fact]
@@ -112,8 +114,13 @@ public class JsonGrammarConstraintTests
         for (int i = 0; i < 20; i++) sb.Append(']');
         Assert.True(MatchesViaConstraint(v, sb.ToString()));
 
-        // Nested objects to depth 10.
-        Assert.True(MatchesViaConstraint(v, "{\"a\":{\"a\":{\"a\":{\"a\":0}}}}"));
+        // Nested objects to depth 10: {"a":{"a":...{"a":0}...}} (10 levels), built programmatically so it
+        // actually reaches depth 10 rather than the depth-4 literal a hand-written string settled for.
+        var obj = new System.Text.StringBuilder();
+        for (int i = 0; i < 10; i++) obj.Append("{\"a\":");
+        obj.Append('0');
+        for (int i = 0; i < 10; i++) obj.Append('}');
+        Assert.True(MatchesViaConstraint(v, obj.ToString()));
     }
 
     [Fact]

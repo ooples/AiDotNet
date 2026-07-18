@@ -101,10 +101,11 @@ public class JsonSchemaConstraintTests
     [Fact]
     public void AnyJsonObject_BoundedNesting()
     {
-        var c = JsonSchemaConstraint.AnyJsonObject(Vocab.TokenText, Vocab.Eos, maxDepth: 2);
         var logits = new float[Vocab.TokenText.Length];
+        // Fresh constraint per case (it is stateful) so each string is judged from a clean start.
         bool Feed(string json)
         {
+            var c = JsonSchemaConstraint.AnyJsonObject(Vocab.TokenText, Vocab.Eos, maxDepth: 2);
             foreach (char ch in json)
             {
                 Array.Clear(logits, 0, logits.Length);
@@ -114,7 +115,12 @@ public class JsonSchemaConstraintTests
             }
             return c.IsComplete;
         }
-        Assert.True(Feed(@"{""a"":1}"));
+        // Exercise BOTH sides of the bound so a constraint that ignores maxDepth cannot pass. AnyJsonObject
+        // wraps a top-level object whose values may nest maxDepth (=2) further, so 1 + 2 = 3 nested objects
+        // are accepted and a 4th level is rejected.
+        Assert.True(Feed(@"{""a"":1}"));                             // 1 object - accepted
+        Assert.True(Feed(@"{""a"":{""a"":{""a"":1}}}"));            // top + maxDepth(2) nested objects - accepted
+        Assert.False(Feed(@"{""a"":{""a"":{""a"":{""a"":1}}}}"));   // one level beyond the bound - rejected
     }
 
     [Fact]
