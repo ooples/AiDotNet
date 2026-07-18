@@ -1747,29 +1747,36 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             FitDetectionResult = stepData.FitDetectionResult
         });
 
-        // Notify the per-epoch progress observer (if any). Report the CURRENT iteration's
-        // fitness (stashed by UpdateBestSolution) so observers see live loss — including a
-        // diverging or NaN loss — rather than the monotonic best-so-far value passed here.
-        // A false return means an observer (e.g. a user training callback or health monitor)
-        // requested an abort, which we honor by signalling the optimizer to stop.
+        // The CURRENT iteration's live fitness (stashed by UpdateBestSolution) — including a diverging or NaN
+        // loss — rather than the monotonic best-so-far in stepData. Captured BEFORE the observer block consumes
+        // the stash so both the observer and the divergence guard below see the same live value. When an
+        // optimizer evaluates multiple candidates per iteration this is the LAST candidate stashed this
+        // iteration (falling back to the monotonic best when nothing was stashed).
+        T liveFitness = (_hasObservedFitness && _lastObservedFitness is { } observed) ? observed : stepData.FitnessScore;
+
+        // Notify the per-epoch progress observer (if any). A false return means an observer (e.g. a user
+        // training callback or health monitor) requested an abort, which we honor by signalling a stop.
         if (_epochProgressCallback is not null)
         {
-            T reported = stepData.FitnessScore;
-            if (_hasObservedFitness && _lastObservedFitness is { } observed)
-            {
-                reported = observed;
-            }
-            // Consume the stash so each iteration reports a value stashed DURING that iteration: without this
-            // reset, an iteration that never calls UpdateBestSolution would re-report the previous iteration's
-            // stale fitness. When an optimizer evaluates multiple candidates per iteration, `reported` is the
-            // LAST candidate stashed this iteration (falling back to the monotonic best `stepData.FitnessScore`
-            // when nothing was stashed) — the seam targets per-epoch gradient optimizers that call
-            // UpdateBestSolution exactly once per epoch (see SetEpochProgressCallback).
+            // Consume the stash so each iteration reports a value stashed DURING that iteration (see
+            // SetEpochProgressCallback): without this reset an iteration that never calls UpdateBestSolution
+            // would re-report the previous iteration's stale fitness.
             _hasObservedFitness = false;
-            if (!_epochProgressCallback(iteration, reported))
+            if (!_epochProgressCallback(iteration, liveFitness))
             {
                 return true; // Observer requested an early stop
             }
+        }
+
+        // Divergence guard — ALWAYS on, independent of any configured observer. A non-finite live fitness means
+        // the optimization has blown up (NaN/Inf gradients/loss); stop now so the run returns the best FINITE
+        // solution tracked so far (a NaN never wins UpdateBestSolution) instead of iterating on NaNs. This fires
+        // even on the facade's bare no-observer path, where nothing else would catch divergence — a safety floor
+        // under every model trained through the optimizer. Most optimizers keep iterating on NaN.
+        double liveFitnessMagnitude = Convert.ToDouble(liveFitness);
+        if (double.IsNaN(liveFitnessMagnitude) || double.IsInfinity(liveFitnessMagnitude))
+        {
+            return true; // stop before NaNs corrupt the model
         }
 
         // Check for early stopping

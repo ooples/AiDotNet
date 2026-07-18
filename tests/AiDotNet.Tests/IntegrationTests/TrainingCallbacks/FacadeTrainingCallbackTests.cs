@@ -204,6 +204,32 @@ public class FacadeTrainingCallbackTests
         Assert.NotNull(result.StopReason);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task DivergenceGuard_StopsOptimizer_EvenWhenNoObserverVetoes()
+    {
+        await Task.Yield();
+        const int epochs = 30;
+        var (x, y) = BuildData();
+        // Inject a NaN target so the fitness is non-finite from the first epoch. The callback below only COUNTS
+        // epochs and never asks to stop, so the ONLY thing that can cut training short is the optimizer's
+        // always-on divergence guard. Without it, all 30 epochs run (propagating NaNs).
+        y[0, 0] = float.NaN;
+        var optimizer = BuildOptimizer(epochs, 5.0);
+        var model = BuildModel(optimizer);
+
+        int epochCount = 0;
+        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(x, y))
+            .ConfigureTrainingCallback(_ => { epochCount++; return true; }) // never vetoes — only counts
+            .BuildAsync();
+
+        Assert.NotNull(result);
+        Assert.True(epochCount < epochs,
+            $"divergence guard did not stop the optimizer on non-finite fitness (ran {epochCount}/{epochs} epochs)");
+    }
+
     // --- Learnable probe task: "most-frequent token in the window" ---------------------------
     // Order-invariant and generalizing: a strict-majority token m is planted in each window and
     // the label is m. A correct SequenceClassification transformer learns this FAR above chance
