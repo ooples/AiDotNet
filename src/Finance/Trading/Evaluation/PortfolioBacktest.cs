@@ -160,4 +160,54 @@ public static class BaselinePolicies
     /// <summary>Flat (all-cash) policy: never take a position. The zero-risk control.</summary>
     public static Func<Vector<T>, Vector<T>> Flat<T>(int tradableCount)
         => _ => new Vector<T>(tradableCount);
+
+    /// <summary>
+    /// Cross-sectional MOMENTUM baseline: go equal-weight long the tradable assets whose price rose over the
+    /// observation window (recent winners), flat the rest. A far harder benchmark than equal-weight — momentum
+    /// is a real, persistent effect — so beating it on the holdout is a much stronger signal of skill.
+    /// <para>
+    /// Decodes the environment's observation layout: the first <c>windowSize * totalColumns</c> entries are the
+    /// per-step price/feature window (row-major by time then asset), so asset i's window-start and window-end
+    /// prices are <c>obs[i]</c> and <c>obs[(windowSize-1)*totalColumns + i]</c>. <paramref name="totalColumns"/>
+    /// is the env's NumAssets (tradable + feature columns); only the first <paramref name="tradableCount"/> are
+    /// traded.
+    /// </para>
+    /// </summary>
+    public static Func<Vector<T>, Vector<T>> Momentum<T>(int windowSize, int totalColumns, int tradableCount)
+    {
+        if (windowSize < 2) throw new ArgumentOutOfRangeException(nameof(windowSize), "Momentum needs a window of at least 2.");
+        if (tradableCount <= 0 || tradableCount > totalColumns) throw new ArgumentOutOfRangeException(nameof(tradableCount));
+
+        int lastRow = (windowSize - 1) * totalColumns;
+        return state =>
+        {
+            var winners = new bool[tradableCount];
+            int count = 0;
+            for (int i = 0; i < tradableCount; i++)
+            {
+                double first = Convert.ToDouble(state[i]);
+                double last = Convert.ToDouble(state[lastRow + i]);
+                if (last > first)
+                {
+                    winners[i] = true;
+                    count++;
+                }
+            }
+
+            var action = new Vector<T>(tradableCount);
+            if (count > 0)
+            {
+                var w = (T)Convert.ChangeType(1.0 / count, typeof(T), System.Globalization.CultureInfo.InvariantCulture);
+                for (int i = 0; i < tradableCount; i++)
+                {
+                    if (winners[i])
+                    {
+                        action[i] = w;
+                    }
+                }
+            }
+
+            return action;
+        };
+    }
 }

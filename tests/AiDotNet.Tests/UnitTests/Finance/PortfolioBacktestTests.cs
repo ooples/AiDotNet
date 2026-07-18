@@ -65,6 +65,22 @@ public sealed class PortfolioBacktestTests
 
     [Fact]
     [Trait("category", "unit")]
+    public void Momentum_baseline_longs_the_winner_and_beats_equal_weight_on_a_trend()
+    {
+        // Asset 0 trends up, asset 1 trends down. Momentum should hold ONLY the winner and beat equal-weight,
+        // which wastes half its book on the falling asset. (2 assets, no feature columns → totalColumns == 2.)
+        var prices = new List<double[]> { Ramp(100, 2, 60), Ramp(100, -1.5, 60) };
+
+        var momentum = PortfolioBacktest.Run(Env(prices), BaselinePolicies.Momentum<double>(windowSize: 5, totalColumns: 2, tradableCount: 2));
+        var equalWeight = PortfolioBacktest.Run(Env(prices), BaselinePolicies.EqualWeight<double>(2));
+
+        Assert.True(momentum.TotalReturn > 0, $"momentum should grow on the up-trending winner, got {momentum.TotalReturn}");
+        Assert.True(momentum.TotalReturn > equalWeight.TotalReturn,
+            $"momentum ({momentum.TotalReturn}) should beat equal-weight ({equalWeight.TotalReturn}) by avoiding the loser");
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
     public void Drawdown_is_captured_when_the_market_rises_then_falls()
     {
         // Rise to a peak, then fall well below it — a full-long book must record a real drawdown.
