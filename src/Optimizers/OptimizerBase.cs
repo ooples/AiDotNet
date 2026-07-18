@@ -603,7 +603,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // vector, so column-subset feature selection doesn't apply. They use all features
         // and skip data subsetting entirely (Step 4 below). Fixes #1468.
         int totalFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
-        bool hasNonFlatInput = HasNonFlatNeuralInput(solution);
+        // "Non-flat" = the input is a spatial/sequence tensor, so column-subset feature selection doesn't apply.
+        // HasNonFlatNeuralInput inspects the first layer's declared input rank, which misses Dense-embedding
+        // forecasters (PatchTST/iTransformer start with a Dense patch/variate embedding, so their first-layer
+        // rank is 1) even though they consume a rank-3 [batch, seq, features] tensor. Fall back to the ACTUAL
+        // input rank so any rank>2 tensor input skips column extraction (which would otherwise index axis 1 of a
+        // rank-3 tensor and throw). Matrix inputs and rank-2 tensors are unaffected.
+        bool hasNonFlatInput = HasNonFlatNeuralInput(solution)
+            || (inputData.XTrain is Tensor<T> nonFlatTensor && nonFlatTensor.Shape.Length > 2);
         List<int> selectedFeaturesIndices;
 
         if (!InterfaceGuard.Parameterizable(solution).SupportsParameterInitialization

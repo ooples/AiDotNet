@@ -1879,6 +1879,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var quantizedModel = quantizer.Quantize(model, internalConfig);
         var quantizedParameters = InterfaceGuard.Parameterizable(quantizedModel).GetParameters();
 
+        // Preserve trained state through quantization. Quantizers rebuild the model from its parameter vector
+        // (IParameterizable.WithParameters), which for model families that keep trained state OUTSIDE
+        // GetParameters() — e.g. gradient-boosted trees' tree ensembles and bin thresholds — drops those
+        // internals, leaving the quantized model UNTRAINED so its Predict throws "Model must be trained before
+        // making predictions" (surfaced when a downstream consumer such as the JIT path then traces it). Re-seat
+        // the quantized parameters onto a full DeepCopy of the trained source, which keeps those internals, and
+        // apply the parameters in-place (SetParameters) rather than rebuilding.
+        try
+        {
+            var trainedQuantized = model.DeepCopy();
+            InterfaceGuard.Parameterizable(trainedQuantized).SetParameters(quantizedParameters);
+            quantizedModel = trainedQuantized;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && ex is not OutOfMemoryException)
+        {
+            // Preserving trained state failed for an EXPECTED reason (e.g. a model that can't round-trip via
+            // DeepCopy/SetParameters). Do NOT fall back to the quantizer's rebuilt model — for families that keep
+            // trained internals outside the parameter vector it is UNTRAINED and would throw at predict time (the
+            // exact defect this path fixes). Skip quantization so the caller keeps the original trained,
+            // unquantized model rather than a landmine. Cancellation and out-of-memory are NOT expected here and
+            // propagate so they aren't silently turned into a successful-looking build.
+            _accelerationLogger?.Invoke(
+                $"[AiDotNet] Quantization skipped: could not preserve trained state ({ex.GetType().Name}: {ex.Message}); " +
+                "keeping the original trained model.");
+            return (null, null);
+        }
+
         // Calculate actual quantized size based on bit width
         // For sub-byte quantization (4-bit), we need to account for packing
         long quantizedSizeBytes = ((long)quantizedParameters.Length * internalConfig.EffectiveBitWidth + 7) / 8;
