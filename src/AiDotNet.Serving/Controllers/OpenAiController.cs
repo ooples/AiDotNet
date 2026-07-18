@@ -478,7 +478,7 @@ public sealed class OpenAiController : ControllerBase
         return earliest;
     }
 
-    private static int ResolveEosTokenId(ITokenizer tokenizer)
+    private int ResolveEosTokenId(ITokenizer tokenizer)
     {
         var eos = tokenizer.SpecialTokens?.EosToken;
         if (string.IsNullOrEmpty(eos)) return -1;
@@ -487,8 +487,11 @@ public sealed class OpenAiController : ControllerBase
             var ids = tokenizer.ConvertTokensToIds(new List<string> { eos! });
             return ids.Count > 0 ? ids[0] : -1;
         }
-        catch
+        catch (Exception ex)
         {
+            // Log for developer monitoring, then fall back to "no EOS": a tokenizer/config defect must be
+            // visible, not silently swallowed (it changes generation termination behavior).
+            _logger.LogWarning(ex, "Failed to resolve the EOS token id for the tokenizer; generation will rely on max_tokens/stop only.");
             return -1;
         }
     }
