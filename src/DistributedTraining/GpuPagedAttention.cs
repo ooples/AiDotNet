@@ -76,10 +76,19 @@ internal sealed class GpuPagedAttention : IDisposable
     public float[] Decode(int seqId, float[] query, int seqLen)
     {
         var qBuf = _backend.AllocateBuffer(query);
-        var outBuf = _backend.PagedAttentionDecode(
-            qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
-            _heads, _headDim, _blockSize, seqLen, _scale);
-        return _backend.DownloadBuffer(outBuf);
+        IGpuBuffer? outBuf = null;
+        try
+        {
+            outBuf = _backend.PagedAttentionDecode(
+                qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
+                _heads, _headDim, _blockSize, seqLen, _scale);
+            return _backend.DownloadBuffer(outBuf);
+        }
+        finally
+        {
+            qBuf.Dispose();
+            if (outBuf is not null && !ReferenceEquals(outBuf, qBuf)) outBuf.Dispose();
+        }
     }
 
     /// <summary>
@@ -90,10 +99,19 @@ internal sealed class GpuPagedAttention : IDisposable
     public float[] Prefill(int seqId, float[] queries, int numQueries, int startPos)
     {
         var qBuf = _backend.AllocateBuffer(queries);
-        var outBuf = _backend.PagedAttentionPrefill(
-            qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
-            _heads, _headDim, _blockSize, numQueries, startPos, _scale);
-        return _backend.DownloadBuffer(outBuf);
+        IGpuBuffer? outBuf = null;
+        try
+        {
+            outBuf = _backend.PagedAttentionPrefill(
+                qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
+                _heads, _headDim, _blockSize, numQueries, startPos, _scale);
+            return _backend.DownloadBuffer(outBuf);
+        }
+        finally
+        {
+            qBuf.Dispose();
+            if (outBuf is not null && !ReferenceEquals(outBuf, qBuf)) outBuf.Dispose();
+        }
     }
 
     public void Dispose()

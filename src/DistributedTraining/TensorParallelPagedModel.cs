@@ -100,6 +100,11 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
     private readonly GpuPagedAttention?[][]? _gpuAttn;
     private bool GpuEnabled => _gpuAttn is not null;
 
+    // The device caches key sequences by int, but the batcher's sequence ids are long. Map each long id to a
+    // distinct int (allocated on first use, released on free) so different sequences never collide on the device.
+    private readonly System.Collections.Generic.Dictionary<long, int> _gpuSeqIds = new();
+    private int _nextGpuSid;
+
     /// <summary>Whether this model's attention runs on the GPU (device paged attention) vs the CPU double path.</summary>
     public bool GpuActive => _gpuAttn is not null;
 
@@ -452,7 +457,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
     private void GpuAttention(int r, int l, long seqId, double[] q, double[] k, double[] v, int seqLen, int basePos, double[] context_r)
     {
         var g = _gpuAttn![r]![l]!;
-        int sid = (int)(seqId & 0x7FFFFFFF);
+        int sid = GpuSid(seqId);
         for (int t = 0; t < seqLen; t++)
         {
             int src = t * _localDim;
@@ -478,14 +483,26 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         }
     }
 
+    // Maps a batcher long sequence id to the distinct int the device caches use (stable for the sequence's life).
+    private int GpuSid(long seqId)
+    {
+        if (!_gpuSeqIds.TryGetValue(seqId, out int sid))
+        {
+            sid = _nextGpuSid++;
+            _gpuSeqIds[seqId] = sid;
+        }
+        return sid;
+    }
+
     /// <summary>Frees this sequence's device KV across all ranks/layers (GPU mode); no-op on the CPU path.</summary>
     internal void FreeGpuSequence(long seqId)
     {
         if (_gpuAttn is null) return;
-        int sid = (int)(seqId & 0x7FFFFFFF);
+        if (!_gpuSeqIds.TryGetValue(seqId, out int sid)) return;
         for (int r = 0; r < _worldSize; r++)
             for (int l = 0; l < _numLayers; l++)
                 _gpuAttn[r]?[l]?.Free(sid);
+        _gpuSeqIds.Remove(seqId);
     }
 
     /// <summary>Frees the per-rank caches.</summary>
