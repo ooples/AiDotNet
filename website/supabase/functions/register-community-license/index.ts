@@ -2,6 +2,34 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
 import { type ProductSlug } from "../_shared/products.ts";
+import { capsForTier, signAidn2Token } from "../_shared/aidn2.ts";
+
+// Short-lived aidn2 "bootstrap" token minted at community registration so the user can LOAD models offline
+// immediately (before the SDK's first online validation derives a machine-bound token). It is NOT
+// machine-bound (no machine at registration), but that's safe HERE and ONLY here: community caps are
+// `tensors:load` — no save/persist — so a leaked bootstrap token grants nothing beyond offline read, which
+// community already allows. Paid tiers deliberately do NOT get a non-bound token; their SDK derives a
+// machine-bound one via issue-license. Kept short so it self-expires well inside the attestation window.
+const BOOTSTRAP_EXP_DAYS = 7;
+
+/** Best-effort: mints a non-bound, load-only community bootstrap token, or null if signing isn't configured
+ *  or fails. NEVER throws — a signing hiccup must not fail an otherwise-successful registration. */
+async function mintCommunityBootstrap(licenseId: string): Promise<string | null> {
+  try {
+    return await signAidn2Token({
+      sub: licenseId,          // opaque license id, never the reusable AIDN-* key
+      tier: COMMUNITY_TIER,
+      seats: 1,
+      caps: capsForTier(COMMUNITY_TIER), // ["tensors:load"] — load-only, so non-binding is safe
+      jti: licenseId,
+      expDays: BOOTSTRAP_EXP_DAYS,
+      // no mach (no machine at registration), no scope
+    });
+  } catch (err) {
+    console.warn("register-community-license: bootstrap token mint skipped:", (err as Error).message);
+    return null;
+  }
+}
 
 // Default matches the production origin the marketing site actually serves from.
 // Override via the ALLOWED_ORIGIN function secret for staging / preview envs.
@@ -115,12 +143,14 @@ serve(async (req: Request) => {
     }
 
     if (existingLicense) {
+      const bootstrap_token = await mintCommunityBootstrap(existingLicense.id);
       return new Response(
         JSON.stringify({
           success: true,
           license_key: existingLicense.license_key,
           tier: COMMUNITY_TIER,
           is_existing: true,
+          bootstrap_token,
           message: "You already have an active community license.",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -141,7 +171,7 @@ serve(async (req: Request) => {
     // insert fails with Postgres error code 23505 (unique_violation) and
     // we recover by reading back the winner's row instead of creating a
     // duplicate.
-    const { error: insertError } = await serviceClient
+    const { data: inserted, error: insertError } = await serviceClient
       .from("license_keys")
       .insert({
         user_id: user.id,
@@ -151,7 +181,9 @@ serve(async (req: Request) => {
         status: "active",
         max_activations: 3,
         notes: "Self-registered community license",
-      });
+      })
+      .select("id")
+      .single();
 
     if (insertError) {
       // PostgREST surfaces the native Postgres SQLSTATE in `code`; 23505 is
@@ -168,12 +200,14 @@ serve(async (req: Request) => {
         // for this user. Read it back and return that one.
         const { data: racedLicense, error: refetchError } = await fetchExistingActiveLicense();
         if (!refetchError && racedLicense) {
+          const bootstrap_token = await mintCommunityBootstrap(racedLicense.id);
           return new Response(
             JSON.stringify({
               success: true,
               license_key: racedLicense.license_key,
               tier: COMMUNITY_TIER,
               is_existing: true,
+              bootstrap_token,
               message: "You already have an active community license.",
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -210,12 +244,14 @@ serve(async (req: Request) => {
       );
     }
 
+    const bootstrap_token = inserted?.id ? await mintCommunityBootstrap(inserted.id) : null;
     return new Response(
       JSON.stringify({
         success: true,
         license_key: licenseKey,
         tier: COMMUNITY_TIER,
         is_existing: false,
+        bootstrap_token,
         message: "Community license created successfully! Set AIDOTNET_LICENSE_KEY or save to ~/.aidotnet/license.key",
       }),
       { status: 201, headers: { ...corsHeaders, "Content-Type": "application/json" } }
