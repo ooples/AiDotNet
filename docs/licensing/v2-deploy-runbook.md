@@ -76,14 +76,15 @@ Copy the `LicensePublicKey.json` from step 1 into `src/BuildKey/LicensePublicKey
 lines keygen printed). Cut SDK releases embedding it. Until a released SDK embeds this exact public key, no
 client can verify an aidn2 token — so this must land before step 5/6 go wide.
 
-## Step 5 — wire the client auto-fetch glue (follow-up PR)
+## Step 5 — client auto-fetch glue — DONE (#1891, `OnlineLicenseServices`)
 
-With the endpoints live and the public key embedded, add to the SDK: after a successful online validation,
-call `issue-license` and cache the returned `offline_token`; on startup fetch `get-revocations`, verify it
-against the embedded key, and hand it to `LicenseRevocationProvider.TryInstallFetched`. Keep both strictly
-**fail-open** and off the latency-critical path (background refresh + cache). This is deferred out of #1891 on
-purpose: it's hot-path network code that should be built and tested against the now-live endpoints, not
-shipped blind.
+Implemented + tested against the live endpoints: after a successful online validation a throttled BACKGROUND
+task (off the hot path) fetches + installs the signed CRL and mints + caches a short-lived, machine-bound
+`aidn2` token via `issue-license`; when the server is later unreachable, `Validate()`/`ValidateAsync()` fall
+back to that cached token (verified locally — signature + exp + machine-lock + CRL — so it only grants when
+genuinely valid). `LicenseRevocationProvider` lazily loads the last-fetched CRL from disk so revocation is
+enforced even on a fully-offline start. Strictly fail-open/best-effort. 8 `OnlineLicenseServicesTests` green
+(18/18 with the aidn2 binding tests); project builds clean.
 
 ## Step 6 — CI key (replaces the ModuleInitializer stopgap, optional)
 
