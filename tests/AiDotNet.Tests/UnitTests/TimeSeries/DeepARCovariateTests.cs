@@ -27,6 +27,9 @@ public sealed class DeepARCovariateTests
         CovariateSize = 1,
     };
 
+    // net471-safe finiteness check (double.IsFinite is .NET Core / netstandard2.1+ only).
+    private static bool IsFinite(double x) => !double.IsNaN(x) && !double.IsInfinity(x);
+
     // Series whose one-step change is DRIVEN by a covariate: y[t+1] - y[t] ≈ covariate[t]. A covariate-blind
     // model cannot fit this; a covariate-aware one can, so the trained model's next-step forecast must move
     // with the last covariate.
@@ -75,7 +78,7 @@ public sealed class DeepARCovariateTests
         var bands = model.ForecastWithCovariates(history, histCov, future, new[] { 0.1, 0.5, 0.9 });
         for (var h = 0; h < options.ForecastHorizon; h++)
         {
-            Assert.True(double.IsFinite(bands[0.5][h]), $"non-finite covariate forecast at h={h}");
+            Assert.True(IsFinite(bands[0.5][h]), $"non-finite covariate forecast at h={h}");
             Assert.True(bands[0.1][h] <= bands[0.5][h] + 1e-9 && bands[0.5][h] <= bands[0.9][h] + 1e-9, "non-monotone band");
         }
     }
@@ -106,7 +109,7 @@ public sealed class DeepARCovariateTests
         double fLow = model.PredictNextWithCovariates(history, covLow);
         double fHigh = model.PredictNextWithCovariates(history, covHigh);
 
-        Assert.True(double.IsFinite(fLow) && double.IsFinite(fHigh), "non-finite covariate point forecast");
+        Assert.True(IsFinite(fLow) && IsFinite(fHigh), "non-finite covariate point forecast");
         // A covariate that drives the next step must change the forecast, and in the right direction
         // (higher covariate → higher next value on this series).
         Assert.True(Math.Abs(fHigh - fLow) > 1e-4, $"covariate had no effect on the forecast ({fLow} vs {fHigh}) — x was ignored");
