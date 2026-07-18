@@ -164,7 +164,14 @@ begin
     -- duplicate row. Re-check the activation lookup INSIDE the locked
     -- section so one of the racers finds the row the other just wrote
     -- and short-circuits into the existing-activation update path.
-    perform pg_advisory_xact_lock(v_license.id);
+    --
+    -- pg_advisory_xact_lock takes BIGINT, not uuid — passing v_license.id
+    -- directly throws `function pg_advisory_xact_lock(uuid) does not exist`
+    -- on every new-machine activation (the 20260504 fix; regressed here when
+    -- this migration rebuilt the function from the pre-fix version, and
+    -- re-fixed in 20260718000300). hashtextextended(uuid::text) is a
+    -- deterministic bigint, so concurrent validations still serialise.
+    perform pg_advisory_xact_lock(hashtextextended(v_license.id::text, 0));
 
     -- Repeat the activation lookup now that we hold the lock.
     select * into v_existing_activation
