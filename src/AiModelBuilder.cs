@@ -132,7 +132,7 @@ namespace AiDotNet;
 /// modelRegistry.TransitionStage(modelVersion.ModelId, modelVersion.Version, ModelStage.Production);
 /// </code>
 /// </remarks>
-public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>, IWeightStreamingCapableBuilder<T, TInput, TOutput>, AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>
+public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>, AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
 
