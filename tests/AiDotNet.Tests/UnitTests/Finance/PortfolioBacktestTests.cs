@@ -81,6 +81,42 @@ public sealed class PortfolioBacktestTests
 
     [Fact]
     [Trait("category", "unit")]
+    public void Sortino_and_calmar_are_computed_and_sane_on_a_rising_but_choppy_market()
+    {
+        // A net-rising series WITH regular small dips (so downside deviation is defined). Sortino must be
+        // positive and, since it penalizes only downside, at least the Sharpe; Calmar (annual return / max DD)
+        // must be positive on a net gain.
+        var choppy = new double[80];
+        double p = 100;
+        for (int i = 0; i < 80; i++)
+        {
+            choppy[i] = p;
+            p += (i % 4 == 3) ? -0.8 : 1.2; // three up steps, one down — rises net, with real downside
+        }
+
+        var r = PortfolioBacktest.Run(Env(new List<double[]> { choppy }), _ => new Vector<double>(new[] { 1.0 }));
+
+        Assert.True(r.AnnualizedSortino > 0, $"sortino {r.AnnualizedSortino}");
+        Assert.True(r.AnnualizedSortino >= r.AnnualizedSharpe - 1e-9, "sortino only penalizes downside, so >= sharpe");
+        Assert.True(r.Calmar > 0, $"calmar {r.Calmar}");
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void RiskParity_allocates_more_to_the_calmer_asset()
+    {
+        // windowSize 3, 2 tradable columns. Asset 0 is steady (low vol); asset 1 is volatile (high vol).
+        // Observation layout: [t0a0,t0a1, t1a0,t1a1, t2a0,t2a1].
+        var state = new Vector<double>(new[] { 100.0, 100.0, 101.0, 110.0, 102.0, 95.0 });
+        var policy = BaselinePolicies.RiskParity<double>(windowSize: 3, totalColumns: 2, tradableCount: 2);
+
+        var w = policy(state);
+        Assert.True(w[0] > w[1], $"risk-parity should over-weight the calmer asset: {w[0]} vs {w[1]}");
+        Assert.True(Math.Abs((w[0] + w[1]) - 1.0) < 1e-9, "long-only weights should sum to 1");
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
     public void Drawdown_is_captured_when_the_market_rises_then_falls()
     {
         // Rise to a peak, then fall well below it — a full-long book must record a real drawdown.

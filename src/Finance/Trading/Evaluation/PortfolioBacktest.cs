@@ -14,7 +14,9 @@ public sealed record PortfolioBacktestResult(
     double FinalValue,
     double TotalReturn,
     double AnnualizedSharpe,
+    double AnnualizedSortino,
     double MaxDrawdown,
+    double Calmar,
     double AverageTurnover,
     int Steps);
 
@@ -75,15 +77,15 @@ public static class PortfolioBacktest
         if (values.Count < 2)
         {
             double single = values.Count == 1 ? values[0] : 0.0;
-            return new PortfolioBacktestResult(single, 0.0, 0.0, 0.0, 0.0, steps);
+            return new PortfolioBacktestResult(single, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, steps);
         }
 
         double start = values[0];
         double final = values[^1];
         double totalReturn = start > 0 ? (final - start) / start : 0.0;
 
-        // Per-step returns → annualized Sharpe.
-        double sumR = 0, sumR2 = 0;
+        // Per-step returns → annualized Sharpe + Sortino (Sortino penalizes only DOWNSIDE volatility).
+        double sumR = 0, sumR2 = 0, sumDown2 = 0;
         int n = 0;
         for (int i = 1; i < values.Count; i++)
         {
@@ -96,16 +98,22 @@ public static class PortfolioBacktest
             double r = (values[i] - prev) / prev;
             sumR += r;
             sumR2 += r * r;
+            if (r < 0)
+            {
+                sumDown2 += r * r;
+            }
             n++;
         }
 
-        double sharpe = 0.0;
+        double sharpe = 0.0, sortino = 0.0, mean = 0.0;
         if (n > 1)
         {
-            double mean = sumR / n;
+            mean = sumR / n;
             double variance = Math.Max(0.0, (sumR2 / n) - (mean * mean));
             double std = Math.Sqrt(variance);
             sharpe = std > 1e-12 ? (mean / std) * Math.Sqrt(PeriodsPerYear) : 0.0;
+            double downsideDev = Math.Sqrt(sumDown2 / n);
+            sortino = downsideDev > 1e-12 ? (mean / downsideDev) * Math.Sqrt(PeriodsPerYear) : 0.0;
         }
 
         // Max drawdown from the running peak.
@@ -123,8 +131,12 @@ public static class PortfolioBacktest
             }
         }
 
+        // Calmar = annualized return / max drawdown (return per unit of worst-case loss).
+        double annualizedReturn = mean * PeriodsPerYear;
+        double calmar = maxDd > 1e-12 ? annualizedReturn / maxDd : 0.0;
+
         double avgTurnover = steps > 0 ? turnoverSum / steps : 0.0;
-        return new PortfolioBacktestResult(final, totalReturn, sharpe, maxDd, avgTurnover, steps);
+        return new PortfolioBacktestResult(final, totalReturn, sharpe, sortino, maxDd, calmar, avgTurnover, steps);
     }
 }
 
@@ -204,6 +216,63 @@ public static class BaselinePolicies
                     {
                         action[i] = w;
                     }
+                }
+            }
+
+            return action;
+        };
+    }
+
+    /// <summary>
+    /// RISK-PARITY (inverse-volatility) baseline: allocate long weights proportional to 1/σ of each tradable
+    /// asset's recent returns, so every name contributes roughly equal risk (calmer assets get more capital).
+    /// A standard institutional benchmark that usually earns a HIGHER Sharpe than equal-weight, making it a
+    /// tougher control. Decodes the same observation window as <see cref="Momentum{T}"/>.
+    /// </summary>
+    public static Func<Vector<T>, Vector<T>> RiskParity<T>(int windowSize, int totalColumns, int tradableCount)
+    {
+        if (windowSize < 3) throw new ArgumentOutOfRangeException(nameof(windowSize), "Risk-parity needs a window of at least 3.");
+        if (tradableCount <= 0 || tradableCount > totalColumns) throw new ArgumentOutOfRangeException(nameof(tradableCount));
+
+        return state =>
+        {
+            var invVol = new double[tradableCount];
+            double sum = 0;
+            for (int i = 0; i < tradableCount; i++)
+            {
+                // Per-step returns of asset i across the window.
+                double sr = 0, sr2 = 0;
+                int m = 0;
+                for (int t = 1; t < windowSize; t++)
+                {
+                    double prev = Convert.ToDouble(state[(t - 1) * totalColumns + i]);
+                    double cur = Convert.ToDouble(state[t * totalColumns + i]);
+                    if (prev > 0)
+                    {
+                        double r = (cur - prev) / prev;
+                        sr += r;
+                        sr2 += r * r;
+                        m++;
+                    }
+                }
+
+                double vol = 1e-6;
+                if (m > 1)
+                {
+                    double mu = sr / m;
+                    vol = Math.Sqrt(Math.Max(0.0, (sr2 / m) - (mu * mu))) + 1e-6;
+                }
+
+                invVol[i] = 1.0 / vol;
+                sum += invVol[i];
+            }
+
+            var action = new Vector<T>(tradableCount);
+            if (sum > 0)
+            {
+                for (int i = 0; i < tradableCount; i++)
+                {
+                    action[i] = (T)Convert.ChangeType(invVol[i] / sum, typeof(T), System.Globalization.CultureInfo.InvariantCulture);
                 }
             }
 
