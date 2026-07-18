@@ -1085,6 +1085,20 @@ internal class ContinuousBatcher<T> : IDisposable
 
     private bool ShouldUseSpeculativeDecoding(IReadOnlyCollection<SequenceState<T>> batch, out string reason)
     {
+        // Structured-output requests must never speculate: the greedy draft/verify path picks tokens via
+        // argmax without applying the per-sequence constraint mask, so a drafted token could violate the
+        // required format. Force plain masked decode whenever any batched sequence carries a constraint.
+        // This overrides even ForceOn — correctness of the constraint takes priority over the speed hint.
+        foreach (var seq in batch)
+        {
+            if (seq.Request.Constraint is not null)
+            {
+                reason = "StructuredOutputConstraint";
+                InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+                return false;
+            }
+        }
+
         if (_speculationDisabledDueToFailure)
         {
             reason = "DisabledDueToFailure";
@@ -1351,6 +1365,21 @@ internal class ContinuousBatcher<T> : IDisposable
             lastLogits[i] = Convert.ToSingle(logits[indices]);
         }
 
+        // Structured-output constraint (JSON / regex / grammar / choice): forbid tokens that would break
+        // the required format BEFORE greedy/softmax/sampling by setting their logit to -inf. Applied here so
+        // it composes with temperature, min-p, top-p, and top-k. Speculation is disabled for constrained
+        // requests (see ShouldUseSpeculativeDecoding), so every emitted token passes through this mask.
+        var constraint = request.Constraint;
+        constraint?.ApplyMask(lastLogits);
+
+        // Advances the constraint state for the chosen token and returns it — the single exit point so the
+        // constraint sees exactly the committed token regardless of which sampling branch produced it.
+        int Finalize(int token)
+        {
+            constraint?.Accept(token);
+            return token;
+        }
+
         // Greedy decoding (temperature <= 0): the argmax — deterministic, and avoids dividing by zero below.
         if (request.Temperature <= 0f)
         {
@@ -1359,7 +1388,7 @@ internal class ContinuousBatcher<T> : IDisposable
             {
                 if (lastLogits[i] > lastLogits[best]) best = i;
             }
-            return best;
+            return Finalize(best);
         }
 
         // Apply temperature
@@ -1411,10 +1440,10 @@ internal class ContinuousBatcher<T> : IDisposable
         {
             cumSum += lastLogits[i];
             if (cumSum >= r)
-                return i;
+                return Finalize(i);
         }
 
-        return vocabSize - 1; // Fallback to last token
+        return Finalize(vocabSize - 1); // Fallback to last token
     }
 
     // Per-sequence deterministic RNG: seeded from the request when a seed is provided (reproducible),

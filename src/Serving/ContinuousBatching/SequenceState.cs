@@ -331,6 +331,15 @@ public class GenerationRequest<T>
     public int? SpeculationDepth { get; set; }
 
     /// <summary>
+    /// Optional structured-output constraint (JSON, regex, grammar, or choice) that restricts which tokens
+    /// may be emitted so the output conforms to a required format. Null = unconstrained free-form decoding.
+    /// The constraint is stateful and belongs to this single request/sequence — never share one instance
+    /// across concurrent requests. When set, speculative decoding is disabled for the request so every
+    /// emitted token passes through the constraint mask.
+    /// </summary>
+    public AiDotNet.Serving.StructuredOutput.ITokenConstraint? Constraint { get; set; }
+
+    /// <summary>
     /// Repetition penalty (1.0 = no penalty).
     /// </summary>
     public float RepetitionPenalty { get; set; } = 1.0f;
