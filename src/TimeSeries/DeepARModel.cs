@@ -67,9 +67,10 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     private readonly Random _random;
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
-    // Tape-trainable LSTM cells (one per layer) and the Gaussian output head.
+    // Tape-trainable LSTM cells (one per layer) and the pluggable predictive-distribution head
+    // (Gaussian / Student-t / spline-quantile, selected by DeepAROptions.LikelihoodType).
     private readonly List<DeepARLstmCellTape<T>> _lstmLayers;
-    private DeepARGaussianHead<T> _head;
+    private DeepARDistributionHead<T> _head;
 
     // Normalization statistics computed during training (zero-mean / unit-variance of the
     // training series). Applied to inputs before the network and inverted on the network
@@ -131,7 +132,22 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
             _lstmLayers.Add(new DeepARLstmCellTape<T>(layerInputSize, _options.HiddenSize, 42 + i * 1000));
         }
 
-        _head = new DeepARGaussianHead<T>(_options.HiddenSize, seed: 12345);
+        _head = CreateHead();
+    }
+
+    /// <summary>
+    /// Builds the predictive-distribution head selected by <see cref="DeepAROptions{T}.LikelihoodType"/>:
+    /// "StudentT" (heavy-tailed, ν = <see cref="DeepAROptions{T}.StudentTDegreesOfFreedom"/>), "Spline"
+    /// (non-parametric asymmetric quantile function trained with the pinball loss), or "Gaussian" (default).
+    /// </summary>
+    private DeepARDistributionHead<T> CreateHead()
+    {
+        string kind = _options.LikelihoodType?.Trim() ?? "Gaussian";
+        if (string.Equals(kind, "StudentT", StringComparison.OrdinalIgnoreCase))
+            return new DeepARStudentTHead<T>(_options.HiddenSize, _options.StudentTDegreesOfFreedom, seed: 12345);
+        if (string.Equals(kind, "Spline", StringComparison.OrdinalIgnoreCase))
+            return new DeepARSplineHead<T>(_options.HiddenSize, seed: 12345);
+        return new DeepARGaussianHead<T>(_options.HiddenSize, seed: 12345);
     }
 
     private IReadOnlyList<Interfaces.ILayer<T>> AllLayers()
@@ -273,8 +289,10 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
                 using var tape = new GradientTape<T>();
 
-                var (meanBL, scaleBL) = ForwardTape(inputSteps, b);
-                var batchLoss = ComputeTrainingLoss(meanBL, scaleBL, batchTarget);
+                // Unroll the LSTM to per-step top hidden states, then let the selected distribution head
+                // build its own likelihood loss (the head owns the residual-mean skip + distribution math).
+                var hiddenSteps = ForwardHidden(inputSteps, b);
+                var batchLoss = _head.ComputeBatchLoss(hiddenSteps, inputSteps, batchTarget);
 
                 var allGrads = tape.ComputeGradients(batchLoss, sources: null);
                 var grads = new Dictionary<Tensor<T>, Tensor<T>>(
@@ -324,11 +342,12 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
     /// <summary>
     /// Tape-tracked batched forward: unrolls the LSTM over the timesteps in
-    /// <paramref name="inputSteps"/> (each <c>[1, B]</c>) and returns the per-step Gaussian
-    /// parameters as <c>([B, L] mean, [B, L] scale)</c>. Uses <c>Engine.Tensor*</c> ops so
+    /// <paramref name="inputSteps"/> (each <c>[1, B]</c>) and returns the top-layer hidden state
+    /// <c>[H, B]</c> at every timestep. The selected <see cref="DeepARDistributionHead{T}"/> turns those
+    /// hidden states into its likelihood loss. Uses <c>Engine.Tensor*</c> ops so
     /// <see cref="GradientTape{T}"/> differentiates the loss w.r.t. every registered weight.
     /// </summary>
-    private (Tensor<T> mean, Tensor<T> scale) ForwardTape(Tensor<T>[] inputSteps, int batch)
+    private List<Tensor<T>> ForwardHidden(Tensor<T>[] inputSteps, int batch)
     {
         int layers = _lstmLayers.Count;
         int h = _options.HiddenSize;
@@ -342,12 +361,10 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
             cState[l] = new Tensor<T>(new[] { h, batch });
         }
 
-        var meanSteps = new Tensor<T>[inputSteps.Length];
-        var scaleRawSteps = new Tensor<T>[inputSteps.Length];
-
+        var hiddenSteps = new List<Tensor<T>>(inputSteps.Length);
         for (int t = 0; t < inputSteps.Length; t++)
         {
-            Tensor<T> layerInput = inputSteps[t]; // [1, B]
+            Tensor<T> layerInput = inputSteps[t]; // [inputSize, B]
             for (int l = 0; l < layers; l++)
             {
                 var (hNew, cNew) = _lstmLayers[l].Step(layerInput, hState[l], cState[l]);
@@ -356,64 +373,13 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
                 layerInput = hNew; // feed to next layer
             }
 
-            // Top-layer hidden -> Gaussian parameters for the next value. The head predicts a
-            // RESIDUAL (delta) that is added to the current observation, so the mean is
-            // μ_t = x_t + Δ(h_t). This residual/skip parameterization keeps the model at the
-            // strong persistence prior (μ ≈ last value) at initialization and lets training
-            // learn only the one-step change — the plain "predict the level from hidden" head
-            // otherwise collapses to a smoothed mean on series with a fast seasonal component.
-            var (deltaT, scaleRawT) = _head.Project(hState[layers - 1]); // each [1, B]
-            meanSteps[t] = Engine.TensorAdd(inputSteps[t], deltaT);
-            scaleRawSteps[t] = scaleRawT;
+            // Each Step returns a fresh tensor, so storing the current top-layer hidden captures this
+            // timestep's state before the next iteration overwrites hState[layers-1]. The head applies the
+            // residual-mean skip (μ_t = x_t + Δ(h_t)) itself, keeping the strong persistence prior at init.
+            hiddenSteps.Add(hState[layers - 1]);
         }
 
-        // Concatenate the per-step [1, B] slices along axis 0 -> [L, B], then permute to [B, L].
-        var meanLB = Engine.TensorConcatenate(meanSteps, axis: 0);
-        var scaleRawLB = Engine.TensorConcatenate(scaleRawSteps, axis: 0);
-        var meanBL = Engine.TensorPermute(meanLB, new[] { 1, 0 });
-        var scaleRawBL = Engine.TensorPermute(scaleRawLB, new[] { 1, 0 });
-
-        // Softplus for a strictly-positive scale.
-        var scaleBL = Engine.Softplus(scaleRawBL);
-        return (meanBL, scaleBL);
-    }
-
-    /// <summary>
-    /// Training loss for the Gaussian head, built entirely from tape-tracked engine ops:
-    /// <c>MSE(μ, y) + mean( log σ + (y − μ_detached)² / (2σ²) )</c>.
-    /// </summary>
-    /// <remarks>
-    /// A pure Gaussian negative log-likelihood couples μ and σ through <c>∂NLL/∂μ = (μ−y)/σ²</c>:
-    /// when the mean is hard to fit early in training the optimizer inflates σ, which vanishes
-    /// that gradient and collapses μ to the series mean (verified empirically — μ froze at the
-    /// global mean and never tracked). Splitting the objective fixes this: the mean is pulled to
-    /// the target by an undivided MSE gradient (no σ escape hatch), while σ is still trained to
-    /// the residual scale via the NLL term with the mean <see cref="IEngine.StopGradient"/>-ed
-    /// so the σ branch cannot perturb μ. The Gaussian likelihood head therefore stays fully
-    /// trained and usable for predictive intervals. This mirrors the MSE-for-stability choice in
-    /// NBEATSModel and is the "train the mean on MSE" simplification permitted for this model.
-    /// </remarks>
-    private Tensor<T> ComputeTrainingLoss(Tensor<T> mean, Tensor<T> scale, Tensor<T> target)
-    {
-        var allAxes = Enumerable.Range(0, mean.Shape.Length).ToArray();
-
-        // Mean branch: plain MSE — gradient (μ − y) is independent of σ, so μ always tracks.
-        var diffMean = Engine.TensorSubtract(mean, target);
-        var meanMse = Engine.ReduceMean(Engine.TensorMultiply(diffMean, diffMean), allAxes, keepDims: false);
-
-        // Scale branch: Gaussian NLL over the detached mean so σ learns the residual spread
-        // without feeding gradient back into μ.
-        var eps = NumOps.FromDouble(1e-6);
-        var muDetached = Engine.StopGradient(mean);
-        var diff = Engine.TensorSubtract(target, muDetached);
-        var diff2 = Engine.TensorMultiply(diff, diff);
-        var variance = Engine.TensorMultiply(scale, scale);
-        var twoVar = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(variance, NumOps.FromDouble(2.0)), eps);
-        var quad = Engine.TensorDivide(diff2, twoVar);
-        var logSigma = Engine.TensorLog(Engine.TensorAddScalar(scale, eps));
-        var scaleTerm = Engine.ReduceMean(Engine.TensorAdd(quad, logSigma), allAxes, keepDims: false);
-
-        return Engine.TensorAdd(meanMse, scaleTerm);
+        return hiddenSteps;
     }
 
     private List<Vector<T>> SnapshotParameters()
@@ -458,12 +424,26 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Predicts the Gaussian parameters (mean and scale, in the ORIGINAL data scale) for the
-    /// value that follows the provided lookback window. Runs the same <c>Engine.Tensor*</c>
-    /// LSTM recurrence used in training (B = 1, sequential unroll) so there is no
-    /// scalar/tape divergence between inference and training.
+    /// Predicts the point mean and representative scale (in the ORIGINAL data scale) for the value that
+    /// follows the provided lookback window, from whichever distribution head is configured.
     /// </summary>
     private (T mean, T scale) PredictDistribution(Vector<T> input)
+    {
+        var dist = PredictDistNorm(input);
+        T mean = NumOps.Add(NumOps.Multiply(dist.MeanNorm, _normStd), _normMean);
+        T scale = NumOps.Multiply(dist.ScaleNorm, _normStd);
+        T minScale = NumOps.FromDouble(1e-6);
+        if (NumOps.LessThan(scale, minScale))
+            scale = minScale;
+        return (mean, scale);
+    }
+
+    /// <summary>
+    /// Runs the eager (B = 1) LSTM recurrence over the lookback window — the same <c>Engine.Tensor*</c> ops
+    /// used in training, so there is no scalar/tape divergence — and returns the head's predictive
+    /// distribution in NORMALIZED space (point, scale, sampler, and optional closed-form quantile function).
+    /// </summary>
+    private DeepARPredictiveDist<T> PredictDistNorm(Vector<T> input)
     {
         // If the window is shorter than the lookback, LEFT-PAD it with its own first value while keeping the
         // caller's real values (in particular the most-recent one, which drives the residual skip at the head).
@@ -518,35 +498,16 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        var (deltaT, scaleRawT) = _head.Project(hState[layers - 1]); // each [1, 1]
-        // μ = last observed value + learned residual (matches the training parameterization).
-        T meanNorm = NumOps.Add(lastNorm, deltaT[0, 0]);
-        T scaleNorm = Softplus(scaleRawT[0, 0]);
-
-        // Denormalize into the original data scale.
-        T mean = NumOps.Add(NumOps.Multiply(meanNorm, _normStd), _normMean);
-        T scale = NumOps.Multiply(scaleNorm, _normStd);
-
-        T minScale = NumOps.FromDouble(1e-6);
-        if (NumOps.LessThan(scale, minScale))
-            scale = minScale;
-
-        return (mean, scale);
-    }
-
-    private T Softplus(T v)
-    {
-        T threshold = NumOps.FromDouble(20.0);
-        if (NumOps.GreaterThan(v, threshold))
-            return v;
-        if (NumOps.LessThan(v, NumOps.FromDouble(-20.0)))
-            return NumOps.Exp(v);
-        return NumOps.Log(NumOps.Add(NumOps.One, NumOps.Exp(v)));
+        // The head owns the residual-mean skip and the distribution math; hand it the final hidden state
+        // and the last normalized observation, and return its normalized predictive distribution.
+        return _head.PredictNorm(hState[layers - 1], lastNorm);
     }
 
     /// <summary>
     /// Generates probabilistic forecasts with quantile predictions by Monte-Carlo sampling
-    /// the autoregressive predictive path.
+    /// the autoregressive predictive path. Samples are drawn from the configured head's own predictive
+    /// distribution (heavy-tailed for Student-t, asymmetric for the spline head), so the quantile bands
+    /// reflect the fitted tail-weight and skew rather than a forced Gaussian shape.
     /// </summary>
     public Dictionary<double, Vector<T>> ForecastWithQuantiles(Vector<T> history, double[] quantiles)
     {
@@ -560,9 +521,10 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
             for (int hStep = 0; hStep < _options.ForecastHorizon; hStep++)
             {
-                var (mean, scale) = PredictDistribution(context);
-
-                T sample = NumOps.Add(mean, NumOps.Multiply(scale, NumOps.FromDouble(_random.NextGaussian())));
+                var dist = PredictDistNorm(context);
+                // Denormalize a head-drawn sample into the original data scale.
+                T sampleNorm = dist.SampleNorm(_random);
+                T sample = NumOps.Add(NumOps.Multiply(sampleNorm, _normStd), _normMean);
                 forecast[hStep] = sample;
 
                 var newContext = new Vector<T>(context.Length);
@@ -601,6 +563,10 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     {
         writer.Write(_options.HiddenSize);
         writer.Write(_options.NumLayers);
+        // Persist the head selector so deserialize rebuilds the SAME distribution head regardless of the
+        // options passed to the deserializing constructor.
+        writer.Write(_options.LikelihoodType ?? "Gaussian");
+        writer.Write(_options.StudentTDegreesOfFreedom);
 
         writer.Write(_lstmLayers.Count);
         foreach (var lstm in _lstmLayers)
@@ -620,6 +586,8 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     {
         _options.HiddenSize = reader.ReadInt32();
         _options.NumLayers = reader.ReadInt32();
+        _options.LikelihoodType = reader.ReadString();
+        _options.StudentTDegreesOfFreedom = reader.ReadDouble();
 
         InitializeModel();
 
@@ -650,7 +618,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "DeepAR",
-            Description = "Probabilistic forecasting with autoregressive recurrent networks (tape-trained BPTT, Gaussian likelihood)",
+            Description = $"Probabilistic forecasting with autoregressive recurrent networks (tape-trained BPTT, {_head.LikelihoodName} likelihood head)",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,
             AdditionalInfo = new Dictionary<string, object>
@@ -851,144 +819,6 @@ internal class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
         ReadTensorInto(reader, _wx);
         ReadTensorInto(reader, _wh);
         ReadTensorInto(reader, _bias);
-    }
-
-    private static void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
-    {
-        writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor._shape)
-            writer.Write(dim);
-        for (int i = 0; i < tensor.Length; i++)
-            writer.Write(Convert.ToDouble(tensor[i]));
-    }
-
-    private void ReadTensorInto(BinaryReader reader, Tensor<T> tensor)
-    {
-        int rank = reader.ReadInt32();
-        var shape = new int[rank];
-        for (int d = 0; d < rank; d++)
-            shape[d] = reader.ReadInt32();
-        int total = shape.Aggregate(1, (a, bb) => a * bb);
-        for (int i = 0; i < total; i++)
-        {
-            double v = reader.ReadDouble();
-            if (i < tensor.Length)
-                tensor[i] = NumOps.FromDouble(v);
-        }
-    }
-}
-
-/// <summary>
-/// Gaussian output head for DeepAR: projects the top LSTM hidden state to a mean and a raw
-/// scale (softplus is applied by the caller). Expressed with <c>Engine.Tensor*</c> ops so the
-/// tape differentiates the likelihood w.r.t. the projection weights. Activations are
-/// column-major <c>[*, batch]</c>.
-/// </summary>
-internal class DeepARGaussianHead<T> : NeuralNetworks.Layers.LayerBase<T>
-{
-    private readonly int _hiddenSize;
-
-    private readonly Tensor<T> _meanW;   // [1, H]
-    private readonly Tensor<T> _meanB;   // [1]
-    private readonly Tensor<T> _scaleW;  // [1, H]
-    private readonly Tensor<T> _scaleB;  // [1]
-
-    public override long ParameterCount => _meanW.Length + _meanB.Length + _scaleW.Length + _scaleB.Length;
-    public override bool SupportsTraining => true;
-    public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { /* tape-based optimizer updates registered params */ }
-
-    /// <summary>
-    /// Projects the hidden state <paramref name="input"/> <c>[H, B]</c> to the Gaussian mean
-    /// <c>[1, B]</c> (satisfies the <c>ILayer</c> contract; the model uses <see cref="Project"/>).
-    /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
-    {
-        var (mean, _) = Project(input);
-        return mean;
-    }
-
-    public DeepARGaussianHead(int hiddenSize, int seed = 12345)
-        : base(new[] { hiddenSize }, new[] { 1 })
-    {
-        _hiddenSize = hiddenSize;
-
-        var random = RandomHelper.CreateSeededRandom(seed);
-        double stddev = Math.Sqrt(2.0 / hiddenSize);
-
-        _meanW = CreateRandomTensor(new[] { 1, hiddenSize }, stddev, random);
-        _meanB = new Tensor<T>(new[] { 1 });
-        _scaleW = CreateRandomTensor(new[] { 1, hiddenSize }, stddev, random);
-        _scaleB = new Tensor<T>(new[] { 1 });
-
-        RegisterTrainableParameter(_meanW, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_meanB, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_scaleW, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_scaleB, PersistentTensorRole.Biases);
-    }
-
-    private Tensor<T> CreateRandomTensor(int[] shape, double stddev, Random random)
-    {
-        var tensor = new Tensor<T>(shape);
-        int total = tensor.Length;
-        for (int i = 0; i < total; i++)
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        return tensor;
-    }
-
-    /// <summary>
-    /// Projects the top hidden state <paramref name="h"/> (<c>[H, B]</c>) to the Gaussian mean
-    /// and raw (pre-softplus) scale, each <c>[1, B]</c>. Same ops for tape and eager use.
-    /// </summary>
-    public (Tensor<T> mean, Tensor<T> scaleRaw) Project(Tensor<T> h)
-    {
-        var mean = Engine.TensorMatMul(_meanW, h);   // [1, B]
-        var meanBCol = Engine.Reshape(_meanB, new[] { 1, 1 });
-        mean = Engine.TensorBroadcastAdd(mean, meanBCol);
-
-        var scaleRaw = Engine.TensorMatMul(_scaleW, h); // [1, B]
-        var scaleBCol = Engine.Reshape(_scaleB, new[] { 1, 1 });
-        scaleRaw = Engine.TensorBroadcastAdd(scaleRaw, scaleBCol);
-
-        return (mean, scaleRaw);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new T[_meanW.Length + _meanB.Length + _scaleW.Length + _scaleB.Length];
-        int idx = 0;
-        for (int i = 0; i < _meanW.Length; i++) p[idx++] = _meanW[i];
-        for (int i = 0; i < _meanB.Length; i++) p[idx++] = _meanB[i];
-        for (int i = 0; i < _scaleW.Length; i++) p[idx++] = _scaleW[i];
-        for (int i = 0; i < _scaleB.Length; i++) p[idx++] = _scaleB[i];
-        return new Vector<T>(p);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        for (int i = 0; i < _meanW.Length; i++) _meanW[i] = parameters[idx++];
-        for (int i = 0; i < _meanB.Length; i++) _meanB[i] = parameters[idx++];
-        for (int i = 0; i < _scaleW.Length; i++) _scaleW[i] = parameters[idx++];
-        for (int i = 0; i < _scaleB.Length; i++) _scaleB[i] = parameters[idx++];
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        writer.Write(_hiddenSize);
-        WriteTensor(writer, _meanW);
-        WriteTensor(writer, _meanB);
-        WriteTensor(writer, _scaleW);
-        WriteTensor(writer, _scaleB);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        reader.ReadInt32(); // hiddenSize
-        ReadTensorInto(reader, _meanW);
-        ReadTensorInto(reader, _meanB);
-        ReadTensorInto(reader, _scaleW);
-        ReadTensorInto(reader, _scaleB);
     }
 
     private static void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
