@@ -136,6 +136,11 @@ internal static class TensorParallelPartitioner<T>
                 reason = $"block {l} attention differs";
                 return null;
             }
+            if (b.IsGated != blocks[0].IsGated)
+            {
+                reason = $"block {l} FFN gating differs from block 0";
+                return null;
+            }
 
             AttnWeights(b.AttentionLayer, out var qWraw, out var kWraw, out var vWraw, out var oWraw, out var oBias);
             var qW = TransposeToOutIn(qWraw, embedDim, embedDim);   // Q: [embDim, numHeads*headDim=embDim]
@@ -150,6 +155,20 @@ internal static class TensorParallelPartitioner<T>
                 return null;
             }
 
+            // Gated SwiGLU: extract the gate projection (partitioned like Up). The block's activation
+            // (SiLU) is applied to the gate path inside the TP FFN; the up path stays linear.
+            Tensor<T>? gateW = null, gateBias = null;
+            if (b.IsGated && b.FfnGate is not null)
+            {
+                gateW = TransposeToOutIn(b.FfnGate.GetWeights(), ffnDim, embedDim);
+                if (gateW is null)
+                {
+                    reason = $"block {l} gate weight shape mismatch";
+                    return null;
+                }
+                gateBias = DenseBias(b.FfnGate, ffnDim);
+            }
+
             perLayer[l] = new TensorParallelLayerWeights<T>
             {
                 QWeight = qW, QBias = Zeros(embedDim),
@@ -158,6 +177,7 @@ internal static class TensorParallelPartitioner<T>
                 OWeight = oW, OBias = oBias,
                 UpWeight = upW, UpBias = DenseBias(b.FfnUp, ffnDim),
                 DownWeight = downW, DownBias = DenseBias(b.FfnDown, embedDim),
+                GateWeight = gateW, GateBias = gateBias,
                 Norm1Gamma = b.Norm1.GetGammaTensor(),
                 Norm2Gamma = b.Norm2.GetGammaTensor(),
             };

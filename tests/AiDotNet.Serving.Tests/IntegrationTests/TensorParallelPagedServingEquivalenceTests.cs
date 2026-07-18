@@ -141,6 +141,46 @@ public sealed class TensorParallelPagedServingEquivalenceTests
         Assert.Equal(reference, sharded);
     }
 
+    /// <summary>
+    /// Gated SwiGLU FFN (LLaMA/Mistral/Qwen2: <c>Down(act(Gate(x)) * Up(x))</c>): the gate and up projections
+    /// are column-partitioned across ranks and multiplied per-slice, so tensor-parallel serving (world sizes 2
+    /// and 4) produces the SAME tokens as world size 1. Proves the gate sharding is invariant.
+    /// </summary>
+    [Theory(Timeout = 120000)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public async Task TensorParallelPagedServing_GatedSwiGLU_MatchesUnsharded(int worldSize)
+    {
+        await Task.Yield();
+
+        var rng = RandomHelper.CreateSeededRandom(13579);
+        var embedding = RandomTensor(rng, Vocab, EmbedDim);
+        var lmHead = RandomTensor(rng, Vocab, EmbedDim);
+        var finalGamma = RandomGamma(rng, EmbedDim);
+        var layers = new TensorParallelLayerWeights<double>[NumLayers];
+        for (int l = 0; l < NumLayers; l++)
+            layers[l] = new TensorParallelLayerWeights<double>
+            {
+                QWeight = RandomTensor(rng, EmbedDim, EmbedDim), QBias = RandomTensor(rng, EmbedDim),
+                KWeight = RandomTensor(rng, EmbedDim, EmbedDim), KBias = RandomTensor(rng, EmbedDim),
+                VWeight = RandomTensor(rng, EmbedDim, EmbedDim), VBias = RandomTensor(rng, EmbedDim),
+                OWeight = RandomTensor(rng, EmbedDim, EmbedDim), OBias = RandomTensor(rng, EmbedDim),
+                UpWeight = RandomTensor(rng, FfnDim, EmbedDim), UpBias = RandomTensor(rng, FfnDim),
+                GateWeight = RandomTensor(rng, FfnDim, EmbedDim), GateBias = RandomTensor(rng, FfnDim), // gated
+                DownWeight = RandomTensor(rng, EmbedDim, FfnDim), DownBias = RandomTensor(rng, EmbedDim),
+                Norm1Gamma = RandomGamma(rng, EmbedDim), Norm2Gamma = RandomGamma(rng, EmbedDim),
+            };
+
+        var prompt = new[] { 1, 2, 3 };
+        const int maxNew = 8;
+
+        int[] reference = GenerateThroughBatcher(1, embedding, lmHead, layers, prompt, maxNew, finalGamma);
+        int[] sharded = GenerateThroughBatcher(worldSize, embedding, lmHead, layers, prompt, maxNew, finalGamma);
+
+        Assert.Equal(maxNew, reference.Length);
+        Assert.Equal(reference, sharded);
+    }
+
     // GELU (tanh approximation), matching a trained transformer's feed-forward activation. Any fixed activation
     // proves sharding-invariance since ws1 and wsN use the same function; GELU exercises a non-piecewise-linear op.
     private static double Gelu(double v)
