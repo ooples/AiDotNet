@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining;
@@ -102,6 +103,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
     // GPU execution: per-(rank, layer) device paged attention. When set, each rank's head-group attention runs
     // on the GPU (FP32) instead of the manual CPU double loop; the rest of the forward stays CPU/double.
     private readonly GpuPagedAttention?[][]? _gpuAttn;
+    private readonly IDirectGpuBackend?[]? _deviceBackends; // per-rank GPU device backend (rank r -> device r%N)
     private bool GpuEnabled => _gpuAttn is not null;
 
     // The device caches key sequences by int, but the batcher's sequence ids are long. Map each long id to a
@@ -179,23 +181,40 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
             });
         }
 
-        // GPU mode: one device paged-attention head-group per (rank, layer). Falls back to CPU (leaves
-        // _gpuAttn null) when no compatible GPU backend is active, so useGpu is a safe request, not a demand.
+        // GPU mode: one device paged-attention head-group per (rank, layer). Each rank is placed on a distinct
+        // GPU device when several are present (rank r -> device r % deviceCount), so its KV cache + attention
+        // live on that device (Megatron multi-GPU memory distribution). Falls back to CPU (leaves _gpuAttn null)
+        // when no compatible GPU backend is active, so useGpu is a safe request, not a demand.
         if (useGpu && GpuPagedAttention.IsAvailable)
         {
+            int deviceCount = Math.Max(1, GpuPagedAttention.DeviceCount);
+            var backends = new IDirectGpuBackend?[worldSize];
             var gpu = new GpuPagedAttention?[worldSize][];
             bool ok = true;
             for (int r = 0; r < worldSize && ok; r++)
             {
+                // Rank r runs on device r % deviceCount; each rank gets its own backend/context on that device.
+                var backend = GpuPagedAttention.CreateDeviceBackend(r % deviceCount);
+                if (backend is null) { ok = false; break; }
+                backends[r] = backend;
                 gpu[r] = new GpuPagedAttention?[numLayers];
                 for (int l = 0; l < numLayers; l++)
                 {
-                    var g = GpuPagedAttention.TryCreate(_localHeads, _localKVHeads, _headDim, blockSize, numBlocks);
+                    var g = GpuPagedAttention.Create(backend, _localHeads, _localKVHeads, _headDim, blockSize, numBlocks);
                     if (g is null) { ok = false; break; }
                     gpu[r][l] = g;
                 }
             }
-            _gpuAttn = ok ? gpu : null;
+            if (ok)
+            {
+                _gpuAttn = gpu;
+                _deviceBackends = backends;
+            }
+            else
+            {
+                // Roll back any backends created before the failure so a partial GPU init doesn't leak devices.
+                for (int r = 0; r < worldSize; r++) backends[r]?.Dispose();
+            }
         }
     }
 
@@ -236,19 +255,21 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         var x = new double[seqLen * _embedDim];
         Embed(input, seqLen, x);
 
-        var keyRow = new T[_localKVDim];
-        var valRow = new T[_localKVDim];
-        var cachedKey = new T[_localKVDim];
-        var cachedVal = new T[_localKVDim];
+        // Resolve the device sequence id ONCE (single-threaded) before the parallel rank regions, since GpuSid
+        // mutates the id map. -1 when running on the CPU path.
+        int gpuSid = GpuEnabled ? GpuSid(seqId) : -1;
 
         for (int l = 0; l < _numLayers; l++)
         {
             var w = _layers[l];
 
-            // ---- Attention sub-block: x = x + O( Attn(Norm1(x)) ), partials summed over ranks ----
+            // ---- Attention sub-block: x = x + O( Attn(Norm1(x)) ). Each rank computes its O-projection PARTIAL
+            // independently (on its own GPU device / CPU thread, its own paged cache + scratch); the partials are
+            // then summed in fixed rank order, so the parallel result is bit-identical to the sequential one. ----
             var ln1 = Normalize(x, seqLen, w.Norm1Gamma);
-            var attnOut = new double[seqLen * _embedDim]; // accumulates O-projection partials + bias
-            for (int r = 0; r < _worldSize; r++)
+            var attnPartials = new double[_worldSize][];
+            int layer = l;
+            RunRanks(r =>
             {
                 int qShardStart = r * _localDim;   // this rank's query-head slice
                 int kvShardStart = r * _localKVDim; // this rank's KV-head slice (== query slice for plain MHA)
@@ -261,17 +282,21 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                 var context_r = new double[seqLen * _localDim];
                 if (GpuEnabled)
                 {
-                    GpuAttention(r, l, seqId, q, k, v, seqLen, basePos, context_r);
+                    GpuAttention(r, layer, gpuSid, q, k, v, seqLen, basePos, context_r);
                 }
                 else
                 {
-                    // Write this rank's KV-head K/V for each step into its paged cache.
+                    var keyRow = new T[_localKVDim];
+                    var valRow = new T[_localKVDim];
+                    var cachedKey = new T[_localKVDim];
+                    var cachedVal = new T[_localKVDim];
+                    // Write this rank's KV-head K/V for each step into its (rank-private) paged cache.
                     for (int t = 0; t < seqLen; t++)
                     {
                         int src = t * _localKVDim;
                         for (int d = 0; d < _localKVDim; d++) { keyRow[d] = NumOps.FromDouble(k[src + d]); valRow[d] = NumOps.FromDouble(v[src + d]); }
-                        _caches[r].WriteKey(seqId, basePos + t, l, keyRow);
-                        _caches[r].WriteValue(seqId, basePos + t, l, valRow);
+                        _caches[r].WriteKey(seqId, basePos + t, layer, keyRow);
+                        _caches[r].WriteValue(seqId, basePos + t, layer, valRow);
                     }
 
                     var scores = new double[basePos + seqLen];
@@ -286,7 +311,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                             double maxScore = double.NegativeInfinity;
                             for (int j = 0; j <= lastPos; j++)
                             {
-                                _caches[r].ReadKey(seqId, j, l, cachedKey);
+                                _caches[r].ReadKey(seqId, j, layer, cachedKey);
                                 double dot = 0.0;
                                 for (int d = 0; d < _headDim; d++)
                                     dot += q[qBase + hOff + d] * Convert.ToDouble(cachedKey[kvOff + d]);
@@ -302,7 +327,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                                 double acc = 0.0;
                                 for (int j = 0; j <= lastPos; j++)
                                 {
-                                    _caches[r].ReadValue(seqId, j, l, cachedVal);
+                                    _caches[r].ReadValue(seqId, j, layer, cachedVal);
                                     acc += scores[j] * inv * Convert.ToDouble(cachedVal[kvOff + d]);
                                 }
                                 context_r[qBase + hOff + d] = acc;
@@ -311,24 +336,32 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                     }
                 }
 
-                // Output projection PARTIAL: attnOut[t,o] += Σ_j context_r[t,j] * O[o, qShardStart+j].
-                AccumulateColumnProjection(attnOut, context_r, seqLen, w.OWeight, qShardStart, _localDim);
-            }
+                // This rank's O-projection PARTIAL into its own buffer: partial[t,o] = Σ_j context_r[t,j] * O[o, qShardStart+j].
+                var partial = new double[seqLen * _embedDim];
+                AccumulateColumnProjection(partial, context_r, seqLen, w.OWeight, qShardStart, _localDim);
+                attnPartials[r] = partial;
+            });
+            var attnOut = new double[seqLen * _embedDim];
+            for (int r = 0; r < _worldSize; r++) { var p = attnPartials[r]; for (int i = 0; i < p.Length; i++) attnOut[i] += p[i]; }
             AddBias(attnOut, seqLen, w.OBias); // O bias added once after the reduce
             for (int i = 0; i < x.Length; i++) x[i] += attnOut[i]; // residual
 
-            // ---- MLP sub-block: x = x + Down(act(Up(Norm2(x)))), partials summed over ranks ----
+            // ---- MLP sub-block: x = x + Down(act(Up(Norm2(x)))). Rank Down-projection partials computed in
+            // parallel, then summed in fixed rank order (bit-identical to the sequential reduction). ----
             var ln2 = Normalize(x, seqLen, w.Norm2Gamma);
-            var ffnOut = new double[seqLen * _embedDim];
-            for (int r = 0; r < _worldSize; r++)
+            var ffnPartials = new double[_worldSize][];
+            RunRanks(r =>
             {
                 int ffnStart = r * _localFfn;
                 // Up-projection for this rank's FFN slice + activation -> h_r [seqLen, localFfn].
                 var h = ProjectRows(ln2, seqLen, w.UpWeight, w.UpBias, ffnStart, _localFfn);
                 for (int i = 0; i < h.Length; i++) h[i] = _ffnActivation(h[i]);
-                // Down-projection PARTIAL: ffnOut[t,o] += Σ_f h[t,f] * Down[o, ffnStart+f].
-                AccumulateColumnProjection(ffnOut, h, seqLen, w.DownWeight, ffnStart, _localFfn);
-            }
+                var partial = new double[seqLen * _embedDim];
+                AccumulateColumnProjection(partial, h, seqLen, w.DownWeight, ffnStart, _localFfn);
+                ffnPartials[r] = partial;
+            });
+            var ffnOut = new double[seqLen * _embedDim];
+            for (int r = 0; r < _worldSize; r++) { var p = ffnPartials[r]; for (int i = 0; i < p.Length; i++) ffnOut[i] += p[i]; }
             AddBias(ffnOut, seqLen, w.DownBias);
             for (int i = 0; i < x.Length; i++) x[i] += ffnOut[i]; // residual
         }
@@ -469,10 +502,9 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
 
     // GPU attention for one (rank, layer): append this step's K/V (FP32) to the device cache and run the paged
     // decode (single query) or prefill (causal, multiple queries) kernel, writing the context into context_r.
-    private void GpuAttention(int r, int l, long seqId, double[] q, double[] k, double[] v, int seqLen, int basePos, double[] context_r)
+    private void GpuAttention(int r, int l, int sid, double[] q, double[] k, double[] v, int seqLen, int basePos, double[] context_r)
     {
         var g = _gpuAttn![r]![l]!;
-        int sid = GpuSid(seqId);
         // K/V are the (possibly narrower) KV-head slice; the query is the full query-head slice.
         for (int t = 0; t < seqLen; t++)
         {
@@ -497,6 +529,16 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
             var ctx = g.Prefill(sid, qf, seqLen, basePos);
             for (int i = 0; i < seqLen * _localDim && i < ctx.Length; i++) context_r[i] = ctx[i];
         }
+    }
+
+    // Runs each rank's independent per-rank work (own device/thread, own paged cache + scratch, own partial
+    // buffer). Ranks are parallelized across GPU devices / CPU cores when worldSize > 1; the callers sum the
+    // per-rank partials in fixed rank order afterwards, so the result stays deterministic (bit-identical to
+    // sequential). A single rank runs inline to avoid thread-pool overhead.
+    private void RunRanks(Action<int> perRank)
+    {
+        if (_worldSize <= 1) { perRank(0); return; }
+        System.Threading.Tasks.Parallel.For(0, _worldSize, perRank);
     }
 
     // Maps a batcher long sequence id to the distinct int the device caches use (stable for the sequence's life).
@@ -529,6 +571,9 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
             for (int r = 0; r < _worldSize; r++)
                 for (int l = 0; l < _numLayers; l++)
                     _gpuAttn[r]?[l]?.Dispose();
+        if (_deviceBackends is not null)
+            for (int r = 0; r < _worldSize; r++)
+                _deviceBackends[r]?.Dispose();
     }
 
     // ---- NeuralNetworkBase inference-only overrides ----
