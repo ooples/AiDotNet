@@ -121,6 +121,10 @@ internal class ContinuousBatcher<T> : IDisposable
     private Task? _runLoopTask;
     private bool _isRunning;
     private bool _disposed;
+    // Serializes request submission against Dispose: a request is either fully enqueued before disposal or
+    // rejected with ObjectDisposedException — it can never be inserted into the queues after the run loop
+    // and signal have been torn down (which would return a task that never completes).
+    private readonly object _lifecycleLock = new();
 
     // Statistics
     private long _totalTokensGenerated;
@@ -242,11 +246,22 @@ internal class ContinuousBatcher<T> : IDisposable
             }
         });
 
-        _pendingResults[sequence.SequenceId] = tcs;
-        _incomingRequests.Enqueue(sequence);
-        // Wake the run loop now if it is idle-waiting (see _workAvailable). Safe to over-signal: extra
-        // permits just cause a spurious no-op Step before the loop settles back to waiting.
-        try { _workAvailable.Release(); } catch (System.ObjectDisposedException) { }
+        // Enqueue + signal under the lifecycle lock so a concurrent Dispose cannot tear down the run loop
+        // and signal between our disposal check and the enqueue (which would leave this task never
+        // completing). If disposal already happened, reject the request instead of accepting orphaned work.
+        lock (_lifecycleLock)
+        {
+            if (_disposed)
+            {
+                throw new System.ObjectDisposedException(nameof(ContinuousBatcher<T>),
+                    "Cannot submit generation requests after the batcher has been disposed.");
+            }
+            _pendingResults[sequence.SequenceId] = tcs;
+            _incomingRequests.Enqueue(sequence);
+            // Wake the run loop now if it is idle-waiting (see _workAvailable). Safe to over-signal: extra
+            // permits just cause a spurious no-op Step before the loop settles back to waiting.
+            try { _workAvailable.Release(); } catch (System.ObjectDisposedException) { }
+        }
 
         // If running, the run loop will pick this up
         // If not running, start in synchronous mode
@@ -1189,9 +1204,12 @@ internal class ContinuousBatcher<T> : IDisposable
     {
         // Some per-request features are incompatible with the greedy draft/verify path, which picks tokens
         // via argmax and bypasses the per-token sampler:
-        //  - a structured-output Constraint (a drafted token could violate the required format), and
+        //  - a structured-output Constraint (a drafted token could violate the required format),
         //  - IncludeLogProbs (the speculative path never computes the per-token distribution, so logprobs
-        //    would be missing for accepted draft tokens).
+        //    would be missing for accepted draft tokens), and
+        //  - frequency/presence penalties or logit_bias (the draft/verify path selects tokens by raw argmax
+        //    and never calls SampleFromLogits, where those adjustments are applied — so a greedy request
+        //    using them would produce DIFFERENT output with speculation on vs off).
         // Force plain masked/sampled decode whenever any batched sequence needs them. Overrides even ForceOn.
         foreach (var seq in batch)
         {
@@ -1204,6 +1222,12 @@ internal class ContinuousBatcher<T> : IDisposable
             if (seq.Request.IncludeLogProbs)
             {
                 reason = "LogProbsRequested";
+                InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+                return false;
+            }
+            if (seq.Request.FrequencyPenalty != 0f || seq.Request.PresencePenalty != 0f || seq.Request.LogitBias is { Count: > 0 })
+            {
+                reason = "PenaltyOrLogitBias";
                 InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
                 return false;
             }
@@ -1700,6 +1724,19 @@ internal class ContinuousBatcher<T> : IDisposable
             {
                 entry.TopLogProbs.Add(new TokenLogProb { TokenId = tok, LogProb = lp });
             }
+
+            // The emitted token must appear in TopLogProbs (PositionLogProbs contract), even when sampling
+            // chose a token whose probability falls outside the highest K — otherwise the reported
+            // alternatives omit the token that was actually produced.
+            bool chosenIncluded = false;
+            foreach (var t in entry.TopLogProbs)
+            {
+                if (t.TokenId == chosenToken) { chosenIncluded = true; break; }
+            }
+            if (chosenToken >= 0 && !chosenIncluded)
+            {
+                entry.TopLogProbs.Add(new TokenLogProb { TokenId = chosenToken, LogProb = entry.LogProb });
+            }
         }
 
         sequence.LogProbs.Add(entry);
@@ -1847,8 +1884,13 @@ internal class ContinuousBatcher<T> : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        // Flip _disposed under the same lock GenerateAsync uses, so any in-flight submission either finishes
+        // enqueuing first or observes _disposed and is rejected — no request slips into the queues after this.
+        lock (_lifecycleLock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
 
         StopAsync().GetAwaiter().GetResult();
 
