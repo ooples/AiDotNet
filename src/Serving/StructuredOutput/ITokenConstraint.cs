@@ -34,6 +34,16 @@ public interface ITokenConstraint
     void Accept(int tokenId);
 
     /// <summary>
+    /// Gets a value indicating whether the generated text so far is <b>accepting</b> — a complete valid
+    /// instance of the target language. Unlike <see cref="IsTerminal"/>, an accepting state may still have
+    /// valid continuations (e.g. after one digit of <c>\d+</c>, or a complete JSON value that could take
+    /// more whitespace). The engine does NOT stop here; it uses this only to decide that the end-of-sequence
+    /// token is permitted (so the model may choose to stop) and to distinguish a valid completion from a
+    /// dead-end. Callers/tests use it to ask "is the output a complete valid instance right now?".
+    /// </summary>
+    bool IsComplete { get; }
+
+    /// <summary>
     /// Gets a value indicating whether the constraint is <b>terminal</b>: the generated text so far is a
     /// complete valid instance of the target language AND no valid non-EOS continuation remains, so the
     /// engine may stop the sequence.

@@ -58,6 +58,9 @@ public sealed class RegexTokenConstraint : ITokenConstraint
     }
 
     /// <inheritdoc/>
+    public bool IsComplete => _finished || _nfa.IsAccepting(_current);
+
+    /// <inheritdoc/>
     // Terminal only when no vocabulary token can extend the match (the cached allowed-set is empty). An
     // accepting state that still permits tokens is NOT terminal — the model ends the match by emitting EOS
     // (ApplyMask permits it while accepting), so extendable patterns like \d+ are never truncated.

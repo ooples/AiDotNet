@@ -41,6 +41,9 @@ public sealed class JsonGrammarConstraint : ITokenConstraint
     }
 
     /// <inheritdoc/>
+    public bool IsComplete => _finished || _pda.CanEnd;
+
+    /// <inheritdoc/>
     // Terminal only when the automaton can accept no further non-EOS token. A complete top-level value is
     // still followed by valid insignificant whitespace, so at End the constraint is accepting (EOS permitted
     // in ApplyMask) but NOT terminal — the model ends generation by emitting EOS. The scan short-circuits on

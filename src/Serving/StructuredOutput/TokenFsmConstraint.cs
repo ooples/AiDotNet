@@ -86,6 +86,9 @@ public sealed class TokenFsmConstraint : ITokenConstraint
     }
 
     /// <inheritdoc/>
+    public bool IsComplete => _finished || _accepting[_current];
+
+    /// <inheritdoc/>
     // Terminal only when the grammar is exhausted: no outgoing (non-EOS) transition remains. An accepting
     // state that still has outgoing transitions is NOT terminal — the model ends it by emitting EOS (which
     // ApplyMask permits in accepting states), so extendable matches are never truncated.
