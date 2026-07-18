@@ -11,9 +11,10 @@
 
 create table if not exists public.revocations (
     id             uuid primary key default gen_random_uuid(),
-    -- The license whose offline tokens are being revoked. FK so deleting a license cascades its revocation
-    -- rows; nullable so a kid-only (whole-signing-key) revocation can exist without a specific license.
-    license_key_id uuid references public.license_keys(id) on delete cascade,
+    -- The license whose offline tokens are being revoked. Nullable, and ON DELETE SET NULL (NOT cascade):
+    -- deleting a license must NOT delete its revocation rows, or previously-issued offline tokens would
+    -- validate again until they expire. The jti deny-list entry outlives the license row.
+    license_key_id uuid references public.license_keys(id) on delete set null,
     -- Token id to deny. For customer tokens this equals license_keys.id (what issue-license stamps as jti and
     -- what validate_license_key returns as license_id). Stored as text to also allow ad-hoc/non-license jtis.
     jti            text,
@@ -32,6 +33,12 @@ comment on table public.revocations is
 
 create index if not exists revocations_jti_idx on public.revocations (jti) where jti is not null;
 create index if not exists revocations_kid_idx on public.revocations (kid) where kid is not null;
+
+-- At-most-one revocation row per (license, jti) so revoke_license's idempotency is concurrency-safe: two
+-- simultaneous callers can't both pass a check-then-insert and create duplicate deny-list rows.
+create unique index if not exists revocations_license_jti_unique
+    on public.revocations (license_key_id, jti)
+    where license_key_id is not null and jti is not null;
 
 -- RLS: server-only. The CRL is emitted by the service-role edge function; no anon/authenticated access to
 -- the raw table (the signed CRL is the public surface, not this table).
@@ -56,14 +63,13 @@ begin
     set status = 'revoked', revoked_at = now(), updated_at = now()
     where id = p_license_key_id;
 
-    -- Offline path: deny the license's aidn2 tokens (jti = license id) via the CRL. Idempotent — a repeat
-    -- revoke of the same license doesn't stack duplicate rows.
+    -- Offline path: deny the license's aidn2 tokens (jti = license id) via the CRL. Idempotent AND
+    -- concurrency-safe via the partial unique index above — ON CONFLICT DO NOTHING, not a racy NOT EXISTS.
     insert into public.revocations (license_key_id, jti, reason)
-    select p_license_key_id, p_license_key_id::text, p_reason
-    where not exists (
-        select 1 from public.revocations
-        where license_key_id = p_license_key_id and jti = p_license_key_id::text
-    );
+    values (p_license_key_id, p_license_key_id::text, p_reason)
+    on conflict (license_key_id, jti)
+        where license_key_id is not null and jti is not null
+        do nothing;
 end;
 $$;
 

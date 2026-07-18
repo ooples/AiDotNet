@@ -26,6 +26,7 @@ Requires: pip install cryptography
 import argparse
 import base64
 import json
+import os
 import sys
 
 from cryptography.hazmat.primitives import serialization
@@ -58,7 +59,25 @@ def main() -> int:
     )
     pub_raw = pub.public_bytes_raw()  # 32 bytes
 
-    jwk = {"keys": [{"kty": "OKP", "crv": "Ed25519", "kid": args.kid, "x": b64url(pub_raw)}]}
+    new_key = {"kty": "OKP", "crv": "Ed25519", "kid": args.kid, "x": b64url(pub_raw)}
+    keys = [new_key]
+    # MERGE mode: if the target bundle already exists, PRESERVE its keys and append this one, so running
+    # keygen for prod-2026a and then ci-2026a yields ONE bundle carrying BOTH kids (the release/CI embed the
+    # design requires) instead of the second run overwriting the first. A duplicate kid is refused.
+    if os.path.exists(args.jwk_out):
+        try:
+            with open(args.jwk_out, encoding="utf-8") as f:
+                existing = json.load(f).get("keys", [])
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"ERROR: {args.jwk_out} exists but is not a readable JWK set: {e}", file=sys.stderr)
+            return 2
+        if any(k.get("kid") == args.kid for k in existing):
+            print(f"ERROR: kid '{args.kid}' is already in {args.jwk_out}; refusing to duplicate. "
+                  f"Use a different --kid, or remove the existing entry first.", file=sys.stderr)
+            return 2
+        keys = existing + [new_key]
+
+    jwk = {"keys": keys}
     with open(args.jwk_out, "w", encoding="utf-8") as f:
         json.dump(jwk, f, separators=(",", ":"))
     jwk_compact = json.dumps(jwk, separators=(",", ":"))

@@ -52,17 +52,43 @@ serve(async (req: Request) => {
   }
 
   try {
-    const body: IssueRequest = await req.json();
-    if (!body.license_key || !body.machine_id_hash) {
+    // The IssueRequest type is erased at runtime, so validate the shape explicitly: reject invalid JSON with
+    // a 400 (not a 500), and require license_key/machine_id_hash to be non-blank STRINGS so arrays/objects/
+    // whitespace can't slip through to the RPC as "present" fields.
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ valid: false, error: "invalid_json", message: "Request body is not valid JSON." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const r = raw as Partial<IssueRequest>;
+    if (
+      typeof raw !== "object" || raw === null ||
+      typeof r.license_key !== "string" || r.license_key.trim().length === 0 ||
+      typeof r.machine_id_hash !== "string" || r.machine_id_hash.trim().length === 0 ||
+      (r.scope !== undefined && typeof r.scope !== "string") ||
+      (r.hostname !== undefined && typeof r.hostname !== "string") ||
+      (r.os_description !== undefined && typeof r.os_description !== "string")
+    ) {
       return new Response(
         JSON.stringify({
           valid: false,
           error: "missing_fields",
-          message: "license_key and machine_id_hash are required.",
+          message: "license_key and machine_id_hash are required non-empty strings.",
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+    const body: IssueRequest = {
+      license_key: r.license_key.trim(),
+      machine_id_hash: r.machine_id_hash.trim(),
+      hostname: r.hostname,
+      os_description: r.os_description,
+      scope: r.scope,
+    };
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -111,7 +137,10 @@ serve(async (req: Request) => {
     const caps = Array.isArray(result.capabilities) ? (result.capabilities as string[]) : capsForTier(tier);
 
     const claims: Aidn2Claims = {
-      sub: body.license_key,
+      // Opaque license id, NOT the reusable license_key: the token payload is only base64url-encoded (not
+      // encrypted), so anyone who reads a leaked cached token must not be able to recover the permanent
+      // online key and mint fresh tokens. license_id is the same non-secret value already returned to clients.
+      sub: licenseId,
       tier,
       seats: 1,
       caps,
