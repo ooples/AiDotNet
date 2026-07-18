@@ -337,13 +337,22 @@ public class ContinuousBatcherPagedEquivalenceTests
         var taskB = batcher.GenerateAsync(reqB);
 
         int guard = maxNew * 2 + 40;
-        while ((!taskA.IsCompleted || !taskB.IsCompleted) && guard-- > 0) batcher.Step();
+        int maxCoBatched = 0;
+        while ((!taskA.IsCompleted || !taskB.IsCompleted) && guard-- > 0)
+        {
+            batcher.Step();
+            maxCoBatched = Math.Max(maxCoBatched, batcher.LastBatchedDecodeCount);
+        }
 
         Assert.True(taskA.IsCompleted && taskB.IsCompleted, "both sequences should complete");
         Assert.Equal(refA, (await taskA).GeneratedTokens.ToArray());
         Assert.Equal(refB, (await taskB).GeneratedTokens.ToArray());
         Assert.True(batcher.SpeculationAcceptanceRate is > 0.0,
             $"batched speculation should accept some drafts (acceptance={batcher.SpeculationAcceptanceRate}).");
+        // Prove the two sequences were actually CO-BATCHED (verified in the same forward), not run
+        // independently — otherwise this test just duplicates the single-sequence speculation test.
+        Assert.True(maxCoBatched >= 2,
+            $"speculative verification should co-batch both sequences in at least one step (max batched decode count={maxCoBatched}).");
     }
 
     [Fact(Timeout = 120000)]

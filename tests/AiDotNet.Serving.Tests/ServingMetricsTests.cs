@@ -68,6 +68,18 @@ public sealed class ServingMetricsTests
 
         Assert.Contains("aidotnet_serving_time_to_first_token_seconds_count 1", page);
         Assert.Contains("aidotnet_serving_time_per_output_token_seconds_count 1", page);
+
+        // Verify the ACTUAL recorded values, not just the observation count — otherwise the test passes even
+        // if TTFT/TPOT are silently dropped or recorded incorrectly.
+        var pageLines = page.Split('\n');
+        double ttftSum = double.Parse(
+            pageLines.First(l => l.StartsWith("aidotnet_serving_time_to_first_token_seconds_sum ")).Split(' ')[1],
+            System.Globalization.CultureInfo.InvariantCulture);
+        Assert.InRange(ttftSum, 0.049, 0.051);
+        double tpotSum = double.Parse(
+            pageLines.First(l => l.StartsWith("aidotnet_serving_time_per_output_token_seconds_sum ")).Split(' ')[1],
+            System.Globalization.CultureInfo.InvariantCulture);
+        Assert.InRange(tpotSum, 0.019, 0.021);
     }
 
     [Fact]
