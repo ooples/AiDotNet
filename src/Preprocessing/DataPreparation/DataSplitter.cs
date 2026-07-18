@@ -29,6 +29,13 @@ public static class DataSplitter
     /// <param name="validationRatio">Proportion for validation (default 0.15).</param>
     /// <param name="shuffle">Whether to shuffle before splitting (default true).</param>
     /// <param name="randomSeed">Random seed for reproducibility (default 42).</param>
+    /// <param name="embargo">
+    /// Number of rows to DROP as a gap at each chronological split boundary (train/val and val/test), sized
+    /// from the label/forecast horizon. Prevents a horizon-<paramref name="embargo"/> label from straddling a
+    /// boundary and leaking future information across partitions. Only applies on the CHRONOLOGICAL path
+    /// (<paramref name="shuffle"/> = false); ignored when shuffling (i.i.d. data has no temporal boundary).
+    /// Default 0 (no gap) preserves the historical behavior exactly.
+    /// </param>
     /// <returns>Tuple of (XTrain, yTrain, XVal, yVal, XTest, yTest).</returns>
     public static (TInput XTrain, TOutput yTrain, TInput XVal, TOutput yVal, TInput XTest, TOutput yTest)
         Split<T, TInput, TOutput>(
@@ -37,11 +44,12 @@ public static class DataSplitter
             double trainRatio = 0.7,
             double validationRatio = 0.15,
             bool shuffle = true,
-            int randomSeed = 42)
+            int randomSeed = 42,
+            int embargo = 0)
     {
         if (X is Matrix<T> xMatrix && y is Vector<T> yVector)
         {
-            var result = SplitMatrix<T>(xMatrix, yVector, trainRatio, validationRatio, shuffle, randomSeed);
+            var result = SplitMatrix<T>(xMatrix, yVector, trainRatio, validationRatio, shuffle, randomSeed, embargo);
             return (
                 (TInput)(object)result.XTrain,
                 (TOutput)(object)result.yTrain,
@@ -55,7 +63,7 @@ public static class DataSplitter
         {
             // Multi-output (n×H) regression: X is n×features, y is n×H. Split by the SAME shuffled row
             // partition so features and every horizon column stay aligned.
-            var result = SplitMatrixMatrix<T>(xMatrixMulti, yMatrix, trainRatio, validationRatio, shuffle, randomSeed);
+            var result = SplitMatrixMatrix<T>(xMatrixMulti, yMatrix, trainRatio, validationRatio, shuffle, randomSeed, embargo);
             return (
                 (TInput)(object)result.XTrain,
                 (TOutput)(object)result.yTrain,
@@ -67,7 +75,7 @@ public static class DataSplitter
         }
         else if (X is Tensor<T> xTensor && y is Tensor<T> yTensor)
         {
-            var result = SplitTensor<T>(xTensor, yTensor, trainRatio, validationRatio, shuffle, randomSeed);
+            var result = SplitTensor<T>(xTensor, yTensor, trainRatio, validationRatio, shuffle, randomSeed, embargo);
             return (
                 (TInput)(object)result.XTrain,
                 (TOutput)(object)result.yTrain,
@@ -155,6 +163,31 @@ public static class DataSplitter
         return (trainSize, validationSize, testSize);
     }
 
+    /// <summary>
+    /// Chronological partition layout with an EMBARGO gap of <paramref name="embargo"/> rows dropped at each
+    /// internal boundary (train→val and val→test). Returns the size of each partition and the START index of
+    /// val/test within the ordered [0, totalSamples) sequence, so a horizon-<paramref name="embargo"/> label
+    /// can never straddle a boundary (the last train row's label lands inside the dropped gap, not in val).
+    /// Falls back to the plain contiguous layout when the data is too small to afford the gaps.
+    /// </summary>
+    private static (int trainSize, int valStart, int valSize, int testStart, int testSize) ComputeEmbargoedLayout(
+        int totalSamples, double trainRatio, double validationRatio, int embargo)
+    {
+        embargo = Math.Max(0, embargo);
+        int usable = totalSamples - 2 * embargo;
+        if (embargo == 0 || usable < 3)
+        {
+            // No gap (or too small to afford one): contiguous train|val|test.
+            var (tr, va, te) = ComputeSplitSizes(totalSamples, trainRatio, validationRatio);
+            return (tr, tr, va, tr + va, te);
+        }
+
+        var (trainSize, valSize, testSize) = ComputeSplitSizes(usable, trainRatio, validationRatio);
+        int valStart = trainSize + embargo;                 // drop [trainSize, trainSize+embargo)
+        int testStart = valStart + valSize + embargo;       // drop [valStart+valSize, testStart)
+        return (trainSize, valStart, valSize, testStart, testSize);
+    }
+
     private static (Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XVal, Vector<T> yVal, Matrix<T> XTest, Vector<T> yTest)
         SplitMatrix<T>(
             Matrix<T> X,
@@ -162,19 +195,29 @@ public static class DataSplitter
             double trainRatio,
             double validationRatio,
             bool shuffle,
-            int randomSeed)
+            int randomSeed,
+            int embargo = 0)
     {
         int totalSamples = X.Rows;
-        var (trainSize, validationSize, testSize) = ComputeSplitSizes(totalSamples, trainRatio, validationRatio);
-
         var indices = Enumerable.Range(0, totalSamples).ToList();
+
+        int trainSize, valStart, validationSize, testStart, testSize;
         if (shuffle)
         {
+            // i.i.d. path: shuffle, then contiguous partitions (embargo is meaningless without temporal order).
             var random = RandomHelper.CreateSeededRandom(randomSeed);
             indices = [.. indices.OrderBy(_ => random.Next())];
+            (trainSize, validationSize, testSize) = ComputeSplitSizes(totalSamples, trainRatio, validationRatio);
+            valStart = trainSize;
+            testStart = trainSize + validationSize;
+        }
+        else
+        {
+            // Chronological path: honor the embargo gap so horizon-`embargo` labels never cross a boundary.
+            (trainSize, valStart, validationSize, testStart, testSize) =
+                ComputeEmbargoedLayout(totalSamples, trainRatio, validationRatio, embargo);
         }
 
-        // Create output matrices and vectors
         var XTrain = new Matrix<T>(trainSize, X.Columns);
         var yTrain = new Vector<T>(trainSize);
         var XVal = new Matrix<T>(validationSize, X.Columns);
@@ -182,25 +225,22 @@ public static class DataSplitter
         var XTest = new Matrix<T>(testSize, X.Columns);
         var yTest = new Vector<T>(testSize);
 
-        // Copy training data
         for (int i = 0; i < trainSize; i++)
         {
             XTrain.SetRow(i, X.GetRow(indices[i]));
             yTrain[i] = y[indices[i]];
         }
 
-        // Copy validation data
         for (int i = 0; i < validationSize; i++)
         {
-            XVal.SetRow(i, X.GetRow(indices[i + trainSize]));
-            yVal[i] = y[indices[i + trainSize]];
+            XVal.SetRow(i, X.GetRow(indices[valStart + i]));
+            yVal[i] = y[indices[valStart + i]];
         }
 
-        // Copy test data
         for (int i = 0; i < testSize; i++)
         {
-            XTest.SetRow(i, X.GetRow(indices[i + trainSize + validationSize]));
-            yTest[i] = y[indices[i + trainSize + validationSize]];
+            XTest.SetRow(i, X.GetRow(indices[testStart + i]));
+            yTest[i] = y[indices[testStart + i]];
         }
 
         return (XTrain, yTrain, XVal, yVal, XTest, yTest);
@@ -213,18 +253,25 @@ public static class DataSplitter
             double trainRatio,
             double validationRatio,
             bool shuffle,
-            int randomSeed)
+            int randomSeed,
+            int embargo = 0)
     {
         int totalSamples = X.Rows;
-        int trainSize = (int)(totalSamples * trainRatio);
-        int validationSize = (int)(totalSamples * validationRatio);
-        int testSize = totalSamples - trainSize - validationSize;
-
         var indices = Enumerable.Range(0, totalSamples).ToList();
+
+        int trainSize, valStart, validationSize, testStart, testSize;
         if (shuffle)
         {
             var random = RandomHelper.CreateSeededRandom(randomSeed);
             indices = [.. indices.OrderBy(_ => random.Next())];
+            (trainSize, validationSize, testSize) = ComputeSplitSizes(totalSamples, trainRatio, validationRatio);
+            valStart = trainSize;
+            testStart = trainSize + validationSize;
+        }
+        else
+        {
+            (trainSize, valStart, validationSize, testStart, testSize) =
+                ComputeEmbargoedLayout(totalSamples, trainRatio, validationRatio, embargo);
         }
 
         var XTrain = new Matrix<T>(trainSize, X.Columns);
@@ -242,14 +289,14 @@ public static class DataSplitter
 
         for (int i = 0; i < validationSize; i++)
         {
-            XVal.SetRow(i, X.GetRow(indices[i + trainSize]));
-            yVal.SetRow(i, y.GetRow(indices[i + trainSize]));
+            XVal.SetRow(i, X.GetRow(indices[valStart + i]));
+            yVal.SetRow(i, y.GetRow(indices[valStart + i]));
         }
 
         for (int i = 0; i < testSize; i++)
         {
-            XTest.SetRow(i, X.GetRow(indices[i + trainSize + validationSize]));
-            yTest.SetRow(i, y.GetRow(indices[i + trainSize + validationSize]));
+            XTest.SetRow(i, X.GetRow(indices[testStart + i]));
+            yTest.SetRow(i, y.GetRow(indices[testStart + i]));
         }
 
         return (XTrain, yTrain, XVal, yVal, XTest, yTest);
@@ -262,16 +309,25 @@ public static class DataSplitter
             double trainRatio,
             double validationRatio,
             bool shuffle,
-            int randomSeed)
+            int randomSeed,
+            int embargo = 0)
     {
         int totalSamples = X.Shape[0];
-        var (trainSize, validationSize, testSize) = ComputeSplitSizes(totalSamples, trainRatio, validationRatio);
-
         var indices = Enumerable.Range(0, totalSamples).ToList();
+
+        int trainSize, valStart, validationSize, testStart, testSize;
         if (shuffle)
         {
             var random = RandomHelper.CreateSeededRandom(randomSeed);
             indices = [.. indices.OrderBy(_ => random.Next())];
+            (trainSize, validationSize, testSize) = ComputeSplitSizes(totalSamples, trainRatio, validationRatio);
+            valStart = trainSize;
+            testStart = trainSize + validationSize;
+        }
+        else
+        {
+            (trainSize, valStart, validationSize, testStart, testSize) =
+                ComputeEmbargoedLayout(totalSamples, trainRatio, validationRatio, embargo);
         }
 
         // Create output tensors — MUST clone shape arrays because modifying
@@ -309,14 +365,14 @@ public static class DataSplitter
 
         for (int i = 0; i < validationSize; i++)
         {
-            CopySample(X, XVal, indices[i + trainSize], i);
-            CopySample(y, yVal, indices[i + trainSize], i);
+            CopySample(X, XVal, indices[valStart + i], i);
+            CopySample(y, yVal, indices[valStart + i], i);
         }
 
         for (int i = 0; i < testSize; i++)
         {
-            CopySample(X, XTest, indices[i + trainSize + validationSize], i);
-            CopySample(y, yTest, indices[i + trainSize + validationSize], i);
+            CopySample(X, XTest, indices[testStart + i], i);
+            CopySample(y, yTest, indices[testStart + i], i);
         }
 
         return (XTrain, yTrain, XVal, yVal, XTest, yTest);
