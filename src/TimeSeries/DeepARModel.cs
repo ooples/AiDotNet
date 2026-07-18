@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Validation;
 
 namespace AiDotNet.TimeSeries;
 
@@ -617,9 +618,9 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         int cov = _options.CovariateSize;
         if (cov <= 0)
             throw new InvalidOperationException("ForecastWithCovariates requires CovariateSize > 0; use ForecastWithQuantiles for the univariate model.");
-        ArgumentNullException.ThrowIfNull(history);
-        ArgumentNullException.ThrowIfNull(historyCovariates);
-        ArgumentNullException.ThrowIfNull(futureCovariates);
+        Guard.NotNull(history);
+        Guard.NotNull(historyCovariates);
+        Guard.NotNull(futureCovariates);
 
         int L = history.Length;
         if (historyCovariates.Rows != L || historyCovariates.Columns < cov)
@@ -677,8 +678,8 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         int cov = _options.CovariateSize;
         if (cov <= 0)
             throw new InvalidOperationException("PredictNextWithCovariates requires CovariateSize > 0; use PredictSingle for the univariate model.");
-        ArgumentNullException.ThrowIfNull(historyWindow);
-        ArgumentNullException.ThrowIfNull(historyCovariates);
+        Guard.NotNull(historyWindow);
+        Guard.NotNull(historyCovariates);
         if (historyCovariates.Rows != historyWindow.Length || historyCovariates.Columns < cov)
             throw new ArgumentException($"historyCovariates must be [{historyWindow.Length}, >={cov}]; got [{historyCovariates.Rows}, {historyCovariates.Columns}].");
 
