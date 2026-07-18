@@ -172,6 +172,7 @@ public class Program
         builder.Services.AddSingleton<IModelRepository, ModelRepository>();
         AddConfiguredRequestBatcher(builder.Services);
         builder.Services.AddSingleton<ITextGenerationService, TextGenerationService>();
+        builder.Services.AddSingleton<ITokenizerRegistry, TokenizerRegistry>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<ITierResolver, ClaimsTierResolver>();
         builder.Services.AddSingleton<ITierPolicyProvider, DefaultTierPolicyProvider>();

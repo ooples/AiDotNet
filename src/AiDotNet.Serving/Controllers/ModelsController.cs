@@ -27,6 +27,7 @@ public class ModelsController : ControllerBase
     private readonly ITierPolicyProvider _tierPolicyProvider;
     private readonly IModelArtifactService _artifactService;
     private readonly IAttestationVerifier _attestationVerifier;
+    private readonly ITokenizerRegistry _tokenizers;
 
     /// <summary>
     /// Initializes a new instance of the ModelsController.
@@ -45,7 +46,8 @@ public class ModelsController : ControllerBase
         ITierResolver tierResolver,
         ITierPolicyProvider tierPolicyProvider,
         IModelArtifactService artifactService,
-        IAttestationVerifier attestationVerifier)
+        IAttestationVerifier attestationVerifier,
+        ITokenizerRegistry tokenizers)
     {
         Guard.NotNull(modelRepository);
         _modelRepository = modelRepository;
@@ -61,6 +63,8 @@ public class ModelsController : ControllerBase
         _artifactService = artifactService;
         Guard.NotNull(attestationVerifier);
         _attestationVerifier = attestationVerifier;
+        Guard.NotNull(tokenizers);
+        _tokenizers = tokenizers;
     }
 
     /// <summary>
@@ -181,6 +185,25 @@ public class ModelsController : ControllerBase
             _logger.LogInformation("Successfully loaded model '{ModelName}' from '{Path}'",
                 request.Name, candidatePath);
 
+            // Optionally associate a tokenizer so the model can be served via the OpenAI-compatible API.
+            // A tokenizer failure does not fail the load — the model is still usable via the native
+            // token-ID endpoint; the OpenAI endpoints will report the missing tokenizer if used.
+            if (!string.IsNullOrWhiteSpace(request.TokenizerPath))
+            {
+                try
+                {
+                    _tokenizers.LoadAndRegister(request.Name, request.TokenizerPath!);
+                    _logger.LogInformation("Registered tokenizer for model '{ModelName}' from '{TokenizerPath}'",
+                        request.Name, request.TokenizerPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to load tokenizer for model '{ModelName}' from '{TokenizerPath}'; " +
+                        "the model is loaded but the OpenAI API will be unavailable for it.",
+                        request.Name, request.TokenizerPath);
+                }
+            }
+
             return Ok(new LoadModelResponse
             {
                 Success = true,
@@ -295,6 +318,7 @@ public class ModelsController : ControllerBase
         }
 
         _artifactService.RemoveProtectedArtifact(modelName);
+        _tokenizers.Remove(modelName);
 
         _logger.LogInformation("Model '{ModelName}' unloaded successfully", modelName);
         return Ok(new { message = $"Model '{modelName}' unloaded successfully" });
