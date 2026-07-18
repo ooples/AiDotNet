@@ -792,8 +792,8 @@ internal class InferenceOptimizer<T>
                     }
 
                     var replacement = dense.VectorActivation != null
-                        ? new QuantizedDenseLayer(dense, dense.VectorActivation)
-                        : new QuantizedDenseLayer(dense);
+                        ? new QuantizedDenseLayer(dense, dense.VectorActivation, mode)
+                        : new QuantizedDenseLayer(dense, mode);
 
                     if (replacement is ILayer<T> typedReplacement)
                     {
@@ -859,9 +859,9 @@ internal class InferenceOptimizer<T>
                 }
 
                 any |= TryQuantizeBlockFfn(
-                    quantEncBlock.FfnUpLayer, quantEncBlock.HiddenSize, quantEncBlock.ReplaceFfnUp);
+                    quantEncBlock.FfnUpLayer, quantEncBlock.HiddenSize, quantEncBlock.ReplaceFfnUp, mode);
                 any |= TryQuantizeBlockFfn(
-                    quantEncBlock.FfnDownLayer, quantEncBlock.FfnDim, quantEncBlock.ReplaceFfnDown);
+                    quantEncBlock.FfnDownLayer, quantEncBlock.FfnDim, quantEncBlock.ReplaceFfnDown, mode);
             }
             // Quantize the sublayers hosted inside a composite decoder block. The
             // CROSS-attention slot is intentionally left untouched: its two-input
@@ -891,9 +891,9 @@ internal class InferenceOptimizer<T>
                 }
 
                 any |= TryQuantizeBlockFfn(
-                    quantDecBlock.FfnUpLayer, quantDecBlock.HiddenSize, quantDecBlock.ReplaceFfnUp);
+                    quantDecBlock.FfnUpLayer, quantDecBlock.HiddenSize, quantDecBlock.ReplaceFfnUp, mode);
                 any |= TryQuantizeBlockFfn(
-                    quantDecBlock.FfnDownLayer, quantDecBlock.FfnDim, quantDecBlock.ReplaceFfnDown);
+                    quantDecBlock.FfnDownLayer, quantDecBlock.FfnDim, quantDecBlock.ReplaceFfnDown, mode);
             }
             // Quantize GroupedQueryAttentionLayer (supports INT8, FP8, NF4)
             else if (model.Layers[i] is GroupedQueryAttentionLayer<float> gqa)
@@ -932,7 +932,8 @@ internal class InferenceOptimizer<T>
     private static bool TryQuantizeBlockFfn(
         LayerBase<float> ffn,
         int inputDim,
-        Action<LayerBase<float>> replace)
+        Action<LayerBase<float>> replace,
+        InferenceQuantizationMode mode)
     {
         if (ffn is not DenseLayer<float> denseFfn)
             return false; // already quantized (idempotent re-run) or custom sublayer
@@ -943,8 +944,8 @@ internal class InferenceOptimizer<T>
                 denseFfn.ResolveFromShape(new[] { 1, inputDim });
 
             var replacement = denseFfn.VectorActivation != null
-                ? new QuantizedDenseLayer(denseFfn, denseFfn.VectorActivation)
-                : new QuantizedDenseLayer(denseFfn);
+                ? new QuantizedDenseLayer(denseFfn, denseFfn.VectorActivation, mode)
+                : new QuantizedDenseLayer(denseFfn, mode);
 
             if (replacement is LayerBase<float> typedReplacement)
             {
