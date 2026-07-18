@@ -43,6 +43,11 @@ public static class PretrainedArchitectures<T>
             LlamaModelBuilder<T>.Build(config, new FusedProjectionSource(weights, config));
         Registry["phi3"] = phi3;
         Registry["Phi3ForCausalLM"] = phi3;
+
+        // Mixtral: sparse mixture-of-experts FFN (top-k of E gated experts).
+        DecoderFactory mixtral = (config, weights) => MoEModelBuilder<T>.Build(config, weights);
+        foreach (var name in MoEModelBuilder<T>.SupportedArchitectures)
+            Registry[name] = mixtral;
     }
 
     /// <summary>Registers (or replaces) the factory for an architecture / model-type name.</summary>

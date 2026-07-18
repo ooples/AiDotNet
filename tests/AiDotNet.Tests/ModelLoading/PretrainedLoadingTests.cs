@@ -319,6 +319,105 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         [Fact]
+        public void Builder_Mixtral_MoE_BuildsAndForwards()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""MixtralForCausalLM""],
+                ""model_type"": ""mixtral"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""num_local_experts"": 4, ""num_experts_per_tok"": 2,
+                ""tie_word_embeddings"": false }");
+            Assert.Equal(4, config.NumLocalExperts);
+            Assert.Equal(2, config.NumExpertsPerTok);
+
+            int h = 8, ffn = 16, vocab = 6, heads = 2, kvHeads = 2, headDim = 4, E = 4;
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 50),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 51),
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 52),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(heads * headDim * h, 53),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(kvHeads * headDim * h, 54),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(kvHeads * headDim * h, 55),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * heads * headDim, 56),
+                ["model.layers.0.block_sparse_moe.gate.weight"] = Fill(E * h, 57), // router
+                ["model.norm.weight"] = Fill(h, 90),
+                ["lm_head.weight"] = Fill(vocab * h, 91),
+            };
+            for (int e = 0; e < E; e++)
+            {
+                string ep = $"model.layers.0.block_sparse_moe.experts.{e}.";
+                t[ep + "w1.weight"] = Fill(ffn * h, 60 + e); // gate
+                t[ep + "w3.weight"] = Fill(ffn * h, 70 + e); // up
+                t[ep + "w2.weight"] = Fill(h * ffn, 80 + e); // down
+            }
+
+            var net = MoEModelBuilder<double>.Build(config, new InMemorySource(t));
+            Assert.Equal(4, net.Layers.Count); // embed + 1 MoE block + final norm + lm head
+
+            var tokens = new Tensor<double>(new[] { 1, 3 });
+            tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+
+            var block = Assert.IsType<MoEDecoderBlock<double>>(net.Layers[1]);
+            Assert.Equal(4, block.Moe.NumExperts);
+            Assert.Equal(2, block.Moe.TopK);
+
+            Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
+        }
+
+        [Fact]
+        public void MoE_Routing_MixesTopKExpertsByRenormalizedWeights()
+        {
+            // Two experts, top-1: with a strongly separating router, each token goes to exactly one expert,
+            // so the layer output equals that expert's SwiGLU output (renormalized weight = 1).
+            int h = 4, ffn = 4, E = 2, topK = 1;
+            var moe = new MoEFeedForwardLayer<double>(h, ffn, E, topK, new AiDotNet.ActivationFunctions.SiLUActivation<double>());
+            moe.Materialize();
+
+            // Router: expert 0 fires on positive first feature, expert 1 otherwise (large logits => hard top-1).
+            SetDense(moe.Router, new double[,] { { 100, 0, 0, 0 }, { -100, 0, 0, 0 } }); // [E, h] -> [h,E] internally
+            // Give the two experts different, identifiable weights.
+            SetDense(moe.ExpertGate(0), Const(ffn, h, 0.0)); // gate(x)=0 -> silu(0)=0 -> expert 0 output is 0
+            SetDense(moe.ExpertUp(0), Const(ffn, h, 0.0));
+            SetDense(moe.ExpertDown(0), Const(h, ffn, 0.0));
+            SetDense(moe.ExpertGate(1), Identityish(ffn, h));
+            SetDense(moe.ExpertUp(1), Identityish(ffn, h));
+            SetDense(moe.ExpertDown(1), Identityish(h, ffn));
+
+            var x = new Tensor<double>(new[] { 1, h });
+            x[0, 0] = 1.0; x[0, 1] = 0.5; x[0, 2] = -0.5; x[0, 3] = 0.25; // positive first feature -> expert 0
+            var y = moe.Forward(x);
+            // Expert 0 has all-zero weights -> output is exactly zero.
+            for (int j = 0; j < h; j++) Assert.Equal(0.0, y[0, j], 9);
+        }
+
+        private static void SetDense(DenseLayer<double> dense, double[,] outIn)
+        {
+            int outDim = outIn.GetLength(0), inDim = outIn.GetLength(1);
+            var w = new double[inDim * outDim];               // layer stores [in, out]
+            for (int o = 0; o < outDim; o++)
+                for (int i = 0; i < inDim; i++)
+                    w[i * outDim + o] = outIn[o, i];
+            var full = new double[w.Length + outDim];          // + zero bias
+            Array.Copy(w, full, w.Length);
+            dense.SetParameters(new Vector<double>(full));
+        }
+
+        private static double[,] Const(int outDim, int inDim, double v)
+        {
+            var m = new double[outDim, inDim];
+            for (int o = 0; o < outDim; o++) for (int i = 0; i < inDim; i++) m[o, i] = v;
+            return m;
+        }
+
+        private static double[,] Identityish(int outDim, int inDim)
+        {
+            var m = new double[outDim, inDim];
+            for (int o = 0; o < outDim; o++) m[o, o % inDim] = 1.0;
+            return m;
+        }
+
+        [Fact]
         public void Architectures_ResolvesGemmaAndPhi3()
         {
             var gemma = HuggingFaceConfig.Parse(@"{ ""architectures"": [""GemmaForCausalLM""], ""model_type"": ""gemma"",
