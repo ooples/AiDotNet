@@ -64,12 +64,19 @@ internal static class ModelPersistenceGuard
     internal static IDisposable InternalOperation()
     {
         _internalOperationDepth.Value++;
-        // Acquire the tensor-side scope FIRST so a partial failure (the
-        // tensor scope acquisition throws) leaves the upstream depth
-        // counter consistent — the local InternalOperationScope will still
-        // decrement on dispose. Using a composite ensures the two scopes
-        // are released in LIFO order.
-        IDisposable tensorScope = TensorLicenseFlow.InternalOperation();
+        IDisposable tensorScope;
+        try
+        {
+            tensorScope = TensorLicenseFlow.InternalOperation();
+        }
+        catch
+        {
+            // Roll back the depth increment if acquiring the tensor-side scope throws. Otherwise this
+            // logical (AsyncLocal) context would be left permanently at depth > 0 — i.e. stuck in
+            // save/load bypass mode — because no InternalOperationScope was returned to decrement it.
+            _internalOperationDepth.Value--;
+            throw;
+        }
         return new InternalOperationScope(tensorScope);
     }
 

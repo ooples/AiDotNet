@@ -763,11 +763,16 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
         if (_sharedBatcher is { } existing)
         {
+            // Guard the lock-free fast path against a concurrent Dispose: never hand back a disposed batcher.
+            if (_disposed) throw new System.ObjectDisposedException(nameof(ServableModelWrapper<T>));
             return existing;
         }
 
         lock (_batcherInitLock)
         {
+            // Re-check under the SAME lock Dispose takes, so we never start a background engine after
+            // disposal (which would leak a thread the wrapper no longer tracks).
+            if (_disposed) throw new System.ObjectDisposedException(nameof(ServableModelWrapper<T>));
             if (_sharedBatcher is null)
             {
                 // Continuous-batching settings flow from the user's facade InferenceOptimizationConfig
@@ -784,9 +789,11 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                     // Sequence-collapsing models (SupportsBatchedPrefill=false) must prefill/decode one
                     // token at a time; a multi-token forward would re-fit a shape-dependent head.
                     SupportsBatchedPrefill = _supportsBatchedPrefill,
-                    // A positive default keeps greedy-exact prompt-lookup speculation available even when the
-                    // facade didn't opt in, so greedy requests that specify a draft depth still benefit.
-                    EnableSpeculativeDecoding = facade?.EnableSpeculativeDecoding ?? true,
+                    // Honor the facade's setting when serving a facade-built model; otherwise fall back to
+                    // this wrapper's constructor flag (IServableModelInferenceOptions.EnableSpeculativeDecoding)
+                    // rather than force-enabling — a caller that constructed the wrapper with speculation off
+                    // must get speculation off.
+                    EnableSpeculativeDecoding = facade?.EnableSpeculativeDecoding ?? _enableSpeculativeDecoding,
                     SpeculationDepth = (facade is { SpeculationDepth: > 0 }) ? facade.SpeculationDepth : 4,
                     SpeculationPolicy = facade?.SpeculationPolicy ?? AiDotNet.Configuration.SpeculationPolicy.Auto,
                     UseTreeSpeculation = facade?.UseTreeSpeculation ?? false,
@@ -854,9 +861,16 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             try { queue.Add(token); }
             catch (System.InvalidOperationException) { /* consumer stopped: adding already completed */ }
         };
+        System.Exception? generationError = null;
         var task = batcher.GenerateAsync(request, cancellationToken);
         _ = task.ContinueWith(
-            _ => { try { queue.CompleteAdding(); } catch (System.ObjectDisposedException) { } },
+            t =>
+            {
+                // Capture a fault so the consumer observes it after draining the queue; without this the
+                // stream would end normally with a truncated completion and the task exception would be lost.
+                if (t.IsFaulted) { generationError = t.Exception?.GetBaseException(); }
+                try { queue.CompleteAdding(); } catch (System.ObjectDisposedException) { }
+            },
             System.Threading.Tasks.TaskScheduler.Default);
 
         foreach (var token in queue.GetConsumingEnumerable(cancellationToken))
@@ -867,6 +881,13 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             }
             yield return token;
         }
+
+        // Generation faulted (not a normal completion): surface it now that the queue is drained so the
+        // failure propagates to the caller instead of masquerading as a successful (truncated) stream.
+        if (generationError is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(generationError).Throw();
+        }
     }
 
     /// <summary>
@@ -874,12 +895,18 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
+        // Take the SAME lock EnsureBatcher uses so disposal is synchronized with (lazy) creation: a request
+        // arriving concurrently either builds before we dispose, or sees _disposed and is rejected — it can
+        // never race a half-built or already-disposed batcher.
+        lock (_batcherInitLock)
         {
-            return;
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            _sharedBatcher?.Dispose();
         }
-        _disposed = true;
-        _sharedBatcher?.Dispose();
         System.GC.SuppressFinalize(this);
     }
 

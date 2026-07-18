@@ -225,7 +225,10 @@ public class IncrementalGenerationEndToEndTests
     private static (TextGenerationService Service, ServableModelWrapper<float> Wrapper) BuildPerPositionService()
     {
         var model = BuildPerPositionLm();
-        var wrapper = new ServableModelWrapper<float>("lm", model, inputShape: new[] { 1 }, generationForward: model.Predict);
+        // Enable speculation explicitly: the wrapper now honors its EnableSpeculativeDecoding flag (rather
+        // than force-enabling when no facade config is present), and SpeculativeDecode_MatchesGreedy_AndAcceptsDrafts
+        // relies on prompt-lookup speculation actually running.
+        var wrapper = new ServableModelWrapper<float>("lm", model, inputShape: new[] { 1 }, enableSpeculativeDecoding: true, generationForward: model.Predict);
         var repo = new OneModelRepo("lm", wrapper);
         return (new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance), wrapper);
     }
