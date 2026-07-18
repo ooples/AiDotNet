@@ -32,6 +32,12 @@ internal sealed class TensorParallelLayerWeights<T>
     public required Tensor<T> DownWeight { get; init; }
     public required Tensor<T> DownBias { get; init; }
 
+    // Optional gated-SwiGLU gate projection (LLaMA/Mistral/Qwen2). When set, the FFN is
+    // Down(act(Gate(x)) * Up(x)) with the activation on the gate path and a linear up path;
+    // null => classic Down(act(Up(x))). Column-partitioned identically to UpWeight.
+    public Tensor<T>? GateWeight { get; init; }
+    public Tensor<T>? GateBias { get; init; }
+
     // Optional per-layer RMSNorm scale (γ) for the pre-attention (Norm1) and pre-FFN (Norm2) norms, used only in
     // the faithful path where the model reproduces a real trained transformer's RMSNorm. Null => unit scale.
     public Tensor<T>? Norm1Gamma { get; init; }
@@ -354,9 +360,20 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
             RunRanks(r =>
             {
                 int ffnStart = r * _localFfn;
-                // Up-projection for this rank's FFN slice + activation -> h_r [seqLen, localFfn].
+                // Up-projection for this rank's FFN slice -> h_r [seqLen, localFfn].
                 var h = ProjectRows(ln2, seqLen, w.UpWeight, w.UpBias, ffnStart, _localFfn);
-                for (int i = 0; i < h.Length; i++) h[i] = _ffnActivation(h[i]);
+                if (w.GateWeight is not null && w.GateBias is not null)
+                {
+                    // Gated SwiGLU: activation on the gate path, linear up path. Gate and up share this
+                    // rank's ffn slice, so act(gate_r) * up_r is exactly the slice of act(gate) * up.
+                    var g = ProjectRows(ln2, seqLen, w.GateWeight, w.GateBias, ffnStart, _localFfn);
+                    for (int i = 0; i < h.Length; i++) h[i] = _ffnActivation(g[i]) * h[i];
+                }
+                else
+                {
+                    // Classic two-matrix FFN: activation on the up path.
+                    for (int i = 0; i < h.Length; i++) h[i] = _ffnActivation(h[i]);
+                }
                 var partial = new double[seqLen * _embedDim];
                 AccumulateColumnProjection(partial, h, seqLen, w.DownWeight, ffnStart, _localFfn);
                 ffnPartials[r] = partial;
