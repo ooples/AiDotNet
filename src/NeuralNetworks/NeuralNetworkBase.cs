@@ -10656,6 +10656,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // original (TOTEM Clone_AfterTraining). Round-trip through the SAME hooks the
         // eager serialize path uses, giving the clone an INDEPENDENT deep copy (a write
         // to either side cannot leak, unlike the shared layer tensors).
+        // InternalOperation scope: SerializeNetworkSpecificData / DeserializeNetworkSpecificData can recurse
+        // into a nested composite model's PUBLIC Serialize()/Deserialize() (GAN Generator/Discriminator,
+        // BiLSTMCRF, ...), which would otherwise trip the ModelPersistenceGuard license gate on this INTERNAL
+        // clone (LicenseRequiredException when the license server is unreachable or the trial is exhausted).
+        // This COW round-trip is the DEFAULT clone path (UseCopyOnWriteDeepCopy defaults true), so it needs
+        // the same guard as DeepCopy()'s serialize-roundtrip fallback — see that scope for the full rationale.
+        using (ModelPersistenceGuard.InternalOperation())
         using (var nsStream = new System.IO.MemoryStream())
         {
             var nsWriter = new System.IO.BinaryWriter(nsStream);
