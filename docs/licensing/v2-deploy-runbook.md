@@ -86,23 +86,21 @@ genuinely valid). `LicenseRevocationProvider` lazily loads the last-fetched CRL 
 enforced even on a fully-offline start. Strictly fail-open/best-effort. 8 `OnlineLicenseServicesTests` green
 (18/18 with the aidn2 binding tests); project builds clean.
 
-## Step 6 — CI key — DONE (real ci-2026a aidn2 token wired, isolated)
+## Step 6 — CI key — DONE (dedicated enterprise CI license key)
 
-CI now exercises a REAL scope-fenced aidn2 token instead of the synthetic ModuleInitializer license:
-- A dedicated **ci-2026a** Ed25519 keypair (separate from prod) was generated; its public key is embedded
-  alongside prod in `src/BuildKey/LicensePublicKey.json` (both keys) + the `AIDOTNET_LICENSE_PUBLIC_KEY_JSON`
-  CI variable.
-- A `scope:"ci"`, no-machine-lock, full-caps token (exp 1y) is stored as the **`AIDOTNET_CI_LICENSE_KEY`**
-  secret; its private half as `AIDOTNET_CI_LICENSE_SIGNING_KEY_PKCS8` (rotation).
-- `sonarcloud.yml` + `heavy-timeout-nightly.yml` test jobs now use `secrets.AIDOTNET_CI_LICENSE_KEY` +
-  `AIDOTNET_LICENSE_SCOPE=ci`. This is kept in its OWN secret so the global `AIDOTNET_LICENSE_KEY` (used by
-  other branches) is untouched — no cross-branch impact, and ModuleInitializer keeps this offline-verifiable
-  token as-is. Proven locally: LicensingIntegration + aidn2 binding tests pass 17/17 with this exact setup.
+CI uses ONE dedicated **enterprise** license key stored as the global `AIDOTNET_LICENSE_KEY` secret:
+- Real server key `AIDN-PROD-ENTERPRISE-…` under a persistent "AiDotNet CI" user, **capability = save-capable**
+  (`tensors:save`/`model:save`, so it lifts the persistence op cap under capability gating) with effectively
+  **unlimited activations** (`max_activations` 2e9) so ephemeral CI runners never trip the seat limit.
+- `sonarcloud.yml` + `heavy-timeout-nightly.yml` test jobs read `secrets.AIDOTNET_LICENSE_KEY`. On the main
+  suite, `ModuleInitializer` swaps this online `AIDN-*` key for a deterministic synthetic OFFLINE license, so
+  the persistence-heavy suite is licensed with **no network round-trip**; jobs/consumers without that
+  hardening validate the key online. One key, all branches — simplest + save-capable.
+- Rotate/revoke via `revoke_license(<license_id>)` + issuing a new enterprise key; nothing to embed or rebuild.
 
-**Rotation — automated (`.github/workflows/rotate-ci-license.yml`):** a monthly (+ manual) job re-signs the
-`scope:ci` token with `AIDOTNET_CI_LICENSE_SIGNING_KEY_PKCS8` and updates `AIDOTNET_CI_LICENSE_KEY` before
-expiry. It needs a **`CI_LICENSE_ROTATION_PAT`** secret (a token with `secrets: write`) — `GITHUB_TOKEN`
-can't update repo secrets. The embedded public key is unchanged, so only the secret rotates.
+_(An earlier design used a scope-fenced `ci-2026a` offline aidn2 token + a rotation workflow; that was
+retired in favour of the single enterprise key. The prod-2026a signing key remains — it's what
+`issue-license` uses to mint real users' offline tokens.)_
 
 **Release embed — automated:** `release-please.yml` injects `LicensePublicKey.json` (+ `LicenseRevocation.json`)
 from the repo var before the release build, so a key rotation ships in the released NuGet without a code
