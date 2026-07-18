@@ -21,10 +21,19 @@ public interface ITokenConstraint
     /// <summary>
     /// Masks tokens that are not permitted as the next token in-place: sets
     /// <c>logits[i] = <see cref="float.NegativeInfinity"/></c> for every token id <c>i</c> that would
-    /// violate the constraint given the tokens accepted so far. At least one token (a real token or the
-    /// end-of-sequence token) is always left unmasked, so sampling can never dead-end.
+    /// violate the constraint given the tokens accepted so far. In every reachable state at least one token
+    /// (a real token or, when the output is accepting, the end-of-sequence token) is left unmasked.
     /// </summary>
+    /// <remarks>
+    /// If generation reaches a state from which the required format can no longer be satisfied — no valid
+    /// non-EOS token remains and the output so far is not a complete valid instance (a non-accepting
+    /// dead-end) — the implementation throws <see cref="StructuredOutputConstraintException"/> rather than
+    /// leaving the whole vocabulary masked or silently permitting EOS. The engine fails that sequence closed.
+    /// A well-formed constraint driven only through its own mask does not reach such a state.
+    /// </remarks>
     /// <param name="logits">The per-token logit scores for the current step, over the full vocabulary.</param>
+    /// <exception cref="StructuredOutputConstraintException">The constraint cannot be satisfied from the
+    /// current (non-accepting dead-end) state.</exception>
     void ApplyMask(Span<float> logits);
 
     /// <summary>

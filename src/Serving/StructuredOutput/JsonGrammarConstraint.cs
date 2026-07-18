@@ -56,6 +56,13 @@ public sealed class JsonGrammarConstraint : ITokenConstraint
             {
                 return true;
             }
+            // Terminal requires a COMPLETE top-level JSON value (CanEnd) with no valid non-EOS continuation.
+            // A state that accepts no token but is not yet a complete value is a dead-end error (ApplyMask
+            // throws StructuredOutputConstraintException for it), NOT a terminal (successful) stop.
+            if (!_pda.CanEnd)
+            {
+                return false;
+            }
             for (int i = 0; i < _tokenText.Length; i++)
             {
                 if (_tokenText[i].Length > 0 && _pda.Accepts(_tokenText[i]))
@@ -84,7 +91,10 @@ public sealed class JsonGrammarConstraint : ITokenConstraint
         bool anyAllowed = false;
         for (int i = 0; i < logits.Length; i++)
         {
-            bool ok = (eosAllowed && i == _eosTokenId) || (_tokenText[i].Length > 0 && _pda.Accepts(_tokenText[i]));
+            // Mask model token ids beyond the tokenizer vocabulary (i >= _tokenText.Length) instead of
+            // indexing past _tokenText — logits can be wider than the known vocabulary, and an OOB index
+            // would throw and fail the request repeatedly.
+            bool ok = (eosAllowed && i == _eosTokenId) || (i < _tokenText.Length && _tokenText[i].Length > 0 && _pda.Accepts(_tokenText[i]));
             if (ok) anyAllowed = true;
             else logits[i] = float.NegativeInfinity;
         }

@@ -64,7 +64,10 @@ public sealed class RegexTokenConstraint : ITokenConstraint
     // Terminal only when no vocabulary token can extend the match (the cached allowed-set is empty). An
     // accepting state that still permits tokens is NOT terminal — the model ends the match by emitting EOS
     // (ApplyMask permits it while accepting), so extendable patterns like \d+ are never truncated.
-    public bool IsTerminal => _finished || GetAllowedTokens(_current).Length == 0;
+    // Terminal requires BOTH an accepting NFA state AND no vocabulary token that can extend the match:
+    // only a complete match with no continuation stops. A non-accepting state with no continuation is a
+    // dead-end, NOT terminal — ApplyMask throws StructuredOutputConstraintException for it (fail closed).
+    public bool IsTerminal => _finished || (_nfa.IsAccepting(_current) && GetAllowedTokens(_current).Length == 0);
 
     /// <inheritdoc/>
     public void ApplyMask(Span<float> logits)
