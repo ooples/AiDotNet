@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
@@ -15,6 +17,24 @@ public static class Program
         if (Array.Exists(args, a => a is "--help" or "-h" or "-?"))
         {
             Console.WriteLine(BenchmarkOptions.Usage());
+            return 0;
+        }
+
+        // Comparison mode: `adnbench compare label=report.json ...` renders a side-by-side table across backends.
+        if (args.Length >= 1 && args[0] == "compare")
+        {
+            var entries = new List<(string, BenchmarkReport)>();
+            foreach (var arg in args.Skip(1))
+            {
+                int eq = arg.IndexOf('=');
+                string label = eq > 0 ? arg.Substring(0, eq) : System.IO.Path.GetFileNameWithoutExtension(arg);
+                string path = eq > 0 ? arg.Substring(eq + 1) : arg;
+                if (!System.IO.File.Exists(path)) { Console.Error.WriteLine($"report not found: {path}"); return 2; }
+                try { entries.Add((label, BenchmarkReport.FromJson(await System.IO.File.ReadAllTextAsync(path)))); }
+                catch (Exception ex) { Console.Error.WriteLine($"bad report {path}: {ex.Message}"); return 2; }
+            }
+            if (entries.Count == 0) { Console.Error.WriteLine("compare: pass one or more [label=]report.json files"); return 2; }
+            Console.WriteLine(BenchmarkReport.CompareConsole(entries));
             return 0;
         }
 
