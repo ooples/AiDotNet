@@ -33,6 +33,18 @@ public class SpeculativeDecodingRequest
     public double Temperature { get; set; } = 1.0;
 
     /// <summary>
+    /// Gets or sets the nucleus (top-p) sampling threshold. 1.0 disables nucleus filtering.
+    /// Only applied by the streaming generation path.
+    /// </summary>
+    public double TopP { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the top-k sampling cutoff (keep the k highest-probability tokens). 0 disables top-k.
+    /// Only applied by the streaming generation path.
+    /// </summary>
+    public int TopK { get; set; }
+
+    /// <summary>
     /// Gets or sets the end-of-sequence token ID. Generation stops when this token is produced.
     /// </summary>
     public int? EosTokenId { get; set; }

@@ -53,5 +53,26 @@ public class StartupModel
     /// is <c>true</c>. Default is <c>false</c>.
     /// </summary>
     public bool QuantizeKvCacheWeights { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether the incremental text-generation path uses a paged (vLLM-style) KV cache
+    /// that allocates KV memory in fixed-size blocks. Only takes effect when
+    /// <see cref="EnableTextGeneration"/> is <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the industry-standard high-throughput serving default, so it is <c>true</c> out of the
+    /// box — paged KV cache is wired transparently with no configuration required. Set to <c>false</c>
+    /// only to force the traditional contiguous KV cache (e.g. for debugging or memory-tiny models).
+    /// </para>
+    /// </remarks>
+    public bool EnablePagedKvCache { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the block size (in tokens) for the paged KV cache when
+    /// <see cref="EnablePagedKvCache"/> is enabled. Common values are 16 (default) or 32: smaller
+    /// blocks reduce internal fragmentation, larger blocks reduce block-table overhead.
+    /// </summary>
+    public int PagedKvCacheBlockSize { get; set; } = 16;
 }
 

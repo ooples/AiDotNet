@@ -1807,6 +1807,48 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Embargo (row gap) for the DEFAULT chronological validation split, sized from the model's forecast
+    /// horizon so a horizon-h label never straddles a train/val or val/test boundary (leaking future
+    /// information across partitions). Returns 0 for non-time-series (i.i.d.) models — they get a shuffled
+    /// stratified split with no temporal boundary to protect. Best-effort: reads a
+    /// <c>ForecastHorizon</c>/<c>Horizon</c>/<c>OutputHorizon</c> int off the model's <c>Options</c> when
+    /// present, else defaults to 1 (the minimal gap that blocks one-step-ahead leakage). An explicit
+    /// <c>ConfigureDataSplitter</c> bypasses this entirely. No mainstream library embargoes by default.
+    /// </summary>
+    private int DefaultChronologicalEmbargo(bool isTimeSeriesModel)
+    {
+        if (!isTimeSeriesModel || _model is null)
+        {
+            return 0;
+        }
+
+        int horizon = 1;
+        try
+        {
+            object? options = _model.GetType().GetProperty("Options")?.GetValue(_model);
+            if (options is not null)
+            {
+                foreach (var name in new[] { "ForecastHorizon", "Horizon", "OutputHorizon" })
+                {
+                    var prop = options.GetType().GetProperty(name);
+                    if (prop is not null && prop.PropertyType == typeof(int)
+                        && prop.GetValue(options) is int v && v > 0)
+                    {
+                        horizon = v;
+                        break;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort only — any reflection hiccup falls back to the minimal 1-row embargo.
+        }
+
+        return Math.Max(1, horizon);
+    }
+
+    /// <summary>
     /// Splits the data with the splitter supplied to <c>ConfigureDataSplitter</c>, if there is one.
     /// </summary>
     /// <returns>
@@ -3886,8 +3928,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             if (!TrySplitWithConfiguredSplitter(preparedX, preparedY,
                     out XTrain, out yTrain, out XVal, out yVal, out XTest, out yTest))
             {
+                // Family-aware DEFAULT: forecast-horizon models get a purged/embargoed chronological split
+                // (gap sized from the horizon so labels never straddle a boundary); i.i.d. families get the
+                // shuffled stratified split (embargo is a no-op when shuffling).
+                int splitEmbargo = DefaultChronologicalEmbargo(isTimeSeriesModel);
                 (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
-                    preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
+                    preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit,
+                    embargo: splitEmbargo);
             }
 
             // Apply data preparation (SMOTE, outlier removal, etc.) to training data ONLY after split.

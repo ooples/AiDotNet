@@ -56,6 +56,197 @@ public sealed class TextGenerationService : ITextGenerationService
         };
     }
 
+    /// <inheritdoc/>
+    public bool SupportsGeneration(string modelName, NumericType numericType) => numericType switch
+    {
+        NumericType.Double => SupportsGenerationTyped<double>(modelName),
+        NumericType.Float => SupportsGenerationTyped<float>(modelName),
+        NumericType.Decimal => SupportsGenerationTyped<decimal>(modelName),
+        _ => false
+    };
+
+    private bool SupportsGenerationTyped<T>(string modelName)
+        => _modelRepository.GetModel<T>(modelName) is IServableGenerativeModel<T> gm && gm.SupportsGeneration;
+
+    /// <inheritdoc/>
+    public IEnumerable<int> GenerateStream(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default)
+    {
+        Guard.NotNull(request);
+        return numericType switch
+        {
+            NumericType.Double => GenerateStreamTyped<double>(modelName, request, cancellationToken),
+            NumericType.Float => GenerateStreamTyped<float>(modelName, request, cancellationToken),
+            NumericType.Decimal => GenerateStreamTyped<decimal>(modelName, request, cancellationToken),
+            _ => Enumerable.Empty<int>()
+        };
+    }
+
+    /// <summary>
+    /// Incremental decode with sampling, yielding one token id per step. Uses the KV-cached session
+    /// path when the model supports it (each step forwards only the new token), otherwise falls back
+    /// to stateless full-context decode. Speculative decoding is intentionally not used here so token
+    /// emission cadence matches wall-clock decode steps (accurate TTFT / inter-token latency).
+    /// </summary>
+    private IEnumerable<int> GenerateStreamTyped<T>(string modelName, SpeculativeDecodingRequest request, CancellationToken ct)
+    {
+        var model = _modelRepository.GetModel<T>(modelName);
+        if (model is not IServableGenerativeModel<T> gm || !gm.SupportsGeneration)
+        {
+            yield break;
+        }
+        if (request.InputTokens is null || request.InputTokens.Length == 0)
+        {
+            yield break;
+        }
+
+        int eosTokenId = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId;
+        double temperature = request.Temperature;
+        double topP = request.TopP;
+        int topK = request.TopK;
+        // Seeded per request id when present so greedy stays deterministic and sampling is reproducible.
+        var rng = new Random(request.RequestId?.GetHashCode() ?? 0);
+
+        if (gm.SupportsIncrementalGeneration)
+        {
+            using var session = gm.BeginGeneration(request.InputTokens);
+            int prefillStart = session.CachedPromptTokens;
+            int suffixLength = request.InputTokens.Length - prefillStart;
+
+            Tensor<T> logits;
+            if (gm.SupportsBatchedPrefill && suffixLength > 1)
+            {
+                var suffix = new int[suffixLength];
+                for (int i = 0; i < suffixLength; i++)
+                {
+                    suffix[i] = request.InputTokens[prefillStart + i];
+                }
+                logits = session.Forward(TokensToTensor<T>(suffix));
+            }
+            else
+            {
+                logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[prefillStart] }));
+                for (int i = prefillStart + 1; i < request.InputTokens.Length; i++)
+                {
+                    logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[i] }));
+                }
+            }
+
+            for (int step = 0; step < request.MaxNewTokens; step++)
+            {
+                if (ct.IsCancellationRequested) yield break;
+                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, rng);
+                if (next == eosTokenId) yield break;
+                yield return next;
+                logits = session.Forward(TokensToTensor<T>(new[] { next }));
+            }
+        }
+        else
+        {
+            // Stateless fallback: re-forward the full growing context each step.
+            var context = new List<int>(request.InputTokens);
+            for (int step = 0; step < request.MaxNewTokens; step++)
+            {
+                if (ct.IsCancellationRequested) yield break;
+                var logits = gm.Forward(TokensToTensor<T>(context));
+                int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, rng);
+                if (next == eosTokenId) yield break;
+                yield return next;
+                context.Add(next);
+            }
+        }
+    }
+
+    /// <summary>Extracts the last-position vocabulary row of a logits tensor as doubles.</summary>
+    private static double[] LastPositionLogits<T>(Tensor<T> logits)
+    {
+        int rank = logits.Shape.Length;
+        int vocab = logits.Shape[rank - 1];
+        int positions = 1;
+        for (int d = 0; d < rank - 1; d++)
+        {
+            positions *= logits.Shape[d];
+        }
+        int baseOffset = (positions - 1) * vocab;
+
+        var flat = logits.AsSpan();
+        var row = new double[vocab];
+        for (int v = 0; v < vocab; v++)
+        {
+            row[v] = Convert.ToDouble(flat[baseOffset + v]);
+        }
+        return row;
+    }
+
+    /// <summary>
+    /// Samples a token id from a logits row. Greedy (argmax) when <paramref name="temperature"/> ≤ 0,
+    /// otherwise temperature-scaled softmax with optional top-k and nucleus (top-p) filtering.
+    /// </summary>
+    private static int SampleToken(double[] logits, double temperature, double topP, int topK, Random rng)
+    {
+        int n = logits.Length;
+        if (n == 0) return 0;
+        if (temperature <= 0.0)
+        {
+            return ArgMax(logits);
+        }
+
+        // Order indices by descending logit for top-k / top-p truncation.
+        var idx = new int[n];
+        for (int i = 0; i < n; i++) idx[i] = i;
+        Array.Sort(idx, (a, b) => logits[b].CompareTo(logits[a]));
+
+        int limit = topK > 0 ? Math.Min(topK, n) : n;
+
+        // Softmax over the retained candidates (numerically stable).
+        double max = logits[idx[0]];
+        var probs = new double[limit];
+        double sum = 0.0;
+        for (int j = 0; j < limit; j++)
+        {
+            double p = Math.Exp((logits[idx[j]] - max) / temperature);
+            probs[j] = p;
+            sum += p;
+        }
+        for (int j = 0; j < limit; j++) probs[j] /= sum;
+
+        // Nucleus (top-p): keep the smallest prefix whose cumulative prob ≥ topP, then renormalize.
+        if (topP > 0.0 && topP < 1.0)
+        {
+            double cum = 0.0;
+            int cut = limit;
+            for (int j = 0; j < limit; j++)
+            {
+                cum += probs[j];
+                if (cum >= topP) { cut = j + 1; break; }
+            }
+            limit = cut;
+            double s2 = 0.0;
+            for (int j = 0; j < limit; j++) s2 += probs[j];
+            if (s2 > 0) for (int j = 0; j < limit; j++) probs[j] /= s2;
+        }
+
+        double r = rng.NextDouble();
+        double acc = 0.0;
+        for (int j = 0; j < limit; j++)
+        {
+            acc += probs[j];
+            if (r <= acc) return idx[j];
+        }
+        return idx[limit - 1];
+    }
+
+    /// <summary>Argmax over a logits row.</summary>
+    private static int ArgMax(double[] logits)
+    {
+        int best = 0;
+        double bestVal = logits[0];
+        for (int i = 1; i < logits.Length; i++)
+        {
+            if (logits[i] > bestVal) { bestVal = logits[i]; best = i; }
+        }
+        return best;
+    }
+
     private SpeculativeDecodingResponse GenerateTyped<T>(string modelName, SpeculativeDecodingRequest request, CancellationToken cancellationToken)
     {
         var model = _modelRepository.GetModel<T>(modelName);
