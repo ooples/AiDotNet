@@ -136,6 +136,7 @@ public sealed class OpenAiController : ControllerBase
                 r.Constraint = toolConstraint;
             }
             r.AdapterId = adapterId;
+            r.Seed = request.Seed;
             return (r, useTools);
         }
 
@@ -317,6 +318,7 @@ public sealed class OpenAiController : ControllerBase
             sdr = BuildRequest(ctx, request.PromptText(), request.ResolveMaxTokens(DefaultMaxTokens),
                 request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias,
                 request.FrequencyPenalty, request.PresencePenalty);
+            sdr.Seed = request.Seed;
         }
         catch (ArgumentException ex)
         {

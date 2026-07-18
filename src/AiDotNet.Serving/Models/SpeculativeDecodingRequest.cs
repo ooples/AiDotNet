@@ -85,6 +85,12 @@ public class SpeculativeDecodingRequest
     public string? RequestId { get; set; }
 
     /// <summary>
+    /// Gets or sets an optional RNG seed (OpenAI <c>seed</c>). When set, sampling is reproducible for the
+    /// same seed + parameters; null falls back to a per-request seed derived from <see cref="RequestId"/>.
+    /// </summary>
+    public int? Seed { get; set; }
+
+    /// <summary>
     /// Gets or sets an optional structured-output constraint (JSON / regex / grammar / choice) that forces
     /// the generated text to conform to a required format. Null = unconstrained. Built from an OpenAI
     /// <c>response_format</c> by the controller. When set, speculative decoding is disabled for the request.

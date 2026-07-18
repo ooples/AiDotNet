@@ -183,7 +183,9 @@ public sealed class TextGenerationService : ITextGenerationService
             // Streaming forces speculation off: accepted drafts arrive in bursts that distort inter-token
             // latency (TPOT) measurements, and the docs state streaming intentionally avoids speculation.
             SpeculationDepth = disableSpeculation ? 0 : request.NumDraftTokens,
-            Seed = request.RequestId is { } id ? id.GetHashCode() : (int?)null,
+            // An explicit request seed (OpenAI `seed`) wins for reproducibility; otherwise derive a stable
+            // per-request seed from the request id so greedy stays deterministic and sampling is reproducible.
+            Seed = request.Seed ?? (request.RequestId is { } id ? id.GetHashCode() : (int?)null),
             Constraint = request.Constraint,
             LogitBias = request.LogitBias,
             FrequencyPenalty = (float)request.FrequencyPenalty,
