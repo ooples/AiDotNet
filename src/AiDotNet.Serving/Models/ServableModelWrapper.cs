@@ -275,6 +275,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// valid next-token-logits semantics, so generation must be opt-in rather than assumed.</param>
     /// <param name="quantizeIncrementalWeights">When generation is enabled, whether the incremental
     /// KV-cached model uses int8 weight-only quantization so more sequences stay KV-resident.</param>
+    /// <param name="enablePagedKvCache">When generation is enabled, whether the incremental model uses a
+    /// paged (vLLM-style) block KV cache. Industry-standard default is <c>true</c>.</param>
+    /// <param name="pagedKvCacheBlockSize">Block size (tokens) for the paged KV cache. Default 16.</param>
     public ServableModelWrapper(
         string modelName,
         IFullModel<T, Tensor<T>, Tensor<T>> model,
@@ -282,7 +285,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false,
         Func<Tensor<T>, Tensor<T>>? generationForward = null,
-        bool quantizeIncrementalWeights = false)
+        bool quantizeIncrementalWeights = false,
+        bool enablePagedKvCache = true,
+        int pagedKvCacheBlockSize = 16)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         Guard.NotNull(model);
@@ -361,7 +366,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         {
             try
             {
-                var built = BuildIncrementalModel(neural, quantizeIncrementalWeights);
+                var built = BuildIncrementalModel(neural, quantizeIncrementalWeights, enablePagedKvCache, pagedKvCacheBlockSize);
                 _incrementalModel = built.Model;
                 _incrementalCache = built.Cache;
                 if (_incrementalModel is not null && _incrementalCache is not null)
@@ -387,12 +392,16 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// (null, null) when the model has no optimizable attention (incremental unsupported).
     /// </summary>
     private static (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>? Model, AiDotNet.Inference.PagedAttention.PagedKVCache<T>? Cache)
-        BuildIncrementalModel(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source, bool quantizeWeights)
+        BuildIncrementalModel(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source, bool quantizeWeights,
+            bool enablePagedKvCache, int pagedKvCacheBlockSize)
     {
         var config = new AiDotNet.Configuration.InferenceOptimizationConfig
         {
             EnableKVCache = true,
-            EnablePagedKVCache = true,
+            // Paged KV cache is the industry-standard high-throughput default (on unless the operator
+            // opts out); block size is customizable, defaulting to the vLLM-standard 16.
+            EnablePagedKVCache = enablePagedKvCache,
+            PagedKVCacheBlockSize = pagedKvCacheBlockSize,
             EnableFlashAttention = false,
             EnableLayerFusion = false,
             AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal,
@@ -559,6 +568,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled.</param>
     /// <param name="enableTextGeneration">Whether to build the KV-cached incremental generation path (tensor LMs only).</param>
     /// <param name="quantizeKvCacheWeights">Whether the incremental generation model uses int8 weight-only quantization.</param>
+    /// <param name="enablePagedKvCache">Whether the incremental generation model uses a paged (vLLM-style) block KV cache. Default <c>true</c>.</param>
+    /// <param name="pagedKvCacheBlockSize">Block size (tokens) for the paged KV cache. Default 16.</param>
     /// <returns>A ServableModelWrapper configured for the detected model type.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the model does not implement a supported IFullModel variant.</exception>
     internal static ServableModelWrapper<T> FromModel(
@@ -567,7 +578,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false,
         bool enableTextGeneration = false,
-        bool quantizeKvCacheWeights = false)
+        bool quantizeKvCacheWeights = false,
+        bool enablePagedKvCache = true,
+        int pagedKvCacheBlockSize = 16)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         Guard.NotNull(model);
@@ -608,7 +621,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             return new ServableModelWrapper<T>(
                 modelName, tensorModel, inputShape, enableBatching, enableSpeculativeDecoding,
                 generationForward: generationForward,
-                quantizeIncrementalWeights: enableTextGeneration && quantizeKvCacheWeights);
+                quantizeIncrementalWeights: enableTextGeneration && quantizeKvCacheWeights,
+                enablePagedKvCache: enablePagedKvCache,
+                pagedKvCacheBlockSize: pagedKvCacheBlockSize);
         }
 
         throw new InvalidOperationException(
@@ -629,6 +644,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="decryptionToken">Optional server-side decryption token.</param>
     /// <param name="enableTextGeneration">Whether to build the KV-cached incremental generation path (tensor LMs only).</param>
     /// <param name="quantizeKvCacheWeights">Whether the incremental generation model uses int8 weight-only quantization.</param>
+    /// <param name="enablePagedKvCache">Whether the incremental generation model uses a paged (vLLM-style) block KV cache. Default <c>true</c>.</param>
+    /// <param name="pagedKvCacheBlockSize">Block size (tokens) for the paged KV cache. Default 16.</param>
     /// <returns>A ServableModelWrapper ready for serving.</returns>
     internal static ServableModelWrapper<T> LoadServable(
         string filePath,
@@ -638,10 +655,13 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         string? licenseKey = null,
         byte[]? decryptionToken = null,
         bool enableTextGeneration = false,
-        bool quantizeKvCacheWeights = false)
+        bool quantizeKvCacheWeights = false,
+        bool enablePagedKvCache = true,
+        int pagedKvCacheBlockSize = 16)
     {
         var model = ModelLoader.Load<T>(filePath, licenseKey, decryptionToken);
-        return FromModel(modelName, model, enableBatching, enableSpeculativeDecoding, enableTextGeneration, quantizeKvCacheWeights);
+        return FromModel(modelName, model, enableBatching, enableSpeculativeDecoding, enableTextGeneration,
+            quantizeKvCacheWeights, enablePagedKvCache, pagedKvCacheBlockSize);
     }
 
     /// <inheritdoc/>

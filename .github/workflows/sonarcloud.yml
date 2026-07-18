@@ -255,6 +255,27 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Inject license public key + revocation list (aidn2 offline verification)
+        # So the CI-built AiDotNet.dll can verify offline aidn2 tokens (the CI license key path) and
+        # honour the revocation deny-list, drop the PUBLIC signing key + signed CRL where the csproj
+        # embeds them (src/BuildKey/LicensePublicKey.json -> AiDotNet.LicensePublicKey,
+        # src/BuildKey/LicenseRevocation.json -> AiDotNet.LicenseRevocation). Both are PUBLIC/signed and
+        # safe to expose. No-ops when the secrets/vars are unset (embed is Condition="Exists(...)"), so a
+        # build without them simply ships no embedded key/CRL (offline aidn2 verification unavailable).
+        shell: bash
+        run: |
+          mkdir -p src/BuildKey
+          if [ -n "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
+            echo "Injected LicensePublicKey.json ($(wc -c < src/BuildKey/LicensePublicKey.json) bytes)"
+          else
+            echo "AIDOTNET_LICENSE_PUBLIC_KEY_JSON not set — skipping (offline aidn2 verification unavailable in this build)."
+          fi
+          if [ -n "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" > src/BuildKey/LicenseRevocation.json
+            echo "Injected LicenseRevocation.json ($(wc -c < src/BuildKey/LicenseRevocation.json) bytes)"
+          fi
+
       - name: Build source generator first
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
@@ -920,6 +941,11 @@ jobs:
         # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
         # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
         env:
+          # Dedicated enterprise CI license key (save-capable — lifts the persistence op cap under capability
+          # gating — with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
+          # this online AIDN-* key for the deterministic synthetic OFFLINE license so the persistence-heavy
+          # suite is licensed with no network round-trip; the key still validates online for any job/consumer
+          # that doesn't run the ModuleInitializer hardening.
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           # Sanitize shard name: remove/replace all characters invalid in file paths

@@ -100,6 +100,26 @@ jobs:
           echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
           echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
 
+      - name: Inject license public key + revocation list (aidn2 offline verification)
+        # Drop the PUBLIC Ed25519 signing key(s) + signed CRL where the csproj embeds them
+        # (src/BuildKey/LicensePublicKey.json -> AiDotNet.LicensePublicKey,
+        # src/BuildKey/LicenseRevocation.json -> AiDotNet.LicenseRevocation) so the RELEASED NuGet can verify
+        # offline aidn2 tokens + honour the deny-list. Both are public/signed. The repo already commits a
+        # LicensePublicKey.json, but injecting from the var lets a key ROTATION ship without a code change; a
+        # non-empty var overrides the committed file, and an unset var leaves the committed one in place.
+        run: |
+          mkdir -p src/BuildKey
+          if [ -n "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
+            echo "Injected LicensePublicKey.json ($(wc -c < src/BuildKey/LicensePublicKey.json) bytes)"
+          else
+            echo "AIDOTNET_LICENSE_PUBLIC_KEY_JSON not set — using the committed src/BuildKey/LicensePublicKey.json."
+          fi
+          if [ -n "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" > src/BuildKey/LicenseRevocation.json
+            echo "Injected LicenseRevocation.json ($(wc -c < src/BuildKey/LicenseRevocation.json) bytes)"
+          fi
+
       - name: Generate integrity hash
         run: |
           mkdir -p src/IntegrityHash

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AiDotNet.Serving.DevHost</RootNamespace>
+    <!--
+      DEV / BENCHMARK ONLY. Composes the REAL OpenAI controller + generation engine + tokenizer
+      registry from AiDotNet.Serving, but WITHOUT auth/DB/Stripe, and registers a SYNTHETIC in-memory
+      generative model so /v1 can be exercised end-to-end over HTTP. Never ship this; it exists to
+      measure serving-layer overhead (batching, KV path, sampling, detok, SSE), NOT real model compute.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AiDotNet.Serving\AiDotNet.Serving.csproj" />
+  </ItemGroup>
+
+</Project>
