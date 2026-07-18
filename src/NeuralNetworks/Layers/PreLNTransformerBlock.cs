@@ -35,9 +35,11 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     private readonly RMSNormalizationLayer<T> _norm1;
     private readonly LayerBase<T> _attention;
     private readonly RMSNormalizationLayer<T> _norm2;
+    private readonly DenseLayer<T>? _ffnGate;
     private readonly DenseLayer<T> _ffnUp;
     private readonly DenseLayer<T> _ffnDown;
     private readonly IActivationFunction<T> _ffnActivation;
+    private readonly bool _gated;
     private readonly int _hiddenSize;
     private readonly int _ffnDim;
 
@@ -52,7 +54,21 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     /// <summary>The self-attention sublayer (exposed for tensor-parallel serving partitioning).</summary>
     public LayerBase<T> AttentionLayer => _attention;
 
-    /// <summary>The FFN up-projection DenseLayer (hidden -&gt; ffnDim, activation).</summary>
+    /// <summary>
+    /// The FFN gate-projection DenseLayer (hidden -&gt; ffnDim, activation), present only in
+    /// gated SwiGLU mode; <c>null</c> for the classic two-matrix FFN. Exposed for
+    /// tensor-parallel serving partitioning and pretrained weight loading.
+    /// </summary>
+    public DenseLayer<T>? FfnGate => _ffnGate;
+
+    /// <summary>
+    /// Whether the FFN is a gated SwiGLU (LLaMA/Mistral/Qwen2: <c>down(act(gate(x)) * up(x))</c>)
+    /// rather than the classic two-matrix <c>down(act(up(x)))</c>.
+    /// </summary>
+    public bool IsGated => _gated;
+
+    /// <summary>The FFN up-projection DenseLayer (hidden -&gt; ffnDim). In gated mode this is the
+    /// linear value path (no activation); in classic mode it carries the FFN activation.</summary>
     public DenseLayer<T> FfnUp => _ffnUp;
 
     /// <summary>The FFN down-projection DenseLayer (ffnDim -&gt; hidden, identity).</summary>
@@ -85,7 +101,8 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         int hiddenSize,
         int ffnDim,
         LayerBase<T> attention,
-        IActivationFunction<T>? ffnActivation = null)
+        IActivationFunction<T>? ffnActivation = null,
+        bool gated = false)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
         if (hiddenSize <= 0)
@@ -99,15 +116,27 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         _ffnDim = ffnDim;
         _attention = attention;
         _ffnActivation = ffnActivation ?? new GELUActivation<T>();
+        _gated = gated;
 
         _norm1 = new RMSNormalizationLayer<T>();
         _norm2 = new RMSNormalizationLayer<T>();
 
-        // T5 / LLaMA / Gemma / Qwen2 / ChatGLM3 FFN: linear (no bias) → activation → linear (no bias).
-        // DenseLayer's vector activation overload accepts scalar IActivationFunction.
-        // DenseLayer(outputSize, activation): lazy-resolves input dim on first
-        // forward, so the FFN expands hidden -> ffnDim, then projects ffnDim -> hidden.
-        _ffnUp = new DenseLayer<T>(outputSize: ffnDim, activationFunction: _ffnActivation);
+        // DenseLayer(outputSize, activation): lazy-resolves input dim on first forward
+        // and (with no init strategy) zero-inits biases, matching the bias-free FFN
+        // convention of T5 / LLaMA / Gemma / Qwen2 / ChatGLM3.
+        if (_gated)
+        {
+            // Gated SwiGLU (LLaMA/Mistral/Qwen2, Shazeer 2020): down( act(gate(x)) * up(x) ).
+            // The activation sits on the gate path; the up (value) path stays linear.
+            _ffnGate = new DenseLayer<T>(outputSize: ffnDim, activationFunction: _ffnActivation);
+            _ffnUp = new DenseLayer<T>(outputSize: ffnDim, activationFunction: new IdentityActivation<T>());
+        }
+        else
+        {
+            // Classic two-matrix FFN (T5/Gemma-style): linear → activation → linear.
+            _ffnUp = new DenseLayer<T>(outputSize: ffnDim, activationFunction: _ffnActivation);
+        }
+
         _ffnDown = new DenseLayer<T>(outputSize: hiddenSize, activationFunction: new IdentityActivation<T>());
 
         // Register every sublayer so TapeTrainingStep<T>.CollectParameters
@@ -120,6 +149,8 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         RegisterSubLayer(_norm1);
         RegisterSubLayer(_attention);
         RegisterSubLayer(_norm2);
+        if (_ffnGate is not null)
+            RegisterSubLayer(_ffnGate);
         RegisterSubLayer(_ffnUp);
         RegisterSubLayer(_ffnDown);
     }
@@ -145,8 +176,23 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         for (int i = 0; i < rank - 1; i++) flatN *= afterAttn.Shape[i];
 
         var normed2Flat = Engine.Reshape(normed2, new[] { flatN, featureDim });
-        var ffnUpOut = _ffnUp.Forward(normed2Flat);
-        var ffnDownOut = _ffnDown.Forward(ffnUpOut);
+
+        Tensor<T> ffnHidden;
+        if (_ffnGate is not null)
+        {
+            // Gated SwiGLU: act(gate(x)) * up(x). The gate carries the activation
+            // (applied inside _ffnGate); the up path is linear.
+            var gateOut = _ffnGate.Forward(normed2Flat);
+            var upOut = _ffnUp.Forward(normed2Flat);
+            ffnHidden = Engine.TensorMultiply(gateOut, upOut);
+        }
+        else
+        {
+            // Classic FFN: activation is applied inside _ffnUp.
+            ffnHidden = _ffnUp.Forward(normed2Flat);
+        }
+
+        var ffnDownOut = _ffnDown.Forward(ffnHidden);
         var afterAttnShape = afterAttn._shape;
         var ffnReshaped = Engine.Reshape(ffnDownOut, afterAttnShape);
 
@@ -154,18 +200,42 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _norm1.ParameterCount + _attention.ParameterCount + _norm2.ParameterCount +
-        _ffnUp.ParameterCount + _ffnDown.ParameterCount;
+    /// <summary>
+    /// The block's sublayers in flat-parameter order. The gate (when present) sits
+    /// immediately before the up-projection, so a non-gated block keeps its original
+    /// layout and a gated block appends the gate deterministically.
+    /// </summary>
+    private IEnumerable<LayerBase<T>> OrderedSubLayers()
+    {
+        yield return _norm1;
+        yield return _attention;
+        yield return _norm2;
+        if (_ffnGate is not null)
+            yield return _ffnGate;
+        yield return _ffnUp;
+        yield return _ffnDown;
+    }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters() =>
-        Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(_norm1.GetParameters(), _attention.GetParameters()),
-                _norm2.GetParameters()),
-            Vector<T>.Concatenate(_ffnUp.GetParameters(), _ffnDown.GetParameters()));
+    public override long ParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var layer in OrderedSubLayers())
+                total += layer.ParameterCount;
+            return total;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        Vector<T> acc = new Vector<T>(0);
+        foreach (var layer in OrderedSubLayers())
+            acc = Vector<T>.Concatenate(acc, layer.GetParameters());
+        return acc;
+    }
 
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
@@ -176,11 +246,8 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
                 $"Expected {expected} parameters, got {parameters.Length}.");
 
         int offset = 0;
-        SetSubParams(_norm1, parameters, ref offset);
-        SetSubParams(_attention, parameters, ref offset);
-        SetSubParams(_norm2, parameters, ref offset);
-        SetSubParams(_ffnUp, parameters, ref offset);
-        SetSubParams(_ffnDown, parameters, ref offset);
+        foreach (var layer in OrderedSubLayers())
+            SetSubParams(layer, parameters, ref offset);
     }
 
     private static void SetSubParams(LayerBase<T> layer, Vector<T> source, ref int offset)
@@ -193,41 +260,33 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients() =>
-        Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(_norm1.GetParameterGradients(), _attention.GetParameterGradients()),
-                _norm2.GetParameterGradients()),
-            Vector<T>.Concatenate(_ffnUp.GetParameterGradients(), _ffnDown.GetParameterGradients()));
+    public override Vector<T> GetParameterGradients()
+    {
+        Vector<T> acc = new Vector<T>(0);
+        foreach (var layer in OrderedSubLayers())
+            acc = Vector<T>.Concatenate(acc, layer.GetParameterGradients());
+        return acc;
+    }
 
     /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _norm1.ClearGradients();
-        _attention.ClearGradients();
-        _norm2.ClearGradients();
-        _ffnUp.ClearGradients();
-        _ffnDown.ClearGradients();
+        foreach (var layer in OrderedSubLayers())
+            layer.ClearGradients();
     }
 
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
-        _norm1.UpdateParameters(learningRate);
-        _attention.UpdateParameters(learningRate);
-        _norm2.UpdateParameters(learningRate);
-        _ffnUp.UpdateParameters(learningRate);
-        _ffnDown.UpdateParameters(learningRate);
+        foreach (var layer in OrderedSubLayers())
+            layer.UpdateParameters(learningRate);
     }
 
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _norm1.ResetState();
-        _attention.ResetState();
-        _norm2.ResetState();
-        _ffnUp.ResetState();
-        _ffnDown.ResetState();
+        foreach (var layer in OrderedSubLayers())
+            layer.ResetState();
     }
 }
