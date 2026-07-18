@@ -6,18 +6,28 @@ remaining pieces that require the **Ed25519 signing key**, which is intentionall
 agent (the private key must be generated on a trusted machine and set as a secret — it never enters a chat or
 the repo).
 
-## What is already deployed / merged-ready
+## Status — steps 1–4 DONE (prod-2026a key live, 2026-07-18)
 
 - **DB (applied to `yfkqwpgjahoamlgckjib`):** `public.revocations` table + `public.revoke_license(uuid,text)`
   (migrations `20260718000000_revocations.sql`, `20260718000100_lock_revoke_license_execute.sql`). Additive
   and locked down (service_role-only; verified via the security advisor). No existing object changed, so the
   live paid customers are unaffected. `validate_license_key` already returns `license_id` (the natural `jti`)
   and per-tier `capabilities` — **no change needed** to that hot-path function.
-- **Edge function code (committed, NOT yet deployed):** `issue-license`, `get-revocations`, and the shared
-  signer `_shared/aidn2.ts`. They 503 until the signing secret exists — deploy them in step 3.
+- **DONE — signing key:** keypair `kid=prod-2026a` generated; private key set as the
+  `AIDOTNET_LICENSE_SIGNING_KEY_PKCS8` + `AIDOTNET_LICENSE_KID` function secrets.
+- **DONE — edge functions deployed + ACTIVE:** `issue-license`, `get-revocations` (both `verify_jwt:false`,
+  matching the sibling license functions). Smoke-tested: `get-revocations` returns a signed CRL and its
+  signature **verifies against the embedded public key** — the private key in the secret and the embedded
+  public key are a proven matched pair.
+- **DONE — public key embedded:** `src/BuildKey/LicensePublicKey.json` (kid prod-2026a) committed to
+  ooples/AiDotNet (#1891) + set as the `AIDOTNET_LICENSE_PUBLIC_KEY_JSON` CI variable. Because it's committed,
+  every build (not just CI) embeds it, so a released SDK verifies aidn2 tokens offline with no extra wiring.
 - **Client SDK:** capability-authoritative persistence gate, aidn2 scope/machine/CRL verification, embedded +
-  online CRL provider. The online→offline *auto-fetch glue* (SDK calling `issue-license` / `get-revocations`)
-  is deliberately deferred to step 5 so it's wired against live, tested endpoints.
+  online CRL provider. The online→offline *auto-fetch glue* (SDK auto-calling `issue-license` / auto-fetching
+  the CRL) is step 5 below — now unblocked and testable against the live endpoints.
+- **NOTE — AiDotNet.Tensors is a separate keypair.** Tensors' offline path is RSA `SignedEntitlement`, NOT
+  aidn2/Ed25519, so it does **not** consume the prod-2026a JWK. Its RSA signing key is still the placeholder
+  and needs its own keygen + issuer rollout (tracked separately; #808 added its scope/CRL verification only).
 
 ## Step 1 — generate the signing keypair (on your machine)
 
