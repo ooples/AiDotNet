@@ -115,6 +115,48 @@ public sealed class TensorParallelInferenceEquivalenceTests
         }
     }
 
+    [Theory(Timeout = 120000)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public async Task TensorParallelTransformerBlock_ShardedForward_MatchesUnsharded(int worldSize)
+    {
+        await Task.Yield();
+
+        const int embedDim = 16;
+        const int numHeads = 4;
+        const int ffnDim = 32;
+        const int seq = 4;
+        const int batch = 2;
+
+        var rng = RandomHelper.CreateSeededRandom(9001);
+        var qW = RandomTensor(rng, embedDim, embedDim); var qB = RandomTensor(rng, embedDim);
+        var kW = RandomTensor(rng, embedDim, embedDim); var kB = RandomTensor(rng, embedDim);
+        var vW = RandomTensor(rng, embedDim, embedDim); var vB = RandomTensor(rng, embedDim);
+        var oW = RandomTensor(rng, embedDim, embedDim); var oB = RandomTensor(rng, embedDim);
+        var upW = RandomTensor(rng, ffnDim, embedDim); var upB = RandomTensor(rng, ffnDim);
+        var downW = RandomTensor(rng, embedDim, ffnDim); var downB = RandomTensor(rng, embedDim);
+
+        var input = RandomTensor(rng, batch, seq, embedDim);
+
+        IReadOnlyList<ILayer<double>> BuildRank(ICommunicationBackend<double> backend)
+        {
+            var block = new TensorParallelTransformerBlock<double>(backend, embedDim, numHeads, ffnDim, causal: true);
+            block.SetFromFullWeights(qW, qB, kW, kB, vW, vB, oW, oB, upW, upB, downW, downB);
+            return new ILayer<double>[] { block };
+        }
+
+        var reference = TensorParallelInference.ForwardInProcess(1, input, BuildRank);
+        var sharded = TensorParallelInference.ForwardInProcess(worldSize, input, BuildRank);
+
+        var refSpan = reference.AsSpan();
+        var shardSpan = sharded.AsSpan();
+        Assert.Equal(refSpan.Length, shardSpan.Length);
+        for (int i = 0; i < refSpan.Length; i++)
+        {
+            Assert.Equal(refSpan[i], shardSpan[i], Tol);
+        }
+    }
+
     private static Tensor<double> RandomTensor(System.Random rng, params int[] shape)
     {
         var t = new Tensor<double>(shape);
