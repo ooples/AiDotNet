@@ -626,6 +626,32 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Provides a custom speculative-decoding draft model for serving. The serving engine verifies this draft's
+    /// guessed tokens against the target model, accelerating generation beyond the built-in N-gram prompt-lookup
+    /// draft. Setting a draft also switches <see cref="AiDotNet.Configuration.InferenceOptimizationConfig.DraftModelType"/>
+    /// to <see cref="AiDotNet.Configuration.DraftModelType.Custom"/> so the engine uses it.
+    /// </summary>
+    /// <param name="draftModel">A draft model implementing <see cref="AiDotNet.Inference.SpeculativeDecoding.IDraftModel{T}"/>
+    /// (e.g. wrap a smaller model with <see cref="AiDotNet.Inference.SpeculativeDecoding.NeuralDraftModel{T}"/>).</param>
+    /// <remarks>
+    /// <para>
+    /// The draft model is a live object, so it applies to in-process serving only (it is not serialized with the
+    /// model artifact). Speculative decoding must also be enabled (<c>EnableSpeculativeDecoding = true</c>).
+    /// </para>
+    /// <para><b>For Beginners:</b> Speculative decoding uses a small, fast "guesser" model to propose the next
+    /// few tokens, which the big model checks all at once — often 1.5–3× faster. This lets you plug in your own
+    /// guesser instead of the default word-pattern one.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureDraftModel(AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T> draftModel)
+    {
+        _servingDraftModel = draftModel ?? throw new ArgumentNullException(nameof(draftModel));
+        _inferenceOptimizationConfig ??= AiDotNet.Configuration.InferenceOptimizationConfig.Default;
+        _inferenceOptimizationConfig.DraftModelType = AiDotNet.Configuration.DraftModelType.Custom;
+        return this;
+    }
+
+    /// <summary>
     /// Enables JIT (Just-In-Time) compilation for the built model's forward and
     /// backward passes.
     /// </summary>

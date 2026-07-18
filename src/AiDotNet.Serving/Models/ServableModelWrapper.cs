@@ -621,11 +621,14 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             // An explicit servingInferenceConfig (e.g. operator startup settings threaded from
             // ModelStartupService) takes precedence; otherwise fall back to the facade's config.
             AiDotNet.Configuration.InferenceOptimizationConfig? servingConfig = servingInferenceConfig;
+            AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? draftModel = null;
             IFullModel<T, Tensor<T>, Tensor<T>> servableModel = tensorModel;
             IModelShape? shapeSource = model as IModelShape;
             if (model is AiDotNet.Models.Results.AiModelResult<T, Tensor<T>, Tensor<T>> facade)
             {
                 servingConfig ??= facade.GetInferenceOptimizationConfigForServing();
+                // Live custom draft model (facade ConfigureDraftModel) for in-process serving.
+                draftModel = facade.GetDraftModelForServing();
                 if (facade.Model is IFullModel<T, Tensor<T>, Tensor<T>> innerTensorModel)
                 {
                     servableModel = innerTensorModel;
@@ -658,7 +661,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                 modelName, servableModel, inputShape, enableBatching, enableSpeculativeDecoding,
                 generationForward: generationForward,
                 quantizeIncrementalWeights: enableTextGeneration && quantizeKvCacheWeights,
-                servingInferenceConfig: servingConfig);
+                servingInferenceConfig: servingConfig,
+                draftModel: draftModel);
         }
 
         throw new InvalidOperationException(

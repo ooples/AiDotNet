@@ -684,6 +684,14 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
     /// <summary>
+    /// Optional user-supplied draft model for speculative decoding during serving. When set (and
+    /// <see cref="InferenceOptimizationConfig.DraftModelType"/> is <c>Custom</c>), the serving engine verifies
+    /// this draft's guesses instead of the built-in N-gram prompt-lookup draft. This is a live object, so it is
+    /// not serialized and only applies to in-process serving.
+    /// </summary>
+    public AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? ServingDraftModel { get; set; }
+
+    /// <summary>
     /// JIT compilation configuration applied on every Predict call.
     /// </summary>
     public AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }
