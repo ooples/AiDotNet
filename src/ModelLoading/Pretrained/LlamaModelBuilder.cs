@@ -137,14 +137,7 @@ public static class LlamaModelBuilder<T>
             LoadGamma(block.Norm1, weights, p + "input_layernorm.weight", hidden, opt.RmsNormAddsOne);
             LoadGamma(block.Norm2, weights, p + "post_attention_layernorm.weight", hidden, opt.RmsNormAddsOne);
 
-            // Attention: HF q/k/v/o_proj are [out, in]; the GQA layer stores [in, out]; load order is
-            // Q, K, V, O, then the (zero) output bias.
-            var qT = TransposeOutInToInOut(weights, p + "self_attn.q_proj.weight", outDim: numHeads * headDim, inDim: hidden);
-            var kT = TransposeOutInToInOut(weights, p + "self_attn.k_proj.weight", outDim: kvDim, inDim: hidden);
-            var vT = TransposeOutInToInOut(weights, p + "self_attn.v_proj.weight", outDim: kvDim, inDim: hidden);
-            var oT = TransposeOutInToInOut(weights, p + "self_attn.o_proj.weight", outDim: hidden, inDim: numHeads * headDim);
-            var attnParams = Concat(qT, kT, vT, oT, new T[hidden]); // trailing zeros = output bias
-            ((GroupedQueryAttentionLayer<T>)block.AttentionLayer).SetParameters(new Vector<T>(attnParams));
+            LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
 
             // Gated SwiGLU FFN: gate/up are [intermediate, hidden] → [hidden, intermediate]; down is
             // [hidden, intermediate] → [intermediate, hidden]. Each DenseLayer stores [in, out] + zero bias.
@@ -166,11 +159,25 @@ public static class LlamaModelBuilder<T>
         return network;
     }
 
-    private const string EmbedName = "model.embed_tokens.weight";
-    private const string LmHeadName = "lm_head.weight";
+    internal const string EmbedName = "model.embed_tokens.weight";
+    internal const string LmHeadName = "lm_head.weight";
+
+    // Loads a GQA layer's Q/K/V/O projections (HF [out,in] -> layer [in,out]) + zero output bias, in the
+    // layer's SetParameters order (Q, K, V, O, bias). Shared by the dense and MoE decoder builders.
+    internal static void LoadAttention(GroupedQueryAttentionLayer<T> attn, INamedTensorSource weights,
+        string layerPrefix, int numHeads, int numKVHeads, int headDim, int hidden)
+    {
+        int kvDim = numKVHeads * headDim;
+        var qT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.q_proj.weight", outDim: numHeads * headDim, inDim: hidden);
+        var kT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.k_proj.weight", outDim: kvDim, inDim: hidden);
+        var vT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.v_proj.weight", outDim: kvDim, inDim: hidden);
+        var oT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.o_proj.weight", outDim: hidden, inDim: numHeads * headDim);
+        var attnParams = Concat(qT, kT, vT, oT, new T[hidden]); // trailing zeros = output bias
+        attn.SetParameters(new Vector<T>(attnParams));
+    }
 
     // Loads a DenseLayer's weights ([in, out] after transposing HF's [out, in]) and a zero bias.
-    private static void LoadDense(DenseLayer<T> dense, INamedTensorSource weights, string name, int outDim, int inDim)
+    internal static void LoadDense(DenseLayer<T> dense, INamedTensorSource weights, string name, int outDim, int inDim)
     {
         var wInOut = TransposeOutInToInOut(weights, name, outDim, inDim);
         var full = Concat(wInOut, new T[outDim]); // trailing zeros = bias
@@ -179,7 +186,7 @@ public static class LlamaModelBuilder<T>
 
     // Reads an RMSNorm weight and writes it into the layer's gamma, optionally as (weight + 1) for the
     // Gemma convention where the norm scales by (1 + weight).
-    private static void LoadGamma(RMSNormalizationLayer<T> norm, INamedTensorSource weights, string name, int hidden, bool addOne)
+    internal static void LoadGamma(RMSNormalizationLayer<T> norm, INamedTensorSource weights, string name, int hidden, bool addOne)
     {
         var gamma = ReadTensor(weights, name, hidden);
         if (addOne)
@@ -203,7 +210,7 @@ public static class LlamaModelBuilder<T>
     }
 
     // Reads a named tensor's values (row-major) as T, verifying the element count.
-    private static T[] ReadTensor(INamedTensorSource weights, string name, int expectedCount)
+    internal static T[] ReadTensor(INamedTensorSource weights, string name, int expectedCount)
     {
         if (!HasTensor(weights, name))
             throw new InvalidDataException($"checkpoint is missing required tensor '{name}'.");
@@ -228,7 +235,7 @@ public static class LlamaModelBuilder<T>
         return dst;
     }
 
-    private static bool HasTensor(INamedTensorSource weights, string name)
+    internal static bool HasTensor(INamedTensorSource weights, string name)
     {
         foreach (var n in weights.TensorNames)
             if (string.Equals(n, name, StringComparison.Ordinal))
