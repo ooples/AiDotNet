@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using AiDotNet.Finance.Trading.Environments;
 using AiDotNet.Finance.Trading.Evaluation;
 using AiDotNet.Finance.Trading.Rewards;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.ReinforcementLearning.Agents.SAC;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -103,5 +106,47 @@ public sealed class PortfolioAgentTrainingTests
 
         Assert.Single(outcomes);
         Assert.False(outcomes[0].BeatBaseline);
+    }
+
+    [Fact(Timeout = 120000)]
+    [Trait("category", "unit")]
+    public async Task Harness_trains_a_real_SAC_agent_end_to_end_and_produces_finite_holdout_metrics()
+    {
+        await Task.Yield();
+        // Integration smoke: drive a REAL AiDotNet SAC agent (via the adapter) through the trainer + holdout
+        // evaluator. Asserts the wiring runs end-to-end and yields finite, sane metrics — NOT that it converges
+        // (RL convergence is a research result, not a unit test).
+        var prices = new List<double[]> { Ramp(100, 1, 40), Ramp(100, 0.5, 40) };
+        var trainEnv = new PortfolioManagerEnvironment<double>(
+            prices, null, windowSize: 5, initialCapital: 100_000, reward: new DifferentialSharpeReward());
+
+        var options = new SACOptions<double>
+        {
+            StateSize = trainEnv.ObservationSpaceDimension,
+            ActionSize = trainEnv.ActionSpaceSize,
+            PolicyLearningRate = 3e-4,
+            QLearningRate = 3e-4,
+            AlphaLearningRate = 3e-4,
+            DiscountFactor = 0.99,
+            InitialTemperature = 0.2,
+            TargetUpdateTau = 0.005,
+            BatchSize = 8,
+            ReplayBufferSize = 2000,
+            WarmupSteps = 4,
+            PolicyHiddenLayers = new List<int> { 32, 32 },
+            QHiddenLayers = new List<int> { 32, 32 },
+            Seed = 1,
+        };
+        var agent = PortfolioAgent.From(new SACAgent<double>(options));
+
+        double meanReturn = PortfolioAgentTrainer.Train(agent, trainEnv, episodes: 2);
+        Assert.True(double.IsFinite(meanReturn), $"training return {meanReturn} was not finite");
+
+        var evalEnv = new PortfolioManagerEnvironment<double>(
+            prices, null, windowSize: 5, initialCapital: 100_000, reward: new DifferentialSharpeReward());
+        var result = PortfolioBacktest.Run(evalEnv, s => agent.SelectAction(s, explore: false));
+
+        Assert.True(double.IsFinite(result.FinalValue) && result.FinalValue > 0, $"final value {result.FinalValue}");
+        Assert.True(result.Steps > 0);
     }
 }
