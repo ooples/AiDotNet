@@ -357,7 +357,7 @@ internal class ContinuousBatcher<T> : IDisposable
         // SupportsBatchedPrefill=false) would see the padded width and diverge from a single-prompt
         // forward, so only batch prefill for models that accept a multi-token forward.
         bool batchedPrefillDone = false;
-        if (UsePagedPath && _config.SupportsBatchedPrefill && _config.MaxPrefillChunkTokens <= 0 && prefillSequences.Count > 1 && !RequiresPerSequenceAdapter(prefillSequences))
+        if (UsePagedPath && _config.SupportsBatchedPrefill && _config.MaxPrefillChunkTokens <= 0 && prefillSequences.Count > 1)
         {
             var batchedPrefill = RunBatchedPagedPrefill(prefillSequences);
             if (batchedPrefill is not null)
@@ -386,7 +386,7 @@ internal class ContinuousBatcher<T> : IDisposable
         // batched forward (true continuous batching) instead of one forward per sequence — the Phase 2
         // throughput win. Otherwise decode per sequence (speculation, single-sequence, or stateless path).
         var generating = decodeSequences.Where(s => s.Status == SequenceStatus.Generating).ToList();
-        if (UsePagedPath && generating.Count > 1 && !RequiresPerSequenceAdapter(generating))
+        if (UsePagedPath && generating.Count > 1)
         {
             // One batched forward serves the whole decode batch: plain batched decode when speculation is
             // off, and batched speculative verify (grouped by draft length) when it is on.
@@ -581,11 +581,11 @@ internal class ContinuousBatcher<T> : IDisposable
     private int? RunPagedPrefill(SequenceState<T> sequence)
     {
         if (_pagedCache is not { } cache || _incrementalModel is not { } model) return null;
-        ApplyAdapter(sequence);
 
         long seqId = sequence.SequenceId;
         var prompt = sequence.TokenIds;
         int promptLen = prompt.Count;
+        string? adapter = AdapterTaskFor(sequence);
 
         // First chunk: allocate the cache slot and reuse the longest registered STRICT prefix
         // (copy-on-write), which sets the starting cursor. cached < promptLen always.
@@ -611,18 +611,18 @@ internal class ContinuousBatcher<T> : IDisposable
             int chunk = _config.MaxPrefillChunkTokens > 0 ? Math.Min(remaining, _config.MaxPrefillChunkTokens) : remaining;
             var piece = new List<int>(chunk);
             for (int i = 0; i < chunk; i++) piece.Add(prompt[start + i]);
-            logits = model.PredictWithContext(CreateInputTensor(piece), new InferenceForwardContext(seqId, start));
+            logits = model.PredictWithContext(CreateInputTensor(piece), new InferenceForwardContext(seqId, start) { LoraTask = adapter });
             sequence.PrefillCursor = start + chunk;
             LastPrefillChunkCount++;
         }
         else
         {
             logits = model.PredictWithContext(
-                CreateInputTensor(new List<int> { prompt[start] }), new InferenceForwardContext(seqId, start));
+                CreateInputTensor(new List<int> { prompt[start] }), new InferenceForwardContext(seqId, start) { LoraTask = adapter });
             for (int i = start + 1; i < promptLen; i++)
             {
                 logits = model.PredictWithContext(
-                    CreateInputTensor(new List<int> { prompt[i] }), new InferenceForwardContext(seqId, i));
+                    CreateInputTensor(new List<int> { prompt[i] }), new InferenceForwardContext(seqId, i) { LoraTask = adapter });
             }
             sequence.PrefillCursor = promptLen;
         }
@@ -693,7 +693,7 @@ internal class ContinuousBatcher<T> : IDisposable
             // Right-padded tail (t >= promptLens[i]) stays 0 and is masked out by RowLengths.
         }
 
-        var ctx = new InferenceForwardContext(seqIds, positions) { RowLengths = promptLens };
+        var ctx = new InferenceForwardContext(seqIds, positions) { RowLengths = promptLens, LoraTasks = AdapterTasksFor(sequences) };
         var logits = model.PredictWithContext(input, ctx);
 
         var results = new List<(SequenceState<T>, int)>(batch);
@@ -759,14 +759,13 @@ internal class ContinuousBatcher<T> : IDisposable
     private IReadOnlyList<int> RunPagedDecodeStep(SequenceState<T> sequence)
     {
         if (_incrementalModel is not { } model) return Array.Empty<int>();
-        ApplyAdapter(sequence);
 
         long seqId = sequence.SequenceId;
         int position = _pagedPositions.TryGetValue(seqId, out var p) ? p : sequence.PromptLength;
         int lastToken = sequence.TokenIds[sequence.TokenIds.Count - 1];
 
         var input = CreateInputTensor(new List<int> { lastToken });
-        var logits = model.PredictWithContext(input, new InferenceForwardContext(seqId, position));
+        var logits = model.PredictWithContext(input, new InferenceForwardContext(seqId, position) { LoraTask = AdapterTaskFor(sequence) });
         _pagedPositions[seqId] = position + 1;
 
         int nextToken;
@@ -809,7 +808,7 @@ internal class ContinuousBatcher<T> : IDisposable
             input[[i, 0]] = ConvertToT(seq.TokenIds[seq.TokenIds.Count - 1]);
         }
 
-        var logits = model.PredictWithContext(input, new InferenceForwardContext(seqIds, positions));
+        var logits = model.PredictWithContext(input, new InferenceForwardContext(seqIds, positions) { LoraTasks = AdapterTasksFor(sequences) });
 
         for (int i = 0; i < batch; i++)
         {
@@ -863,9 +862,11 @@ internal class ContinuousBatcher<T> : IDisposable
         int p = _pagedPositions.TryGetValue(seqId, out var pos) ? pos : sequence.PromptLength;
         int lastToken = sequence.TokenIds[sequence.TokenIds.Count - 1];
 
+        string? specAdapter = AdapterTaskFor(sequence);
+
         // 1) Forward the last token -> greedy next token (KV[p] now written; cache length p+1).
         var greedyLogits = model.PredictWithContext(
-            CreateInputTensor(new List<int> { lastToken }), new InferenceForwardContext(seqId, p));
+            CreateInputTensor(new List<int> { lastToken }), new InferenceForwardContext(seqId, p) { LoraTask = specAdapter });
         int greedy = ArgMaxLastPosition(greedyLogits);
 
         // 2) Draft the next tokens (custom draft model if supplied, else trailing-n-gram prompt lookup).
@@ -885,7 +886,7 @@ internal class ContinuousBatcher<T> : IDisposable
 
         // 3) Verify the K drafts in ONE forward at position p+1 (KV[p+1..p+K]; cache length p+1+K).
         var verifyLogits = model.PredictWithContext(
-            CreateInputTensor(draft), new InferenceForwardContext(seqId, p + 1));
+            CreateInputTensor(draft), new InferenceForwardContext(seqId, p + 1) { LoraTask = specAdapter });
         _pagedDraftedTokens += draft.Count;
 
         // 4-6) Accept the longest greedy-matching prefix, roll back rejected KV, emit the correction.
@@ -969,7 +970,8 @@ internal class ContinuousBatcher<T> : IDisposable
         }
 
         // 1) Batched greedy forward (last token of each @ its own position).
-        var greedyLogits = model.PredictWithContext(greedyInput, new InferenceForwardContext(seqIds, greedyPos));
+        var specTasks = AdapterTasksFor(group);
+        var greedyLogits = model.PredictWithContext(greedyInput, new InferenceForwardContext(seqIds, greedyPos) { LoraTasks = specTasks });
 
         // 2) Batched verify forward (K drafts of each @ position+1).
         var verifyPos = new int[b];
@@ -979,7 +981,7 @@ internal class ContinuousBatcher<T> : IDisposable
             verifyPos[i] = greedyPos[i] + 1;
             for (int j = 0; j < k; j++) verifyInput[[i, j]] = ConvertToT(drafts[i][j]);
         }
-        var verifyLogits = model.PredictWithContext(verifyInput, new InferenceForwardContext(seqIds, verifyPos));
+        var verifyLogits = model.PredictWithContext(verifyInput, new InferenceForwardContext(seqIds, verifyPos) { LoraTasks = specTasks });
         _pagedDraftedTokens += (long)b * k;
 
         // 3) Per-row accept + emit.
@@ -1235,6 +1237,17 @@ internal class ContinuousBatcher<T> : IDisposable
             if (seq.Request.FrequencyPenalty != 0f || seq.Request.PresencePenalty != 0f || seq.Request.LogitBias is { Count: > 0 })
             {
                 reason = "PenaltyOrLogitBias";
+                InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+                return false;
+            }
+            // A request that selects a LoRA adapter must NOT speculate: the draft model is a separate model
+            // that does not carry the target's adapter, so its drafted tokens come from a different
+            // distribution than the adapted target — verification would reject nearly everything and, worse,
+            // the greedy/verify path would decode from the wrong (unadapted) draft. Force plain decode, where
+            // the adapter is resolved per-row from the InferenceForwardContext.
+            if (_hasMultiLoRA && seq.Request.AdapterId is not null)
+            {
+                reason = "LoRAAdapterSelected";
                 InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
                 return false;
             }
@@ -1640,27 +1653,30 @@ internal class ContinuousBatcher<T> : IDisposable
                 ? RandomHelper.CreateSeededRandom(seed)
                 : RandomHelper.CreateSecureRandom());
 
-    // Switches the shared base model to the sequence's requested LoRA adapter before its forward. A no-op
-    // unless the model has multi-LoRA layers and the request named an adapter. The batcher's single-loop
-    // execution means this global-to-the-model selection is race-free between sequential forwards.
-    private void ApplyAdapter(SequenceState<T> sequence)
-    {
-        if (_hasMultiLoRA && _incrementalModel is { } model && sequence.Request.AdapterId is { } adapterId)
-        {
-            AiDotNet.LoRA.LoRAAdapterSelection.SelectTask(model, adapterId);
-        }
-    }
+    // The sequence's requested LoRA adapter for a single-sequence forward, or null when the model has no
+    // multi-LoRA layers or the request named no adapter. Carried on the InferenceForwardContext so the
+    // MultiLoRAAdapter layers resolve it per-request (see MultiLoRAAdapter.ForwardWithContext) instead of
+    // mutating shared model state — this is what makes concurrent, differently-adapted requests safe.
+    private string? AdapterTaskFor(SequenceState<T> sequence)
+        => _hasMultiLoRA ? sequence.Request.AdapterId : null;
 
-    // True when any sequence in the set requests a specific LoRA adapter — such sequences must decode
-    // per-sequence (each selects its own adapter) rather than through a single co-batched forward.
-    private bool RequiresPerSequenceAdapter(IReadOnlyCollection<SequenceState<T>> sequences)
+    // Per-row adapter tasks parallel to a batched forward's sequence rows, or null (fast path) when no row
+    // requests an adapter. Lets sequences that requested DIFFERENT adapters co-batch in a single forward:
+    // each row's LoRA delta is computed from its own adapter (row b uses tasks[b]; null => default task).
+    private string?[]? AdapterTasksFor(IReadOnlyList<SequenceState<T>> sequences)
     {
-        if (!_hasMultiLoRA) return false;
-        foreach (var s in sequences)
+        if (!_hasMultiLoRA) return null;
+        string?[]? tasks = null;
+        for (int i = 0; i < sequences.Count; i++)
         {
-            if (s.Request.AdapterId is not null) return true;
+            var id = sequences[i].Request.AdapterId;
+            if (id is not null)
+            {
+                tasks ??= new string?[sequences.Count];
+                tasks[i] = id;
+            }
         }
-        return false;
+        return tasks;
     }
 
     // Returns log(softmax(logits / temperature)) as a new array. Masked (-inf) logits map to -inf, so they
