@@ -116,6 +116,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </summary>
     protected T CurrentLearningRate;
 
+    // ReduceLROnPlateau-coordinated-with-stopping state (opt-in via Options.MaxLearningRateReductionsOnPlateau).
+    // _plateauReductionsUsed counts how many times the LR has been halved on a plateau this run;
+    // _earlyStopHistoryFloor is the iteration-history index from which ShouldEarlyStop measures its window, so a
+    // reduction clears the plateau window and grants the lowered LR a fresh patience budget. Floor 0 (the
+    // default when the feature is off) makes ShouldEarlyStop byte-for-byte the historical behavior.
+    private int _plateauReductionsUsed;
+    private int _earlyStopHistoryFloor;
+
     /// <summary>
     /// The current momentum used in the optimization process.
     /// </summary>
@@ -1593,6 +1601,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         CurrentMomentum = NumOps.FromDouble(Options.InitialMomentum);
         IterationsWithoutImprovement = 0;
         IterationsWithImprovement = 0;
+        _plateauReductionsUsed = 0;
+        _earlyStopHistoryFloor = 0;
     }
 
     /// <summary>
@@ -1779,9 +1789,28 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             return true; // stop before NaNs corrupt the model
         }
 
-        // Check for early stopping
+        // Check for early stopping — coordinated with ReduceLROnPlateau when enabled.
         if (Options.UseEarlyStopping && ShouldEarlyStop())
         {
+            // Reduce-first, stop-only-once-reduction-stops-helping: on a plateau, HALVE the learning rate up to
+            // MaxLearningRateReductionsOnPlateau times before actually stopping, each reduction clearing the
+            // plateau window so the lowered LR gets a fresh patience budget. Only stop once reductions are
+            // exhausted (or the LR is already at the floor). Default (0 reductions) stops immediately, exactly
+            // as before. The returned model is still the global best (UpdateBestSolution is unaffected), so a
+            // reduction can only help — it trades a few more epochs at a finer LR for a possibly-better optimum.
+            if (Options.MaxLearningRateReductionsOnPlateau > 0
+                && _plateauReductionsUsed < Options.MaxLearningRateReductionsOnPlateau
+                && Convert.ToDouble(CurrentLearningRate) > Options.MinLearningRate)
+            {
+                _plateauReductionsUsed++;
+                double reduced = Math.Max(
+                    Options.MinLearningRate,
+                    Convert.ToDouble(CurrentLearningRate) * Options.PlateauLearningRateReductionFactor);
+                CurrentLearningRate = NumOps.FromDouble(reduced);
+                _earlyStopHistoryFloor = IterationHistoryList.Count; // fresh window for the reduced LR
+                return false; // keep training at the lower learning rate
+            }
+
             return true; // Signal to stop the optimization
         }
 
@@ -1839,16 +1868,21 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual bool ShouldEarlyStop()
     {
-        if (IterationHistoryList.Count < Options.EarlyStoppingPatience)
+        // Measure the plateau over the CURRENT window only. Without ReduceLROnPlateau the floor is 0, so this is
+        // the whole history (byte-for-byte the historical behavior); after a plateau LR reduction the floor
+        // advances so the lowered LR is judged on its own fresh window, not against the pre-reduction best.
+        int floor = Math.Min(_earlyStopHistoryFloor, IterationHistoryList.Count);
+        var window = IterationHistoryList.Skip(floor).ToList();
+        if (window.Count < Options.EarlyStoppingPatience)
         {
             return false;
         }
 
-        var recentIterations = IterationHistoryList.Skip(Math.Max(0, IterationHistoryList.Count - Options.EarlyStoppingPatience)).ToList();
+        var recentIterations = window.Skip(Math.Max(0, window.Count - Options.EarlyStoppingPatience)).ToList();
 
-        // Find the best fitness score
-        T bestFitness = IterationHistoryList[0].Fitness;
-        foreach (var iteration in IterationHistoryList)
+        // Find the best fitness score (within the current window)
+        T bestFitness = window[0].Fitness;
+        foreach (var iteration in window)
         {
             if (FitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
             {

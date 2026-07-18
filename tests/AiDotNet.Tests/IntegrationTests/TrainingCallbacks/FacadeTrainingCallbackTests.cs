@@ -230,6 +230,62 @@ public class FacadeTrainingCallbackTests
             $"divergence guard did not stop the optimizer on non-finite fitness (ran {epochCount}/{epochs} epochs)");
     }
 
+    private static AdamOptimizer<float, Tensor<float>, Tensor<float>> BuildEarlyStopOptimizer(
+        int maxIterations, double learningRate, int patience, int plateauReductions)
+    {
+        var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+        {
+            InitialLearningRate = learningRate,
+            MaxIterations = maxIterations,
+            UseAdaptiveLearningRate = false,
+            UseEarlyStopping = true,
+            EarlyStoppingPatience = patience,
+            Tolerance = 0.0,
+            MaxLearningRateReductionsOnPlateau = plateauReductions,
+            PlateauLearningRateReductionFactor = 0.5,
+            FitnessCalculator = new MeanSquaredErrorFitnessCalculator<float, Tensor<float>, Tensor<float>>()
+        };
+        return new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, options);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ReduceLROnPlateau_defers_early_stop_and_trains_longer()
+    {
+        await Task.Yield();
+        const int maxEpochs = 80;
+        const int patience = 3;
+
+        // Unlearnable (noise) target → the model plateaus fast at the variance floor, so early stopping fires
+        // well before maxEpochs. With plateau LR reductions enabled, each reduction grants a fresh patience
+        // window, so training must run STRICTLY MORE epochs before it finally gives up.
+        var (x, y) = BuildData();
+        var noise = new System.Random(99);
+        for (int i = 0; i < N; i++) y[i, 0] = (float)(noise.NextDouble() * 2 - 1);
+
+        int epochsBaseline = 0;
+        var opt0 = BuildEarlyStopOptimizer(maxEpochs, 0.01, patience, plateauReductions: 0);
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(BuildModel(opt0))
+            .ConfigureOptimizer(opt0)
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(x, y))
+            .ConfigureTrainingCallback(_ => { epochsBaseline++; return true; })
+            .BuildAsync();
+
+        int epochsWithReductions = 0;
+        var opt3 = BuildEarlyStopOptimizer(maxEpochs, 0.01, patience, plateauReductions: 3);
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(BuildModel(opt3))
+            .ConfigureOptimizer(opt3)
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(x, y))
+            .ConfigureTrainingCallback(_ => { epochsWithReductions++; return true; })
+            .BuildAsync();
+
+        Assert.True(epochsBaseline < maxEpochs,
+            $"baseline should early-stop on the plateau, not run all {maxEpochs} (ran {epochsBaseline})");
+        Assert.True(epochsWithReductions > epochsBaseline,
+            $"ReduceLROnPlateau should train longer before stopping ({epochsWithReductions} vs baseline {epochsBaseline})");
+    }
+
     // --- Learnable probe task: "most-frequent token in the window" ---------------------------
     // Order-invariant and generalizing: a strict-majority token m is planted in each window and
     // the label is m. A correct SequenceClassification transformer learns this FAR above chance
