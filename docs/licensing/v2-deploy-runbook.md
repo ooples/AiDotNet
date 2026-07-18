@@ -96,11 +96,29 @@ CI uses ONE dedicated **enterprise** license key stored as the global `AIDOTNET_
   suite, `ModuleInitializer` swaps this online `AIDN-*` key for a deterministic synthetic OFFLINE license, so
   the persistence-heavy suite is licensed with **no network round-trip**; jobs/consumers without that
   hardening validate the key online. One key, all branches — simplest + save-capable.
-- Rotate/revoke via `revoke_license(<license_id>)` + issuing a new enterprise key; nothing to embed or rebuild.
+- **Self-expiring:** the key has `expires_at` = **1 year out**, so a leaked key stops working on its own
+  (the containment property the retired scope-fenced ci token had) while staying save-capable and simple.
 
-_(An earlier design used a scope-fenced `ci-2026a` offline aidn2 token + a rotation workflow; that was
-retired in favour of the single enterprise key. The prod-2026a signing key remains — it's what
-`issue-license` uses to mint real users' offline tokens.)_
+**Rotation (annual, ~5 min, plain DB op — NO signing key or `secrets:write` PAT):**
+1. Issue a fresh enterprise CI key (reuses the persistent CI user `…00000000c1c1`):
+   ```sql
+   insert into public.license_keys (user_id, license_key, tier, status, max_activations, product, organization_name, expires_at, notes)
+   values ('00000000-0000-0000-0000-00000000c1c1',
+           'AIDN-PROD-ENTERPRISE-' || replace(gen_random_uuid()::text,'-',''),
+           'enterprise','active', 2000000000, 'aidotnet', 'AiDotNet CI',
+           now() + interval '1 year', 'Dedicated CI/CD key (rotated).')
+   returning id, license_key;
+   ```
+2. `gh secret set AIDOTNET_LICENSE_KEY --repo ooples/AiDotNet --body '<new key>'` (and update any external
+   pipelines using the old key).
+3. Revoke the old key once CI is green on the new one: `select public.revoke_license('<old license_id>', 'rotated');`
+   (Immediate: it's an online key, so `status=revoked` takes effect on the next validation — no CRL wait.)
+
+Current CI key id (revoke target): `e5c265c7-23f0-4e66-a1f6-1d9c93da4cd4`.
+
+_(An earlier design used a scope-fenced `ci-2026a` offline aidn2 token + a rotation workflow that needed a
+`secrets:write` PAT; that was retired in favour of this single, self-expiring enterprise key. The prod-2026a
+Ed25519 signing key remains — it's what `issue-license` uses to mint real users' offline tokens.)_
 
 **Release embed — automated:** `release-please.yml` injects `LicensePublicKey.json` (+ `LicenseRevocation.json`)
 from the repo var before the release build, so a key rotation ships in the released NuGet without a code
