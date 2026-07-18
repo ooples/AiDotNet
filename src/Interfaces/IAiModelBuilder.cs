@@ -1,5 +1,7 @@
 using AiDotNet.Agentic.Tools;
+using AiDotNet.Augmentation;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.NeuralRadianceFields.Data;
 using AiDotNet.Configuration;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.DistributedTraining;
@@ -913,12 +915,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null);
 
-    // NOTE: The advanced ConfigureAutoML(IAutoMLModel<T,TInput,TOutput>) overload is intentionally
-    // NOT part of this interface. Adding it would be a breaking change for every external
-    // IAiModelBuilder<T,TInput,TOutput> implementer. It remains a public method on the concrete
-    // AiModelBuilder<T,TInput,TOutput>, which is also what the generated YAML applier targets
-    // (it dispatches against the concrete builder type, not this interface).
-
     /// <summary>
     /// Configures reinforcement learning options for training an RL agent.
     /// </summary>
@@ -1178,13 +1174,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="config">The telemetry configuration (optional, uses default telemetry settings if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
-
-    // ConfigureWeightStreaming intentionally lives on
-    // IWeightStreamingCapableBuilder<T, TInput, TOutput> (declared at the
-    // bottom of this file) instead of on IAiModelBuilder<T, TInput, TOutput>,
-    // so adding it does not break external implementers of IAiModelBuilder.
-    // The concrete AiModelBuilder<T, TInput, TOutput> implements both
-    // interfaces, so existing fluent call sites continue to compile.
 
     /// <summary>
     /// Controls GPU backend diagnostic output visibility and routing.
@@ -1449,6 +1438,80 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
+
+    /// <summary>
+    /// Configures training memory management — gradient checkpointing and activation pooling — so large models
+    /// (e.g. deep transformers) can train within a bounded activation-memory budget.
+    /// </summary>
+    /// <param name="configuration">The training-memory configuration (presets such as
+    /// <c>TrainingMemoryConfig.ForTransformers()</c> or <c>MemoryEfficient()</c>); <c>null</c> applies the defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> deep models store the intermediate results of every layer during training so they
+    /// can compute gradients. Gradient checkpointing trades a little extra compute to recompute some of those
+    /// instead of holding them all in memory, which lets a bigger model fit on the same hardware.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureMemoryManagement(Training.Memory.TrainingMemoryConfig? configuration = null);
+
+    /// <summary>
+    /// Configures Float16/Int8 weight streaming so very large models can run without holding all weights in
+    /// memory at once.
+    /// </summary>
+    /// <param name="config">The weight-streaming configuration; <c>null</c> applies the defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureWeightStreaming(WeightStreamingConfig? config = null);
+
+    /// <summary>
+    /// Configures a runtime profiling pass over the build/inference path to capture timing and resource usage.
+    /// </summary>
+    /// <param name="config">The profiling configuration; <c>null</c> applies the defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null);
+
+    /// <summary>
+    /// Configures model interpretability — feature attribution and explanations — on the built result.
+    /// </summary>
+    /// <param name="options">The interpretability options; <c>null</c> applies the defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> interpretability tools tell you WHY the model made a prediction — which inputs
+    /// mattered most — instead of treating it as an opaque box.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureInterpretability(InterpretabilityOptions? options = null);
+
+    /// <summary>
+    /// Configures the preprocessing stage directly from a prebuilt
+    /// <see cref="PreprocessingPipeline{T,TInput,TInput}"/> (the overload for callers that already assembled one).
+    /// </summary>
+    /// <param name="pipeline">The preprocessing pipeline; <c>null</c> applies the defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(PreprocessingPipeline<T, TInput, TInput>? pipeline = null);
+
+    /// <summary>
+    /// Configures training-time data augmentation with a type-parameterized augmentation configuration.
+    /// </summary>
+    /// <param name="config">The augmentation configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> augmentation makes extra, slightly-varied copies of your training data (e.g.
+    /// jittered or shifted) so the model sees more variety and generalizes better.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(AugmentationConfig<T, TInput>? config);
+
+    /// <summary>
+    /// Configures AutoML with a caller-supplied AutoML model implementation (the advanced overload; the
+    /// <see cref="ConfigureAutoML(AutoMLOptions{T,TInput,TOutput})"/> overload takes a budget preset instead).
+    /// </summary>
+    /// <param name="autoMLModel">The AutoML model that drives architecture/hyperparameter search.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+
+    /// <summary>
+    /// Configures the Neural Radiance Field image-view / pixel-batch data loader (the overload for NeRF pipelines).
+    /// </summary>
+    /// <param name="dataLoader">The image-view / pixel-batch data loader.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<ImageView<T>, PixelBatch<T>> dataLoader);
 
     /// <summary>
     /// Configures advanced reasoning capabilities for the model using Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency strategies.
@@ -2322,29 +2385,4 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureSimilarityMetric(RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T> metric);
 
-}
-
-/// <summary>
-/// Optional companion interface for builders that support PaLM-E-scale weight
-/// streaming. Kept separate from <see cref="IAiModelBuilder{T, TInput, TOutput}"/>
-/// so the introduction of <see cref="ConfigureWeightStreaming"/> does NOT
-/// break external implementers of <c>IAiModelBuilder</c>. Cast a builder to
-/// this interface (or use the concrete <see cref="AiModelBuilder{T, TInput, TOutput}"/>)
-/// to opt into the streaming control surface.
-/// </summary>
-public interface IWeightStreamingCapableBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>
-{
-    /// <summary>
-    /// Configures weight streaming behaviour for the model under
-    /// construction. See the doc block on
-    /// <see cref="AiDotNet.AiModelBuilder{T, TInput, TOutput}.ConfigureWeightStreaming"/>
-    /// for the full behavioural contract — this declaration is the binding
-    /// surface callers should invoke through when they want to remain
-    /// abstract over the builder type.
-    /// </summary>
-    /// <param name="config">The streaming configuration. Pass null to
-    /// reset to default auto-detect behaviour; pass a populated config
-    /// to override.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureWeightStreaming(WeightStreamingConfig? config = null);
 }

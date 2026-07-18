@@ -574,6 +574,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled.</param>
     /// <param name="enableTextGeneration">Whether to build the KV-cached incremental generation path (tensor LMs only).</param>
     /// <param name="quantizeKvCacheWeights">Whether the incremental generation model uses int8 weight-only quantization.</param>
+    /// <param name="servingInferenceConfig">Optional inference-optimization config for the incremental generation
+    /// path (paged-KV block size, quantization, positional encoding, etc.). When supplied it takes precedence over
+    /// any facade-derived config; when null a facade model's own config is used, else engine defaults apply.</param>
     /// <returns>A ServableModelWrapper configured for the detected model type.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the model does not implement a supported IFullModel variant.</exception>
     internal static ServableModelWrapper<T> FromModel(
@@ -582,7 +585,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false,
         bool enableTextGeneration = false,
-        bool quantizeKvCacheWeights = false)
+        bool quantizeKvCacheWeights = false,
+        AiDotNet.Configuration.InferenceOptimizationConfig? servingInferenceConfig = null)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         Guard.NotNull(model);
@@ -607,12 +611,14 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             // incremental path — its Predict is the raw token→logits forward without the facade's I/O
             // normalization — and thread the facade's InferenceOptimizationConfig so paging, batching,
             // and speculation all come from the builder rather than serving-side hardcoded defaults.
-            AiDotNet.Configuration.InferenceOptimizationConfig? servingConfig = null;
+            // An explicit servingInferenceConfig (e.g. operator startup settings threaded from
+            // ModelStartupService) takes precedence; otherwise fall back to the facade's config.
+            AiDotNet.Configuration.InferenceOptimizationConfig? servingConfig = servingInferenceConfig;
             IFullModel<T, Tensor<T>, Tensor<T>> servableModel = tensorModel;
             IModelShape? shapeSource = model as IModelShape;
             if (model is AiDotNet.Models.Results.AiModelResult<T, Tensor<T>, Tensor<T>> facade)
             {
-                servingConfig = facade.GetInferenceOptimizationConfigForServing();
+                servingConfig ??= facade.GetInferenceOptimizationConfigForServing();
                 if (facade.Model is IFullModel<T, Tensor<T>, Tensor<T>> innerTensorModel)
                 {
                     servableModel = innerTensorModel;
@@ -666,6 +672,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="decryptionToken">Optional server-side decryption token.</param>
     /// <param name="enableTextGeneration">Whether to build the KV-cached incremental generation path (tensor LMs only).</param>
     /// <param name="quantizeKvCacheWeights">Whether the incremental generation model uses int8 weight-only quantization.</param>
+    /// <param name="servingInferenceConfig">Optional inference-optimization config threaded into the incremental
+    /// generation path (paged-KV block size, quantization, etc.). See <see cref="FromModel"/>.</param>
     /// <returns>A ServableModelWrapper ready for serving.</returns>
     internal static ServableModelWrapper<T> LoadServable(
         string filePath,
@@ -675,10 +683,12 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         string? licenseKey = null,
         byte[]? decryptionToken = null,
         bool enableTextGeneration = false,
-        bool quantizeKvCacheWeights = false)
+        bool quantizeKvCacheWeights = false,
+        AiDotNet.Configuration.InferenceOptimizationConfig? servingInferenceConfig = null)
     {
         var model = ModelLoader.Load<T>(filePath, licenseKey, decryptionToken);
-        return FromModel(modelName, model, enableBatching, enableSpeculativeDecoding, enableTextGeneration, quantizeKvCacheWeights);
+        return FromModel(modelName, model, enableBatching, enableSpeculativeDecoding, enableTextGeneration,
+            quantizeKvCacheWeights, servingInferenceConfig);
     }
 
     /// <inheritdoc/>

@@ -112,6 +112,7 @@ public class MultipleRegression<T> : RegressionBase<T>
             x = x.AddConstantColumn(NumOps.One);
         var xTx = x.Transpose().Multiply(x);
         var regularizedXTx = xTx.Add(Regularization.Regularize(xTx));
+        ApplyNumericalConditioning(regularizedXTx);
         var xTy = x.Transpose().Multiply(y);
         var solution = SolveSystem(regularizedXTx, xTy);
         if (Options.UseIntercept)
@@ -122,6 +123,43 @@ public class MultipleRegression<T> : RegressionBase<T>
         else
         {
             Coefficients = new Vector<T>(solution);
+        }
+    }
+
+    /// <summary>
+    /// Adds a tiny Tikhonov diagonal-loading (ridge) to the normal-equations matrix for NUMERICAL CONDITIONING.
+    /// Normal equations square the condition number, so a near-collinear design yields a severely ill-conditioned
+    /// X'X. Cholesky still succeeds on it (it is positive-definite, just ill-conditioned) and returns absurd,
+    /// blown-up coefficients — huge but FINITE, so the NaN/Infinity guard in SolveSystem never trips and the
+    /// prediction explodes (e.g. ~1e10). The ridge is scaled to the matrix's own diagonal magnitude, so it is
+    /// negligible for well-conditioned problems (below solver noise) yet bounds the blow-up for collinear ones.
+    /// </summary>
+    private void ApplyNumericalConditioning(Matrix<T> matrix)
+    {
+        var n = matrix.Rows;
+        if (n == 0)
+        {
+            return;
+        }
+
+        var trace = NumOps.Zero;
+        for (var i = 0; i < n; i++)
+        {
+            trace = NumOps.Add(trace, matrix[i, i]);
+        }
+
+        // ridge = 1e-9 * mean(diagonal), with a tiny absolute floor for a degenerate (zero-diagonal) matrix.
+        var meanDiag = NumOps.Divide(trace, NumOps.FromDouble(n));
+        var ridge = NumOps.Multiply(NumOps.FromDouble(1e-9), meanDiag);
+        var floor = NumOps.FromDouble(1e-12);
+        if (NumOps.LessThanOrEquals(ridge, floor))
+        {
+            ridge = floor;
+        }
+
+        for (var i = 0; i < n; i++)
+        {
+            matrix[i, i] = NumOps.Add(matrix[i, i], ridge);
         }
     }
 
