@@ -95,32 +95,54 @@ public sealed class OpenAiController : ControllerBase
             return error!;
 
         string prompt = ChatTemplate.Render(request.Messages.Select(m => (m.Role, m.TextContent())));
-        SpeculativeDecodingRequest sdr;
-        bool toolMode;
-        try
+        // Builds a FRESH request every call. The structured-output / tool Constraint is a STATEFUL state
+        // machine, so each completion (every one of the `n` choices) must get its own instance — a shared
+        // constraint would remain in its terminal state after the first choice and corrupt the rest.
+        (SpeculativeDecodingRequest Sdr, bool ToolMode) BuildSdr()
         {
-            sdr = BuildRequest(ctx, prompt, request.ResolveMaxTokens(DefaultMaxTokens),
+            var r = BuildRequest(ctx, prompt, request.ResolveMaxTokens(DefaultMaxTokens),
                 request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias,
                 request.FrequencyPenalty, request.PresencePenalty, request.Logprobs, request.TopLogprobs);
 
             // Function calling: constrain the output to a valid tool call whose arguments match the tool's
             // JSON schema (reuses the structured-output engine). Takes precedence over response_format.
             var (toolConstraint, useTools) = ToolConstraintFactory.Build(request.Tools, request.ToolChoice, ctx.Tokenizer, ctx.EosTokenId ?? -1);
-            toolMode = useTools;
-            if (toolMode)
+            if (useTools)
             {
-                sdr.Constraint = toolConstraint;
+                r.Constraint = toolConstraint;
             }
+            r.AdapterId = adapterId;
+            return (r, useTools);
+        }
+
+        SpeculativeDecodingRequest sdr;
+        bool toolMode;
+        try
+        {
+            (sdr, toolMode) = BuildSdr();
         }
         catch (ArgumentException ex)
         {
             ServingMetrics.RecordRequest(success: false, promptTokens: 0, generationTokens: 0, durationSeconds: sw.Elapsed.TotalSeconds);
             return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "response_format");
         }
-        sdr.AdapterId = adapterId;
         var stops = request.ResolveStop();
         string id = "chatcmpl-" + Guid.NewGuid().ToString("N");
         long created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        // The streaming path implements neither multi-choice (`n`) nor tool-call deltas. Reject those
+        // combinations explicitly rather than silently returning a single choice / streaming the raw
+        // constrained JSON as assistant content (which would violate the request contract).
+        if (request.Stream && (request.N ?? 1) != 1)
+        {
+            ServingMetrics.RecordRequest(success: false, promptTokens: ctx.PromptTokenCount, generationTokens: 0, durationSeconds: sw.Elapsed.TotalSeconds);
+            return OpenAiError(StatusCodes.Status400BadRequest, "Streaming with 'n' greater than 1 is not supported.");
+        }
+        if (request.Stream && toolMode)
+        {
+            ServingMetrics.RecordRequest(success: false, promptTokens: ctx.PromptTokenCount, generationTokens: 0, durationSeconds: sw.Elapsed.TotalSeconds);
+            return OpenAiError(StatusCodes.Status400BadRequest, "Streaming tool calls are not supported; use stream=false when passing tools.");
+        }
 
         if (!request.Stream)
         {
@@ -132,16 +154,19 @@ public sealed class OpenAiController : ControllerBase
             int completionTokens = 0;
             for (int i = 0; i < n; i++)
             {
+                // Fresh request + constraint per choice: the constraint is stateful, so choices after the
+                // first must not reuse (and resume from) the previous choice's completed constraint.
+                var choiceSdr = i == 0 ? sdr : BuildSdr().Sdr;
                 string text; int genCount; string finish; ChatLogProbs? logProbs = null;
                 if (request.Logprobs == true || toolMode)
                 {
                     // The batch path surfaces logprobs and reliably drives a constrained generation to
                     // completion; the streaming Collect path is used only for plain free-form output.
-                    (text, genCount, finish, logProbs) = CollectWithLogProbs(ctx, sdr, stops, ct);
+                    (text, genCount, finish, logProbs) = CollectWithLogProbs(ctx, choiceSdr, stops, ct);
                 }
                 else
                 {
-                    (text, genCount, finish) = Collect(ctx, sdr, stops, ct);
+                    (text, genCount, finish) = Collect(ctx, choiceSdr, stops, ct);
                 }
                 if (toolMode)
                 {
