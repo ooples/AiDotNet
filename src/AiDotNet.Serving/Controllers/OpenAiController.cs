@@ -158,15 +158,24 @@ public sealed class OpenAiController : ControllerBase
                 // first must not reuse (and resume from) the previous choice's completed constraint.
                 var choiceSdr = i == 0 ? sdr : BuildSdr().Sdr;
                 string text; int genCount; string finish; ChatLogProbs? logProbs = null;
-                if (request.Logprobs == true || toolMode)
+                try
                 {
-                    // The batch path surfaces logprobs and reliably drives a constrained generation to
-                    // completion; the streaming Collect path is used only for plain free-form output.
-                    (text, genCount, finish, logProbs) = CollectWithLogProbs(ctx, choiceSdr, stops, ct);
+                    if (request.Logprobs == true || toolMode)
+                    {
+                        // The batch path surfaces logprobs and reliably drives a constrained generation to
+                        // completion; the streaming Collect path is used only for plain free-form output.
+                        (text, genCount, finish, logProbs) = CollectWithLogProbs(ctx, choiceSdr, stops, ct);
+                    }
+                    else
+                    {
+                        (text, genCount, finish) = Collect(ctx, choiceSdr, stops, ct);
+                    }
                 }
-                else
+                catch (GenerationFailedException gfe)
                 {
-                    (text, genCount, finish) = Collect(ctx, choiceSdr, stops, ct);
+                    // A generation-engine failure must surface as a 500, not a truncated 200.
+                    ServingMetrics.RecordRequest(success: false, promptTokens: ctx.PromptTokenCount, generationTokens: completionTokens, durationSeconds: sw.Elapsed.TotalSeconds);
+                    return OpenAiError(StatusCodes.Status500InternalServerError, gfe.Message, "server_error");
                 }
                 if (toolMode)
                 {
@@ -202,6 +211,7 @@ public sealed class OpenAiController : ControllerBase
 
         var ids = new List<int>();
         string prev = string.Empty;
+        string lastFull = string.Empty;
         string finishReason = "length";
         bool stopped = false;
         double? ttftSeconds = null;
@@ -211,6 +221,7 @@ public sealed class OpenAiController : ControllerBase
             ids.Add(tok);
             ttftSeconds ??= sw.Elapsed.TotalSeconds;
             string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
+            lastFull = full;
 
             int stopAt = FindStop(full, stops);
             if (stopAt >= 0)
@@ -218,16 +229,27 @@ public sealed class OpenAiController : ControllerBase
                 string delta = stopAt > prev.Length ? full.Substring(prev.Length, stopAt - prev.Length) : string.Empty;
                 if (delta.Length > 0)
                     await WriteChunkAsync(ContentChunk(id, created, request.Model, delta), ct);
+                prev = full.Substring(0, stopAt);
                 stopped = true;
                 break;
             }
 
-            if (full.Length > prev.Length)
+            // Emit only text that cannot begin a future stop string: hold back the longest suffix of `full`
+            // that is a proper prefix of some stop (so "EN" of stop "END" is never streamed before "D"
+            // reveals or refutes the match). Streamed content cannot be retracted, hence the buffering.
+            int safeLen = full.Length - PendingStopPrefixLen(full, stops);
+            if (safeLen > prev.Length)
             {
-                string delta = full.Substring(prev.Length);
-                prev = full;
+                string delta = full.Substring(prev.Length, safeLen - prev.Length);
+                prev = full.Substring(0, safeLen);
                 await WriteChunkAsync(ContentChunk(id, created, request.Model, delta), ct);
             }
+        }
+
+        // No stop matched: the held-back tail turned out to be safe — flush it.
+        if (!stopped && lastFull.Length > prev.Length)
+        {
+            await WriteChunkAsync(ContentChunk(id, created, request.Model, lastFull.Substring(prev.Length)), ct);
         }
 
         finishReason = stopped ? "stop" : (ids.Count >= sdr.MaxNewTokens ? "length" : "stop");
@@ -287,6 +309,7 @@ public sealed class OpenAiController : ControllerBase
         BeginSse();
         var ids = new List<int>();
         string prev = string.Empty;
+        string lastFull = string.Empty;
         bool stopped = false;
         double? ttftSeconds = null;
 
@@ -295,6 +318,7 @@ public sealed class OpenAiController : ControllerBase
             ids.Add(tok);
             ttftSeconds ??= sw.Elapsed.TotalSeconds;
             string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
+            lastFull = full;
 
             int stopAt = FindStop(full, stops);
             if (stopAt >= 0)
@@ -302,16 +326,25 @@ public sealed class OpenAiController : ControllerBase
                 string delta = stopAt > prev.Length ? full.Substring(prev.Length, stopAt - prev.Length) : string.Empty;
                 if (delta.Length > 0)
                     await WriteChunkAsync(CompletionChunk(id, created, request.Model, delta, null), ct);
+                prev = full.Substring(0, stopAt);
                 stopped = true;
                 break;
             }
 
-            if (full.Length > prev.Length)
+            // Hold back the longest suffix that could still begin a stop string (see PendingStopPrefixLen);
+            // streamed content cannot be retracted, so a partial stop prefix must never be emitted early.
+            int safeLen = full.Length - PendingStopPrefixLen(full, stops);
+            if (safeLen > prev.Length)
             {
-                string delta = full.Substring(prev.Length);
-                prev = full;
+                string delta = full.Substring(prev.Length, safeLen - prev.Length);
+                prev = full.Substring(0, safeLen);
                 await WriteChunkAsync(CompletionChunk(id, created, request.Model, delta, null), ct);
             }
+        }
+
+        if (!stopped && lastFull.Length > prev.Length)
+        {
+            await WriteChunkAsync(CompletionChunk(id, created, request.Model, lastFull.Substring(prev.Length), null), ct);
         }
 
         string finishReason = stopped ? "stop" : (ids.Count >= sdr.MaxNewTokens ? "length" : "stop");
@@ -409,19 +442,39 @@ public sealed class OpenAiController : ControllerBase
         GenContext ctx, SpeculativeDecodingRequest sdr, IReadOnlyList<string> stops, CancellationToken ct)
     {
         var resp = _textGeneration.Generate(ctx.ModelName, ctx.NumericType, sdr, ct);
+
+        // Propagate engine/generation failures instead of building a successful (but truncated) 200. A client
+        // cancellation surfaces as OperationCanceledException (the framework handles it); any other reported
+        // error is a server-side generation failure that must reach the caller as a 500.
+        if (resp.Error is { } err)
+        {
+            ct.ThrowIfCancellationRequested();
+            throw new GenerationFailedException(err);
+        }
+
         var genTokens = new List<int>(resp.GeneratedTokens);
         string text = ctx.Tokenizer.Decode(genTokens, skipSpecialTokens: true);
         int stopAt = FindStop(text, stops);
         bool stopped = stopAt >= 0;
-        if (stopped) text = text.Substring(0, stopAt);
+
+        // When a stop string ends generation early, trim the reported token count AND the log-probs to the
+        // SAME decoded boundary as the text, so usage/logprobs never include tokens generated after the stop.
+        int keptTokens = genTokens.Count;
+        if (stopped)
+        {
+            text = text.Substring(0, stopAt);
+            keptTokens = TokensCoveringPrefix(ctx, genTokens, stopAt);
+        }
         string finish = stopped ? "stop" : (genTokens.Count >= sdr.MaxNewTokens ? "length" : "stop");
 
         ChatLogProbs? logProbs = null;
         if (resp.LogProbs is { } lps)
         {
-            var content = new List<ChatLogProbContent>(lps.Count);
-            foreach (var p in lps)
+            int lpCount = Math.Min(keptTokens, lps.Count);
+            var content = new List<ChatLogProbContent>(lpCount);
+            for (int idx = 0; idx < lpCount; idx++)
             {
+                var p = lps[idx];
                 content.Add(new ChatLogProbContent
                 {
                     Token = DecodeToken(ctx, p.TokenId),
@@ -433,7 +486,20 @@ public sealed class OpenAiController : ControllerBase
             }
             logProbs = new ChatLogProbs { Content = content };
         }
-        return (text, genTokens.Count, finish, logProbs);
+        return (text, keptTokens, finish, logProbs);
+    }
+
+    // Smallest number of leading tokens whose decoded text covers <paramref name="charCount"/> characters —
+    // maps a decoded stop-string offset back to a token count so usage/logprobs align with the emitted text.
+    private static int TokensCoveringPrefix(GenContext ctx, List<int> tokens, int charCount)
+    {
+        if (charCount <= 0) return 0;
+        for (int k = 1; k <= tokens.Count; k++)
+        {
+            int len = ctx.Tokenizer.Decode(tokens.GetRange(0, k), skipSpecialTokens: true).Length;
+            if (len >= charCount) return k;
+        }
+        return tokens.Count;
     }
 
     private static string DecodeToken(GenContext ctx, int tokenId)
@@ -525,6 +591,28 @@ public sealed class OpenAiController : ControllerBase
             if (i >= 0 && (earliest < 0 || i < earliest)) earliest = i;
         }
         return earliest;
+    }
+
+    // Length of the longest suffix of <paramref name="text"/> that is a PROPER prefix of some stop string —
+    // i.e. text the streamer must hold back because it could still grow into a stop match. Returns 0 when no
+    // trailing partial-stop is pending. A completed stop is handled by <see cref="FindStop"/>, not here.
+    private static int PendingStopPrefixLen(string text, IReadOnlyList<string> stops)
+    {
+        int held = 0;
+        foreach (var s in stops)
+        {
+            if (string.IsNullOrEmpty(s)) continue;
+            int max = Math.Min(s.Length - 1, text.Length);
+            for (int k = max; k > held; k--)
+            {
+                if (string.CompareOrdinal(text, text.Length - k, s, 0, k) == 0)
+                {
+                    held = k;
+                    break;
+                }
+            }
+        }
+        return held;
     }
 
     private int ResolveEosTokenId(ITokenizer tokenizer)
