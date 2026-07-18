@@ -84,6 +84,13 @@ public class SpeculativeDecodingRequest
     /// </summary>
     public string? RequestId { get; set; }
 
+    /// <summary>
+    /// Gets or sets an optional structured-output constraint (JSON / regex / grammar / choice) that forces
+    /// the generated text to conform to a required format. Null = unconstrained. Built from an OpenAI
+    /// <c>response_format</c> by the controller. When set, speculative decoding is disabled for the request.
+    /// </summary>
+    public AiDotNet.Serving.StructuredOutput.ITokenConstraint? Constraint { get; set; }
+
     internal string? Validate()
     {
         if (InputTokens == null || InputTokens.Length == 0)

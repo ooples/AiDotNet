@@ -156,7 +156,8 @@ public sealed class TextGenerationService : ITextGenerationService
             MinP = (float)request.MinP,
             EosTokenId = request.EosTokenId,
             SpeculationDepth = request.NumDraftTokens,
-            Seed = request.RequestId is { } id ? id.GetHashCode() : (int?)null
+            Seed = request.RequestId is { } id ? id.GetHashCode() : (int?)null,
+            Constraint = request.Constraint
         };
     }
 
@@ -362,12 +363,11 @@ public sealed class TextGenerationService : ITextGenerationService
 
         using var batcher = new ContinuousBatcher<T>(config, tokens => generativeModel.Forward(tokens));
 
-        var generationRequest = new GenerationRequest<T>
-        {
-            PromptTokenIds = new List<int>(request.InputTokens),
-            MaxNewTokens = request.MaxNewTokens,
-            Temperature = (float)request.Temperature
-        };
+        // Build the SAME engine request as the incremental path so every field flows — EOS, top-p/top-k/
+        // min-p, seed, speculation depth, and any structured-output Constraint. (Previously this path built
+        // the request inline and silently dropped all of those, so e.g. a response_format was ignored on the
+        // full-context fallback.)
+        var generationRequest = BuildGenerationRequest<T>(request);
 
         // Enqueue the request (AutoStart=false keeps the background loop off) and drive Step()
         // until the sequence completes.

@@ -11,6 +11,7 @@ using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Serving.Controllers;
 
@@ -87,8 +88,16 @@ public sealed class OpenAiController : ControllerBase
             return error!;
 
         string prompt = ChatTemplate.Render(request.Messages.Select(m => (m.Role, m.TextContent())));
-        var sdr = BuildRequest(ctx, prompt, request.ResolveMaxTokens(DefaultMaxTokens),
-            request.Temperature, request.TopP, request.TopK, request.MinP);
+        SpeculativeDecodingRequest sdr;
+        try
+        {
+            sdr = BuildRequest(ctx, prompt, request.ResolveMaxTokens(DefaultMaxTokens),
+                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat);
+        }
+        catch (ArgumentException ex)
+        {
+            return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "response_format");
+        }
         var stops = request.ResolveStop();
         string id = "chatcmpl-" + Guid.NewGuid().ToString("N");
         long created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -166,8 +175,16 @@ public sealed class OpenAiController : ControllerBase
         if (!TryPrepare(request.Model, out var ctx, out var error))
             return error!;
 
-        var sdr = BuildRequest(ctx, request.PromptText(), request.ResolveMaxTokens(DefaultMaxTokens),
-            request.Temperature, request.TopP, request.TopK, request.MinP);
+        SpeculativeDecodingRequest sdr;
+        try
+        {
+            sdr = BuildRequest(ctx, request.PromptText(), request.ResolveMaxTokens(DefaultMaxTokens),
+                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat);
+        }
+        catch (ArgumentException ex)
+        {
+            return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "response_format");
+        }
         var stops = request.ResolveStop();
         string id = "cmpl-" + Guid.NewGuid().ToString("N");
         long created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -276,8 +293,10 @@ public sealed class OpenAiController : ControllerBase
         return true;
     }
 
-    /// <summary>Encodes the prompt and builds the engine request.</summary>
-    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK, double? minP)
+    /// <summary>Encodes the prompt and builds the engine request. When <paramref name="responseFormat"/> is
+    /// supplied it compiles a structured-output constraint (json_object / json_schema / regex); a malformed
+    /// response_format throws <see cref="ArgumentException"/>, which the caller maps to a 400.</summary>
+    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK, double? minP, JToken? responseFormat = null)
     {
         ctx.PromptTokenIds = ctx.Tokenizer.Encode(prompt).TokenIds.ToArray();
         return new SpeculativeDecodingRequest
@@ -289,6 +308,7 @@ public sealed class OpenAiController : ControllerBase
             TopK = topK ?? 0,
             MinP = minP ?? 0.0,
             EosTokenId = ctx.EosTokenId,
+            Constraint = StructuredOutputFactory.Build(responseFormat, ctx.Tokenizer, ctx.EosTokenId ?? -1),
         };
     }
 

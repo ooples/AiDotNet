@@ -418,6 +418,16 @@ internal class ContinuousBatcher<T> : IDisposable
         // Invoke the per-token callback if one was provided.
         sequence.Request.OnTokenGenerated?.Invoke(tokenId);
 
+        // A structured-output request stops the moment its constraint reaches a complete valid instance —
+        // this is the correct terminator for guided decoding and does not depend on the model emitting EOS
+        // (many constrained outputs, e.g. a closed JSON object, are complete without an explicit EOS token).
+        if (sequence.Status != SequenceStatus.Completed && sequence.Request.Constraint is { IsComplete: true })
+        {
+            sequence.FinishReason ??= StopReason.StopToken;
+            CompleteSequence(sequence);
+            return 1;
+        }
+
         // Check for completion after the appended token. EOS is per-request (a shared batcher serves
         // requests with different stop tokens), falling back to the batcher default.
         if (sequence.Status != SequenceStatus.Completed &&
