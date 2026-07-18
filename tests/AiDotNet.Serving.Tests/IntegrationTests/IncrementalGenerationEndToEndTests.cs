@@ -282,6 +282,58 @@ public class IncrementalGenerationEndToEndTests
             "quantized generation config should still build the incremental path");
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task FromModel_FacadeResult_UnwrapsInnerNetwork_AndHonorsInferenceConfig()
+    {
+        await Task.Yield();
+
+        // A facade-built generative model is an AiModelResult<T, Tensor, Tensor> that wraps an inner
+        // NeuralNetwork and carries the user's ConfigureInferenceOptimizations settings. Build one with a
+        // DISTINCTIVE inference config so we can prove serving reads it rather than serving-side defaults.
+        var inner = BuildPerPositionLm();
+        var facadeConfig = new AiDotNet.Configuration.InferenceOptimizationConfig
+        {
+            EnableSpeculativeDecoding = false, // deviates from the serving default (true)
+            SpeculationDepth = 7,              // deviates from the serving default (4)
+            MaxBatchSize = 13                  // must flow to the batch scheduler
+        };
+        var options = new AiDotNet.Models.Options.AiModelResultOptions<float, Tensor<float>, Tensor<float>>
+        {
+            OptimizationResult = new AiDotNet.Models.Results.OptimizationResult<float, Tensor<float>, Tensor<float>>
+            {
+                BestSolution = inner
+            },
+            InferenceOptimizationConfig = facadeConfig
+        };
+        var facade = new AiDotNet.Models.Results.AiModelResult<float, Tensor<float>, Tensor<float>>(options);
+
+        // Production loader path: FromModel must detect the facade, unwrap its inner network for the paged
+        // incremental path, and thread GetInferenceOptimizationConfigForServing() into the batcher.
+        var wrapper = ServableModelWrapper<float>.FromModel(
+            "facade-lm", facade, enableBatching: true, enableSpeculativeDecoding: false,
+            enableTextGeneration: true);
+
+        Assert.True(wrapper.SupportsGeneration,
+            "a facade AiModelResult opting into text generation must advertise generation");
+        Assert.True(wrapper.SupportsIncrementalGeneration,
+            "FromModel must unwrap the facade's inner NeuralNetwork and build the KV-cached paged path");
+
+        // The batcher's config must come from the facade's InferenceOptimizationConfig, not hardcoded defaults.
+        var batcher = wrapper.EnsureBatcher();
+        Assert.NotNull(batcher);
+        Assert.False(batcher!.Config.EnableSpeculativeDecoding);
+        Assert.Equal(7, batcher.Config.SpeculationDepth);
+        Assert.Equal(13, batcher.Config.SchedulerConfig.MaxBatchSize);
+
+        // And it actually generates through that path.
+        var repo = new OneModelRepo("facade-lm", wrapper);
+        var service = new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance);
+        var resp = service.Generate("facade-lm", NumericType.Float, Req(new[] { 1, 2, 3 }));
+        Assert.Null(resp.Error);
+        Assert.Equal(5, resp.NumGenerated);
+        Assert.All(resp.GeneratedTokens, t => Assert.InRange(t, 0, Vocab - 1));
+    }
+
     private sealed class OneModelRepo : IModelRepository
     {
         private readonly string _name;

@@ -570,6 +570,12 @@ public class InferenceOptimizationConfig
     public bool EnableLayerFusion { get; set; } = true;
 
     #endregion
+
+    /// <summary>
+    /// Returns a shallow copy of this configuration. Used when a consumer (e.g. the serving layer) needs to
+    /// override a few settings for its own context without mutating the caller's shared config instance.
+    /// </summary>
+    public InferenceOptimizationConfig Clone() => (InferenceOptimizationConfig)MemberwiseClone();
 }
 
 /// <summary>

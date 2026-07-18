@@ -35,6 +35,12 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     private readonly object _batcherInitLock = new();
     private bool _disposed;
 
+    // The user's facade InferenceOptimizationConfig (from ConfigureInferenceOptimizations), threaded in when
+    // serving a facade-built model so the paged incremental build AND the continuous-batching engine honor
+    // it (paged block size, batching size, speculation depth/policy, quantization) instead of hardcoded
+    // defaults. Null => serving defaults (a raw model wrapped without the facade).
+    private readonly AiDotNet.Configuration.InferenceOptimizationConfig? _servingInferenceConfig;
+
     // The optimized, context-aware model backing incremental decode (writes/reads paged KV per sequence
     // id via PredictWithContext), or null when this model has no incremental path. Exposed to the
     // continuous-batching engine (and its equivalence tests) so ONE shared batcher can drive the same
@@ -283,12 +289,14 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false,
         Func<Tensor<T>, Tensor<T>>? generationForward = null,
-        bool quantizeIncrementalWeights = false)
+        bool quantizeIncrementalWeights = false,
+        AiDotNet.Configuration.InferenceOptimizationConfig? servingInferenceConfig = null)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         Guard.NotNull(model);
 
         _modelName = modelName;
+        _servingInferenceConfig = servingInferenceConfig;
         _enableBatching = enableBatching;
         _enableSpeculativeDecoding = enableSpeculativeDecoding;
 
@@ -362,7 +370,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         {
             try
             {
-                var built = BuildIncrementalModel(neural, quantizeIncrementalWeights);
+                var built = BuildIncrementalModel(neural, quantizeIncrementalWeights, _servingInferenceConfig);
                 _incrementalModel = built.Model;
                 _incrementalCache = built.Cache;
                 if (_incrementalModel is not null && _incrementalCache is not null)
@@ -388,21 +396,27 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// (null, null) when the model has no optimizable attention (incremental unsupported).
     /// </summary>
     private static (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>? Model, AiDotNet.Inference.PagedAttention.PagedKVCache<T>? Cache)
-        BuildIncrementalModel(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source, bool quantizeWeights)
+        BuildIncrementalModel(
+            AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source, bool quantizeWeights,
+            AiDotNet.Configuration.InferenceOptimizationConfig? facadeConfig)
     {
-        var config = new AiDotNet.Configuration.InferenceOptimizationConfig
+        // Start from the user's facade InferenceOptimizationConfig (ConfigureInferenceOptimizations) when
+        // present, so its paged block size, quantization, positional-encoding, RoPE theta, etc. flow into
+        // the paged incremental build. Clone it so the serving-required overrides below don't mutate the
+        // caller's shared config. Then force the settings the KV-cached incremental path REQUIRES.
+        var config = (facadeConfig ?? new AiDotNet.Configuration.InferenceOptimizationConfig()).Clone();
+        config.EnableKVCache = true;
+        config.EnablePagedKVCache = true;
+        config.EnableFlashAttention = false;
+        config.EnableLayerFusion = false;
+        config.AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal;
+        // A quantize override wins; otherwise keep the facade's InferenceQuantization. int8 weight-only
+        // quantization shrinks resident weights so more sequences fit (paged decode stays correct — see
+        // PagedQuantizedDecodeTests).
+        if (quantizeWeights)
         {
-            EnableKVCache = true,
-            EnablePagedKVCache = true,
-            EnableFlashAttention = false,
-            EnableLayerFusion = false,
-            AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal,
-            // int8 weight-only quantization shrinks resident weights so more sequences fit; the paged
-            // decode stays correct under it (proven by PagedQuantizedDecodeTests).
-            InferenceQuantization = quantizeWeights
-                ? AiDotNet.Configuration.InferenceQuantizationMode.WeightOnlyInt8
-                : AiDotNet.Configuration.InferenceQuantizationMode.None
-        };
+            config.InferenceQuantization = AiDotNet.Configuration.InferenceQuantizationMode.WeightOnlyInt8;
+        }
 
         var optimizer = new AiDotNet.Inference.InferenceOptimizer<T>(config);
         var (optimized, applied) = optimizer.OptimizeForInference(source, cloneModel: true);
@@ -588,11 +602,32 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         // Check Tensor→Tensor (neural networks, diffusion)
         if (model is IFullModel<T, Tensor<T>, Tensor<T>> tensorModel)
         {
-            // Get input shape from IModelShape
-            int[] inputShape;
-            if (model is IModelShape shapeModel)
+            // A facade-built model (AiModelResult) carries the user's ConfigureInferenceOptimizations
+            // settings and wraps an inner NeuralNetworkBase. Serve the INNER network through the paged
+            // incremental path — its Predict is the raw token→logits forward without the facade's I/O
+            // normalization — and thread the facade's InferenceOptimizationConfig so paging, batching,
+            // and speculation all come from the builder rather than serving-side hardcoded defaults.
+            AiDotNet.Configuration.InferenceOptimizationConfig? servingConfig = null;
+            IFullModel<T, Tensor<T>, Tensor<T>> servableModel = tensorModel;
+            IModelShape? shapeSource = model as IModelShape;
+            if (model is AiDotNet.Models.Results.AiModelResult<T, Tensor<T>, Tensor<T>> facade)
             {
-                inputShape = shapeModel.GetInputShape();
+                servingConfig = facade.GetInferenceOptimizationConfigForServing();
+                if (facade.Model is IFullModel<T, Tensor<T>, Tensor<T>> innerTensorModel)
+                {
+                    servableModel = innerTensorModel;
+                    if (innerTensorModel is IModelShape innerShape)
+                    {
+                        shapeSource = innerShape;
+                    }
+                }
+            }
+
+            // Get input shape from IModelShape (inner network when a facade unwrapped it)
+            int[] inputShape;
+            if (shapeSource is not null)
+            {
+                inputShape = shapeSource.GetInputShape();
             }
             else
             {
@@ -602,14 +637,15 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             }
 
             // Token-generation models (declared via config) get the KV-cached incremental path; other
-            // tensor models (e.g. diffusion) do not advertise generation. model.Predict is the
+            // tensor models (e.g. diffusion) do not advertise generation. Predict is the
             // token-to-logits forward only when the operator marks the model generative.
-            Func<Tensor<T>, Tensor<T>>? generationForward = enableTextGeneration ? tensorModel.Predict : null;
+            Func<Tensor<T>, Tensor<T>>? generationForward = enableTextGeneration ? servableModel.Predict : null;
 
             return new ServableModelWrapper<T>(
-                modelName, tensorModel, inputShape, enableBatching, enableSpeculativeDecoding,
+                modelName, servableModel, inputShape, enableBatching, enableSpeculativeDecoding,
                 generationForward: generationForward,
-                quantizeIncrementalWeights: enableTextGeneration && quantizeKvCacheWeights);
+                quantizeIncrementalWeights: enableTextGeneration && quantizeKvCacheWeights,
+                servingInferenceConfig: servingConfig);
         }
 
         throw new InvalidOperationException(
@@ -713,6 +749,10 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         {
             if (_sharedBatcher is null)
             {
+                // Continuous-batching settings flow from the user's facade InferenceOptimizationConfig
+                // (ConfigureInferenceOptimizations) when serving a facade-built model; otherwise sensible
+                // serving defaults. Per-request GenerationRequest.SpeculationDepth still overrides the depth.
+                var facade = _servingInferenceConfig;
                 var config = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig
                 {
                     // ONE background loop thread drives Step() and is the sole thread that runs model
@@ -720,14 +760,20 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                     // per-request output), and request threads just await/consume instead of competing to
                     // drive — which is what lets throughput scale with concurrency.
                     AutoStart = true,
-                    // Per-request GenerationRequest.SpeculationDepth overrides this; a positive default keeps
-                    // greedy-exact prompt-lookup speculation available to greedy requests that don't specify one.
                     // Sequence-collapsing models (SupportsBatchedPrefill=false) must prefill/decode one
                     // token at a time; a multi-token forward would re-fit a shape-dependent head.
                     SupportsBatchedPrefill = _supportsBatchedPrefill,
-                    EnableSpeculativeDecoding = true,
-                    SpeculationDepth = 4
+                    // A positive default keeps greedy-exact prompt-lookup speculation available even when the
+                    // facade didn't opt in, so greedy requests that specify a draft depth still benefit.
+                    EnableSpeculativeDecoding = facade?.EnableSpeculativeDecoding ?? true,
+                    SpeculationDepth = (facade is { SpeculationDepth: > 0 }) ? facade.SpeculationDepth : 4,
+                    SpeculationPolicy = facade?.SpeculationPolicy ?? AiDotNet.Configuration.SpeculationPolicy.Auto,
+                    UseTreeSpeculation = facade?.UseTreeSpeculation ?? false
                 };
+                if (facade is { MaxBatchSize: > 0 })
+                {
+                    config.SchedulerConfig.MaxBatchSize = facade.MaxBatchSize;
+                }
                 _sharedBatcher = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<T>(config, model, cache);
             }
             return _sharedBatcher;
