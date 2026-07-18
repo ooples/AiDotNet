@@ -41,7 +41,28 @@ public sealed class JsonGrammarConstraint : ITokenConstraint
     }
 
     /// <inheritdoc/>
-    public bool IsComplete => _finished || _pda.CanEnd;
+    // Terminal only when the automaton can accept no further non-EOS token. A complete top-level value is
+    // still followed by valid insignificant whitespace, so at End the constraint is accepting (EOS permitted
+    // in ApplyMask) but NOT terminal — the model ends generation by emitting EOS. The scan short-circuits on
+    // the first acceptable token, which the common (non-dead) states hit almost immediately.
+    public bool IsTerminal
+    {
+        get
+        {
+            if (_finished)
+            {
+                return true;
+            }
+            for (int i = 0; i < _tokenText.Length; i++)
+            {
+                if (_tokenText[i].Length > 0 && _pda.Accepts(_tokenText[i]))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
 
     /// <inheritdoc/>
     public void ApplyMask(Span<float> logits)

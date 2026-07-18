@@ -58,7 +58,10 @@ public sealed class RegexTokenConstraint : ITokenConstraint
     }
 
     /// <inheritdoc/>
-    public bool IsComplete => _finished || _nfa.IsAccepting(_current);
+    // Terminal only when no vocabulary token can extend the match (the cached allowed-set is empty). An
+    // accepting state that still permits tokens is NOT terminal — the model ends the match by emitting EOS
+    // (ApplyMask permits it while accepting), so extendable patterns like \d+ are never truncated.
+    public bool IsTerminal => _finished || GetAllowedTokens(_current).Length == 0;
 
     /// <inheritdoc/>
     public void ApplyMask(Span<float> logits)
@@ -414,7 +417,11 @@ internal sealed class RegexNfa
         private int _atomEnd;
         private Fragment ParseAtom()
         {
-            _atomStart = _i;
+            // Capture this atom's start in a LOCAL: a nested ParseAtom (group contents) would otherwise
+            // overwrite the _atomStart field, so a bounded repetition like (ab){2} would clone the inner
+            // atom's span ("b)") instead of the whole group. The fields are written at the single exit
+            // below, so the OUTERMOST atom's span wins after all nested calls have returned.
+            int atomStart = _i;
             Fragment frag;
             char c = Peek;
             if (c == '(')
@@ -450,6 +457,7 @@ internal sealed class RegexNfa
                 _i++;
                 frag = Single(CharMatcher.Literal(c));
             }
+            _atomStart = atomStart;
             _atomEnd = _i;
             return frag;
         }

@@ -34,8 +34,18 @@ public interface ITokenConstraint
     void Accept(int tokenId);
 
     /// <summary>
-    /// Gets a value indicating whether the constraint has reached an accepting/terminal state, i.e. the
-    /// generated text so far is a complete valid instance of the target language and generation may stop.
+    /// Gets a value indicating whether the constraint is <b>terminal</b>: the generated text so far is a
+    /// complete valid instance of the target language AND no valid non-EOS continuation remains, so the
+    /// engine may stop the sequence.
     /// </summary>
-    bool IsComplete { get; }
+    /// <remarks>
+    /// This is deliberately distinct from merely being in an <i>accepting</i> state. An accepting state that
+    /// still has valid continuations (e.g. after the first digit of <c>\d+</c>, or a complete JSON value that
+    /// could still be followed by insignificant whitespace) is NOT terminal — stopping there would truncate
+    /// output to its shortest valid prefix. For such variable-length matches the model itself ends generation
+    /// by emitting the end-of-sequence token, which <see cref="ApplyMask"/> leaves permitted whenever the
+    /// current state is accepting. Terminality is reached only when the grammar is exhausted (e.g. a closed
+    /// fixed literal, or a state from which no vocabulary token can extend the match).
+    /// </remarks>
+    bool IsTerminal { get; }
 }

@@ -424,10 +424,13 @@ internal class ContinuousBatcher<T> : IDisposable
         // Invoke the per-token callback if one was provided.
         sequence.Request.OnTokenGenerated?.Invoke(tokenId);
 
-        // A structured-output request stops the moment its constraint reaches a complete valid instance —
-        // this is the correct terminator for guided decoding and does not depend on the model emitting EOS
-        // (many constrained outputs, e.g. a closed JSON object, are complete without an explicit EOS token).
-        if (sequence.Status != SequenceStatus.Completed && sequence.Request.Constraint is { IsComplete: true })
+        // A structured-output request stops when its constraint becomes TERMINAL — the grammar is exhausted
+        // and no valid non-EOS continuation remains (e.g. a fixed literal fully emitted). It deliberately
+        // does NOT stop the instant the constraint is merely accepting: an extendable match (\d+, or a
+        // complete value that could still take insignificant whitespace) still has valid continuations, so
+        // stopping there would truncate output to its shortest valid prefix. Such matches end instead when
+        // the model emits EOS, which the constraint's mask permits in accepting states (handled below).
+        if (sequence.Status != SequenceStatus.Completed && sequence.Request.Constraint is { IsTerminal: true })
         {
             sequence.FinishReason ??= StopReason.StopToken;
             CompleteSequence(sequence);
