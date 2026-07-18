@@ -4590,7 +4590,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// scratch fields (<c>_lastInput</c>/<c>_lastOutput</c>) are written but only read by Backward,
     /// which inference never calls, so concurrent forwards produce correct independent outputs.
     /// </remarks>
-    internal Tensor<T> PredictWithContext(Tensor<T> input, AiDotNet.Inference.InferenceForwardContext context)
+    internal virtual Tensor<T> PredictWithContext(Tensor<T> input, AiDotNet.Inference.InferenceForwardContext context)
     {
         if (context is null) throw new ArgumentNullException(nameof(context));
 
