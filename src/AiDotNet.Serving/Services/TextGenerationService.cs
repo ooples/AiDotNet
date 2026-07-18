@@ -107,7 +107,7 @@ public sealed class TextGenerationService : ITextGenerationService
         if (model is ServableModelWrapper<T> wrapper && wrapper.SupportsIncrementalGeneration)
         {
             int emitted = 0;
-            foreach (var token in wrapper.StreamGeneration(BuildGenerationRequest<T>(request), eosTokenId, ct))
+            foreach (var token in wrapper.StreamGeneration(BuildGenerationRequest<T>(request, disableSpeculation: true), eosTokenId, ct))
             {
                 if (ct.IsCancellationRequested || emitted >= request.MaxNewTokens) yield break;
                 emitted++;
@@ -144,7 +144,7 @@ public sealed class TextGenerationService : ITextGenerationService
     /// The RNG seed is derived from the request id when present (reproducible), else null (a seedless
     /// request at temperature &gt; 0 samples non-deterministically, matching industry serving defaults).
     /// </summary>
-    private static GenerationRequest<T> BuildGenerationRequest<T>(SpeculativeDecodingRequest request)
+    private static GenerationRequest<T> BuildGenerationRequest<T>(SpeculativeDecodingRequest request, bool disableSpeculation = false)
     {
         return new GenerationRequest<T>
         {
@@ -155,7 +155,9 @@ public sealed class TextGenerationService : ITextGenerationService
             TopK = request.TopK,
             MinP = (float)request.MinP,
             EosTokenId = request.EosTokenId,
-            SpeculationDepth = request.NumDraftTokens,
+            // Streaming forces speculation off: accepted drafts arrive in bursts that distort inter-token
+            // latency (TPOT) measurements, and the docs state streaming intentionally avoids speculation.
+            SpeculationDepth = disableSpeculation ? 0 : request.NumDraftTokens,
             Seed = request.RequestId is { } id ? id.GetHashCode() : (int?)null,
             Constraint = request.Constraint,
             LogitBias = request.LogitBias,
@@ -314,17 +316,9 @@ public sealed class TextGenerationService : ITextGenerationService
                 int eos = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId;
                 var genResult = wrapper.RunGeneration(BuildGenerationRequest<T>(request), cancellationToken);
 
-                var genTokens = new List<int>(genResult.GeneratedTokens);
-                // The engine emits EOS as a terminating token; it is not part of the completion content.
-                if (genTokens.Count > 0 && genTokens[genTokens.Count - 1] == eos)
-                {
-                    genTokens.RemoveAt(genTokens.Count - 1);
-                }
-                // Honor the MaxNewTokens contract exactly at the serving boundary (defensive cap).
-                if (genTokens.Count > request.MaxNewTokens)
-                {
-                    genTokens = genTokens.Take(request.MaxNewTokens).ToList();
-                }
+                // Remove a trailing EOS, cap to MaxNewTokens, and trim log-probs to the SAME final count so
+                // both generation paths honor the one-logprob-per-generated-token contract identically.
+                var (genTokens, genLogProbs) = NormalizeGeneration(genResult.GeneratedTokens, genResult.LogProbs, eos, request.MaxNewTokens);
 
                 var all = new List<int>(request.InputTokens);
                 all.AddRange(genTokens);
@@ -335,7 +329,7 @@ public sealed class TextGenerationService : ITextGenerationService
                     NumGenerated = genTokens.Count,
                     AcceptanceRate = wrapper.SpeculationAcceptanceRate ?? 0.0,
                     RequestId = request.RequestId,
-                    LogProbs = genResult.LogProbs
+                    LogProbs = genLogProbs
                 };
             }
             catch (OperationCanceledException)
@@ -348,6 +342,21 @@ public sealed class TextGenerationService : ITextGenerationService
             }
             catch (Exception ex)
             {
+                // A structured-output constraint is a STATEFUL machine that the failed incremental attempt has
+                // already advanced. The full-context fallback below reuses the same request.Constraint, so
+                // resuming from its mid-state would emit malformed / truncated structured output. When a
+                // constraint is in play, fail instead of retrying with the advanced constraint.
+                if (request.Constraint is not null)
+                {
+                    _logger.LogWarning(ex,
+                        "Batched incremental generation failed for model '{ModelName}' with an active structured-output constraint; failing rather than retrying with the advanced constraint.",
+                        modelName);
+                    return new SpeculativeDecodingResponse
+                    {
+                        Error = "Structured-output generation failed and cannot be safely retried.",
+                        RequestId = request.RequestId
+                    };
+                }
                 _logger.LogWarning(ex,
                     "Batched incremental generation failed for model '{ModelName}'; falling back to full-context decode.",
                     modelName);
@@ -412,12 +421,10 @@ public sealed class TextGenerationService : ITextGenerationService
 
         var result = task.GetAwaiter().GetResult();
 
-        var generated = result.GeneratedTokens;
-        // Honor the MaxNewTokens contract exactly at the serving boundary (defensive cap).
-        if (generated.Count > request.MaxNewTokens)
-        {
-            generated = generated.Take(request.MaxNewTokens).ToList();
-        }
+        // Same normalization as the incremental path: strip trailing EOS, cap to MaxNewTokens, and trim
+        // log-probs to the final token count so output is identical regardless of which path served it.
+        var (generated, fallbackLogProbs) = NormalizeGeneration(
+            result.GeneratedTokens, result.LogProbs, request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId, request.MaxNewTokens);
 
         var allTokens = new List<int>(request.InputTokens);
         allTokens.AddRange(generated);
@@ -429,8 +436,31 @@ public sealed class TextGenerationService : ITextGenerationService
             NumGenerated = generated.Count,
             AcceptanceRate = batcher.SpeculationAcceptanceRate ?? 0.0,
             RequestId = request.RequestId,
-            LogProbs = result.LogProbs
+            LogProbs = fallbackLogProbs
         };
+    }
+
+    // Normalizes a raw engine result to the serving contract: drops a trailing EOS token, caps to
+    // maxNewTokens, and trims per-token log-probs to the SAME final count (one logprob per generated token).
+    // Applied on BOTH generation paths so the response never depends on which path served it.
+    private static (List<int> Tokens, List<ContinuousBatching.PositionLogProbs>? LogProbs) NormalizeGeneration(
+        IReadOnlyList<int> generated, List<ContinuousBatching.PositionLogProbs>? logProbs, int eos, int maxNewTokens)
+    {
+        var tokens = new List<int>(generated);
+        if (tokens.Count > 0 && tokens[tokens.Count - 1] == eos)
+        {
+            tokens.RemoveAt(tokens.Count - 1);
+        }
+        if (tokens.Count > maxNewTokens)
+        {
+            tokens = tokens.Take(maxNewTokens).ToList();
+        }
+        var lp = logProbs;
+        if (lp is not null && lp.Count > tokens.Count)
+        {
+            lp = lp.Take(tokens.Count).ToList();
+        }
+        return (tokens, lp);
     }
 
     /// <summary>Builds a <c>[1, n]</c> token-id tensor from token IDs.</summary>
