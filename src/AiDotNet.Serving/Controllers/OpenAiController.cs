@@ -302,6 +302,21 @@ public sealed class OpenAiController : ControllerBase
             Id = id, Created = created, Model = request.Model,
             Choices = { new ChatChoice { Index = 0, Delta = new ChatMessageOut(), FinishReason = finishReason } }
         }, ct);
+        // Per the OpenAI stream_options.include_usage contract, emit a final chunk (empty choices) carrying the
+        // authoritative token usage, so streaming clients get exact counts instead of counting content chunks.
+        if (request.StreamOptions?.IncludeUsage == true)
+        {
+            await WriteChunkAsync(new ChatCompletionChunk
+            {
+                Id = id, Created = created, Model = request.Model,
+                Usage = new Usage
+                {
+                    PromptTokens = ctx.PromptTokenCount,
+                    CompletionTokens = ids.Count,
+                    TotalTokens = ctx.PromptTokenCount + ids.Count
+                }
+            }, ct);
+        }
         await WriteDoneAsync(ct);
         RecordStreamMetrics(ctx.PromptTokenCount, ids.Count, sw.Elapsed.TotalSeconds, ttftSeconds);
         return new EmptyResult();
@@ -402,6 +417,20 @@ public sealed class OpenAiController : ControllerBase
 
         string finishReason = stopped ? "stop" : (ids.Count >= sdr.MaxNewTokens ? "length" : "stop");
         await WriteChunkAsync(CompletionChunk(id, created, request.Model, string.Empty, finishReason), ct);
+        // OpenAI stream_options.include_usage: final chunk (empty choices) carries authoritative token usage.
+        if (request.StreamOptions?.IncludeUsage == true)
+        {
+            await WriteChunkAsync(new CompletionResponse
+            {
+                Id = id, Created = created, Model = request.Model,
+                Usage = new Usage
+                {
+                    PromptTokens = ctx.PromptTokenCount,
+                    CompletionTokens = ids.Count,
+                    TotalTokens = ctx.PromptTokenCount + ids.Count
+                }
+            }, ct);
+        }
         await WriteDoneAsync(ct);
         RecordStreamMetrics(ctx.PromptTokenCount, ids.Count, sw.Elapsed.TotalSeconds, ttftSeconds);
         return new EmptyResult();
