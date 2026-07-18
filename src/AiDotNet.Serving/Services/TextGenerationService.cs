@@ -116,23 +116,48 @@ public sealed class TextGenerationService : ITextGenerationService
             yield break;
         }
 
-        // Stateless fallback (models without the incremental path): re-forward the full growing context
-        // each step and sample.
-        double temperature = request.Temperature;
-        double topP = request.TopP;
-        int topK = request.TopK;
-        double minP = request.MinP;
-        // Seeded per request id when present so greedy stays deterministic and sampling is reproducible.
-        var rng = new Random(request.RequestId?.GetHashCode() ?? 0);
-        var context = new List<int>(request.InputTokens);
-        for (int step = 0; step < request.MaxNewTokens; step++)
+        // Stateless fallback (models without the shared incremental engine): drive a per-request
+        // continuous-batching engine and stream its tokens as they are produced. Routing through the
+        // engine means structured-output constraints, logit_bias, frequency/presence penalties, and stop
+        // handling are applied by the SAME sampler as the incremental path — the previous hand-written loop
+        // silently ignored all of those, so identical requests behaved differently by model capability.
+        var fallbackConfig = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EosTokenId = eosTokenId,
+            EnableSpeculativeDecoding = false, // streaming: speculation stays off (accurate inter-token latency)
+        };
+        var streamRequest = BuildGenerationRequest<T>(request, disableSpeculation: true);
+        var produced = new Queue<int>();
+        streamRequest.OnTokenGenerated = tok => produced.Enqueue(tok);
+
+        using var streamBatcher = new ContinuousBatcher<T>(fallbackConfig, tokens => gm.Forward(tokens));
+        var streamTask = streamBatcher.GenerateAsync(streamRequest);
+
+        int streamed = 0;
+        // Each Step emits at least one token for the running sequence; bound the loop defensively.
+        int stepBudget = request.MaxNewTokens + request.InputTokens.Length + 8;
+        while (!streamTask.IsCompleted && stepBudget-- > 0)
         {
             if (ct.IsCancellationRequested) yield break;
-            var logits = gm.Forward(TokensToTensor<T>(context));
-            int next = SampleToken(LastPositionLogits(logits), temperature, topP, topK, minP, rng);
-            if (next == eosTokenId) yield break;
-            yield return next;
-            context.Add(next);
+            streamBatcher.Step();
+            while (produced.Count > 0)
+            {
+                int tok = produced.Dequeue();
+                // EOS terminates the stream and is not yielded; honor MaxNewTokens defensively.
+                if (tok == eosTokenId || streamed >= request.MaxNewTokens) yield break;
+                streamed++;
+                yield return tok;
+            }
+        }
+
+        // Drain any tokens produced on the final completing step.
+        while (produced.Count > 0)
+        {
+            int tok = produced.Dequeue();
+            if (tok == eosTokenId || streamed >= request.MaxNewTokens) yield break;
+            streamed++;
+            yield return tok;
         }
     }
 
@@ -169,116 +194,6 @@ public sealed class TextGenerationService : ITextGenerationService
         };
     }
 
-    /// <summary>Extracts the last-position vocabulary row of a logits tensor as doubles.</summary>
-    private static double[] LastPositionLogits<T>(Tensor<T> logits)
-    {
-        int rank = logits.Shape.Length;
-        int vocab = logits.Shape[rank - 1];
-        int positions = 1;
-        for (int d = 0; d < rank - 1; d++)
-        {
-            positions *= logits.Shape[d];
-        }
-        int baseOffset = (positions - 1) * vocab;
-
-        var flat = logits.AsSpan();
-        var row = new double[vocab];
-        for (int v = 0; v < vocab; v++)
-        {
-            row[v] = Convert.ToDouble(flat[baseOffset + v]);
-        }
-        return row;
-    }
-
-    /// <summary>
-    /// Samples a token id from a logits row. Greedy (argmax) when <paramref name="temperature"/> ≤ 0,
-    /// otherwise temperature-scaled softmax with optional top-k and nucleus (top-p) filtering.
-    /// </summary>
-    private static int SampleToken(double[] logits, double temperature, double topP, int topK, double minP, Random rng)
-    {
-        int n = logits.Length;
-        if (n == 0) return 0;
-        if (temperature <= 0.0)
-        {
-            return ArgMax(logits);
-        }
-
-        // Order indices by descending logit for top-k / top-p truncation.
-        var idx = new int[n];
-        for (int i = 0; i < n; i++) idx[i] = i;
-        Array.Sort(idx, (a, b) => logits[b].CompareTo(logits[a]));
-
-        int limit = topK > 0 ? Math.Min(topK, n) : n;
-
-        // Softmax over the retained candidates (numerically stable).
-        double max = logits[idx[0]];
-        var probs = new double[limit];
-        double sum = 0.0;
-        for (int j = 0; j < limit; j++)
-        {
-            double p = Math.Exp((logits[idx[j]] - max) / temperature);
-            probs[j] = p;
-            sum += p;
-        }
-        for (int j = 0; j < limit; j++) probs[j] /= sum;
-
-        // Min-p: drop tokens below minP × the top token's probability (probs are sorted descending), then
-        // renormalize. Applied before top-p, matching the common vLLM/HF ordering.
-        if (minP > 0.0 && limit > 1)
-        {
-            double threshold = minP * probs[0];
-            int cut = limit;
-            for (int j = 1; j < limit; j++)
-            {
-                if (probs[j] < threshold) { cut = j; break; }
-            }
-            if (cut < limit)
-            {
-                limit = cut;
-                double s = 0.0;
-                for (int j = 0; j < limit; j++) s += probs[j];
-                if (s > 0) for (int j = 0; j < limit; j++) probs[j] /= s;
-            }
-        }
-
-        // Nucleus (top-p): keep the smallest prefix whose cumulative prob ≥ topP, then renormalize.
-        if (topP > 0.0 && topP < 1.0)
-        {
-            double cum = 0.0;
-            int cut = limit;
-            for (int j = 0; j < limit; j++)
-            {
-                cum += probs[j];
-                if (cum >= topP) { cut = j + 1; break; }
-            }
-            limit = cut;
-            double s2 = 0.0;
-            for (int j = 0; j < limit; j++) s2 += probs[j];
-            if (s2 > 0) for (int j = 0; j < limit; j++) probs[j] /= s2;
-        }
-
-        double r = rng.NextDouble();
-        double acc = 0.0;
-        for (int j = 0; j < limit; j++)
-        {
-            acc += probs[j];
-            if (r <= acc) return idx[j];
-        }
-        return idx[limit - 1];
-    }
-
-    /// <summary>Argmax over a logits row.</summary>
-    private static int ArgMax(double[] logits)
-    {
-        int best = 0;
-        double bestVal = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (logits[i] > bestVal) { bestVal = logits[i]; best = i; }
-        }
-        return best;
-    }
-
     private SpeculativeDecodingResponse GenerateTyped<T>(string modelName, SpeculativeDecodingRequest request, CancellationToken cancellationToken)
     {
         var model = _modelRepository.GetModel<T>(modelName);
@@ -309,7 +224,13 @@ public sealed class TextGenerationService : ITextGenerationService
         // this model co-batch on the same engine; each gets an isolated paged-cache sequence and only
         // pays for the new token per decode step. On any failure, fall through to the proven full-context
         // path below so a model whose incremental path misbehaves still serves correct (if slower) results.
-        if (model is ServableModelWrapper<T> wrapper && wrapper.SupportsIncrementalGeneration)
+        //
+        // A request that opts into TREE speculation (UseTreeSpeculation) is routed to the per-request
+        // full-context batcher below instead: tree branch-factor / max-depth are batcher-CONFIG settings,
+        // and the shared engine has a single fixed config, so it cannot honor per-request tree knobs. The
+        // fallback builds a batcher per request and applies them (see config below), so those requests get
+        // the behavior they asked for rather than having the knobs silently dropped.
+        if (model is ServableModelWrapper<T> wrapper && wrapper.SupportsIncrementalGeneration && !request.UseTreeSpeculation)
         {
             try
             {
