@@ -47,10 +47,11 @@ internal sealed class TensorParallelLayerWeights<T>
 /// </summary>
 /// <remarks>
 /// <para>
-/// The forward runs the ranks SEQUENTIALLY and reduces the partials in a fixed rank order, so the sharded result
-/// is bit-identical to the un-sharded one (deterministic — no dependence on the process-global compute engine or
-/// autodiff tape, which are not thread-safe). A real multi-GPU deployment runs the ranks on separate devices in
-/// parallel; the math (and result) is the same. Plain pre-LN GPT blocks (no rotary/ALiBi/quantization).
+/// The forward runs each rank's compute independently — on its own GPU device (rank r -&gt; device r % deviceCount)
+/// or CPU thread, with its own paged cache and scratch — then reduces the per-rank partials in a FIXED rank order,
+/// so the parallel result is bit-identical to a sequential one (deterministic — no dependence on the process-global
+/// compute engine or autodiff tape, which are not thread-safe). Falls back to one device / the CPU double path when
+/// fewer GPUs (or none) are present. Supports plain multi-head and grouped-query attention (no rotary/ALiBi/quant).
 /// </para>
 /// <para><b>For Beginners:</b> This is a language model whose layers are split across several GPUs so a model
 /// too big for one GPU still runs — and it remembers past tokens efficiently (paged KV) while generating.
