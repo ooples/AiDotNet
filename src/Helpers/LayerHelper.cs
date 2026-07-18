@@ -24745,13 +24745,19 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder ===
-        // Leading LayerNorm normalizes the per-token vision features, whose width is
-        // visionDim (the documented input contract is [batch, num_tokens, visionDim]
-        // post-patch-embedding). Size it EXPLICITLY: as the first layer it has no
-        // preceding layer to infer from, so a bare lazy LayerNorm gets wired to the
-        // architecture's raw input dimension (e.g. inputHeight=224) and then rejects
-        // the real visionDim-wide input ("Gamma shape (224) does not match ...").
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        // Leading INPUT PROJECTION (ViT patch/input embedding — Brohan et al. 2023 §3.1). This REPLACES a
+        // previous bare LayerNorm, which broke the DifferentInputs_AfterTraining invariant: LayerNorm of a
+        // constant-per-token input (the invariant feeds a uniform tensor) subtracts the per-token mean and
+        // divides by the per-token std, mapping ANY constant to the same learnable `beta` — so distinct
+        // constant inputs (0.1 vs 0.9) become IDENTICAL features at layer 0. A randomly-initialized stack
+        // then amplifies the residual float noise into a spurious pre-training difference (the test passes
+        // by luck), but once training makes the layers contractive the near-zero layer-0 difference stays
+        // near zero and the model is input-invariant (exact post-training collapse). A learnable Dense maps
+        // a constant to a NON-constant, value-dependent token representation (0.1·(W·1)+b != 0.9·(W·1)+b),
+        // preserving input sensitivity through training. Sized EXPLICITLY to visionDim — as the first layer
+        // it has no preceding layer to infer a lazy width from. Count-preserving (one leading layer), so the
+        // robotics models' encoder/decoder boundary math is unchanged.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
