@@ -76,10 +76,20 @@ internal static class TestModuleInitializer
         // (e.g., ModelPersistenceGuardTests, AiModelBuilderLicensingTests) clear this
         // in their own setup via ClearAllLicenseSources().
         //
-        // Only injected when no real license key is already configured (e.g. via a CI
-        // secret) — that real key validates against the official embedded build key, so
-        // we must NOT clobber its build key with the test one below.
-        if (string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY")))
+        // Injected UNLESS a real OFFLINE-verifiable key is already configured. A key that validates
+        // offline — v2 `aidn2` (asymmetric) or legacy `aidn.` (HMAC) — lifts the persistence cap
+        // deterministically without the network, so we keep it (this is the CI `aidn2` key path) and must
+        // NOT clobber its build key. But a MISSING key, or a server-only `AIDN-*` key, would force the
+        // entire save/load-heavy suite onto the online license server every operation AND — for a
+        // community-tier key under capability-authoritative gating — fail to lift the save cap, draining
+        // the free-trial op budget until persistence tests throw LicenseRequiredException. In those cases
+        // install a synthetic offline license so the suite is deterministically licensed; the real
+        // online/community-key path is exercised explicitly by LicenseE2ETests, not the whole suite.
+        string? _envLicenseKey = System.Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY");
+        bool _envKeyOfflineUsable = !string.IsNullOrWhiteSpace(_envLicenseKey)
+            && (AiDotNet.Helpers.AsymmetricLicenseVerifier.IsAsymmetricKeyFormat(_envLicenseKey)
+                || AiDotNet.Helpers.LicenseValidator.IsSignedKeyFormat(_envLicenseKey));
+        if (!_envKeyOfflineUsable)
         {
             // Inject the test build key process-wide so offline license validation
             // (HMAC-SHA256 of the key against the embedded build key, per the
