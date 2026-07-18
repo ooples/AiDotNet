@@ -83,7 +83,7 @@ public sealed class PortfolioAgentTrainingTests
         };
 
         var outcomes = PortfolioExperimentRunner.Run<double>(
-            trainPrices, null, holdoutPrices, null, windowSize: 5, initialCapital: 100_000, maxLeverage: 1.0,
+            trainPrices, null, holdoutPrices, null, windowSize: 5, initialCapital: 100_000,
             experiments, agentFactory: (_, _) => new FixedWeightAgent(new[] { 1.0, 0.0 }), trainEpisodes: 1);
 
         Assert.Equal(2, outcomes.Count);
@@ -100,12 +100,35 @@ public sealed class PortfolioAgentTrainingTests
         // the flat agent must NOT be flagged as beating it — the honest-eval guard against false positives.
         var prices = new List<double[]> { Ramp(100, 2, 50), Ramp(100, 2, 50) };
         var outcomes = PortfolioExperimentRunner.Run<double>(
-            prices, null, prices, null, windowSize: 5, initialCapital: 100_000, maxLeverage: 1.0,
+            prices, null, prices, null, windowSize: 5, initialCapital: 100_000,
             new List<PortfolioExperiment> { new("flat", new TotalReturnReward()) },
             agentFactory: (_, _) => new FixedWeightAgent(new[] { 0.0, 0.0 }), trainEpisodes: 1);
 
         Assert.Single(outcomes);
         Assert.False(outcomes[0].BeatBaseline);
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Frictions_are_an_experiment_axis_carry_cost_drags_the_holdout()
+    {
+        // Same objective + policy; two experiments differ ONLY in holding/carry cost. The held long book pays
+        // carry every step, so the heavy-friction experiment must end below the frictionless one — proving
+        // frictions are a real experiment axis, not a fixed assumption.
+        var prices = new List<double[]> { Ramp(100, 1, 50) };
+        var experiments = new List<PortfolioExperiment>
+        {
+            new("frictionless", new TotalReturnReward(), MaxLeverage: 1.0, Frictions: new PortfolioFrictions(AnnualHoldingCost: 0.0)),
+            new("heavy-carry", new TotalReturnReward(), MaxLeverage: 1.0, Frictions: new PortfolioFrictions(AnnualHoldingCost: 1.0)),
+        };
+
+        var outcomes = PortfolioExperimentRunner.Run<double>(
+            prices, null, prices, null, windowSize: 5, initialCapital: 100_000,
+            experiments, agentFactory: (_, _) => new FixedWeightAgent(new[] { 1.0 }), trainEpisodes: 1);
+
+        double frictionless = System.Linq.Enumerable.First(outcomes, o => o.Name == "frictionless").Agent.FinalValue;
+        double heavyCarry = System.Linq.Enumerable.First(outcomes, o => o.Name == "heavy-carry").Agent.FinalValue;
+        Assert.True(frictionless > heavyCarry, $"carry should drag the book: frictionless {frictionless} !> heavy {heavyCarry}");
     }
 
     [Fact(Timeout = 120000)]

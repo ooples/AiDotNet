@@ -88,10 +88,35 @@ public static class PortfolioAgentTrainer
     }
 }
 
-/// <summary>One experiment in the greenfield trading-agent research: a named objective to train + evaluate.
-/// Swapping the <see cref="Reward"/> (and, later, frictions / policy / algorithm) is how the options become
-/// experiments ranked on the holdout rather than an either/or pick.</summary>
-public sealed record PortfolioExperiment(string Name, IPortfolioReward Reward);
+/// <summary>The friction knobs for an experiment's environment — a market-realism axis. Cheaper frictions flatter
+/// a churning policy; heavier ones reward patience. Sweeping them is how "is the edge real net of costs?" becomes
+/// an experiment rather than an assumption.</summary>
+public sealed record PortfolioFrictions(
+    double TransactionCost = 0.001,
+    double SlippageCoefficient = 0.0005,
+    double AnnualBorrowCost = 0.03,
+    double AnnualHoldingCost = 0.0);
+
+/// <summary>One experiment in the greenfield trading-agent research: a named environment configuration to train +
+/// evaluate. Every SOTA-relevant axis is a knob here — objective (<see cref="Reward"/>), leverage budget
+/// (<see cref="MaxLeverage"/>), and market frictions (<see cref="Frictions"/>) — so the options become experiments
+/// ranked on the holdout rather than an either/or pick. (Policy/algorithm is the agent factory's axis.)</summary>
+public sealed record PortfolioExperiment(
+    string Name,
+    IPortfolioReward Reward,
+    double MaxLeverage = 1.0,
+    PortfolioFrictions? Frictions = null)
+{
+    /// <summary>Builds the environment this experiment specifies over the given data.</summary>
+    public PortfolioManagerEnvironment<T> BuildEnvironment<T>(
+        IReadOnlyList<double[]> assetPrices, IReadOnlyList<double[]>? featureColumns, int windowSize, double initialCapital)
+    {
+        var f = Frictions ?? new PortfolioFrictions();
+        return new PortfolioManagerEnvironment<T>(
+            assetPrices, featureColumns, windowSize, initialCapital, Reward, MaxLeverage,
+            f.TransactionCost, f.SlippageCoefficient, f.AnnualBorrowCost, f.AnnualHoldingCost);
+    }
+}
 
 /// <summary>The holdout result of one experiment: the trained agent's performance vs the no-skill equal-weight
 /// baseline on the untouched holdout, and whether it beat the baseline (higher Sharpe).</summary>
@@ -116,7 +141,6 @@ public static class PortfolioExperimentRunner
         IReadOnlyList<double[]>? holdoutFeatureColumns,
         int windowSize,
         double initialCapital,
-        double maxLeverage,
         IReadOnlyList<PortfolioExperiment> experiments,
         Func<int, int, IPortfolioAgent<T>> agentFactory,
         int trainEpisodes)
@@ -131,20 +155,18 @@ public static class PortfolioExperimentRunner
 
         foreach (var experiment in experiments)
         {
-            // Train a fresh agent on the training split under this experiment's objective.
-            var trainEnv = new PortfolioManagerEnvironment<T>(
-                trainAssetPrices, trainFeatureColumns, windowSize, initialCapital, experiment.Reward, maxLeverage);
+            // Each experiment fully specifies its environment (reward + leverage + frictions), so the harness
+            // sweeps all those axes, not just the objective.
+            var trainEnv = experiment.BuildEnvironment<T>(trainAssetPrices, trainFeatureColumns, windowSize, initialCapital);
             var agent = agentFactory(trainEnv.ObservationSpaceDimension, trainEnv.ActionSpaceSize);
             PortfolioAgentTrainer.Train(agent, trainEnv, trainEpisodes);
 
             // Evaluate the trained agent on the untouched holdout (greedy — no exploration).
-            var agentEnv = new PortfolioManagerEnvironment<T>(
-                holdoutAssetPrices, holdoutFeatureColumns, windowSize, initialCapital, experiment.Reward, maxLeverage);
+            var agentEnv = experiment.BuildEnvironment<T>(holdoutAssetPrices, holdoutFeatureColumns, windowSize, initialCapital);
             var agentResult = PortfolioBacktest.Run(agentEnv, s => agent.SelectAction(s, explore: false));
 
-            // The no-skill control on the SAME holdout.
-            var baseEnv = new PortfolioManagerEnvironment<T>(
-                holdoutAssetPrices, holdoutFeatureColumns, windowSize, initialCapital, experiment.Reward, maxLeverage);
+            // The no-skill control on the SAME holdout environment (same frictions/leverage).
+            var baseEnv = experiment.BuildEnvironment<T>(holdoutAssetPrices, holdoutFeatureColumns, windowSize, initialCapital);
             var baseResult = PortfolioBacktest.Run(baseEnv, BaselinePolicies.EqualWeight<T>(tradableCount));
 
             outcomes.Add(new PortfolioExperimentOutcome(
