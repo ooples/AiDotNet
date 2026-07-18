@@ -49,12 +49,14 @@ public static class LlamaModelBuilder<T>
     /// <paramref name="weights"/> is null.</exception>
     /// <exception cref="InvalidDataException">Thrown when a required tensor is absent, has an
     /// unsupported shape, or the config's head geometry cannot be represented.</exception>
-    public static NeuralNetwork<T> Build(HuggingFaceConfig config, INamedTensorSource weights, int warmupSequenceLength = 8)
+    public static NeuralNetwork<T> Build(HuggingFaceConfig config, INamedTensorSource weights,
+        DecoderOptions<T>? options = null, int warmupSequenceLength = 8)
     {
         Guard.NotNull(config);
         Guard.NotNull(weights);
         if (warmupSequenceLength < 1)
             throw new ArgumentOutOfRangeException(nameof(warmupSequenceLength));
+        var opt = options ?? DecoderOptions<T>.Llama;
 
         int hidden = config.HiddenSize;
         int numHeads = config.NumAttentionHeads;
@@ -80,10 +82,10 @@ public static class LlamaModelBuilder<T>
                 headDimension: explicitHeadDim ? headDim : null);
             attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, config.RopeTheta, maxPos);
 
-            // Gated SwiGLU FFN with SiLU on the gate path (bias-free), matching LLaMA/Mistral/Qwen2.
+            // Gated FFN (bias-free): SiLU gate for LLaMA/Mistral/Qwen2/Phi-3, GELU (GeGLU) for Gemma.
             var block = new PreLNTransformerBlock<T>(
                 hiddenSize: hidden, ffnDim: intermediate, attention: attention,
-                ffnActivation: new SiLUActivation<T>(), gated: true);
+                ffnActivation: opt.FfnActivation, gated: true);
             blocks[i] = block;
             layers.Add(block);
         }
@@ -110,17 +112,30 @@ public static class LlamaModelBuilder<T>
 
         // ---- load pretrained weights ----
         // Embedding: HF model.embed_tokens.weight is [vocab, hidden] row-major — same layout AiDotNet uses.
+        // Gemma multiplies the embeddings by sqrt(hidden); bake that into the embedding table (a tied LM head
+        // below still reads the UNSCALED embedding from the source).
         var embedData = ReadTensor(weights, EmbedName, vocab * hidden);
-        embedding.SetParameters(new Vector<T>(embedData));
+        if (opt.ScaleEmbeddingBySqrtHidden)
+        {
+            var scale = NumOps.FromDouble(Math.Sqrt(hidden));
+            var scaled = new T[embedData.Length];
+            for (int k = 0; k < embedData.Length; k++)
+                scaled[k] = NumOps.Multiply(embedData[k], scale);
+            embedding.SetParameters(new Vector<T>(scaled));
+        }
+        else
+        {
+            embedding.SetParameters(new Vector<T>(embedData));
+        }
 
         for (int i = 0; i < config.NumHiddenLayers; i++)
         {
             var block = blocks[i];
             string p = $"model.layers.{i}.";
 
-            // RMSNorm gammas ([hidden]) load directly into the live gamma tensors.
-            WriteGamma(block.Norm1, ReadTensor(weights, p + "input_layernorm.weight", hidden));
-            WriteGamma(block.Norm2, ReadTensor(weights, p + "post_attention_layernorm.weight", hidden));
+            // RMSNorm gammas ([hidden]) load directly into the live gamma tensors (Gemma: gamma = weight + 1).
+            LoadGamma(block.Norm1, weights, p + "input_layernorm.weight", hidden, opt.RmsNormAddsOne);
+            LoadGamma(block.Norm2, weights, p + "post_attention_layernorm.weight", hidden, opt.RmsNormAddsOne);
 
             // Attention: HF q/k/v/o_proj are [out, in]; the GQA layer stores [in, out]; load order is
             // Q, K, V, O, then the (zero) output bias.
@@ -139,7 +154,7 @@ public static class LlamaModelBuilder<T>
             LoadDense(block.FfnDown, weights, p + "mlp.down_proj.weight", outDim: hidden, inDim: intermediate);
         }
 
-        WriteGamma(finalNorm, ReadTensor(weights, "model.norm.weight", hidden));
+        LoadGamma(finalNorm, weights, "model.norm.weight", hidden, opt.RmsNormAddsOne);
 
         // LM head: HF lm_head.weight is [vocab, hidden]; when tie_word_embeddings, reuse the embedding.
         string headName = HasTensor(weights, LmHeadName) ? LmHeadName : EmbedName;
@@ -160,6 +175,19 @@ public static class LlamaModelBuilder<T>
         var wInOut = TransposeOutInToInOut(weights, name, outDim, inDim);
         var full = Concat(wInOut, new T[outDim]); // trailing zeros = bias
         dense.SetParameters(new Vector<T>(full));
+    }
+
+    // Reads an RMSNorm weight and writes it into the layer's gamma, optionally as (weight + 1) for the
+    // Gemma convention where the norm scales by (1 + weight).
+    private static void LoadGamma(RMSNormalizationLayer<T> norm, INamedTensorSource weights, string name, int hidden, bool addOne)
+    {
+        var gamma = ReadTensor(weights, name, hidden);
+        if (addOne)
+        {
+            for (int i = 0; i < gamma.Length; i++)
+                gamma[i] = NumOps.Add(gamma[i], NumOps.One);
+        }
+        WriteGamma(norm, gamma);
     }
 
     // Writes a [featureSize] gamma vector into an RMSNorm layer's live gamma tensor.

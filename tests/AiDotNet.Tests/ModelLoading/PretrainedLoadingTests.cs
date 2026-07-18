@@ -6,6 +6,7 @@ using System.Text;
 using AiDotNet.Agentic.Models.Local;
 using AiDotNet.ModelLoading.Pretrained;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -229,6 +230,105 @@ namespace AiDotNet.Tests.ModelLoading
             tokens[0, 0] = 1; tokens[0, 1] = 5; tokens[0, 2] = 2;
             var logits = net.Predict(tokens);
             Assert.Equal(new[] { 1, 3, vocab }, logits.Shape);
+        }
+
+        [Fact]
+        public void Builder_Gemma_AppliesNormOffset_EmbedScale_AndGeglu()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""GemmaForCausalLM""],
+                ""model_type"": ""gemma"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""tie_word_embeddings"": true, ""hidden_act"": ""gelu"" }");
+
+            int h = 8, ffn = 16, vocab = 6, heads = 2, kvHeads = 2, headDim = 4;
+            var inNorm = Fill(h, 20);
+            var embed = Fill(vocab * h, 21);
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = embed,
+                ["model.layers.0.input_layernorm.weight"] = inNorm,
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 22),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(heads * headDim * h, 23),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(kvHeads * headDim * h, 24),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(kvHeads * headDim * h, 25),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * heads * headDim, 26),
+                ["model.layers.0.mlp.gate_proj.weight"] = Fill(ffn * h, 27),
+                ["model.layers.0.mlp.up_proj.weight"] = Fill(ffn * h, 28),
+                ["model.layers.0.mlp.down_proj.weight"] = Fill(h * ffn, 29),
+                ["model.norm.weight"] = Fill(h, 30),
+            };
+
+            var net = LlamaModelBuilder<double>.Build(config, new InMemorySource(t), DecoderOptions<double>.Gemma);
+
+            var tokens = new Tensor<double>(new[] { 1, 2 });
+            tokens[0, 0] = 1; tokens[0, 1] = 3;
+            Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape);
+
+            // (1 + weight) RMSNorm: the block's pre-attention gamma is the loaded weight + 1.
+            var block = Assert.IsType<PreLNTransformerBlock<double>>(net.Layers[1]);
+            var gamma = block.Norm1.GetGammaTensor();
+            for (int i = 0; i < h; i++)
+                Assert.Equal(inNorm[i] + 1.0, gamma[i], 9);
+
+            // sqrt(hidden) embedding scale baked into the table (row 0, col 0).
+            var emb = Assert.IsType<EmbeddingLayer<double>>(net.Layers[0]);
+            Assert.Equal(embed[0] * Math.Sqrt(h), emb.GetParameters()[0], 9);
+        }
+
+        [Fact]
+        public void Builder_Phi3_SplitsFusedProjections_AndForwards()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""Phi3ForCausalLM""],
+                ""model_type"": ""phi3"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""tie_word_embeddings"": false, ""hidden_act"": ""silu"" }");
+
+            int h = 8, ffn = 16, vocab = 6, heads = 2, kvHeads = 2, headDim = 4;
+            int qkvRows = (heads + 2 * kvHeads) * headDim; // 24
+            var qkv = Fill(qkvRows * h, 43);
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 40),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 41),
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 42),
+                ["model.layers.0.self_attn.qkv_proj.weight"] = qkv,           // fused
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * heads * headDim, 44),
+                ["model.layers.0.mlp.gate_up_proj.weight"] = Fill(2 * ffn * h, 45), // fused
+                ["model.layers.0.mlp.down_proj.weight"] = Fill(h * ffn, 46),
+                ["model.norm.weight"] = Fill(h, 47),
+                ["lm_head.weight"] = Fill(vocab * h, 48),
+            };
+
+            var fused = new FusedProjectionSource(new InMemorySource(t), config);
+            Assert.Contains("model.layers.0.self_attn.q_proj.weight", fused.TensorNames);
+            Assert.Contains("model.layers.0.mlp.up_proj.weight", fused.TensorNames);
+
+            // q_proj is the first numHeads*headDim rows of qkv_proj.
+            var q = fused.ReadAsDouble("model.layers.0.self_attn.q_proj.weight");
+            Assert.Equal(heads * headDim * h, q.Length);
+            for (int i = 0; i < q.Length; i++) Assert.Equal(qkv[i], q[i]);
+            // v_proj is the last numKVHeads*headDim rows.
+            var v = fused.ReadAsDouble("model.layers.0.self_attn.v_proj.weight");
+            int vStart = (heads + kvHeads) * headDim * h;
+            for (int i = 0; i < v.Length; i++) Assert.Equal(qkv[vStart + i], v[i]);
+
+            var net = LlamaModelBuilder<double>.Build(config, fused);
+            var tokens = new Tensor<double>(new[] { 1, 2 });
+            tokens[0, 0] = 0; tokens[0, 1] = 5;
+            Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape);
+        }
+
+        [Fact]
+        public void Architectures_ResolvesGemmaAndPhi3()
+        {
+            var gemma = HuggingFaceConfig.Parse(@"{ ""architectures"": [""GemmaForCausalLM""], ""model_type"": ""gemma"",
+                ""hidden_size"": 8, ""intermediate_size"": 16, ""num_hidden_layers"": 1,
+                ""num_attention_heads"": 2, ""vocab_size"": 6 }");
+            var phi3 = HuggingFaceConfig.Parse(@"{ ""architectures"": [""Phi3ForCausalLM""], ""model_type"": ""phi3"",
+                ""hidden_size"": 8, ""intermediate_size"": 16, ""num_hidden_layers"": 1,
+                ""num_attention_heads"": 2, ""vocab_size"": 6 }");
+            Assert.True(PretrainedArchitectures<double>.TryResolve(gemma, null, out _));
+            Assert.True(PretrainedArchitectures<double>.TryResolve(phi3, null, out _));
         }
 
         // ---- PretrainedSource descriptor ----
