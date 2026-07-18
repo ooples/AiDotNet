@@ -1375,6 +1375,19 @@ internal class ContinuousBatcher<T> : IDisposable
             lastLogits[i] = Convert.ToSingle(logits[indices]);
         }
 
+        // Per-token additive logit bias (OpenAI logit_bias): applied first so a structured-output mask can
+        // still veto a biased-up token that would break the format, and a -100 ban composes with the mask.
+        if (request.LogitBias is { Count: > 0 } bias)
+        {
+            foreach (var kv in bias)
+            {
+                if (kv.Key >= 0 && kv.Key < vocabSize)
+                {
+                    lastLogits[kv.Key] += kv.Value;
+                }
+            }
+        }
+
         // Structured-output constraint (JSON / regex / grammar / choice): forbid tokens that would break
         // the required format BEFORE greedy/softmax/sampling by setting their logit to -inf. Applied here so
         // it composes with temperature, min-p, top-p, and top-k. Speculation is disabled for constrained

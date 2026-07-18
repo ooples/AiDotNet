@@ -157,7 +157,8 @@ public sealed class TextGenerationService : ITextGenerationService
             EosTokenId = request.EosTokenId,
             SpeculationDepth = request.NumDraftTokens,
             Seed = request.RequestId is { } id ? id.GetHashCode() : (int?)null,
-            Constraint = request.Constraint
+            Constraint = request.Constraint,
+            LogitBias = request.LogitBias
         };
     }
 

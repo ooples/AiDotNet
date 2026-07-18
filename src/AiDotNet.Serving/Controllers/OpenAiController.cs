@@ -92,7 +92,7 @@ public sealed class OpenAiController : ControllerBase
         try
         {
             sdr = BuildRequest(ctx, prompt, request.ResolveMaxTokens(DefaultMaxTokens),
-                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat);
+                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias);
         }
         catch (ArgumentException ex)
         {
@@ -179,7 +179,7 @@ public sealed class OpenAiController : ControllerBase
         try
         {
             sdr = BuildRequest(ctx, request.PromptText(), request.ResolveMaxTokens(DefaultMaxTokens),
-                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat);
+                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias);
         }
         catch (ArgumentException ex)
         {
@@ -296,7 +296,7 @@ public sealed class OpenAiController : ControllerBase
     /// <summary>Encodes the prompt and builds the engine request. When <paramref name="responseFormat"/> is
     /// supplied it compiles a structured-output constraint (json_object / json_schema / regex); a malformed
     /// response_format throws <see cref="ArgumentException"/>, which the caller maps to a 400.</summary>
-    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK, double? minP, JToken? responseFormat = null)
+    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK, double? minP, JToken? responseFormat = null, JObject? logitBias = null)
     {
         ctx.PromptTokenIds = ctx.Tokenizer.Encode(prompt).TokenIds.ToArray();
         return new SpeculativeDecodingRequest
@@ -309,7 +309,32 @@ public sealed class OpenAiController : ControllerBase
             MinP = minP ?? 0.0,
             EosTokenId = ctx.EosTokenId,
             Constraint = StructuredOutputFactory.Build(responseFormat, ctx.Tokenizer, ctx.EosTokenId ?? -1),
+            LogitBias = ParseLogitBias(logitBias),
         };
+    }
+
+    /// <summary>Parses an OpenAI <c>logit_bias</c> map (token-id string -&gt; bias number) into a typed
+    /// dictionary. Throws <see cref="ArgumentException"/> for malformed entries so the caller returns 400.</summary>
+    private static IReadOnlyDictionary<int, float>? ParseLogitBias(JObject? logitBias)
+    {
+        if (logitBias is null || logitBias.Count == 0)
+        {
+            return null;
+        }
+        var map = new Dictionary<int, float>(logitBias.Count);
+        foreach (var prop in logitBias.Properties())
+        {
+            if (!int.TryParse(prop.Name, out int tokenId))
+            {
+                throw new ArgumentException($"'logit_bias' keys must be integer token ids; got '{prop.Name}'.");
+            }
+            if (prop.Value.Type is not (JTokenType.Integer or JTokenType.Float))
+            {
+                throw new ArgumentException($"'logit_bias' values must be numbers; got '{prop.Value}' for token {tokenId}.");
+            }
+            map[tokenId] = prop.Value.Value<float>();
+        }
+        return map;
     }
 
     /// <summary>Runs generation to completion, applying stop strings. Returns (text, tokenCount, finishReason).</summary>

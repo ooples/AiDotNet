@@ -124,4 +124,41 @@ public class StructuredOutputConstraintTests
         Assert.Equal(3, result.GeneratedTokens[0]);
         Assert.Equal(7, result.GeneratedTokens[1]);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task Batcher_LogitBias_BansAndForcesTokens()
+    {
+        await Task.Yield();
+
+        // Model prefers token 5. A large negative bias bans 5; a large positive bias on 8 makes it win.
+        Tensor<float> model(Tensor<float> input)
+        {
+            int seq = input.Shape[^1];
+            var logits = new Tensor<float>(new[] { 1, seq, Vocab });
+            for (int p = 0; p < seq; p++)
+                for (int i = 0; i < Vocab; i++)
+                    logits[new[] { 0, p, i }] = i == 5 ? 10f : 0f;
+            return logits;
+        }
+
+        using var batcher = new ContinuousBatcher<float>(new ContinuousBatcherConfig
+        {
+            AutoStart = true,
+            EosTokenId = Eos
+        }, model);
+
+        var request = new GenerationRequest<float>
+        {
+            PromptTokenIds = new List<int> { 1, 4, 6 },
+            MaxNewTokens = 3,
+            Temperature = 0f,
+            EosTokenId = Eos,
+            LogitBias = new Dictionary<int, float> { [5] = -100f, [8] = 50f }
+        };
+
+        var result = await batcher.GenerateAsync(request);
+
+        Assert.DoesNotContain(5, result.GeneratedTokens); // banned
+        Assert.All(result.GeneratedTokens, t => Assert.Equal(8, t)); // forced winner
+    }
 }

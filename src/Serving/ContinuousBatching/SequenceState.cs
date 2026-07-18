@@ -340,6 +340,13 @@ public class GenerationRequest<T>
     public AiDotNet.Serving.StructuredOutput.ITokenConstraint? Constraint { get; set; }
 
     /// <summary>
+    /// Optional per-token additive logit bias (OpenAI <c>logit_bias</c>): token id -&gt; bias added to the
+    /// token's logit before sampling. Positive values make a token more likely, large negative values
+    /// (e.g. -100) effectively ban it. Null = no biasing. Applied before any structured-output constraint.
+    /// </summary>
+    public IReadOnlyDictionary<int, float>? LogitBias { get; set; }
+
+    /// <summary>
     /// Repetition penalty (1.0 = no penalty).
     /// </summary>
     public float RepetitionPenalty { get; set; } = 1.0f;

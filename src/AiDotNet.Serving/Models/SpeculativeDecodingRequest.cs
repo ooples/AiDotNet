@@ -91,6 +91,12 @@ public class SpeculativeDecodingRequest
     /// </summary>
     public AiDotNet.Serving.StructuredOutput.ITokenConstraint? Constraint { get; set; }
 
+    /// <summary>
+    /// Gets or sets an optional per-token additive logit bias (OpenAI <c>logit_bias</c>): token id -&gt;
+    /// bias added before sampling. Null = none.
+    /// </summary>
+    public IReadOnlyDictionary<int, float>? LogitBias { get; set; }
+
     internal string? Validate()
     {
         if (InputTokens == null || InputTokens.Length == 0)

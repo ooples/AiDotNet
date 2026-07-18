@@ -23,6 +23,7 @@ public sealed class ChatCompletionRequest
     [JsonProperty("n")] public int? N { get; set; }
     [JsonProperty("seed")] public int? Seed { get; set; }
     [JsonProperty("response_format")] public JToken? ResponseFormat { get; set; }
+    [JsonProperty("logit_bias")] public JObject? LogitBias { get; set; }
 
     /// <summary>Resolves the effective max-new-tokens (max_tokens or max_completion_tokens, else fallback).</summary>
     public int ResolveMaxTokens(int fallback) => MaxTokens ?? MaxCompletionTokens ?? fallback;
@@ -55,6 +56,7 @@ public sealed class CompletionRequest
     [JsonProperty("stop")] public JToken? Stop { get; set; }
     [JsonProperty("seed")] public int? Seed { get; set; }
     [JsonProperty("response_format")] public JToken? ResponseFormat { get; set; }
+    [JsonProperty("logit_bias")] public JObject? LogitBias { get; set; }
 
     public int ResolveMaxTokens(int fallback) => MaxTokens ?? fallback;
     public string PromptText() => OpenAiJson.ContentText(Prompt);
