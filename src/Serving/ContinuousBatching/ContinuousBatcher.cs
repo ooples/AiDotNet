@@ -92,6 +92,11 @@ internal class ContinuousBatcher<T> : IDisposable
     // batched decode ran this step). Exposed for continuous-batching tests/telemetry.
     internal int LastBatchedDecodeCount { get; private set; }
 
+    // Number of prefill chunk-forwards performed for the most recently started paged prefill. With
+    // MaxPrefillChunkTokens <= 0 a prompt is prefilled in a single forward (count 1); with chunking a long
+    // prompt spans multiple forwards (count > 1). Exposed for chunked-prefill tests/telemetry.
+    internal int LastPrefillChunkCount { get; private set; }
+
     /// <summary>
     /// Fraction of drafted tokens accepted by the target model, or null when speculative
     /// decoding has not run for this batcher. Exposed for serving-layer telemetry. Covers both the
@@ -591,6 +596,7 @@ internal class ContinuousBatcher<T> : IDisposable
             if (cached >= promptLen) cached = promptLen - 1;
             LastPrefillReusedPrefixTokens = cached;
             sequence.PrefillCursor = cached;
+            LastPrefillChunkCount = 0;
         }
 
         int start = sequence.PrefillCursor;
@@ -607,6 +613,7 @@ internal class ContinuousBatcher<T> : IDisposable
             for (int i = 0; i < chunk; i++) piece.Add(prompt[start + i]);
             logits = model.PredictWithContext(CreateInputTensor(piece), new InferenceForwardContext(seqId, start));
             sequence.PrefillCursor = start + chunk;
+            LastPrefillChunkCount++;
         }
         else
         {

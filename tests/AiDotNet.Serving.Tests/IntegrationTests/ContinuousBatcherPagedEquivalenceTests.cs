@@ -371,20 +371,28 @@ public class ContinuousBatcherPagedEquivalenceTests
         var prompt = new[] { 1, 2, 3, 4, 5, 6, 7 };
         const int maxNew = 8;
 
-        int[] Drive(int chunkTokens)
+        int[] Drive(int chunkTokens, out int prefillChunks)
         {
             var config = new ContinuousBatcherConfig { AutoStart = false, EosTokenId = 999, MaxPrefillChunkTokens = chunkTokens };
             using var batcher = new ContinuousBatcher<float>(config, model, cache);
-            return DriveGreedy(batcher, prompt, maxNew);
+            int[] tokens = DriveGreedy(batcher, prompt, maxNew);
+            prefillChunks = batcher.LastPrefillChunkCount;
+            return tokens;
         }
 
         // Whole-prompt prefill (chunking off) vs 2-token-chunked prefill of the SAME 7-token prompt must
         // produce byte-identical output — chunking only changes how many steps prefill takes.
-        int[] whole = Drive(0);
-        int[] chunked = Drive(2);
+        int[] whole = Drive(0, out int wholeChunks);
+        int[] chunked = Drive(2, out int chunkedChunks);
 
         Assert.Equal(maxNew, whole.Length);
         Assert.Equal(whole, chunked);
+
+        // Prove chunking actually ran multi-step prefill and the control ran single-step — otherwise this
+        // test would pass even if MaxPrefillChunkTokens were silently ignored. A 7-token prompt in 2-token
+        // chunks needs ceil(7/2)=4 forwards; whole-prompt prefill needs exactly 1.
+        Assert.Equal(1, wholeChunks);
+        Assert.Equal(4, chunkedChunks);
     }
 
     [Fact(Timeout = 120000)]
