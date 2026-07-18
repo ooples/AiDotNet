@@ -39,22 +39,31 @@ public sealed class TextGenerationService : ITextGenerationService
     }
 
     /// <inheritdoc/>
-    public SpeculativeDecodingResponse Generate(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default)
+    /// <inheritdoc/>
+    public Task<SpeculativeDecodingResponse> GenerateAsync(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default)
     {
         Guard.NotNull(request);
 
         return numericType switch
         {
-            NumericType.Double => GenerateTyped<double>(modelName, request, cancellationToken),
-            NumericType.Float => GenerateTyped<float>(modelName, request, cancellationToken),
-            NumericType.Decimal => GenerateTyped<decimal>(modelName, request, cancellationToken),
-            _ => new SpeculativeDecodingResponse
+            NumericType.Double => GenerateTypedAsync<double>(modelName, request, cancellationToken),
+            NumericType.Float => GenerateTypedAsync<float>(modelName, request, cancellationToken),
+            NumericType.Decimal => GenerateTypedAsync<decimal>(modelName, request, cancellationToken),
+            _ => Task.FromResult(new SpeculativeDecodingResponse
             {
                 Error = $"Unsupported numeric type '{numericType}' for text generation.",
                 RequestId = request.RequestId
-            }
+            })
         };
     }
+
+    /// <summary>
+    /// Synchronous wrapper over <see cref="GenerateAsync"/> for non-request-thread callers. Request-serving
+    /// controllers must call <see cref="GenerateAsync"/> so the request thread is not blocked for the whole
+    /// completion (which would starve the thread pool under serving concurrency).
+    /// </summary>
+    public SpeculativeDecodingResponse Generate(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default)
+        => GenerateAsync(modelName, numericType, request, cancellationToken).GetAwaiter().GetResult();
 
     /// <inheritdoc/>
     public bool SupportsGeneration(string modelName, NumericType numericType) => numericType switch
@@ -196,7 +205,7 @@ public sealed class TextGenerationService : ITextGenerationService
         };
     }
 
-    private SpeculativeDecodingResponse GenerateTyped<T>(string modelName, SpeculativeDecodingRequest request, CancellationToken cancellationToken)
+    private async Task<SpeculativeDecodingResponse> GenerateTypedAsync<T>(string modelName, SpeculativeDecodingRequest request, CancellationToken cancellationToken)
     {
         var model = _modelRepository.GetModel<T>(modelName);
         if (model is null)
@@ -237,7 +246,8 @@ public sealed class TextGenerationService : ITextGenerationService
             try
             {
                 int eos = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId;
-                var genResult = wrapper.RunGeneration(BuildGenerationRequest<T>(request), cancellationToken);
+                var genResult = await wrapper.RunGenerationAsync(BuildGenerationRequest<T>(request), cancellationToken)
+                    .ConfigureAwait(false);
 
                 // Remove a trailing EOS, cap to MaxNewTokens, and trim log-probs to the SAME final count so
                 // both generation paths honor the one-logprob-per-generated-token contract identically.
@@ -342,7 +352,7 @@ public sealed class TextGenerationService : ITextGenerationService
             };
         }
 
-        var result = task.GetAwaiter().GetResult();
+        var result = await task.ConfigureAwait(false);
 
         // Same normalization as the incremental path: strip trailing EOS, cap to MaxNewTokens, and trim
         // log-probs to the final token count so output is identical regardless of which path served it.

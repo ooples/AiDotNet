@@ -853,20 +853,30 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     }
 
     /// <summary>
-    /// Submits a request to the shared batcher and blocks until it completes, returning the result. The
-    /// batcher's background loop drives generation; concurrent callers co-batch on the same engine.
+    /// Submits a request to the shared batcher and returns the completion asynchronously. The batcher's
+    /// background loop drives generation; the caller should <c>await</c> this so the ASP.NET request thread is
+    /// released back to the thread pool instead of being parked for the whole completion. Concurrent callers
+    /// co-batch on the same engine.
     /// </summary>
-    internal AiDotNet.Serving.ContinuousBatching.GenerationResult<T> RunGeneration(
+    internal System.Threading.Tasks.Task<AiDotNet.Serving.ContinuousBatching.GenerationResult<T>> RunGenerationAsync(
         AiDotNet.Serving.ContinuousBatching.GenerationRequest<T> request,
         System.Threading.CancellationToken cancellationToken)
     {
         Guard.NotNull(request);
         var batcher = EnsureBatcher()
             ?? throw new NotSupportedException($"Model '{_modelName}' does not support incremental generation.");
-        // The background loop drives generation; just await the result (blocks this request thread without
-        // consuming CPU, leaving cores for the loop's forward).
-        return batcher.GenerateAsync(request, cancellationToken).GetAwaiter().GetResult();
+        return batcher.GenerateAsync(request, cancellationToken);
     }
+
+    /// <summary>
+    /// Synchronous wrapper over <see cref="RunGenerationAsync"/> for non-request-thread callers (tests, batch
+    /// tooling). Request-serving paths must use <see cref="RunGenerationAsync"/> to avoid blocking a thread-pool
+    /// worker for the whole completion.
+    /// </summary>
+    internal AiDotNet.Serving.ContinuousBatching.GenerationResult<T> RunGeneration(
+        AiDotNet.Serving.ContinuousBatching.GenerationRequest<T> request,
+        System.Threading.CancellationToken cancellationToken)
+        => RunGenerationAsync(request, cancellationToken).GetAwaiter().GetResult();
 
     /// <summary>
     /// The shared batcher's cumulative speculative-decoding acceptance rate (fraction of drafted tokens
