@@ -44,10 +44,45 @@ internal sealed class GpuPagedAttention : IDisposable
     /// <summary>Whether a GPU engine with paged-attention kernels is active in this process.</summary>
     public static bool IsAvailable => TryGetBackend(out _);
 
+    /// <summary>The number of GPU devices available for multi-GPU tensor-parallel placement (0 when none).</summary>
+    public static int DeviceCount
+    {
+        get
+        {
+            try { return AiDotNet.Tensors.Engines.DirectGpu.DirectGpuBackendFactory.GetAvailableGpus().Length; }
+            catch { return 0; }
+        }
+    }
+
+    /// <summary>
+    /// Creates a fresh GPU backend bound to <paramref name="deviceIndex"/> (its own context) so a tensor-parallel
+    /// rank can run on a distinct device. Returns null when no GPU is available. The caller owns/disposes it.
+    /// </summary>
+    public static IDirectGpuBackend? CreateDeviceBackend(int deviceIndex)
+    {
+        try
+        {
+            var b = AiDotNet.Tensors.Engines.DirectGpu.DirectGpuBackendFactory.CreateNew(
+                AiDotNet.Tensors.Engines.DirectGpu.GpuBackendPreference.Auto, deviceIndex);
+            return (b is not null && b.IsAvailable) ? b : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     /// <summary>Creates a GPU paged-attention head-group, or null when no compatible GPU backend is active.</summary>
     public static GpuPagedAttention? TryCreate(int heads, int kvHeads, int headDim, int blockSize, int maxBlocks)
     {
         if (!TryGetBackend(out var backend) || backend is null) return null;
+        return Create(backend, heads, kvHeads, headDim, blockSize, maxBlocks);
+    }
+
+    /// <summary>Creates a GPU paged-attention head-group on an explicit (per-device) backend.</summary>
+    public static GpuPagedAttention? Create(IDirectGpuBackend backend, int heads, int kvHeads, int headDim, int blockSize, int maxBlocks)
+    {
+        if (backend is null) return null;
         try
         {
             return new GpuPagedAttention(backend, heads, kvHeads, headDim, blockSize, maxBlocks);
