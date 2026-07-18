@@ -277,6 +277,22 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
+    /// Configures the model from a pretrained checkpoint (Hugging Face hub id or local safetensors
+    /// directory), reconstructing the architecture and loading its weights automatically.
+    /// </summary>
+    /// <param name="source">The pretrained-source descriptor (see
+    /// <see cref="AiDotNet.ModelLoading.Pretrained.PretrainedSource"/>), e.g.
+    /// <c>PretrainedSource.HuggingFace("meta-llama/Llama-3.1-8B-Instruct")</c>.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Instead of building a model layer by layer or training from scratch, hand
+    /// the builder a pretrained model's name and it downloads, reconstructs, and loads it for you — ready
+    /// to serve, fine-tune, or export like any other configured model. The builder's input/output types
+    /// must be <c>Tensor&lt;T&gt;</c> for decoder language models.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModel(AiDotNet.ModelLoading.Pretrained.PretrainedSource source);
+
+    /// <summary>
     /// Configures the optimization algorithm for the model.
     /// </summary>
     /// <remarks>
