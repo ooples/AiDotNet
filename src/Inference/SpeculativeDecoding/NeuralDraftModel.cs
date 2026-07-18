@@ -46,6 +46,8 @@ public class NeuralDraftModel<T> : IDraftModel<T>
         int? seed = null)
     {
         Guard.NotNull(forwardFunc);
+        Guard.Positive(vocabSize);
+        Guard.Positive(maxDraftTokens);
         _forwardFunc = forwardFunc;
         _vocabSize = vocabSize;
         _maxDraftTokens = maxDraftTokens;
@@ -60,6 +62,12 @@ public class NeuralDraftModel<T> : IDraftModel<T>
         int numDraftTokens,
         T temperature)
     {
+        Guard.NotNull(inputTokens);
+        Guard.NonNegative(numDraftTokens);
+        if (!NumOps.GreaterThan(temperature, NumOps.Zero))
+        {
+            throw new ArgumentOutOfRangeException(nameof(temperature), "temperature must be positive.");
+        }
         numDraftTokens = Math.Min(numDraftTokens, _maxDraftTokens);
 
         var tokens = new List<int>();
@@ -77,6 +85,11 @@ public class NeuralDraftModel<T> : IDraftModel<T>
             // Forward pass
             var currentVector = new Vector<int>(currentTokens.ToArray());
             var logits = _forwardFunc(currentVector);
+            if (logits is null || logits.Length != _vocabSize)
+            {
+                throw new InvalidOperationException(
+                    $"The draft model's forward function must return exactly {_vocabSize} logits (VocabSize); got {(logits is null ? "null" : logits.Length.ToString())}.");
+            }
 
             // Convert to probabilities with temperature
             var distribution = Softmax(logits, temperature);

@@ -391,6 +391,14 @@ public class InferenceOptimizationConfig
             throw new InvalidOperationException(
                 $"PagedKVCacheBlockSize must be positive when EnablePagedKVCache is enabled. Got: {PagedKVCacheBlockSize}");
         }
+
+        // Documented domain is 0 (disabled) or a positive token count. A negative value is invalid — reject
+        // it rather than letting downstream code silently treat it as disabled.
+        if (MaxPrefillChunkTokens < 0)
+        {
+            throw new InvalidOperationException(
+                $"MaxPrefillChunkTokens must be 0 (disabled) or a positive token count. Got: {MaxPrefillChunkTokens}");
+        }
     }
 
     #endregion
