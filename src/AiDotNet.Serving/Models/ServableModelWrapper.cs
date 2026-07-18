@@ -432,12 +432,18 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         if (config.TensorParallelSize > 1)
         {
             int tpBlockSize = config.PagedKVCacheBlockSize > 0 ? config.PagedKVCacheBlockSize : 16;
+            // Run each rank's paged attention on the GPU when a compatible GPU engine is active (FP32 kernels);
+            // otherwise the model runs the CPU (FP64) attention. Either way the sharding + output are correct.
+            bool tpUseGpu = AiDotNet.DistributedTraining.GpuPagedAttention.IsAvailable;
             var tpModel = AiDotNet.DistributedTraining.TensorParallelPartitioner<T>.TryBuild(
-                source, config.TensorParallelSize, tpBlockSize, numBlocks: 512, out var tpReason);
+                source, config.TensorParallelSize, tpBlockSize, numBlocks: 512, out var tpReason, useGpu: tpUseGpu);
             if (tpModel is not null)
             {
                 tpModel.SetTrainingMode(false);
                 var composite = new AiDotNet.Inference.PagedAttention.CompositePagedKVCache<T>(tpModel.RankCaches);
+                // Keep the model's per-rank device KV in lockstep with the scheduler: release it when a sequence
+                // is freed (no-op on the CPU path).
+                composite.OnFreeSequence = tpModel.FreeGpuSequence;
                 long tpWarmupId = long.MaxValue;
                 if (composite.AllocateSequence(tpWarmupId, 0))
                 {

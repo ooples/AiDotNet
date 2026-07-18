@@ -92,7 +92,9 @@ public sealed class TensorParallelServingWiringTests
         // Served with TensorParallelSize = 2 (partitioner engaged) vs the directly-driven partitioned model.
         int[] served = ServeGreedy(model, tpSize: 2, prompt, maxNew);
 
-        var tp = TensorParallelPartitioner<double>.TryBuild(model, worldSize: 2, blockSize: 16, numBlocks: 512, out var reason);
+        // Match serving's GPU auto-enable so the directly-driven reference uses the same (GPU or CPU) path.
+        var tp = TensorParallelPartitioner<double>.TryBuild(
+            model, worldSize: 2, blockSize: 16, numBlocks: 512, out var reason, useGpu: GpuPagedAttention.IsAvailable);
         Assert.True(tp is not null, $"model should be partitionable (reason: {reason})");
         var composite = new CompositePagedKVCache<double>(tp!.RankCaches);
         var direct = GenerateDirect(tp, composite, prompt, maxNew);

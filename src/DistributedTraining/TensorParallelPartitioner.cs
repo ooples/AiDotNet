@@ -22,7 +22,7 @@ internal static class TensorParallelPartitioner<T>
     /// transformer, or when its head count / FFN width are not divisible by <paramref name="worldSize"/>.
     /// </summary>
     public static TensorParallelPagedModel<T>? TryBuild(
-        NeuralNetworkBase<T> model, int worldSize, int blockSize, int numBlocks, out string reason)
+        NeuralNetworkBase<T> model, int worldSize, int blockSize, int numBlocks, out string reason, bool useGpu = false)
     {
         reason = string.Empty;
         if (model is null) { reason = "model is null"; return null; }
@@ -163,7 +163,8 @@ internal static class TensorParallelPartitioner<T>
             finalNormGamma: finalNorm?.GetGammaTensor(),
             ffnActivation: ffnActivation,
             rmsNormEpsilon: Convert.ToDouble(blocks[0].Norm1.GetEpsilon()),
-            lmHeadBias: DenseBias(head, vocab));
+            lmHeadBias: DenseBias(head, vocab),
+            useGpu: useGpu);
 
         tp.SetFromFullWeights(embMatrix, lmHead, perLayer);
         return tp;

@@ -23,6 +23,13 @@ internal sealed class CompositePagedKVCache<T> : PagedKVCache<T>
 {
     private readonly PagedKVCache<T>[] _ranks;
 
+    /// <summary>
+    /// Optional hook invoked when a sequence is freed, in addition to fanning the free to the CPU rank caches.
+    /// Used in GPU tensor-parallel serving to release the model's per-rank device KV for the sequence, keeping
+    /// the device caches in lockstep with the scheduler-driven CPU caches.
+    /// </summary>
+    public Action<long>? OnFreeSequence { get; set; }
+
     /// <summary>Creates a composite over the given per-rank caches (at least one).</summary>
     public CompositePagedKVCache(PagedKVCache<T>[] ranks)
         : base(MinimalConfig())
@@ -71,6 +78,7 @@ internal sealed class CompositePagedKVCache<T> : PagedKVCache<T>
     public override void FreeSequence(long sequenceId)
     {
         foreach (var r in _ranks) r.FreeSequence(sequenceId);
+        OnFreeSequence?.Invoke(sequenceId);
     }
 
     public override bool TruncateSequence(long sequenceId, int newLength)
