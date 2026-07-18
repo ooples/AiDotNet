@@ -268,13 +268,39 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
             "MaxNewTokens must be greater than 0",
             Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, MaxNewTokens = 0 }));
 
+        // Temperature 0 (greedy) is VALID; only negative / non-finite is rejected.
         Assert.Equal(
-            "Temperature must be greater than 0",
-            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, Temperature = 0.0 }));
+            "Temperature must be a finite value >= 0 (0 = greedy)",
+            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, Temperature = -1.0 }));
 
         Assert.Equal(
-            "NumDraftTokens must be greater than 0",
-            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, NumDraftTokens = 0 }));
+            "TopP must be in the range (0, 1]",
+            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, TopP = 1.5 }));
+
+        Assert.Equal(
+            "TopK must be >= 0 (0 disables top-k)",
+            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, TopK = -1 }));
+
+        Assert.Equal(
+            "MinP must be in the range [0, 1]",
+            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, MinP = 2.0 }));
+
+        Assert.Equal(
+            "FrequencyPenalty must be a finite value in [-2, 2]",
+            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, FrequencyPenalty = 3.0 }));
+
+        Assert.Equal(
+            "PresencePenalty must be a finite value in [-2, 2]",
+            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, PresencePenalty = -3.0 }));
+
+        Assert.Equal(
+            "TopLogprobs must be in the range [0, 20]",
+            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, TopLogprobs = 21 }));
+
+        // NumDraftTokens 0 (speculation off) is VALID; only negative is rejected.
+        Assert.Equal(
+            "NumDraftTokens must be >= 0 (0 disables speculation)",
+            Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, NumDraftTokens = -1 }));
 
         Assert.Equal(
             "TreeBranchFactor must be greater than 0 when UseTreeSpeculation is true",
@@ -283,6 +309,12 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
         Assert.Equal(
             "MaxTreeDepth must be greater than 0 when UseTreeSpeculation is true",
             Validate(new SpeculativeDecodingRequest { InputTokens = new[] { 1 }, UseTreeSpeculation = true, TreeBranchFactor = 2, MaxTreeDepth = 0 }));
+
+        // Zero-valued controls are accepted: temperature 0 (greedy) + NumDraftTokens 0 (speculation off).
+        Assert.Null(Validate(new SpeculativeDecodingRequest
+        {
+            InputTokens = new[] { 1 }, MaxNewTokens = 1, Temperature = 0.0, NumDraftTokens = 0
+        }));
 
         Assert.Null(Validate(new SpeculativeDecodingRequest
         {
