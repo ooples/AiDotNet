@@ -99,15 +99,33 @@ CI now exercises a REAL scope-fenced aidn2 token instead of the synthetic Module
   other branches) is untouched — no cross-branch impact, and ModuleInitializer keeps this offline-verifiable
   token as-is. Proven locally: LicensingIntegration + aidn2 binding tests pass 17/17 with this exact setup.
 
-**Rotation (annual):** re-mint with the same kid using the stored private key —
-`AIDOTNET_CI_LICENSE_SIGNING_KEY_PKCS8` decodes to the Ed25519 PKCS#8 — and update `AIDOTNET_CI_LICENSE_KEY`.
-The embedded public key is unchanged, so only the secret rotates.
+**Rotation — automated (`.github/workflows/rotate-ci-license.yml`):** a monthly (+ manual) job re-signs the
+`scope:ci` token with `AIDOTNET_CI_LICENSE_SIGNING_KEY_PKCS8` and updates `AIDOTNET_CI_LICENSE_KEY` before
+expiry. It needs a **`CI_LICENSE_ROTATION_PAT`** secret (a token with `secrets: write`) — `GITHUB_TOKEN`
+can't update repo secrets. The embedded public key is unchanged, so only the secret rotates.
 
-## Step 7 — migrate issuance + retire AIDN-* (rollout)
+**Release embed — automated:** `release-please.yml` injects `LicensePublicKey.json` (+ `LicenseRevocation.json`)
+from the repo var before the release build, so a key rotation ships in the released NuGet without a code
+change (a set var overrides the committed file). The repo also commits the file, so a build embeds it even
+with the var unset.
 
-Once clients in the wild embed the public key: update `register-community-license` and `stripe-webhook` to
-ALSO mint an aidn2 token (dual-issue) via `_shared/aidn2.ts`, re-issue existing paid keys with caps, then
-deprecate the online-only `AIDN-*` path after the 90-day migration window in the design doc.
+**Online fallback key (design §9) — superseded:** the ModuleInitializer hardening (validate the env key
+offline; fall back to the synthetic license when it doesn't verify Active) already covers "the offline embed
+is missing" for CI, and real users keep their durable `AIDN-*` online key — so a dedicated high-activation
+fallback key isn't provisioned.
+
+## Step 7 — rollout status + retire AIDN-*
+
+- **Community bootstrap issuance — DONE:** `register-community-license` now also mints a short-exp,
+  load-only (`tensors:load`) `aidn2` bootstrap token so a new community user can load offline immediately.
+  It's non-machine-bound but safe *because* it's load-only; **paid tiers get no non-bound token** — their
+  SDK derives a machine-bound one via `issue-license`, so `stripe-webhook` needs no aidn2 change.
+  (Redeploy the function — edge functions are NOT auto-deployed by `deploy-website.yml`, which only runs
+  `supabase db push`.)
+- **Re-issue paid keys with caps — no-op:** caps are tier-derived in `validate_license_key`, so all existing
+  paid keys already receive them on validation (verified: 9 pro + 3 enterprise + 42 community).
+- **Publish first CRL — DONE:** `get-revocations` serves the signed (initially empty) CRL.
+- **Deprecate `AIDN-*`:** keep the online `AIDN-*` path through the 90-day migration window, then retire it.
 
 ## Rollback
 
