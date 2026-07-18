@@ -512,6 +512,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // generation — they have manual reduced-scale scaffolds — so they are not listed here.)
         "HuBERTASR", "Wav2Vec2ASR", "WavLMASR", "BESTRQ", "W2vBERT", "SPIRAL", "AVHuBERT",
         "WavLMRobust", "OmnilangualASR", "MMS", "USM", "XLSR",
+        // Wav2Vec2 (Audio/Foundations, CreateDefaultFoundationModelLayers) and Wav2Vec2Model
+        // (Audio/SpeechRecognition, CreateWav2Vec2Layers): the same wav2vec-2 lineage as the ASR
+        // foundation family above — BERT-base-scale 12-layer/768-dim conv-encoder + transformer. Their
+        // multi-second per-step forward+backward overran the gate SOLELY on the many-iteration training
+        // invariants (Wav2Vec2Model.MoreData: 120 s timeout at 250 iters; Wav2Vec2.LossStrictlyDecreases:
+        // 180 s timeout at 100 iters) — every correctness invariant (DifferentInputs / GradientFlow /
+        // ForwardPass-finite / Clone / Training-direction) already passes. Both are AudioNN family and
+        // hit the generic audio branch, so <float> + its Fp32-gated smoke-iteration caps fit them to the
+        // timeout exactly like Wav2Vec2ASR, WITHOUT the MoreDataTolerance double-define that
+        // HeavyTrainingTimeoutClassNames would cause (the audio branch already emits MoreDataTolerance).
+        "Wav2Vec2", "Wav2Vec2Model",
         // ConvTransformer (SpeechRecognition/ConformerFamily): same deep conv+attention ASR encoder;
         // routes to the audio branch and already gets its relaxed MoreDataTolerance there, but without
         // this membership it missed the smoke-iteration caps and MoreData (250 iters) timed out solo.
