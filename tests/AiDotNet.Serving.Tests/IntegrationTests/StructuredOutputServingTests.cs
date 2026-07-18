@@ -208,4 +208,63 @@ public class StructuredOutputServingTests
             Assert.NotNull(response.Choices[i].Message);
         }
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task ChatCompletions_Tools_ForcesValidToolCall()
+    {
+        var tokenizer = CharacterTokenizer.CreateAscii();
+        int vocab = tokenizer.VocabularySize;
+
+        // Uniform logits: the tool constraint alone forces the (fully schema-determined) output.
+        Tensor<float> gen(Tensor<float> input)
+        {
+            int seq = input.Shape[^1];
+            return new Tensor<float>(new[] { 1, seq, vocab });
+        }
+        var wrapper = new ServableModelWrapper<float>(
+            "sm", inputDimension: 1, outputDimension: vocab, predictFunc: v => v, generationForward: gen);
+
+        var repo = new OneModelRepo("sm", wrapper);
+        var tokenizers = new TokenizerRegistry();
+        tokenizers.Register("sm", tokenizer);
+        var service = new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance);
+        var controller = new OpenAiController(repo, tokenizers, service, NullLogger<OpenAiController>.Instance);
+
+        var request = new ChatCompletionRequest
+        {
+            Model = "sm",
+            Messages = { new ChatMessage { Role = "user", Content = "set status" } },
+            MaxTokens = 200,
+            Temperature = 0,
+            Stream = false,
+            ToolChoice = "required"
+        };
+        // enum-constrained schema -> the whole tool-call JSON is deterministic regardless of model logits.
+        request.Tools = new List<ToolDefinition>
+        {
+            new ToolDefinition
+            {
+                Type = "function",
+                Function = new FunctionDefinition
+                {
+                    Name = "set_status",
+                    Parameters = JObject.Parse(@"{""type"":""object"",""properties"":{""status"":{""type"":""string"",""enum"":[""on""]}}}")
+                }
+            }
+        };
+
+        var result = await controller.ChatCompletions(request, default);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<ChatCompletionResponse>(ok.Value);
+        var choice = response.Choices[0];
+
+        Assert.Equal("tool_calls", choice.FinishReason);
+        Assert.Null(choice.Message!.Content);
+        Assert.NotNull(choice.Message.ToolCalls);
+        var call = choice.Message.ToolCalls![0];
+        Assert.Equal("set_status", call.Function!.Name);
+        var args = JObject.Parse(call.Function.Arguments);
+        Assert.Equal("on", args["status"]!.ToString());
+    }
 }

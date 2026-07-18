@@ -84,8 +84,8 @@ internal static class StructuredOutputFactory
     }
 
     // Builds (and caches) token id -> decoded text piece for the whole vocabulary. Used to judge, per token,
-    // what characters it would append to the output.
-    private static string[] GetVocabStrings(ITokenizer tokenizer)
+    // what characters it would append to the output. Shared with ToolConstraintFactory.
+    internal static string[] GetVocabStrings(ITokenizer tokenizer)
     {
         if (_vocabCache.TryGetValue(tokenizer, out var cached))
         {

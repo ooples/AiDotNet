@@ -89,11 +89,21 @@ public sealed class OpenAiController : ControllerBase
 
         string prompt = ChatTemplate.Render(request.Messages.Select(m => (m.Role, m.TextContent())));
         SpeculativeDecodingRequest sdr;
+        bool toolMode;
         try
         {
             sdr = BuildRequest(ctx, prompt, request.ResolveMaxTokens(DefaultMaxTokens),
                 request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias,
                 request.FrequencyPenalty, request.PresencePenalty, request.Logprobs, request.TopLogprobs);
+
+            // Function calling: constrain the output to a valid tool call whose arguments match the tool's
+            // JSON schema (reuses the structured-output engine). Takes precedence over response_format.
+            var (toolConstraint, useTools) = ToolConstraintFactory.Build(request.Tools, request.ToolChoice, ctx.Tokenizer, ctx.EosTokenId ?? -1);
+            toolMode = useTools;
+            if (toolMode)
+            {
+                sdr.Constraint = toolConstraint;
+            }
         }
         catch (ArgumentException ex)
         {
@@ -114,16 +124,32 @@ public sealed class OpenAiController : ControllerBase
             for (int i = 0; i < n; i++)
             {
                 string text; int genCount; string finish; ChatLogProbs? logProbs = null;
-                if (request.Logprobs == true)
+                if (request.Logprobs == true || toolMode)
                 {
-                    // logprobs come from the batch path (the streaming Collect path does not surface them).
+                    // The batch path surfaces logprobs and reliably drives a constrained generation to
+                    // completion; the streaming Collect path is used only for plain free-form output.
                     (text, genCount, finish, logProbs) = CollectWithLogProbs(ctx, sdr, stops, ct);
                 }
                 else
                 {
                     (text, genCount, finish) = Collect(ctx, sdr, stops, ct);
                 }
-                response.Choices.Add(new ChatChoice { Index = i, Message = new ChatMessageOut { Role = "assistant", Content = text }, FinishReason = finish, LogProbs = logProbs });
+                if (toolMode)
+                {
+                    // Parse the constrained JSON into a tool call. Content is null when the model called a tool.
+                    var toolCalls = ToolConstraintFactory.Parse(text, "call_" + Guid.NewGuid().ToString("N"));
+                    response.Choices.Add(new ChatChoice
+                    {
+                        Index = i,
+                        Message = new ChatMessageOut { Role = "assistant", Content = null, ToolCalls = toolCalls },
+                        FinishReason = toolCalls is not null ? "tool_calls" : finish,
+                        LogProbs = logProbs
+                    });
+                }
+                else
+                {
+                    response.Choices.Add(new ChatChoice { Index = i, Message = new ChatMessageOut { Role = "assistant", Content = text }, FinishReason = finish, LogProbs = logProbs });
+                }
                 completionTokens += genCount;
             }
             response.Usage = new Usage { PromptTokens = ctx.PromptTokenCount, CompletionTokens = completionTokens, TotalTokens = ctx.PromptTokenCount + completionTokens };

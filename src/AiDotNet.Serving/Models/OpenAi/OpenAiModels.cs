@@ -28,6 +28,8 @@ public sealed class ChatCompletionRequest
     [JsonProperty("presence_penalty")] public double? PresencePenalty { get; set; }
     [JsonProperty("logprobs")] public bool? Logprobs { get; set; }
     [JsonProperty("top_logprobs")] public int? TopLogprobs { get; set; }
+    [JsonProperty("tools")] public List<ToolDefinition>? Tools { get; set; }
+    [JsonProperty("tool_choice")] public JToken? ToolChoice { get; set; }
 
     /// <summary>Resolves the effective max-new-tokens (max_tokens or max_completion_tokens, else fallback).</summary>
     public int ResolveMaxTokens(int fallback) => MaxTokens ?? MaxCompletionTokens ?? fallback;
@@ -84,6 +86,37 @@ public sealed class ChatMessageOut
 {
     [JsonProperty("role", NullValueHandling = NullValueHandling.Ignore)] public string? Role { get; set; }
     [JsonProperty("content")] public string? Content { get; set; }
+    [JsonProperty("tool_calls", NullValueHandling = NullValueHandling.Ignore)] public List<ToolCall>? ToolCalls { get; set; }
+}
+
+/// <summary>An OpenAI tool the model may call. Only <c>type: "function"</c> is supported.</summary>
+public sealed class ToolDefinition
+{
+    [JsonProperty("type")] public string Type { get; set; } = "function";
+    [JsonProperty("function")] public FunctionDefinition? Function { get; set; }
+}
+
+/// <summary>A callable function: a name, an optional description, and a JSON-schema parameter spec.</summary>
+public sealed class FunctionDefinition
+{
+    [JsonProperty("name")] public string Name { get; set; } = string.Empty;
+    [JsonProperty("description")] public string? Description { get; set; }
+    [JsonProperty("parameters")] public JObject? Parameters { get; set; }
+}
+
+/// <summary>A tool call the model produced, echoed in the response message.</summary>
+public sealed class ToolCall
+{
+    [JsonProperty("id")] public string Id { get; set; } = string.Empty;
+    [JsonProperty("type")] public string Type { get; set; } = "function";
+    [JsonProperty("function")] public FunctionCallOut? Function { get; set; }
+}
+
+/// <summary>The function name and JSON-encoded arguments of a tool call (OpenAI encodes arguments as a string).</summary>
+public sealed class FunctionCallOut
+{
+    [JsonProperty("name")] public string Name { get; set; } = string.Empty;
+    [JsonProperty("arguments")] public string Arguments { get; set; } = string.Empty;
 }
 
 /// <summary>A chat choice; carries <see cref="Message"/> (non-streaming) or <see cref="Delta"/> (streaming).</summary>
