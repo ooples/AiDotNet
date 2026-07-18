@@ -946,8 +946,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal AiDotNet.Configuration.InferenceOptimizationConfig? GetInferenceOptimizationConfigForServing()
         => InferenceOptimizationConfig;
 
-    // Live user-supplied speculative-decoding draft (ConfigureDraftModel). Not serialized (live object);
-    // the serving wrapper threads it into the continuous-batching engine for in-process serving.
+    // Live user-supplied speculative-decoding draft (builder ConfigureSpeculativeDecoding). Not serialized
+    // (live object); the serving wrapper threads it into the continuous-batching engine for in-process serving.
     [JsonIgnore]
     private AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? ServingDraftModel { get; set; }
 
@@ -2930,7 +2930,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             EnableKVCache = false,
             EnablePagedKVCache = false,
             EnableBatching = false,
-            EnableSpeculativeDecoding = false
+            SpeculativeDecoding = new AiDotNet.Configuration.SpeculativeDecodingOptions { Enabled = false }
         };
     }
 
@@ -3220,18 +3220,20 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                                 UseSlidingWindowKVCache = _config.UseSlidingWindowKVCache,
                                 KVCacheWindowSize = _config.KVCacheWindowSize,
                                 EnableBatching = _config.EnableBatching,
-                                EnableSpeculativeDecoding = _config.EnableSpeculativeDecoding,
-                                SpeculationPolicy = _config.SpeculationPolicy,
-                                SpeculativeMethod = _config.SpeculativeMethod,
-                                DraftModelType = _config.DraftModelType,
-                                SpeculationDepth = _config.SpeculationDepth,
-                                UseTreeSpeculation = _config.UseTreeSpeculation,
+                                SpeculativeDecoding = _config.SpeculativeDecoding.Clone(),
                                 EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization,
                                 AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal
                             }
                             : _config;
 
                         var optimizer = new InferenceOptimizer<T>(sessionConfig);
+                        // Flow the user's speculative-decoding draft (builder ConfigureSpeculativeDecoding) into the
+                        // in-session optimizer so its SpeculativeDecoder uses the chosen draft instead of the default
+                        // N-gram; when none was supplied the optimizer falls back to the N-gram draft itself.
+                        if (_result.ServingDraftModel is { } sessionDraft)
+                        {
+                            optimizer.SetCustomDraftModel(sessionDraft);
+                        }
                         var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(modelForSequence, cloneModel: ReferenceEquals(modelForSequence, model));
 
                         _sequenceOptimizer = optimizer;

@@ -324,9 +324,12 @@ public class IncrementalGenerationEndToEndTests
         var inner = BuildPerPositionLm();
         var facadeConfig = new AiDotNet.Configuration.InferenceOptimizationConfig
         {
-            EnableSpeculativeDecoding = false, // deviates from the serving default (true)
-            SpeculationDepth = 7,              // deviates from the serving default (4)
-            MaxBatchSize = 13                  // must flow to the batch scheduler
+            SpeculativeDecoding = new AiDotNet.Configuration.SpeculativeDecodingOptions
+            {
+                Enabled = false,          // deviates from the serving default (true)
+                SpeculationDepth = 7      // deviates from the serving default (4)
+            },
+            MaxBatchSize = 13             // must flow to the batch scheduler
         };
         var options = new AiDotNet.Models.Options.AiModelResultOptions<float, Tensor<float>, Tensor<float>>
         {

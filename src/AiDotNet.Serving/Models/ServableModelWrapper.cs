@@ -627,7 +627,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             if (model is AiDotNet.Models.Results.AiModelResult<T, Tensor<T>, Tensor<T>> facade)
             {
                 servingConfig ??= facade.GetInferenceOptimizationConfigForServing();
-                // Live custom draft model (facade ConfigureDraftModel) for in-process serving.
+                // Live custom draft model (facade ConfigureSpeculativeDecoding) for in-process serving.
                 draftModel = facade.GetDraftModelForServing();
                 if (facade.Model is IFullModel<T, Tensor<T>, Tensor<T>> innerTensorModel)
                 {
@@ -779,6 +779,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                 // (ConfigureInferenceOptimizations) when serving a facade-built model; otherwise sensible
                 // serving defaults. Per-request GenerationRequest.SpeculationDepth still overrides the depth.
                 var facade = _servingInferenceConfig;
+                var facadeSpec = facade?.SpeculativeDecoding;
                 var config = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig
                 {
                     // ONE background loop thread drives Step() and is the sole thread that runs model
@@ -793,13 +794,13 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                     // this wrapper's constructor flag (IServableModelInferenceOptions.EnableSpeculativeDecoding)
                     // rather than force-enabling — a caller that constructed the wrapper with speculation off
                     // must get speculation off.
-                    EnableSpeculativeDecoding = facade?.EnableSpeculativeDecoding ?? _enableSpeculativeDecoding,
-                    SpeculationDepth = (facade is { SpeculationDepth: > 0 }) ? facade.SpeculationDepth : 4,
-                    SpeculationPolicy = facade?.SpeculationPolicy ?? AiDotNet.Configuration.SpeculationPolicy.Auto,
-                    UseTreeSpeculation = facade?.UseTreeSpeculation ?? false,
+                    EnableSpeculativeDecoding = facadeSpec?.Enabled ?? _enableSpeculativeDecoding,
+                    SpeculationDepth = (facadeSpec is { SpeculationDepth: > 0 }) ? facadeSpec.SpeculationDepth : 4,
+                    SpeculationPolicy = facadeSpec?.SpeculationPolicy ?? AiDotNet.Configuration.SpeculationPolicy.Auto,
+                    UseTreeSpeculation = facadeSpec?.UseTreeSpeculation ?? false,
                     // Speculative METHOD (Auto/ClassicDraftModel/Eagle/Medusa): the batcher enables tree
                     // speculation for Eagle/Medusa, so this must flow from the facade or those methods are inert.
-                    SpeculativeMethod = facade?.SpeculativeMethod ?? AiDotNet.Configuration.SpeculativeMethod.Auto,
+                    SpeculativeMethod = facadeSpec?.SpeculativeMethod ?? AiDotNet.Configuration.SpeculativeMethod.Auto,
                     // Chunked prefill: split a long prompt's prefill into chunks so decode for other in-flight
                     // requests interleaves (0 = off). Without flowing it, the chunked-prefill path is unreachable.
                     MaxPrefillChunkTokens = (facade is { MaxPrefillChunkTokens: > 0 }) ? facade.MaxPrefillChunkTokens : 0

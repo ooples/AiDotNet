@@ -188,7 +188,7 @@ internal sealed class Int8InferenceModel
             EnableFlashAttention = false,
             EnableKVCache = false,
             EnableBatching = false,
-            EnableSpeculativeDecoding = false
+            SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = false }
         };
 
         var optimizer = new InferenceOptimizer<float>(config);

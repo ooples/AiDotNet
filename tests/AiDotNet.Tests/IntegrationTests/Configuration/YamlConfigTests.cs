@@ -570,7 +570,9 @@ inferenceOptimizations:
   kVCacheMaxSizeMB: 2048
   enableBatching: true
   maxBatchSize: 64
-  enableSpeculativeDecoding: false
+  speculativeDecoding:
+    enabled: true
+    speculationDepth: 6
 ";
 
         var config = YamlConfigLoader.LoadFromString(yaml);
@@ -580,7 +582,10 @@ inferenceOptimizations:
         Assert.Equal(2048, config.InferenceOptimizations.KVCacheMaxSizeMB);
         Assert.True(config.InferenceOptimizations.EnableBatching);
         Assert.Equal(64, config.InferenceOptimizations.MaxBatchSize);
-        Assert.False(config.InferenceOptimizations.EnableSpeculativeDecoding);
+        // Speculative decoding now lives in a nested options object; YamlDotNet binds the sub-section by reflection.
+        Assert.NotNull(config.InferenceOptimizations.SpeculativeDecoding);
+        Assert.True(config.InferenceOptimizations.SpeculativeDecoding.Enabled);
+        Assert.Equal(6, config.InferenceOptimizations.SpeculativeDecoding.SpeculationDepth);
     }
 
     [Fact(Timeout = 120000)]

@@ -266,7 +266,7 @@ public class ConfigurationIntegrationTests
 
         Assert.True(config.EnableKVCache);
         Assert.True(config.EnableBatching);
-        Assert.False(config.EnableSpeculativeDecoding);
+        Assert.False(config.SpeculativeDecoding.Enabled);
     }
 
     [Fact(Timeout = 120000)]
@@ -278,8 +278,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(2048, config.KVCacheMaxSizeMB);
         Assert.True(config.EnableBatching);
         Assert.Equal(64, config.MaxBatchSize);
-        Assert.True(config.EnableSpeculativeDecoding);
-        Assert.Equal(5, config.SpeculationDepth);
+        Assert.True(config.SpeculativeDecoding.Enabled);
+        Assert.Equal(5, config.SpeculativeDecoding.SpeculationDepth);
     }
 
     [Fact(Timeout = 120000)]
@@ -310,12 +310,12 @@ public class ConfigurationIntegrationTests
         Assert.True(config.AdaptiveBatchSize);
 
         // Speculative decoding defaults
-        Assert.False(config.EnableSpeculativeDecoding);
-        Assert.Equal(DraftModelType.NGram, config.DraftModelType);
-        Assert.Equal(4, config.SpeculationDepth);
-        Assert.False(config.UseTreeSpeculation);
-        Assert.Equal(SpeculationPolicy.Auto, config.SpeculationPolicy);
-        Assert.Equal(SpeculativeMethod.Auto, config.SpeculativeMethod);
+        Assert.NotNull(config.SpeculativeDecoding);
+        Assert.False(config.SpeculativeDecoding.Enabled);
+        Assert.Equal(4, config.SpeculativeDecoding.SpeculationDepth);
+        Assert.False(config.SpeculativeDecoding.UseTreeSpeculation);
+        Assert.Equal(SpeculationPolicy.Auto, config.SpeculativeDecoding.SpeculationPolicy);
+        Assert.Equal(SpeculativeMethod.Auto, config.SpeculativeDecoding.SpeculativeMethod);
 
         // Quantization defaults
         Assert.False(config.EnableWeightOnlyQuantization);
@@ -383,7 +383,10 @@ public class ConfigurationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task InferenceOptimizationConfig_Validate_RejectsNegativeSpeculationDepth()
     {
-        var config = new InferenceOptimizationConfig { SpeculationDepth = -1 };
+        var config = new InferenceOptimizationConfig
+        {
+            SpeculativeDecoding = new SpeculativeDecodingOptions { SpeculationDepth = -1 }
+        };
 
         var ex = Assert.Throws<InvalidOperationException>(() => config.Validate());
         Assert.Contains("SpeculationDepth must be non-negative", ex.Message);
@@ -427,13 +430,6 @@ public class ConfigurationIntegrationTests
             Assert.Equal(policy, config.KVCacheEvictionPolicy);
         }
 
-        // Test all DraftModelType values
-        foreach (DraftModelType type in Enum.GetValues(typeof(DraftModelType)))
-        {
-            config.DraftModelType = type;
-            Assert.Equal(type, config.DraftModelType);
-        }
-
         // Test all AttentionMaskingMode values
         foreach (AttentionMaskingMode mode in Enum.GetValues(typeof(AttentionMaskingMode)))
         {
@@ -441,18 +437,18 @@ public class ConfigurationIntegrationTests
             Assert.Equal(mode, config.AttentionMasking);
         }
 
-        // Test all SpeculationPolicy values
+        // Test all SpeculationPolicy values (now on the SpeculativeDecoding options object)
         foreach (SpeculationPolicy policy in Enum.GetValues(typeof(SpeculationPolicy)))
         {
-            config.SpeculationPolicy = policy;
-            Assert.Equal(policy, config.SpeculationPolicy);
+            config.SpeculativeDecoding.SpeculationPolicy = policy;
+            Assert.Equal(policy, config.SpeculativeDecoding.SpeculationPolicy);
         }
 
-        // Test all SpeculativeMethod values
+        // Test all SpeculativeMethod values (now on the SpeculativeDecoding options object)
         foreach (SpeculativeMethod method in Enum.GetValues(typeof(SpeculativeMethod)))
         {
-            config.SpeculativeMethod = method;
-            Assert.Equal(method, config.SpeculativeMethod);
+            config.SpeculativeDecoding.SpeculativeMethod = method;
+            Assert.Equal(method, config.SpeculativeDecoding.SpeculativeMethod);
         }
     }
 

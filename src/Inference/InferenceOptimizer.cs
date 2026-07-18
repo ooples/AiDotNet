@@ -218,7 +218,7 @@ internal class InferenceOptimizer<T>
         }
 
         // Initialize speculative decoding if enabled
-        if (_config.EnableSpeculativeDecoding)
+        if (_config.SpeculativeDecoding.Enabled)
         {
             anyOptimizationsApplied |= InitializeSpeculativeDecoding(model);
         }
@@ -1208,7 +1208,7 @@ internal class InferenceOptimizer<T>
         // Default to causal when the user enables generation-oriented inference features.
         // This matches industry-standard expectations for autoregressive decoding and avoids
         // relying on users to set TaskType explicitly.
-        if (_config.EnableKVCache || _config.EnableSpeculativeDecoding)
+        if (_config.EnableKVCache || _config.SpeculativeDecoding.Enabled)
             return true;
 
         // Otherwise, keep heuristics conservative to avoid changing semantics for non-generative models.
@@ -1277,36 +1277,23 @@ internal class InferenceOptimizer<T>
     private bool InitializeSpeculativeDecoding(NeuralNetworkBase<T> model)
     {
         // Facade-friendly behavior: speculative decoding configuration must never crash inference.
-        // If a requested draft model is unavailable, fall back to an N-gram draft model and record diagnostics.
+        // If no draft model is available, fall back to an N-gram draft model and record diagnostics.
         try
         {
-            // For Custom draft models, an internal caller can provide one via SetCustomDraftModel().
-            if (_config.DraftModelType == DraftModelType.Custom)
+            // A user-supplied draft (builder ConfigureSpeculativeDecoding, flowed in via SetCustomDraftModel)
+            // takes precedence; otherwise the zero-cost N-gram/prompt-lookup draft is used by default.
+            if (_draftModel != null)
             {
-                if (_draftModel != null)
-                {
-                    InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: true, reason: "CustomProvided");
-                    return true;
-                }
-
-                _draftModel = CreateNGramDraftModel();
-                InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: _draftModel != null, reason: "CustomNotProvided_FallbackToNGram");
-                return _draftModel != null;
+                InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: true, reason: "CustomProvided");
+                return true;
             }
 
-            IDraftModel<T>? draftModel = _config.DraftModelType switch
-            {
-                DraftModelType.NGram => CreateNGramDraftModel(),
-                DraftModelType.SmallNeural => CreateNeuralDraftModel(model),
-                _ => CreateNGramDraftModel()
-            };
-
-            _draftModel = draftModel ?? CreateNGramDraftModel();
+            _draftModel = CreateNGramDraftModel();
             InferenceDiagnostics.RecordDecision(
                 "InferenceOptimizer",
                 "SpeculativeDraftModel",
                 enabled: _draftModel != null,
-                reason: draftModel != null ? _config.DraftModelType.ToString() : $"Unavailable({_config.DraftModelType})_FallbackToNGram");
+                reason: "DefaultNGram");
 
             return _draftModel != null;
         }
@@ -1335,25 +1322,6 @@ internal class InferenceOptimizer<T>
     {
         // NGram draft model with default settings
         return new NGramDraftModel<T>(ngramSize: 3);
-    }
-
-    /// <summary>
-    /// Creates a small neural network draft model.
-    /// </summary>
-    /// <remarks>
-    /// SmallNeural draft models require a pre-trained companion model that is smaller
-    /// and faster than the target model but trained on similar data. This cannot be
-    /// automatically generated from the target model.
-    /// </remarks>
-    /// <exception cref="NotSupportedException">
-    /// Always thrown because SmallNeural draft models require external pre-trained models.
-    /// </exception>
-    private IDraftModel<T>? CreateNeuralDraftModel(NeuralNetworkBase<T> model)
-    {
-        // SmallNeural draft models require a separate pre-trained smaller model. We do not expose
-        // draft model wiring via the public facade in the MVP, so treat this as unavailable.
-        InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: false, reason: "SmallNeuralUnavailable_FallbackToNGram");
-        return null;
     }
 
     /// <summary>
@@ -1472,7 +1440,7 @@ internal class InferenceOptimizer<T>
         {
             ["IsInitialized"] = _isInitialized,
             ["KVCacheEnabled"] = _config.EnableKVCache,
-            ["SpeculativeDecodingEnabled"] = _config.EnableSpeculativeDecoding,
+            ["SpeculativeDecodingEnabled"] = _config.SpeculativeDecoding.Enabled,
             ["BatchingEnabled"] = _config.EnableBatching,
             ["PagedKVCacheInitialized"] = _pagedKVCache != null,
             ["PagedAttentionLayerCount"] = _pagedAttentionLayers?.Count ?? 0,
@@ -1491,8 +1459,8 @@ internal class InferenceOptimizer<T>
 
         if (_speculativeDecoder != null)
         {
-            stats["SpeculationDepth"] = _config.SpeculationDepth;
-            stats["DraftModelType"] = _config.DraftModelType.ToString();
+            stats["SpeculationDepth"] = _config.SpeculativeDecoding.SpeculationDepth;
+            stats["DraftModel"] = _draftModel?.GetType().Name ?? "None";
         }
 
         return stats;
@@ -1515,8 +1483,8 @@ internal class InferenceOptimizer<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Use this method when you have your own draft model implementation.
     ///
-    /// This is required when using DraftModelType.Custom or when you want to replace the
-    /// default NGram draft model with a more sophisticated model.
+    /// Use this when you want to replace the default NGram draft model with a more
+    /// sophisticated model (this is what the builder's ConfigureSpeculativeDecoding flows in).
     ///
     /// Your custom draft model must implement IDraftModel&lt;T&gt; and provide:
     /// - Draft token generation
@@ -1558,20 +1526,21 @@ internal class InferenceOptimizer<T>
     /// </remarks>
     public SpeculativeDecoder<T>? CreateSpeculativeDecoder(Func<Vector<int>, Matrix<T>> targetForward)
     {
-        if (_draftModel == null || !_config.EnableSpeculativeDecoding)
+        var spec = _config.SpeculativeDecoding;
+        if (_draftModel == null || !spec.Enabled)
         {
             return null;
         }
 
         var speculativeConfig = new SpeculativeDecodingConfig<T>
         {
-            NumDraftTokens = _config.SpeculationDepth,
-            UseTreeSpeculation = _config.UseTreeSpeculation ||
-                                _config.SpeculativeMethod == SpeculativeMethod.Medusa ||
-                                _config.SpeculativeMethod == SpeculativeMethod.Eagle,
-            AdaptiveDraftLength = _config.SpeculationPolicy == SpeculationPolicy.Auto,
-            TreeBranchFactor = _config.SpeculativeMethod == SpeculativeMethod.Medusa ? 4 : 2,
-            MaxTreeDepth = Math.Max(1, _config.SpeculationDepth),
+            NumDraftTokens = spec.SpeculationDepth,
+            UseTreeSpeculation = spec.UseTreeSpeculation ||
+                                spec.SpeculativeMethod == SpeculativeMethod.Medusa ||
+                                spec.SpeculativeMethod == SpeculativeMethod.Eagle,
+            AdaptiveDraftLength = spec.SpeculationPolicy == SpeculationPolicy.Auto,
+            TreeBranchFactor = spec.SpeculativeMethod == SpeculativeMethod.Medusa ? 4 : 2,
+            MaxTreeDepth = Math.Max(1, spec.SpeculationDepth),
             MinAcceptanceRate = MathHelper.GetNumericOperations<T>().FromDouble(0.5)
         };
 

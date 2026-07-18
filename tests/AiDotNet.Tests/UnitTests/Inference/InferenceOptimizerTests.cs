@@ -141,7 +141,7 @@ public class InferenceOptimizerTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenSmallNeuralUnavailable()
+    public async Task InferenceOptimizer_SpeculativeDecoding_UsesNGramDraft_ByDefault()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
 
@@ -149,13 +149,12 @@ public class InferenceOptimizerTests
         {
             EnableKVCache = false,
             EnableFlashAttention = false,
-            EnableSpeculativeDecoding = true,
-            DraftModelType = DraftModelType.SmallNeural
+            SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
         };
 
         var optimizer = new InferenceOptimizer<float>(config);
 
-        // Should never throw: SmallNeural draft models are not available in MVP and must fall back.
+        // With no custom draft supplied, speculation defaults to the zero-cost N-gram draft (never throws).
         var (_, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
 
         Assert.True(anyApplied);
@@ -165,7 +164,7 @@ public class InferenceOptimizerTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenCustomNotProvided()
+    public async Task InferenceOptimizer_SpeculativeDecoding_UsesSuppliedCustomDraft()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
 
@@ -173,18 +172,20 @@ public class InferenceOptimizerTests
         {
             EnableKVCache = false,
             EnableFlashAttention = false,
-            EnableSpeculativeDecoding = true,
-            DraftModelType = DraftModelType.Custom
+            SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
         };
 
         var optimizer = new InferenceOptimizer<float>(config);
+        // A user-supplied draft (as the builder's ConfigureSpeculativeDecoding flows in) takes precedence.
+        var customDraft = new AiDotNet.Inference.SpeculativeDecoding.NGramDraftModel<float>(ngramSize: 2, vocabSize: 123);
+        optimizer.SetCustomDraftModel(customDraft);
 
-        // Should never throw: the public facade does not wire custom draft models in MVP.
         var (_, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
 
         Assert.True(anyApplied);
         Assert.NotNull(optimizer.DraftModel);
-        Assert.True(optimizer.DraftModel!.VocabSize > 0);
+        Assert.Same(customDraft, optimizer.DraftModel);
+        Assert.Equal(123, optimizer.DraftModel!.VocabSize);
     }
 
     [Fact(Timeout = 60000)]
