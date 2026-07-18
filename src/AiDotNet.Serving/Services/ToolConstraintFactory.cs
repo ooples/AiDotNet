@@ -29,17 +29,46 @@ internal static class ToolConstraintFactory
             return (null, false);
         }
 
-        // tool_choice may be a string ("none" | "auto" | "required") or an object naming a function.
-        string? choiceStr = toolChoice is { Type: JTokenType.String } ? toolChoice.ToString() : null;
-        if (string.Equals(choiceStr, "none", StringComparison.Ordinal))
+        // tool_choice controls whether / which tool is forced:
+        //   "none"            -> no tool call (free text)
+        //   "auto" (default)  -> the model MAY call a tool; we do NOT force one. A hard grammar constraint
+        //                        cannot express "either a valid tool call or free text", so auto preserves
+        //                        normal text generation rather than forcing every request into a tool call.
+        //   "required"        -> force a call to ANY provided tool
+        //   {type:function,function:{name}} -> force a call to that named tool
+        // Unknown strings and malformed objects are rejected (400) instead of silently forcing a call.
+        string? forcedName = null;
+        if (toolChoice is { Type: JTokenType.String })
         {
+            switch (toolChoice.ToString())
+            {
+                case "none":
+                case "auto":
+                    return (null, false);
+                case "required":
+                    break; // force a call to any tool, handled below
+                default:
+                    throw new ArgumentException(
+                        $"Invalid 'tool_choice' value '{toolChoice}'. Expected 'none', 'auto', 'required', or a function-selection object.");
+            }
+        }
+        else if (toolChoice is null || toolChoice.Type == JTokenType.Null)
+        {
+            // tools supplied without an explicit tool_choice defaults to "auto".
             return (null, false);
         }
-
-        string? forcedName = null;
-        if (toolChoice is JObject tc && tc["function"]?["name"]?.ToString() is { Length: > 0 } fn)
+        else if (toolChoice is JObject tc)
         {
-            forcedName = fn;
+            forcedName = tc["function"]?["name"]?.ToString();
+            if (string.IsNullOrEmpty(forcedName))
+            {
+                throw new ArgumentException(
+                    "A 'tool_choice' object must be of the form {\"type\":\"function\",\"function\":{\"name\":\"...\"}}.");
+            }
+        }
+        else
+        {
+            throw new ArgumentException("'tool_choice' must be a string ('none' | 'auto' | 'required') or a function-selection object.");
         }
 
         var eligible = tools
@@ -48,11 +77,9 @@ internal static class ToolConstraintFactory
             .ToList();
         if (eligible.Count == 0)
         {
-            if (forcedName is not null)
-            {
-                throw new ArgumentException($"tool_choice names an unknown function '{forcedName}'.");
-            }
-            return (null, false);
+            throw new ArgumentException(forcedName is not null
+                ? $"tool_choice names an unknown function '{forcedName}'."
+                : "tool_choice 'required' was set but no tool with a valid function name was provided.");
         }
 
         // Build an alternation of one compact JSON object per eligible tool.
@@ -67,7 +94,10 @@ internal static class ToolConstraintFactory
                 {
                     ["name"] = new JObject { ["enum"] = new JArray(fnDef.Name) },
                     ["arguments"] = fnDef.Parameters ?? new JObject { ["type"] = "object" }
-                }
+                },
+                // Both members are mandatory: the schema compiler enforces "required", so the constraint
+                // cannot accept {} or an object missing "arguments" (an incomplete tool-call envelope).
+                ["required"] = new JArray("name", "arguments")
             };
             alternatives.Add("(?:" + JsonSchemaConstraint.CompileToRegex(wrapper) + ")");
         }
@@ -102,8 +132,13 @@ internal static class ToolConstraintFactory
         {
             return null;
         }
-        // OpenAI encodes arguments as a JSON string; serialize the arguments object compactly.
-        string arguments = obj["arguments"] is { } args ? args.ToString(Formatting.None) : "{}";
+        // The envelope must carry an arguments object; a tool call missing it is not valid, so do not
+        // silently substitute "{}" (which would report a call the model never actually specified).
+        if (obj["arguments"] is not { } args)
+        {
+            return null;
+        }
+        string arguments = args.ToString(Formatting.None);
 
         return new List<ToolCall>
         {
