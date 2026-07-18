@@ -334,6 +334,11 @@ internal class ContinuousBatcher<T> : IDisposable
         if (batch.Count == 0)
             return 0;
 
+        // Serialize the model forwards below against other models served concurrently in this process: on a
+        // shared GPU engine their forwards would race on its process-global scratch/plans (no-op on CPU, and
+        // uncontended for a single served model since one loop drives it). Scheduling above stays unserialized.
+        using var _gpuGate = AiDotNet.Serving.ServingGpuGate.Enter();
+
         bool useSpeculation = ShouldUseSpeculativeDecoding(batch, out var speculationReason);
         LastStepUsedSpeculation = useSpeculation;
         LastStepSpeculationTokens = 0;

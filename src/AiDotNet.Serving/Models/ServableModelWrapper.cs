@@ -485,6 +485,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             try
             {
                 var probe = new Tensor<T>(new[] { 1, 1 });
+                using var _gate = AiDotNet.Serving.ServingGpuGate.Enter();
                 optimized.PredictWithContext(probe, new AiDotNet.Inference.InferenceForwardContext(warmupId, 0));
             }
             finally
@@ -525,7 +526,11 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         try
         {
             var probe = new Tensor<T>(new[] { 1, probeTokens }); // two tokens in one forward
-            var output = model.PredictWithContext(probe, new AiDotNet.Inference.InferenceForwardContext(probeSequenceId, 0));
+            Tensor<T> output;
+            using (AiDotNet.Serving.ServingGpuGate.Enter())
+            {
+                output = model.PredictWithContext(probe, new AiDotNet.Inference.InferenceForwardContext(probeSequenceId, 0));
+            }
 
             // Require the output to keep one logits row PER input token. positions = (total / vocab):
             // [1, 2, vocab] -> 2 (per-position, supported); [1, vocab] -> 1 (collapsed, NOT supported).

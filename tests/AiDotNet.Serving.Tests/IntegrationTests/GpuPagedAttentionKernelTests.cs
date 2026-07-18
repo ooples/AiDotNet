@@ -23,7 +23,11 @@ public sealed class GpuPagedAttentionKernelTests
         if (AiDotNetEngine.Current is not DirectGpuTensorEngine gpu || !gpu.IsGpuAvailable)
             return; // no GPU on this box — nothing to verify
 
-        var backend = gpu.GetBackend();
+        // Use an ISOLATED backend/context (not the shared serving engine's gpu.GetBackend()) so this raw-kernel
+        // unit test can't race with concurrently-running serving-model forwards on the shared engine's scratch.
+        using var backendOwner = DirectGpuBackendFactory.CreateNew(GpuBackendPreference.Auto, deviceIndex: 0);
+        if (backendOwner is not { IsAvailable: true }) return;
+        var backend = backendOwner;
 
         const int heads = 2, headDim = 4, blockSize = 16, seqLen = 5;
         int dim = heads * headDim;
