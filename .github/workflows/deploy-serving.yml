@@ -17,6 +17,12 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    # Presence of the Azure publish profile decides whether we actually deploy. When the secret is
+    # not configured, the job still builds/publishes (so a broken serving build is caught) but skips
+    # the Azure deploy with a warning instead of hard-failing every master push.
+    env:
+      HAS_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE != '' }}
+
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -40,8 +46,14 @@ jobs:
           rm -rf cs de es fr it ja ko pl pt-BR ru tr zh-Hans zh-Hant
 
       - name: Deploy to Azure App Service
+        if: env.HAS_PUBLISH_PROFILE == 'true'
         uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3
         with:
           app-name: aidotnet-api
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ./publish
+
+      - name: Skip deploy (publish profile not configured)
+        if: env.HAS_PUBLISH_PROFILE != 'true'
+        run: |
+          echo "::warning title=Serving deploy skipped::AZURE_WEBAPP_PUBLISH_PROFILE is not set, so the Azure App Service deploy was skipped (build/publish still validated). Configure the secret to enable deployment."
