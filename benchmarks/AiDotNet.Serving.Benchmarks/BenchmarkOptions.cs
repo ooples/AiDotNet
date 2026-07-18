@@ -123,6 +123,33 @@ public sealed class BenchmarkOptions
         if (o.NumPrompts <= 0) throw new ArgumentException("--num-prompts must be > 0");
         if (o.Concurrency <= 0) throw new ArgumentException("--concurrency must be > 0");
         if (o.RequestRate <= 0) throw new ArgumentException("--request-rate must be > 0 (or 'inf')");
+
+        // Validate every downstream invariant here so malformed values fail fast with a clear message
+        // instead of surfacing later as unhandled exceptions or silently misleading runs.
+        if (o.InputTokens <= 0) throw new ArgumentException("--input-tokens must be > 0");
+        if (o.OutputTokens <= 0) throw new ArgumentException("--output-tokens must be > 0");
+        if (o.Warmup < 0) throw new ArgumentException("--warmup must be >= 0");
+        if (o.TimeoutSeconds <= 0) throw new ArgumentException("--timeout must be > 0");
+        if (o.Vocab <= 0) throw new ArgumentException("--vocab must be > 0");
+        if (!double.IsFinite(o.Temperature) || o.Temperature < 0) throw new ArgumentException("--temperature must be a finite value >= 0");
+        if (!double.IsFinite(o.SlaTtftMs) || o.SlaTtftMs <= 0) throw new ArgumentException("--sla-ttft-ms must be a finite value > 0");
+        if (!double.IsFinite(o.SlaTpotMs) || o.SlaTpotMs <= 0) throw new ArgumentException("--sla-tpot-ms must be a finite value > 0");
+
+        o.Backend = o.Backend.ToLowerInvariant();
+        if (o.Backend is not ("openai" or "aidotnet-native"))
+            throw new ArgumentException($"--backend must be 'openai' or 'aidotnet-native'; got '{o.Backend}'");
+        o.Mode = o.Mode.ToLowerInvariant();
+        if (o.Mode is not ("chat" or "completions"))
+            throw new ArgumentException($"--mode must be 'chat' or 'completions'; got '{o.Mode}'");
+        if (!Uri.TryCreate(o.BaseUrl, UriKind.Absolute, out var baseUri)
+            || (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
+            throw new ArgumentException($"--base-url must be an absolute http(s) URL; got '{o.BaseUrl}'");
+
+        // The native endpoint requires temperature > 0. Reject greedy for it here (fail fast) rather than
+        // silently substituting temperature 1.0 in the backend, which would invalidate backend comparisons.
+        if (o.Backend == "aidotnet-native" && o.Temperature <= 0)
+            throw new ArgumentException(
+                "The aidotnet-native backend requires --temperature > 0 (it does not support greedy decoding); use --backend openai for greedy comparisons.");
         return o;
     }
 

@@ -190,32 +190,34 @@ public class ModelsController : ControllerBase
             // token-ID endpoint; the OpenAI endpoints will report the missing tokenizer if used.
             if (!string.IsNullOrWhiteSpace(request.TokenizerPath))
             {
-                // The tokenizer path is user-controlled and handed to the loader, so canonicalize and
-                // boundary-check it against the model directory exactly like the model path above —
-                // otherwise it could be used to read arbitrary local files. A path that resolves outside
-                // the model directory is treated as a failed (skipped) tokenizer registration: the model
-                // still loads and remains usable via the native token-ID endpoint.
-                var tokenizerPath = Path.GetFullPath(Path.Combine(modelsRoot, request.TokenizerPath!));
-                if (!tokenizerPath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
+                // The model is already registered at this point, so tokenizer association is best-effort:
+                // ANY failure (including path canonicalization) must stay inside this warning-only boundary,
+                // otherwise the request 500s while the model stays loaded and retries then get a 409.
+                // The path is user-controlled, so canonicalize and boundary-check it against the model
+                // directory (exactly like the model path above) — a path resolving outside is skipped so it
+                // cannot be used to read arbitrary local files. Either way the model remains usable via the
+                // native token-ID endpoint.
+                try
                 {
-                    _logger.LogWarning(
-                        "Attempted path traversal: tokenizer path '{TokenizerPath}' resolves outside the model directory; skipping tokenizer registration.",
-                        request.TokenizerPath);
-                }
-                else
-                {
-                    try
+                    var tokenizerPath = Path.GetFullPath(Path.Combine(modelsRoot, request.TokenizerPath!));
+                    if (!tokenizerPath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning(
+                            "Attempted path traversal: tokenizer path '{TokenizerPath}' resolves outside the model directory; skipping tokenizer registration.",
+                            request.TokenizerPath);
+                    }
+                    else
                     {
                         _tokenizers.LoadAndRegister(request.Name, tokenizerPath);
                         _logger.LogInformation("Registered tokenizer for model '{ModelName}' from '{TokenizerPath}'",
                             request.Name, tokenizerPath);
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to load tokenizer for model '{ModelName}' from '{TokenizerPath}'; " +
-                            "the model is loaded but the OpenAI API will be unavailable for it.",
-                            request.Name, tokenizerPath);
-                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to load tokenizer for model '{ModelName}' from '{TokenizerPath}'; " +
+                        "the model is loaded but the OpenAI API will be unavailable for it.",
+                        request.Name, request.TokenizerPath);
                 }
             }
 

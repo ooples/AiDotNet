@@ -74,7 +74,7 @@ public sealed class BenchmarkReport
     public Stat Itl { get; set; } = Stat.Empty;         // ms (all inter-token gaps)
     public Stat E2E { get; set; } = Stat.Empty;         // ms
 
-    public double? GoodputPerSec { get; set; }          // req/s meeting both SLAs; null = unavailable (no request had both TTFT+TPOT)
+    public double? GoodputPerSec { get; set; }          // req/s meeting both SLAs; null = unavailable (no request had both TTFT+TPOT, or duration <= 0)
     public double SlaTtftMs { get; set; }
     public double SlaTpotMs { get; set; }
 
@@ -183,7 +183,7 @@ public sealed class BenchmarkReport
         sb.AppendLine($"  ITL  (per token)      {F(Itl.Mean),8} {F(Itl.P50),8} {F(Itl.P90),8} {F(Itl.P99),8}");
         sb.AppendLine($"  E2E                   {F(E2E.Mean),8} {F(E2E.P50),8} {F(E2E.P90),8} {F(E2E.P99),8}");
         sb.AppendLine("  --------------------------------------------------------------");
-        sb.AppendLine($"  goodput (TTFT<={SlaTtftMs}ms, TPOT<={SlaTpotMs}ms) : {(GoodputPerSec.HasValue ? GoodputPerSec.Value.ToString("0.00", CultureInfo.InvariantCulture) + " req/s" : "n/a (needs TTFT+TPOT)")}");
+        sb.AppendLine($"  goodput (TTFT<={SlaTtftMs}ms, TPOT<={SlaTpotMs}ms) : {(GoodputPerSec.HasValue ? GoodputPerSec.Value.ToString("0.00", CultureInfo.InvariantCulture) + " req/s" : "n/a (insufficient data)")}");
         sb.Append("================================================================");
         return sb.ToString();
     }
