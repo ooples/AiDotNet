@@ -65,6 +65,50 @@ public class LoRAAdapterSelectionTests
     }
 
     [Fact]
+    public void SelectTask_SwitchesEveryAdapterLayer_NotJustTheFirst()
+    {
+        // Two stacked Dense layers (4 -> 3 -> 3) so the "switch EVERY adapter layer" contract is actually
+        // exercised: a regression that only switched the first layer would return 1 here and fail.
+        var arch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 4,
+            outputSize: 3,
+            layers: new List<ILayer<double>>
+            {
+                new DenseLayer<double>(3, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<double>()),
+                new DenseLayer<double>(3, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<double>())
+            });
+        var net = new NeuralNetwork<double>(arch);
+        var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new[] { 0.5, -0.3, 0.8, 0.2 }));
+        net.Predict(input); // resolve both Dense layers' input shapes
+
+        // Wrap BOTH dense layers with independent multi-task adapters, each carrying tasks "A" and "B".
+        int wrapped = 0;
+        for (int i = 0; i < net.Layers.Count; i++)
+        {
+            if (net.Layers[i] is DenseLayer<double>)
+            {
+                var multi = new MultiLoRAAdapter<double>(net.Layers[i], "A", defaultRank: 2, alpha: 2.0);
+                multi.AddTask("B", rank: 2, alpha: 2.0);
+                SetTaskWeights(multi, "A", 0.15 + 0.05 * wrapped);
+                SetTaskWeights(multi, "B", -0.25 - 0.05 * wrapped);
+                net.Layers[i] = multi;
+                wrapped++;
+            }
+        }
+        Assert.Equal(2, wrapped);
+
+        // SelectTask must switch BOTH adapter layers and report 2 switched — not 1.
+        Assert.Equal(2, LoRAAdapterSelection.SelectTask(net, "A"));
+        var outA = net.Predict(input);
+        Assert.Equal(2, LoRAAdapterSelection.SelectTask(net, "B"));
+        var outB = net.Predict(input);
+        Assert.False(AreClose(outA, outB), "switching every adapter layer must change the network output");
+    }
+
+    [Fact]
     public void ForwardWithContext_RoutesAdapterPerRow_WithoutMutatingSharedState()
     {
         // Build a shared-base MultiLoRAAdapter over a resolved Dense 4 -> 3 with two distinct adapters.
