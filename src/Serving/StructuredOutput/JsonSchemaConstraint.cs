@@ -143,7 +143,11 @@ public static class JsonSchemaConstraint
     }
 
     // ---- primitive JSON regexes (compact form) ----
-    private const string JsonStringRegex = "\"(?:[^\"\\\\]|\\\\.)*\"";
+    // A JSON string per RFC 8259: unescaped chars are anything except '"', '\', and control chars
+    // U+0000-U+001F; escapes are exactly \" \\ \/ \b \f \n \r \t or \uXXXX (4 hex). The previous
+    // "[^"\\]|\\." wrongly accepted raw control characters and invalid escapes like \q. The U+0000 and
+    // U+001F literals below are the class range endpoints (this engine has no \u escape).
+    private const string JsonStringRegex = "\"(?:[^\"\\\\\u0000-\u001f]|\\\\(?:[\"\\\\/bfnrt]|u[0-9a-fA-F]{4}))*\"";
     private const string IntegerRegex = "-?(?:0|[1-9][0-9]*)";
     private const string NumberRegex = "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?";
     private const string BooleanRegex = "(?:true|false)";

@@ -64,7 +64,9 @@ internal static class StructuredOutputFactory
                     throw new ArgumentException("'response_format.json_schema.schema' is required for type 'json_schema'.");
                 }
                 var vocab = GetVocabStrings(tokenizer);
-                return JsonSchemaConstraint.FromSchema(schema.ToString(Newtonsoft.Json.Formatting.None), vocab, eosTokenId);
+                return BuildOrThrow(
+                    () => JsonSchemaConstraint.FromSchema(schema.ToString(Newtonsoft.Json.Formatting.None), vocab, eosTokenId),
+                    "json_schema");
             }
 
             case "regex":
@@ -75,12 +77,32 @@ internal static class StructuredOutputFactory
                     throw new ArgumentException("'response_format.regex' is required for type 'regex'.");
                 }
                 var vocab = GetVocabStrings(tokenizer);
-                return new RegexTokenConstraint(pattern!, vocab, eosTokenId);
+                return BuildOrThrow(() => new RegexTokenConstraint(pattern!, vocab, eosTokenId), "regex");
             }
 
             default:
                 throw new ArgumentException($"Unsupported response_format type '{type}'. " +
                     "Supported: text, json_object, json_schema, regex.");
+        }
+    }
+
+    // Runs a constraint compiler, normalizing malformed-input parse failures to ArgumentException so the
+    // controller surfaces a 400 (Build's documented contract). A regex or JSON schema is request-controlled
+    // and can throw FormatException/OverflowException (and, from the regex quantifier cap, ArgumentException)
+    // deep in its parser; without this the controller would surface a 500 instead of a client 400.
+    private static ITokenConstraint BuildOrThrow(Func<ITokenConstraint> compile, string kind)
+    {
+        try
+        {
+            return compile();
+        }
+        catch (ArgumentException)
+        {
+            throw; // already the documented 400-mapped type; keep its message
+        }
+        catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentOutOfRangeException or InvalidOperationException)
+        {
+            throw new ArgumentException($"Invalid '{kind}' response_format: {ex.Message}", ex);
         }
     }
 
@@ -103,10 +125,17 @@ internal static class StructuredOutputFactory
             {
                 pieces[id] = tokenizer.Decode(single, skipSpecialTokens: false) ?? string.Empty;
             }
-            catch (Exception)
+            catch (Exception ex) when (ex is ArgumentException or ArgumentOutOfRangeException or KeyNotFoundException or FormatException or InvalidOperationException or NotSupportedException or IndexOutOfRangeException)
             {
-                // A tokenizer may reject decoding certain ids in isolation; treat as an empty piece so the
-                // constraint simply never permits that token rather than failing the whole request.
+                // Some tokenizers cannot decode certain ids in isolation (byte-fallback fragments, special
+                // tokens). Log the offending id and treat it as an empty, un-emittable piece so the constraint
+                // simply never permits it — rather than silently swallowing EVERY exception, which would hide
+                // real tokenizer defects. Unexpected exception types propagate.
+                AiDotNet.Helpers.InferenceDiagnostics.RecordException(
+                    area: "Serving.StructuredOutput",
+                    feature: "VocabDecode",
+                    ex: ex,
+                    reason: $"Tokenizer failed to decode token id {id} in isolation; treating it as an un-emittable empty piece.");
                 pieces[id] = string.Empty;
             }
         }
