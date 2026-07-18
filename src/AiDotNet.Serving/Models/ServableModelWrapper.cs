@@ -425,6 +425,43 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             config.InferenceQuantization = AiDotNet.Configuration.InferenceQuantizationMode.WeightOnlyInt8;
         }
 
+        // Tensor-parallel serving: when the user asks for TensorParallelSize > 1 and the model is a recognized
+        // pre-LN transformer, shard its attention/FFN across ranks (Megatron-style) with per-rank paged KV
+        // fronted by a composite cache the scheduler drives. Falls back to the normal single-model path (with a
+        // recorded reason) for any other model, so the knob never breaks serving.
+        if (config.TensorParallelSize > 1)
+        {
+            int tpBlockSize = config.PagedKVCacheBlockSize > 0 ? config.PagedKVCacheBlockSize : 16;
+            var tpModel = AiDotNet.DistributedTraining.TensorParallelPartitioner<T>.TryBuild(
+                source, config.TensorParallelSize, tpBlockSize, numBlocks: 512, out var tpReason);
+            if (tpModel is not null)
+            {
+                tpModel.SetTrainingMode(false);
+                var composite = new AiDotNet.Inference.PagedAttention.CompositePagedKVCache<T>(tpModel.RankCaches);
+                long tpWarmupId = long.MaxValue;
+                if (composite.AllocateSequence(tpWarmupId, 0))
+                {
+                    try
+                    {
+                        var probe = new Tensor<T>(new[] { 1, 1 });
+                        tpModel.PredictWithContext(probe, new AiDotNet.Inference.InferenceForwardContext(tpWarmupId, 0));
+                    }
+                    finally
+                    {
+                        composite.FreeSequence(tpWarmupId);
+                    }
+                }
+                AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                    "ServableModelWrapper", "TensorParallel", enabled: true,
+                    reason: $"worldSize={config.TensorParallelSize}");
+                return (tpModel, composite);
+            }
+
+            AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                "ServableModelWrapper", "TensorParallel", enabled: false,
+                reason: $"NotPartitionable({tpReason})_FallbackToSingleModel");
+        }
+
         var optimizer = new AiDotNet.Inference.InferenceOptimizer<T>(config);
         var (optimized, applied) = optimizer.OptimizeForInference(source, cloneModel: true);
         var cache = optimizer.PagedKVCache;
