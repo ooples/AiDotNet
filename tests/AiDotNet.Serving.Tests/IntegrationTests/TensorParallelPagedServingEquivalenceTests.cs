@@ -181,6 +181,49 @@ public sealed class TensorParallelPagedServingEquivalenceTests
         Assert.Equal(reference, sharded);
     }
 
+    /// <summary>
+    /// Explicit head dimension (head_dim != embedDim/numHeads, e.g. Gemma-style): the query/output projection
+    /// width is numHeads*headDim (24) rather than embedDim (16). Tensor-parallel serving still produces the SAME
+    /// tokens as world size 1 — the per-head slices shard cleanly at the explicit head dimension.
+    /// </summary>
+    [Theory(Timeout = 120000)]
+    [InlineData(2)]
+    public async Task TensorParallelPagedServing_ExplicitHeadDim_MatchesUnsharded(int worldSize)
+    {
+        await Task.Yield();
+
+        const int headDim = 6;              // != EmbedDim/NumHeads (16/4 = 4)
+        const int kvHeads = 2;
+        int qDim = NumHeads * headDim;      // 24
+        int kvDim = kvHeads * headDim;      // 12
+
+        var rng = RandomHelper.CreateSeededRandom(97531);
+        var embedding = RandomTensor(rng, Vocab, EmbedDim);
+        var lmHead = RandomTensor(rng, Vocab, EmbedDim);
+        var finalGamma = RandomGamma(rng, EmbedDim);
+        var layers = new TensorParallelLayerWeights<double>[NumLayers];
+        for (int l = 0; l < NumLayers; l++)
+            layers[l] = new TensorParallelLayerWeights<double>
+            {
+                QWeight = RandomTensor(rng, qDim, EmbedDim), QBias = RandomTensor(rng, qDim),
+                KWeight = RandomTensor(rng, kvDim, EmbedDim), KBias = RandomTensor(rng, kvDim),
+                VWeight = RandomTensor(rng, kvDim, EmbedDim), VBias = RandomTensor(rng, kvDim),
+                OWeight = RandomTensor(rng, EmbedDim, qDim), OBias = RandomTensor(rng, EmbedDim),
+                UpWeight = RandomTensor(rng, FfnDim, EmbedDim), UpBias = RandomTensor(rng, FfnDim),
+                DownWeight = RandomTensor(rng, EmbedDim, FfnDim), DownBias = RandomTensor(rng, EmbedDim),
+                Norm1Gamma = RandomGamma(rng, EmbedDim), Norm2Gamma = RandomGamma(rng, EmbedDim),
+            };
+
+        var prompt = new[] { 1, 2, 3 };
+        const int maxNew = 8;
+
+        int[] reference = GenerateThroughBatcher(1, embedding, lmHead, layers, prompt, maxNew, finalGamma, numKVHeads: kvHeads, headDim: headDim);
+        int[] sharded = GenerateThroughBatcher(worldSize, embedding, lmHead, layers, prompt, maxNew, finalGamma, numKVHeads: kvHeads, headDim: headDim);
+
+        Assert.Equal(maxNew, reference.Length);
+        Assert.Equal(reference, sharded);
+    }
+
     // GELU (tanh approximation), matching a trained transformer's feed-forward activation. Any fixed activation
     // proves sharding-invariance since ws1 and wsN use the same function; GELU exercises a non-piecewise-linear op.
     private static double Gelu(double v)
@@ -195,13 +238,13 @@ public sealed class TensorParallelPagedServingEquivalenceTests
 
     private static int[] GenerateThroughBatcher(
         int worldSize, Tensor<double> embedding, Tensor<double> lmHead, TensorParallelLayerWeights<double>[] layers,
-        int[] prompt, int maxNew, Tensor<double>? finalNormGamma = null, int? numKVHeads = null)
+        int[] prompt, int maxNew, Tensor<double>? finalNormGamma = null, int? numKVHeads = null, int? headDim = null)
     {
         var model = finalNormGamma is null
-            ? new TensorParallelPagedModel<double>(worldSize, EmbedDim, NumHeads, NumLayers, FfnDim, Vocab, numKVHeads: numKVHeads)
+            ? new TensorParallelPagedModel<double>(worldSize, EmbedDim, NumHeads, NumLayers, FfnDim, Vocab, numKVHeads: numKVHeads, headDim: headDim)
             : new TensorParallelPagedModel<double>(
                 worldSize, EmbedDim, NumHeads, NumLayers, FfnDim, Vocab,
-                useRmsNorm: true, finalNormGamma: finalNormGamma, ffnActivation: Gelu, numKVHeads: numKVHeads);
+                useRmsNorm: true, finalNormGamma: finalNormGamma, ffnActivation: Gelu, numKVHeads: numKVHeads, headDim: headDim);
         model.SetFromFullWeights(embedding, lmHead, layers);
         var composite = new CompositePagedKVCache<double>(model.RankCaches);
 

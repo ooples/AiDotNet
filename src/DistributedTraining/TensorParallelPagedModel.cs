@@ -129,13 +129,17 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         int blockSize = 16, int numBlocks = 256,
         bool useRmsNorm = false, Tensor<T>? finalNormGamma = null,
         Func<double, double>? ffnActivation = null, double rmsNormEpsilon = 1e-6,
-        Tensor<T>? lmHeadBias = null, bool useGpu = false, int? numKVHeads = null)
+        Tensor<T>? lmHeadBias = null, bool useGpu = false, int? numKVHeads = null, int? headDim = null)
         : base(new MeanSquaredErrorLoss<T>())
     {
         int kvHeads = numKVHeads ?? numHeads;
         if (worldSize < 1) throw new ArgumentOutOfRangeException(nameof(worldSize));
-        if (embedDim <= 0 || numHeads <= 0 || embedDim % numHeads != 0)
+        // An explicit headDim allows numHeads*headDim != embedDim (Gemma-style); only the default
+        // (headDim = embedDim/numHeads) requires embedDim to be a multiple of numHeads.
+        if (embedDim <= 0 || numHeads <= 0 || (headDim is null && embedDim % numHeads != 0))
             throw new ArgumentException($"embedDim ({embedDim}) must be a positive multiple of numHeads ({numHeads}).");
+        if (headDim is { } hdv && hdv <= 0)
+            throw new ArgumentException($"headDim ({hdv}) must be positive.", nameof(headDim));
         if (numHeads % worldSize != 0)
             throw new ArgumentException($"numHeads ({numHeads}) must be divisible by worldSize ({worldSize}).");
         if (kvHeads <= 0 || numHeads % kvHeads != 0)
@@ -148,7 +152,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         _worldSize = worldSize;
         _embedDim = embedDim;
         _numHeads = numHeads;
-        _headDim = embedDim / numHeads;
+        _headDim = headDim ?? (embedDim / numHeads);
         _numLayers = numLayers;
         _ffnDim = ffnDim;
         _vocabSize = vocabSize;

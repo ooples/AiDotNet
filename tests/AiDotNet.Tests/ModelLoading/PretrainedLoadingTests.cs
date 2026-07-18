@@ -194,6 +194,43 @@ namespace AiDotNet.Tests.ModelLoading
             Assert.Throws<InvalidDataException>(() => LlamaModelBuilder<double>.Build(config, weights));
         }
 
+        [Fact]
+        public void Builder_ExplicitHeadDim_BuildsAndForwards()
+        {
+            // head_dim (6) != hidden/num_heads (8/2=4): numHeads*headDim = 12 != hidden. The GQA layer is
+            // built with the explicit head dim and the projections follow from it.
+            var config = HuggingFaceConfig.Parse(@"{
+                ""architectures"": [""LlamaForCausalLM""], ""model_type"": ""llama"",
+                ""hidden_size"": 8, ""intermediate_size"": 16, ""num_hidden_layers"": 1,
+                ""num_attention_heads"": 2, ""num_key_value_heads"": 1, ""head_dim"": 6,
+                ""vocab_size"": 10, ""tie_word_embeddings"": false }");
+            Assert.Equal(6, config.HeadDim);
+
+            int h = 8, ffn = 16, vocab = 10, heads = 2, kvHeads = 1, headDim = 6;
+            int qDim = heads * headDim, kvDim = kvHeads * headDim;
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 1),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 2),
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 3),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(qDim * h, 4),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(kvDim * h, 5),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(kvDim * h, 6),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * qDim, 7),
+                ["model.layers.0.mlp.gate_proj.weight"] = Fill(ffn * h, 8),
+                ["model.layers.0.mlp.up_proj.weight"] = Fill(ffn * h, 9),
+                ["model.layers.0.mlp.down_proj.weight"] = Fill(h * ffn, 10),
+                ["model.norm.weight"] = Fill(h, 11),
+                ["lm_head.weight"] = Fill(vocab * h, 12),
+            };
+
+            var net = LlamaModelBuilder<double>.Build(config, new InMemorySource(t));
+            var tokens = new Tensor<double>(new[] { 1, 3 });
+            tokens[0, 0] = 1; tokens[0, 1] = 5; tokens[0, 2] = 2;
+            var logits = net.Predict(tokens);
+            Assert.Equal(new[] { 1, 3, vocab }, logits.Shape);
+        }
+
         // ---- PretrainedSource descriptor ----
 
         [Fact]
