@@ -105,24 +105,28 @@ public sealed class OpenAiController : ControllerBase
 
         if (!request.Stream)
         {
-            string text; int genCount; string finish; ChatLogProbs? logProbs = null;
-            if (request.Logprobs == true)
+            // n completions (OpenAI `n`): generate independent completions of the same prompt. At
+            // temperature > 0 each draws from its own RNG so they differ; at temperature 0 (greedy) they
+            // are deterministically identical, which is the expected behavior.
+            int n = Math.Clamp(request.N ?? 1, 1, 128);
+            var response = new ChatCompletionResponse { Id = id, Created = created, Model = request.Model };
+            int completionTokens = 0;
+            for (int i = 0; i < n; i++)
             {
-                // logprobs come from the batch path (the streaming Collect path does not surface them).
-                (text, genCount, finish, logProbs) = CollectWithLogProbs(ctx, sdr, stops, ct);
+                string text; int genCount; string finish; ChatLogProbs? logProbs = null;
+                if (request.Logprobs == true)
+                {
+                    // logprobs come from the batch path (the streaming Collect path does not surface them).
+                    (text, genCount, finish, logProbs) = CollectWithLogProbs(ctx, sdr, stops, ct);
+                }
+                else
+                {
+                    (text, genCount, finish) = Collect(ctx, sdr, stops, ct);
+                }
+                response.Choices.Add(new ChatChoice { Index = i, Message = new ChatMessageOut { Role = "assistant", Content = text }, FinishReason = finish, LogProbs = logProbs });
+                completionTokens += genCount;
             }
-            else
-            {
-                (text, genCount, finish) = Collect(ctx, sdr, stops, ct);
-            }
-            var response = new ChatCompletionResponse
-            {
-                Id = id,
-                Created = created,
-                Model = request.Model,
-                Choices = { new ChatChoice { Index = 0, Message = new ChatMessageOut { Role = "assistant", Content = text }, FinishReason = finish, LogProbs = logProbs } },
-                Usage = new Usage { PromptTokens = ctx.PromptTokenCount, CompletionTokens = genCount, TotalTokens = ctx.PromptTokenCount + genCount }
-            };
+            response.Usage = new Usage { PromptTokens = ctx.PromptTokenCount, CompletionTokens = completionTokens, TotalTokens = ctx.PromptTokenCount + completionTokens };
             return Ok(response);
         }
 

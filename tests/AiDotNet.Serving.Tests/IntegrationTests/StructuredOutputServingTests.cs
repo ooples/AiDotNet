@@ -2,11 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using AiDotNet.Serving.Configuration;
+using AiDotNet.Serving.Controllers;
 using AiDotNet.Serving.Models;
+using AiDotNet.Serving.Models.OpenAi;
 using AiDotNet.Serving.Services;
 using AiDotNet.Serving.StructuredOutput;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Algorithms;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -69,7 +72,8 @@ public class StructuredOutputServingTests
         public bool LoadModel<T>(string name, IServableModel<T> model, string? sourcePath = null) => throw new NotSupportedException();
         public bool UnloadModel(string name) => throw new NotSupportedException();
         public List<ModelInfo> GetAllModelInfo() => new();
-        public ModelInfo? GetModelInfo(string name) => null;
+        public ModelInfo? GetModelInfo(string name)
+            => name == _name ? new ModelInfo { Name = _name, NumericType = NumericType.Float } : null;
         public bool ModelExists(string name) => name == _name;
         public bool LoadModelFromRegistry<T>(string name, IServableModel<T> model, int registryVersion, string registryStage, string? sourcePath = null) => throw new NotSupportedException();
         public bool LoadMultimodalModel<T>(string name, IServableMultimodalModel<T> model, string? sourcePath = null) => throw new NotSupportedException();
@@ -159,5 +163,49 @@ public class StructuredOutputServingTests
             Assert.Equal(5, p.TopLogProbs[0].TokenId);
             Assert.Equal(6, p.TopLogProbs[1].TokenId);
         });
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ChatCompletions_N_ReturnsMultipleChoices()
+    {
+        var tokenizer = CharacterTokenizer.CreateAscii();
+        int vocab = tokenizer.VocabularySize;
+
+        Tensor<float> gen(Tensor<float> input)
+        {
+            int seq = input.Shape[^1];
+            var logits = new Tensor<float>(new[] { 1, seq, vocab });
+            for (int p = 0; p < seq; p++) logits[new[] { 0, p, 5 }] = 10f;
+            return logits;
+        }
+        var wrapper = new ServableModelWrapper<float>(
+            "sm", inputDimension: 1, outputDimension: vocab, predictFunc: v => v, generationForward: gen);
+
+        var repo = new OneModelRepo("sm", wrapper);
+        var tokenizers = new TokenizerRegistry();
+        tokenizers.Register("sm", tokenizer);
+        var service = new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance);
+        var controller = new OpenAiController(repo, tokenizers, service, NullLogger<OpenAiController>.Instance);
+
+        var request = new ChatCompletionRequest
+        {
+            Model = "sm",
+            Messages = { new ChatMessage { Role = "user", Content = "hi" } },
+            MaxTokens = 3,
+            Temperature = 0,
+            N = 3,
+            Stream = false
+        };
+
+        var result = await controller.ChatCompletions(request, default);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<ChatCompletionResponse>(ok.Value);
+        Assert.Equal(3, response.Choices.Count);
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Equal(i, response.Choices[i].Index);
+            Assert.NotNull(response.Choices[i].Message);
+        }
     }
 }
