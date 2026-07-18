@@ -100,6 +100,47 @@ public sealed class TensorParallelPagedServingEquivalenceTests
         Assert.Equal(reference, sharded);
     }
 
+    /// <summary>
+    /// Grouped-query attention (numKVHeads &lt; numHeads): the KV heads are narrower than the query heads and each
+    /// query head attends to its KV group. Tensor-parallel serving (world size 2) still produces the SAME tokens as
+    /// world size 1 — the KV-head sharding + query-to-group mapping are sharding-invariant.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task TensorParallelPagedServing_GroupedQueryAttention_MatchesUnsharded()
+    {
+        await Task.Yield();
+
+        const int kvHeads = 2; // NumHeads=4 query heads -> 2 KV heads (2 query heads per group)
+        int headDim = EmbedDim / NumHeads;
+        int kvDim = kvHeads * headDim;
+
+        var rng = RandomHelper.CreateSeededRandom(24681);
+        var embedding = RandomTensor(rng, Vocab, EmbedDim);
+        var lmHead = RandomTensor(rng, Vocab, EmbedDim);
+        var finalGamma = RandomGamma(rng, EmbedDim);
+        var layers = new TensorParallelLayerWeights<double>[NumLayers];
+        for (int l = 0; l < NumLayers; l++)
+            layers[l] = new TensorParallelLayerWeights<double>
+            {
+                QWeight = RandomTensor(rng, EmbedDim, EmbedDim), QBias = RandomTensor(rng, EmbedDim),
+                KWeight = RandomTensor(rng, kvDim, EmbedDim), KBias = RandomTensor(rng, kvDim),   // narrower KV
+                VWeight = RandomTensor(rng, kvDim, EmbedDim), VBias = RandomTensor(rng, kvDim),
+                OWeight = RandomTensor(rng, EmbedDim, EmbedDim), OBias = RandomTensor(rng, EmbedDim),
+                UpWeight = RandomTensor(rng, FfnDim, EmbedDim), UpBias = RandomTensor(rng, FfnDim),
+                DownWeight = RandomTensor(rng, EmbedDim, FfnDim), DownBias = RandomTensor(rng, EmbedDim),
+                Norm1Gamma = RandomGamma(rng, EmbedDim), Norm2Gamma = RandomGamma(rng, EmbedDim),
+            };
+
+        var prompt = new[] { 1, 2, 3 };
+        const int maxNew = 8;
+
+        int[] reference = GenerateThroughBatcher(1, embedding, lmHead, layers, prompt, maxNew, finalGamma, numKVHeads: kvHeads);
+        int[] sharded = GenerateThroughBatcher(2, embedding, lmHead, layers, prompt, maxNew, finalGamma, numKVHeads: kvHeads);
+
+        Assert.Equal(maxNew, reference.Length);
+        Assert.Equal(reference, sharded);
+    }
+
     // GELU (tanh approximation), matching a trained transformer's feed-forward activation. Any fixed activation
     // proves sharding-invariance since ws1 and wsN use the same function; GELU exercises a non-piecewise-linear op.
     private static double Gelu(double v)
@@ -114,13 +155,13 @@ public sealed class TensorParallelPagedServingEquivalenceTests
 
     private static int[] GenerateThroughBatcher(
         int worldSize, Tensor<double> embedding, Tensor<double> lmHead, TensorParallelLayerWeights<double>[] layers,
-        int[] prompt, int maxNew, Tensor<double>? finalNormGamma = null)
+        int[] prompt, int maxNew, Tensor<double>? finalNormGamma = null, int? numKVHeads = null)
     {
         var model = finalNormGamma is null
-            ? new TensorParallelPagedModel<double>(worldSize, EmbedDim, NumHeads, NumLayers, FfnDim, Vocab)
+            ? new TensorParallelPagedModel<double>(worldSize, EmbedDim, NumHeads, NumLayers, FfnDim, Vocab, numKVHeads: numKVHeads)
             : new TensorParallelPagedModel<double>(
                 worldSize, EmbedDim, NumHeads, NumLayers, FfnDim, Vocab,
-                useRmsNorm: true, finalNormGamma: finalNormGamma, ffnActivation: Gelu);
+                useRmsNorm: true, finalNormGamma: finalNormGamma, ffnActivation: Gelu, numKVHeads: numKVHeads);
         model.SetFromFullWeights(embedding, lmHead, layers);
         var composite = new CompositePagedKVCache<double>(model.RankCaches);
 

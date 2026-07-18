@@ -73,18 +73,22 @@ internal static class TensorParallelPartitioner<T>
             return null;
         }
 
-        // Every block's attention must be a plain multi-head attention with a consistent head/dim geometry.
+        // Every block's attention must be a plain multi-head OR grouped-query attention with consistent geometry.
         int embedDim = blocks[0].HiddenSize;
         int ffnDim = blocks[0].FfnDim;
-        if (blocks[0].AttentionLayer is not MultiHeadAttentionLayer<T> firstMha)
+        if (!TryReadHeads(blocks[0].AttentionLayer, out int numHeads, out int numKVHeads))
         {
-            reason = "block attention is not MultiHeadAttentionLayer";
+            reason = "block attention is not MultiHeadAttentionLayer or GroupedQueryAttentionLayer";
             return null;
         }
-        int numHeads = firstMha.HeadCount;
         if (numHeads <= 0 || embedDim % numHeads != 0)
         {
             reason = "invalid head geometry";
+            return null;
+        }
+        if (numKVHeads <= 0 || numHeads % numKVHeads != 0)
+        {
+            reason = $"numHeads ({numHeads}) must be a multiple of numKVHeads ({numKVHeads})";
             return null;
         }
         if (numHeads % worldSize != 0)
@@ -92,11 +96,18 @@ internal static class TensorParallelPartitioner<T>
             reason = $"numHeads ({numHeads}) not divisible by worldSize ({worldSize})";
             return null;
         }
+        if (numKVHeads % worldSize != 0)
+        {
+            reason = $"numKVHeads ({numKVHeads}) not divisible by worldSize ({worldSize})";
+            return null;
+        }
         if (ffnDim % worldSize != 0)
         {
             reason = $"ffnDim ({ffnDim}) not divisible by worldSize ({worldSize})";
             return null;
         }
+        int headDim = embedDim / numHeads;
+        int kvDim = numKVHeads * headDim;
 
         int vocab = MaxTokenId(embedding) + 1;
 
@@ -120,16 +131,17 @@ internal static class TensorParallelPartitioner<T>
                 reason = $"block {l} geometry differs from block 0";
                 return null;
             }
-            if (b.AttentionLayer is not MultiHeadAttentionLayer<T> mha || mha.HeadCount != numHeads)
+            if (!TryReadHeads(b.AttentionLayer, out int bHeads, out int bKVHeads) || bHeads != numHeads || bKVHeads != numKVHeads)
             {
                 reason = $"block {l} attention differs";
                 return null;
             }
 
-            var qW = TransposeToOutIn(mha.GetQueryWeights(), embedDim, embedDim);
-            var kW = TransposeToOutIn(mha.GetKeyWeights(), embedDim, embedDim);
-            var vW = TransposeToOutIn(mha.GetValueWeights(), embedDim, embedDim);
-            var oW = TransposeToOutIn(mha.GetOutputWeights(), embedDim, embedDim);
+            AttnWeights(b.AttentionLayer, out var qWraw, out var kWraw, out var vWraw, out var oWraw, out var oBias);
+            var qW = TransposeToOutIn(qWraw, embedDim, embedDim);   // Q: [embDim, numHeads*headDim=embDim]
+            var kW = TransposeToOutIn(kWraw, kvDim, embedDim);      // K: [embDim, numKVHeads*headDim=kvDim]
+            var vW = TransposeToOutIn(vWraw, kvDim, embedDim);      // V: same as K
+            var oW = TransposeToOutIn(oWraw, embedDim, embedDim);   // O: [numHeads*headDim=embDim, embDim]
             var upW = TransposeToOutIn(b.FfnUp.GetWeights(), ffnDim, embedDim);
             var downW = TransposeToOutIn(b.FfnDown.GetWeights(), embedDim, ffnDim);
             if (qW is null || kW is null || vW is null || oW is null || upW is null || downW is null)
@@ -141,9 +153,9 @@ internal static class TensorParallelPartitioner<T>
             perLayer[l] = new TensorParallelLayerWeights<T>
             {
                 QWeight = qW, QBias = Zeros(embedDim),
-                KWeight = kW, KBias = Zeros(embedDim),
-                VWeight = vW, VBias = Zeros(embedDim),
-                OWeight = oW, OBias = OutputBias(mha, embedDim),
+                KWeight = kW, KBias = Zeros(kvDim),
+                VWeight = vW, VBias = Zeros(kvDim),
+                OWeight = oW, OBias = oBias,
                 UpWeight = upW, UpBias = DenseBias(b.FfnUp, ffnDim),
                 DownWeight = downW, DownBias = DenseBias(b.FfnDown, embedDim),
                 Norm1Gamma = b.Norm1.GetGammaTensor(),
@@ -164,10 +176,54 @@ internal static class TensorParallelPartitioner<T>
             ffnActivation: ffnActivation,
             rmsNormEpsilon: Convert.ToDouble(blocks[0].Norm1.GetEpsilon()),
             lmHeadBias: DenseBias(head, vocab),
-            useGpu: useGpu);
+            useGpu: useGpu,
+            numKVHeads: numKVHeads);
 
         tp.SetFromFullWeights(embMatrix, lmHead, perLayer);
         return tp;
+    }
+
+    // Reads (query heads, KV heads) from a multi-head or grouped-query attention layer; false for other types.
+    private static bool TryReadHeads(LayerBase<T> attention, out int numHeads, out int numKVHeads)
+    {
+        switch (attention)
+        {
+            case MultiHeadAttentionLayer<T> mha:
+                numHeads = mha.HeadCount; numKVHeads = mha.HeadCount; return true;
+            case GroupedQueryAttentionLayer<T> gqa:
+                numHeads = gqa.NumHeads; numKVHeads = gqa.NumKVHeads; return true;
+            default:
+                numHeads = 0; numKVHeads = 0; return false;
+        }
+    }
+
+    // Extracts the Q/K/V/O weight tensors (stored [in, out]) + output bias from either attention type.
+    private static void AttnWeights(
+        LayerBase<T> attention, out Tensor<T> qW, out Tensor<T> kW, out Tensor<T> vW, out Tensor<T> oW, out Tensor<T> oBias)
+    {
+        switch (attention)
+        {
+            case MultiHeadAttentionLayer<T> mha:
+                qW = mha.GetQueryWeights(); kW = mha.GetKeyWeights(); vW = mha.GetValueWeights(); oW = mha.GetOutputWeights();
+                oBias = ParamTail(mha.GetParameters(), mha.GetOutputWeights().Shape[1]);
+                return;
+            case GroupedQueryAttentionLayer<T> gqa:
+                qW = gqa.GetQueryWeights(); kW = gqa.GetKeyWeights(); vW = gqa.GetValueWeights(); oW = gqa.GetOutputWeights();
+                oBias = ParamTail(gqa.GetParameters(), gqa.GetOutputWeights().Shape[1]);
+                return;
+            default:
+                throw new System.ArgumentException($"Unsupported attention type {attention.GetType().Name}.");
+        }
+    }
+
+    // The output bias is the final `count` entries of the layer's parameter vector (after the weight matrices).
+    private static Tensor<T> ParamTail(Vector<T> p, int count)
+    {
+        var t = new Tensor<T>(new[] { count });
+        int start = p.Length - count;
+        if (start < 0) return Zeros(count);
+        for (int i = 0; i < count; i++) t[i] = p[start + i];
+        return t;
     }
 
     // Reads the full [vocab, embedDim] embedding matrix by looking up every token id.
@@ -204,17 +260,6 @@ internal static class TensorParallelPartitioner<T>
         var t = new Tensor<T>(new[] { n });
         var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < n; i++) t[i] = numOps.Zero;
-        return t;
-    }
-
-    // The MHA output bias is the final embedDim entries of its parameter vector (after Q/K/V/O weights).
-    private static Tensor<T> OutputBias(MultiHeadAttentionLayer<T> mha, int embedDim)
-    {
-        var p = mha.GetParameters();
-        var t = new Tensor<T>(new[] { embedDim });
-        int start = p.Length - embedDim;
-        if (start < 0) return Zeros(embedDim);
-        for (int i = 0; i < embedDim; i++) t[i] = p[start + i];
         return t;
     }
 

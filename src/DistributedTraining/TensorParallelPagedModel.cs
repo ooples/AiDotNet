@@ -73,7 +73,11 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
     private readonly int _ffnDim;
     private readonly int _vocabSize;
     private readonly int _localHeads;
-    private readonly int _localDim;   // localHeads * headDim (attention shard width)
+    private readonly int _localDim;   // localHeads * headDim (query shard width)
+    private readonly int _numKVHeads; // grouped-query attention: KV heads (== numHeads for plain MHA)
+    private readonly int _localKVHeads; // numKVHeads / worldSize
+    private readonly int _localKVDim; // localKVHeads * headDim (K/V shard width; == localDim for MHA)
+    private readonly int _groupsPerLocal; // localHeads / localKVHeads (query heads sharing one local KV head)
     private readonly int _localFfn;   // ffnDim / worldSize
     private readonly double _scale;
 
@@ -116,14 +120,19 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         int blockSize = 16, int numBlocks = 256,
         bool useRmsNorm = false, Tensor<T>? finalNormGamma = null,
         Func<double, double>? ffnActivation = null, double rmsNormEpsilon = 1e-6,
-        Tensor<T>? lmHeadBias = null, bool useGpu = false)
+        Tensor<T>? lmHeadBias = null, bool useGpu = false, int? numKVHeads = null)
         : base(new MeanSquaredErrorLoss<T>())
     {
+        int kvHeads = numKVHeads ?? numHeads;
         if (worldSize < 1) throw new ArgumentOutOfRangeException(nameof(worldSize));
         if (embedDim <= 0 || numHeads <= 0 || embedDim % numHeads != 0)
             throw new ArgumentException($"embedDim ({embedDim}) must be a positive multiple of numHeads ({numHeads}).");
         if (numHeads % worldSize != 0)
             throw new ArgumentException($"numHeads ({numHeads}) must be divisible by worldSize ({worldSize}).");
+        if (kvHeads <= 0 || numHeads % kvHeads != 0)
+            throw new ArgumentException($"numHeads ({numHeads}) must be a positive multiple of numKVHeads ({kvHeads}).");
+        if (kvHeads % worldSize != 0)
+            throw new ArgumentException($"numKVHeads ({kvHeads}) must be divisible by worldSize ({worldSize}).");
         if (ffnDim % worldSize != 0)
             throw new ArgumentException($"ffnDim ({ffnDim}) must be divisible by worldSize ({worldSize}).");
 
@@ -136,6 +145,10 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         _vocabSize = vocabSize;
         _localHeads = numHeads / worldSize;
         _localDim = _localHeads * _headDim;
+        _numKVHeads = kvHeads;
+        _localKVHeads = kvHeads / worldSize;
+        _localKVDim = _localKVHeads * _headDim;
+        _groupsPerLocal = _localHeads / _localKVHeads; // query heads per local KV head
         _localFfn = ffnDim / worldSize;
         _scale = 1.0 / Math.Sqrt(_headDim);
         _useRmsNorm = useRmsNorm;
@@ -161,7 +174,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                 BlockSize = blockSize,
                 NumBlocks = numBlocks,
                 NumLayers = numLayers,
-                NumHeads = _localHeads,
+                NumHeads = _localKVHeads, // the cache stores KV heads (== query heads for plain MHA)
                 HeadDimension = _headDim
             });
         }
@@ -177,7 +190,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                 gpu[r] = new GpuPagedAttention?[numLayers];
                 for (int l = 0; l < numLayers; l++)
                 {
-                    var g = GpuPagedAttention.TryCreate(_localHeads, _headDim, blockSize, numBlocks);
+                    var g = GpuPagedAttention.TryCreate(_localHeads, _localKVHeads, _headDim, blockSize, numBlocks);
                     if (g is null) { ok = false; break; }
                     gpu[r][l] = g;
                 }
@@ -223,10 +236,10 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         var x = new double[seqLen * _embedDim];
         Embed(input, seqLen, x);
 
-        var keyRow = new T[_localDim];
-        var valRow = new T[_localDim];
-        var cachedKey = new T[_localDim];
-        var cachedVal = new T[_localDim];
+        var keyRow = new T[_localKVDim];
+        var valRow = new T[_localKVDim];
+        var cachedKey = new T[_localKVDim];
+        var cachedVal = new T[_localKVDim];
 
         for (int l = 0; l < _numLayers; l++)
         {
@@ -237,11 +250,12 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
             var attnOut = new double[seqLen * _embedDim]; // accumulates O-projection partials + bias
             for (int r = 0; r < _worldSize; r++)
             {
-                int shardStart = r * _localDim; // this rank's contiguous slice of the embedding/head dims
-                // Project this rank's Q/K/V for its head group (rows [shardStart, shardStart+localDim)).
-                var q = ProjectRows(ln1, seqLen, w.QWeight, w.QBias, shardStart, _localDim);
-                var k = ProjectRows(ln1, seqLen, w.KWeight, w.KBias, shardStart, _localDim);
-                var v = ProjectRows(ln1, seqLen, w.VWeight, w.VBias, shardStart, _localDim);
+                int qShardStart = r * _localDim;   // this rank's query-head slice
+                int kvShardStart = r * _localKVDim; // this rank's KV-head slice (== query slice for plain MHA)
+                // Project this rank's Q (query heads) and K/V (KV heads, narrower under grouped-query attention).
+                var q = ProjectRows(ln1, seqLen, w.QWeight, w.QBias, qShardStart, _localDim);
+                var k = ProjectRows(ln1, seqLen, w.KWeight, w.KBias, kvShardStart, _localKVDim);
+                var v = ProjectRows(ln1, seqLen, w.VWeight, w.VBias, kvShardStart, _localKVDim);
 
                 // Attention over this rank's cached heads -> context [seqLen, localDim].
                 var context_r = new double[seqLen * _localDim];
@@ -251,11 +265,11 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                 }
                 else
                 {
-                    // Write K/V for this step into the rank's paged cache.
+                    // Write this rank's KV-head K/V for each step into its paged cache.
                     for (int t = 0; t < seqLen; t++)
                     {
-                        int src = t * _localDim;
-                        for (int d = 0; d < _localDim; d++) { keyRow[d] = NumOps.FromDouble(k[src + d]); valRow[d] = NumOps.FromDouble(v[src + d]); }
+                        int src = t * _localKVDim;
+                        for (int d = 0; d < _localKVDim; d++) { keyRow[d] = NumOps.FromDouble(k[src + d]); valRow[d] = NumOps.FromDouble(v[src + d]); }
                         _caches[r].WriteKey(seqId, basePos + t, l, keyRow);
                         _caches[r].WriteValue(seqId, basePos + t, l, valRow);
                     }
@@ -267,14 +281,15 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                         int qBase = t * _localDim;
                         for (int h = 0; h < _localHeads; h++)
                         {
-                            int hOff = h * _headDim;
+                            int hOff = h * _headDim;                          // query head offset in q/context
+                            int kvOff = (h / _groupsPerLocal) * _headDim;     // grouped-query: this head's KV head
                             double maxScore = double.NegativeInfinity;
                             for (int j = 0; j <= lastPos; j++)
                             {
                                 _caches[r].ReadKey(seqId, j, l, cachedKey);
                                 double dot = 0.0;
                                 for (int d = 0; d < _headDim; d++)
-                                    dot += q[qBase + hOff + d] * Convert.ToDouble(cachedKey[hOff + d]);
+                                    dot += q[qBase + hOff + d] * Convert.ToDouble(cachedKey[kvOff + d]);
                                 double s = dot * _scale;
                                 scores[j] = s;
                                 if (s > maxScore) maxScore = s;
@@ -288,7 +303,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                                 for (int j = 0; j <= lastPos; j++)
                                 {
                                     _caches[r].ReadValue(seqId, j, l, cachedVal);
-                                    acc += scores[j] * inv * Convert.ToDouble(cachedVal[hOff + d]);
+                                    acc += scores[j] * inv * Convert.ToDouble(cachedVal[kvOff + d]);
                                 }
                                 context_r[qBase + hOff + d] = acc;
                             }
@@ -296,8 +311,8 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
                     }
                 }
 
-                // Output projection PARTIAL: attnOut[t,o] += Σ_j context_r[t,j] * O[o, shardStart+j].
-                AccumulateColumnProjection(attnOut, context_r, seqLen, w.OWeight, shardStart, _localDim);
+                // Output projection PARTIAL: attnOut[t,o] += Σ_j context_r[t,j] * O[o, qShardStart+j].
+                AccumulateColumnProjection(attnOut, context_r, seqLen, w.OWeight, qShardStart, _localDim);
             }
             AddBias(attnOut, seqLen, w.OBias); // O bias added once after the reduce
             for (int i = 0; i < x.Length; i++) x[i] += attnOut[i]; // residual
@@ -458,12 +473,13 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
     {
         var g = _gpuAttn![r]![l]!;
         int sid = GpuSid(seqId);
+        // K/V are the (possibly narrower) KV-head slice; the query is the full query-head slice.
         for (int t = 0; t < seqLen; t++)
         {
-            int src = t * _localDim;
-            var kf = new float[_localDim];
-            var vf = new float[_localDim];
-            for (int d = 0; d < _localDim; d++) { kf[d] = (float)k[src + d]; vf[d] = (float)v[src + d]; }
+            int src = t * _localKVDim;
+            var kf = new float[_localKVDim];
+            var vf = new float[_localKVDim];
+            for (int d = 0; d < _localKVDim; d++) { kf[d] = (float)k[src + d]; vf[d] = (float)v[src + d]; }
             g.Append(sid, kf, vf);
         }
 
