@@ -380,6 +380,12 @@ public class InferenceOptimizationConfig
                 $"SpeculativeDecoding.SpeculationDepth must be non-negative. Got: {SpeculativeDecoding.SpeculationDepth}");
         }
 
+        if (TensorParallelSize < 1)
+        {
+            throw new InvalidOperationException(
+                $"TensorParallelSize must be at least 1 (1 = no tensor parallelism). Got: {TensorParallelSize}");
+        }
+
         if (UseSlidingWindowKVCache && KVCacheWindowSize <= 0)
         {
             throw new InvalidOperationException(
@@ -504,6 +510,34 @@ public class InferenceOptimizationConfig
     /// with no activation, immediately followed by batch-norm).</para>
     /// </remarks>
     public bool EnableLayerFusion { get; set; } = true;
+
+    #endregion
+
+    #region Tensor Parallelism (Advanced)
+
+    /// <summary>
+    /// Gets or sets the number of tensor-parallel ranks (shards) the model is split across for serving.
+    /// </summary>
+    /// <value>Tensor-parallel world size (default: 1 = no tensor parallelism).</value>
+    /// <remarks>
+    /// <para>
+    /// When &gt; 1, a compatible transformer's attention heads and feed-forward hidden units are partitioned
+    /// across this many ranks (Megatron-LM style): each rank holds a shard of every layer's Q/K/V/O and FFN
+    /// weights and its own slice of the paged KV cache, and the per-rank partial outputs are all-reduced so the
+    /// generated tokens are identical to the un-sharded model. On a multi-GPU engine the ranks run on separate
+    /// devices for higher throughput / larger models; on CPU the ranks run sequentially (correct, but for
+    /// verification rather than speedup). Serving falls back to the normal single-model path (with a logged
+    /// reason) when the model is not a recognized tensor-parallelizable transformer.
+    /// </para>
+    /// <para>
+    /// <c>NumHeads</c> and the FFN hidden size must both be divisible by this value.
+    /// </para>
+    /// <para><b>For Beginners:</b> A very large language model may not fit — or run fast enough — on one GPU.
+    /// Tensor parallelism splits each layer's math across several GPUs that work together on every token, so a
+    /// model too big for one card can still be served. Leave this at 1 unless you have multiple GPUs and a large
+    /// model; the output is exactly the same either way, it's purely about fitting and speed.</para>
+    /// </remarks>
+    public int TensorParallelSize { get; set; } = 1;
 
     #endregion
 
