@@ -59,15 +59,10 @@ public static class LlamaModelBuilder<T>
         int hidden = config.HiddenSize;
         int numHeads = config.NumAttentionHeads;
         int numKVHeads = config.NumKeyValueHeads;
-        int headDim = hidden / numHeads;
-
-        // GroupedQueryAttentionLayer derives head_dim = hidden / numHeads internally, so a config that
-        // declares a different head_dim (rare) cannot be represented faithfully — fail loudly.
-        if (config.HeadDim != headDim)
-            throw new InvalidDataException(
-                $"config head_dim ({config.HeadDim}) must equal hidden_size/num_attention_heads ({headDim}) " +
-                "for this decoder; explicit head_dim decoders are not yet supported.");
-
+        // Honor an explicit head_dim (e.g. Gemma-style, where numHeads*headDim != hidden); the attention
+        // layer is built with this head dimension and the projection widths follow from it.
+        int headDim = config.HeadDim;
+        bool explicitHeadDim = headDim != hidden / numHeads;
         int kvDim = numKVHeads * headDim;
         int intermediate = config.IntermediateSize;
         int vocab = config.VocabSize;
@@ -81,7 +76,8 @@ public static class LlamaModelBuilder<T>
         for (int i = 0; i < config.NumHiddenLayers; i++)
         {
             var attention = new GroupedQueryAttentionLayer<T>(
-                sequenceLength: maxPos, embeddingDimension: hidden, numHeads: numHeads, numKVHeads: numKVHeads);
+                sequenceLength: maxPos, embeddingDimension: hidden, numHeads: numHeads, numKVHeads: numKVHeads,
+                headDimension: explicitHeadDim ? headDim : null);
             attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, config.RopeTheta, maxPos);
 
             // Gated SwiGLU FFN with SiLU on the gate path (bias-free), matching LLaMA/Mistral/Qwen2.

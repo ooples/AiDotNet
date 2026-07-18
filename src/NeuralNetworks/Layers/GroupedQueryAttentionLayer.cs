@@ -179,16 +179,24 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         int numKVHeads,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null,
-        bool deferAllocation = false)
+        bool deferAllocation = false,
+        int? headDimension = null)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
-        if (embeddingDimension % numHeads != 0)
+        // With an explicit head dimension the projection widths are numHeads*headDim (which may differ
+        // from embeddingDimension, e.g. Gemma-style decoders), so embeddingDimension need not be divisible
+        // by numHeads. Only the default (headDim = embeddingDimension/numHeads) requires that divisibility.
+        if (headDimension is null && embeddingDimension % numHeads != 0)
         {
             throw new ArgumentException(
                 $"Embedding dimension ({embeddingDimension}) must be divisible by numHeads ({numHeads}).");
+        }
+        if (headDimension is { } hd && hd <= 0)
+        {
+            throw new ArgumentException($"headDimension ({hd}) must be positive.", nameof(headDimension));
         }
 
         if (numHeads % numKVHeads != 0)
@@ -199,7 +207,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
 
         _numHeads = numHeads;
         _numKVHeads = numKVHeads;
-        _headDimension = embeddingDimension / numHeads;
+        _headDimension = headDimension ?? (embeddingDimension / numHeads);
         _embeddingDimension = embeddingDimension;
         _headsPerGroup = numHeads / numKVHeads;
 
