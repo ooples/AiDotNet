@@ -84,7 +84,11 @@ internal static class LicenseTestSupport
         DateTimeOffset? exp = null,
         string? kid = null,
         string? alg = "EdDSA",
-        Org.BouncyCastle.Crypto.AsymmetricKeyParameter? signingKey = null)
+        Org.BouncyCastle.Crypto.AsymmetricKeyParameter? signingKey = null,
+        string? jti = null,
+        string[]? caps = null,
+        string? mach = null,
+        string? scope = null)
     {
         var claims = new LicenseClaims
         {
@@ -94,7 +98,11 @@ internal static class LicenseTestSupport
             Iat = (iat ?? DateTimeOffset.UtcNow).ToUnixTimeSeconds(),
             Exp = (exp ?? DateTimeOffset.UtcNow.AddDays(30)).ToUnixTimeSeconds(),
             Kid = kid ?? TestKid,
-            Alg = alg
+            Alg = alg,
+            Jti = jti,
+            Caps = caps,
+            Mach = mach,
+            Scope = scope
         };
 
         byte[] claimsBytes = Encoding.UTF8.GetBytes(claims.ToCanonicalJson());
@@ -106,6 +114,40 @@ internal static class LicenseTestSupport
         return AsymmetricLicenseVerifier.Prefix + "." +
                Base64UrlHelper.Encode(claimsBytes) + "." +
                Base64UrlHelper.Encode(sig);
+    }
+
+    /// <summary>
+    /// Produces a signed revocation list (CRL) in the format <see cref="AiDotNet.Helpers.LicenseRevocationProvider"/>
+    /// verifies: <c>{ kid, payload:base64url({iat,exp,rkids,rjti}), sig:base64url(Ed25519 over payload) }</c>,
+    /// signed with the ephemeral test PRIVATE key (so it verifies against the injected test public key).
+    /// </summary>
+    internal static string SignedCrlV2(
+        string[]? revokedJti = null,
+        string[]? revokedKids = null,
+        DateTimeOffset? exp = null,
+        string? kid = null,
+        Org.BouncyCastle.Crypto.AsymmetricKeyParameter? signingKey = null)
+    {
+        var payload = new
+        {
+            iat = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            exp = (exp ?? DateTimeOffset.UtcNow.AddDays(1)).ToUnixTimeSeconds(),
+            rkids = revokedKids ?? System.Array.Empty<string>(),
+            rjti = revokedJti ?? System.Array.Empty<string>()
+        };
+        byte[] payloadBytes = Encoding.UTF8.GetBytes(Newtonsoft.Json.JsonConvert.SerializeObject(payload));
+        var signer = new Org.BouncyCastle.Crypto.Signers.Ed25519Signer();
+        signer.Init(true, signingKey ?? TestKeyPair.Private);
+        signer.BlockUpdate(payloadBytes, 0, payloadBytes.Length);
+        byte[] sig = signer.GenerateSignature();
+
+        var envelope = new
+        {
+            kid = kid ?? TestKid,
+            payload = Base64UrlHelper.Encode(payloadBytes),
+            sig = Base64UrlHelper.Encode(sig)
+        };
+        return Newtonsoft.Json.JsonConvert.SerializeObject(envelope);
     }
 
     /// <summary>
