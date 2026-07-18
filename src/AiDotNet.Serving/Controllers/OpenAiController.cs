@@ -114,7 +114,16 @@ public sealed class OpenAiController : ControllerBase
 
         // Multi-LoRA: the model field may be "baseModel@adapter" to serve a shared base with a per-request
         // adapter. Resolve the base model for lookup and carry the adapter through to the engine.
-        (string baseModel, string? adapterId) = SplitModelAndAdapter(request.Model);
+        string baseModel;
+        string? adapterId;
+        try
+        {
+            (baseModel, adapterId) = SplitModelAndAdapter(request.Model);
+        }
+        catch (ArgumentException ex)
+        {
+            return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "model");
+        }
         if (!TryPrepare(baseModel, out var ctx, out var error))
             return error!;
 
@@ -538,10 +547,15 @@ public sealed class OpenAiController : ControllerBase
     private static int TokensCoveringPrefix(GenContext ctx, List<int> tokens, int charCount)
     {
         if (charCount <= 0) return 0;
-        for (int k = 1; k <= tokens.Count; k++)
+        // Accumulate per-token decoded lengths once (O(n)) rather than re-decoding every growing prefix
+        // (O(n^2) formatting + allocation). Used only to map a decoded stop offset back to a token count.
+        var single = new List<int>(1) { 0 };
+        int accumulated = 0;
+        for (int k = 0; k < tokens.Count; k++)
         {
-            int len = ctx.Tokenizer.Decode(tokens.GetRange(0, k), skipSpecialTokens: true).Length;
-            if (len >= charCount) return k;
+            single[0] = tokens[k];
+            accumulated += ctx.Tokenizer.Decode(single, skipSpecialTokens: true).Length;
+            if (accumulated >= charCount) return k + 1;
         }
         return tokens.Count;
     }
@@ -563,9 +577,21 @@ public sealed class OpenAiController : ControllerBase
         {
             return (model, null);
         }
+        // Reject a malformed multi-LoRA identifier instead of silently mis-parsing it: at most one '@', and
+        // both the base model and the adapter must be non-empty.
+        if (model.IndexOf('@', at + 1) >= 0)
+        {
+            throw new ArgumentException(
+                $"Invalid model identifier '{model}': at most one '@' (separating base model and adapter) is allowed.");
+        }
         string baseModel = model.Substring(0, at);
         string adapter = model.Substring(at + 1);
-        return (baseModel, string.IsNullOrWhiteSpace(adapter) ? null : adapter);
+        if (string.IsNullOrWhiteSpace(baseModel) || string.IsNullOrWhiteSpace(adapter))
+        {
+            throw new ArgumentException(
+                $"Invalid model identifier '{model}': expected 'baseModel@adapter' with a non-empty base model and adapter.");
+        }
+        return (baseModel, adapter);
     }
 
     /// <summary>Parses an OpenAI <c>logit_bias</c> map (token-id string -&gt; bias number) into a typed
