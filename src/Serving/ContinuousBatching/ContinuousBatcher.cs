@@ -1413,11 +1413,25 @@ internal class ContinuousBatcher<T> : IDisposable
         var constraint = request.Constraint;
         constraint?.ApplyMask(lastLogits);
 
+        // Log-probabilities (OpenAI logprobs): computed from the post-penalty/bias/mask logits under the
+        // effective temperature, BEFORE top-p/top-k/min-p truncation (those are sampling filters, not the
+        // model's probability). Captured here so the greedy and sampling branches share the same
+        // distribution; recorded for the chosen token in Finalize.
+        float[]? logProbDist = null;
+        if (request.IncludeLogProbs)
+        {
+            logProbDist = ComputeLogProbabilities(lastLogits, request.Temperature > 0f ? request.Temperature : 1.0f);
+        }
+
         // Advances the constraint state for the chosen token and returns it — the single exit point so the
         // constraint sees exactly the committed token regardless of which sampling branch produced it.
         int Finalize(int token)
         {
             constraint?.Accept(token);
+            if (logProbDist is not null)
+            {
+                RecordLogProbs(sequence, token, logProbDist, request.TopLogProbs);
+            }
             return token;
         }
 
@@ -1494,6 +1508,79 @@ internal class ContinuousBatcher<T> : IDisposable
             sequence.Request.Seed is { } seed
                 ? RandomHelper.CreateSeededRandom(seed)
                 : RandomHelper.CreateSecureRandom());
+
+    // Returns log(softmax(logits / temperature)) as a new array. Masked (-inf) logits map to -inf, so they
+    // never appear as candidates and contribute nothing to the normalizer.
+    private static float[] ComputeLogProbabilities(float[] logits, float temperature)
+    {
+        int n = logits.Length;
+        var scaled = new float[n];
+        float max = float.NegativeInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            scaled[i] = logits[i] / temperature;
+            if (scaled[i] > max) max = scaled[i];
+        }
+
+        double sumExp = 0;
+        if (!float.IsNegativeInfinity(max))
+        {
+            for (int i = 0; i < n; i++)
+            {
+                if (!float.IsNegativeInfinity(scaled[i]))
+                {
+                    sumExp += Math.Exp(scaled[i] - max);
+                }
+            }
+        }
+        float logSumExp = float.IsNegativeInfinity(max) ? 0f : max + (float)Math.Log(sumExp <= 0 ? 1 : sumExp);
+
+        var logp = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            logp[i] = float.IsNegativeInfinity(scaled[i]) ? float.NegativeInfinity : scaled[i] - logSumExp;
+        }
+        return logp;
+    }
+
+    // Records the chosen token's log-probability plus the top-K alternatives (highest first) for one position.
+    private static void RecordLogProbs(SequenceState<T> sequence, int chosenToken, float[] logp, int topK)
+    {
+        sequence.LogProbs ??= new List<PositionLogProbs>();
+        var entry = new PositionLogProbs
+        {
+            TokenId = chosenToken,
+            LogProb = (chosenToken >= 0 && chosenToken < logp.Length) ? logp[chosenToken] : float.NegativeInfinity
+        };
+
+        if (topK > 0)
+        {
+            // Maintain the top-K by log-prob. `best` is kept ascending so best[0] is the weakest of the K.
+            var best = new List<(float lp, int tok)>(topK);
+            for (int i = 0; i < logp.Length; i++)
+            {
+                float lp = logp[i];
+                if (float.IsNegativeInfinity(lp)) continue;
+                if (best.Count < topK)
+                {
+                    best.Add((lp, i));
+                    if (best.Count == topK) best.Sort((a, b) => a.lp.CompareTo(b.lp));
+                }
+                else if (lp > best[0].lp)
+                {
+                    best[0] = (lp, i);
+                    best.Sort((a, b) => a.lp.CompareTo(b.lp));
+                }
+            }
+            best.Sort((a, b) => b.lp.CompareTo(a.lp)); // descending for the report
+            foreach (var (lp, tok) in best)
+            {
+                entry.TopLogProbs.Add(new TokenLogProb { TokenId = tok, LogProb = lp });
+            }
+        }
+
+        sequence.LogProbs.Add(entry);
+    }
 
     private static void ApplyMinP(float[] probs, float minP)
     {
@@ -1599,7 +1686,8 @@ internal class ContinuousBatcher<T> : IDisposable
             GeneratedLength = sequence.GeneratedLength,
             QueueTime = sequence.QueueTime,
             GenerationTime = sequence.GenerationTime,
-            TokensPerSecond = sequence.TokensPerSecond
+            TokensPerSecond = sequence.TokensPerSecond,
+            LogProbs = sequence.LogProbs
         };
 
         // Complete the pending task

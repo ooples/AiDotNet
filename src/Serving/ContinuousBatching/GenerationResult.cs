@@ -29,4 +29,10 @@ public class GenerationResult<T>
 
     /// <summary>Generation speed.</summary>
     public double? TokensPerSecond { get; set; }
+
+    /// <summary>
+    /// Per-generated-token log-probability records, present only when the request set
+    /// <see cref="GenerationRequest{T}.IncludeLogProbs"/>. One entry per generated token, in order.
+    /// </summary>
+    public List<PositionLogProbs>? LogProbs { get; set; }
 }

@@ -202,4 +202,55 @@ public class StructuredOutputConstraintTests
         Assert.True(result.GeneratedTokens.Distinct().Count() > 1,
             $"frequency penalty should break the repetition loop; got [{string.Join(",", result.GeneratedTokens)}]");
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task Batcher_LogProbs_RecordsChosenTokenAndTopK()
+    {
+        await Task.Yield();
+
+        // Ranked logits: token 5 > 6 > 7 > rest. The softmax log-probs must reflect that ordering.
+        Tensor<float> model(Tensor<float> input)
+        {
+            int seq = input.Shape[^1];
+            var logits = new Tensor<float>(new[] { 1, seq, Vocab });
+            for (int p = 0; p < seq; p++)
+            {
+                logits[new[] { 0, p, 5 }] = 10f;
+                logits[new[] { 0, p, 6 }] = 9f;
+                logits[new[] { 0, p, 7 }] = 8f;
+            }
+            return logits;
+        }
+
+        using var batcher = new ContinuousBatcher<float>(new ContinuousBatcherConfig
+        {
+            AutoStart = true,
+            EosTokenId = Eos
+        }, model);
+
+        var request = new GenerationRequest<float>
+        {
+            PromptTokenIds = new List<int> { 1 },
+            MaxNewTokens = 2,
+            Temperature = 0f,        // greedy: chosen = argmax = 5
+            EosTokenId = Eos,
+            IncludeLogProbs = true,
+            TopLogProbs = 3
+        };
+
+        var result = await batcher.GenerateAsync(request);
+
+        Assert.NotNull(result.LogProbs);
+        Assert.Equal(result.GeneratedTokens.Count, result.LogProbs!.Count);
+
+        var first = result.LogProbs[0];
+        Assert.Equal(5, first.TokenId);                 // greedy picked the top-logit token
+        Assert.True(first.LogProb < 0f);                // log of a probability < 1
+        Assert.Equal(-0.41f, first.LogProb, 1);         // 10 - logsumexp(10,9,8,0*29) ≈ -0.41
+
+        Assert.Equal(3, first.TopLogProbs.Count);
+        Assert.Equal(new[] { 5, 6, 7 }, first.TopLogProbs.Select(t => t.TokenId).ToArray()); // descending
+        Assert.Equal(first.LogProb, first.TopLogProbs[0].LogProb); // chosen == top-1
+        Assert.True(first.TopLogProbs[0].LogProb > first.TopLogProbs[1].LogProb);
+    }
 }

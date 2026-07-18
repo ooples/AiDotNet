@@ -109,6 +109,12 @@ public class SequenceState<T>
     public double CumulativeLogProb { get; set; } = 0.0;
 
     /// <summary>
+    /// Per-generated-token log-probability records, populated only when the request set
+    /// <see cref="GenerationRequest{T}.IncludeLogProbs"/>. One entry per emitted token, in order.
+    /// </summary>
+    public List<PositionLogProbs>? LogProbs { get; set; }
+
+    /// <summary>
     /// Priority for scheduling (higher = more important).
     /// </summary>
     public int Priority { get; set; } = 0;
@@ -362,6 +368,18 @@ public class GenerationRequest<T>
     /// appeared at all in the text so far, encouraging the model to introduce new tokens/topics.
     /// </summary>
     public float PresencePenalty { get; set; } = 0.0f;
+
+    /// <summary>
+    /// Whether to record per-token log-probabilities during generation (OpenAI <c>logprobs</c>).
+    /// </summary>
+    public bool IncludeLogProbs { get; set; } = false;
+
+    /// <summary>
+    /// How many of the most likely alternative tokens to record per position (OpenAI <c>top_logprobs</c>,
+    /// 0-20). 0 records only the chosen token's log-probability. Ignored when <see cref="IncludeLogProbs"/>
+    /// is false.
+    /// </summary>
+    public int TopLogProbs { get; set; } = 0;
 
     /// <summary>
     /// Whether to use beam search.
