@@ -225,6 +225,24 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         [Fact]
+        public void Loader_OnnxSource_IsWired_ReachesFileOpen()
+        {
+            // Wired: a missing file throws FileNotFound (the resolver reached the ONNX adapter),
+            // NOT NotSupported (which was the pre-wiring behavior).
+            Assert.Throws<FileNotFoundException>(() =>
+                PretrainedLoader<double>.Load(PretrainedSource.Onnx(
+                    Path.Combine(Path.GetTempPath(), "adn_missing_" + Guid.NewGuid().ToString("N") + ".onnx"))));
+        }
+
+        [Fact]
+        public void Loader_GgufSource_IsWired_ReachesFileOpen()
+        {
+            Assert.Throws<FileNotFoundException>(() =>
+                PretrainedLoader<double>.Load(PretrainedSource.Gguf(
+                    Path.Combine(Path.GetTempPath(), "adn_missing_" + Guid.NewGuid().ToString("N") + ".gguf"))));
+        }
+
+        [Fact]
         public void Architectures_ReturnsFalse_ForUnknown()
         {
             var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""SomeUnknownForCausalLM""],
