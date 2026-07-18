@@ -103,6 +103,12 @@ public class SpeculativeDecodingRequest
     /// <summary>Gets or sets the OpenAI <c>presence_penalty</c> (default 0).</summary>
     public double PresencePenalty { get; set; }
 
+    /// <summary>Gets or sets whether to return per-token log-probabilities (OpenAI <c>logprobs</c>).</summary>
+    public bool Logprobs { get; set; }
+
+    /// <summary>Gets or sets how many top alternatives to return per token (OpenAI <c>top_logprobs</c>, 0-20).</summary>
+    public int TopLogprobs { get; set; }
+
     internal string? Validate()
     {
         if (InputTokens == null || InputTokens.Length == 0)

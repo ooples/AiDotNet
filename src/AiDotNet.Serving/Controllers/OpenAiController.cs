@@ -93,7 +93,7 @@ public sealed class OpenAiController : ControllerBase
         {
             sdr = BuildRequest(ctx, prompt, request.ResolveMaxTokens(DefaultMaxTokens),
                 request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias,
-                request.FrequencyPenalty, request.PresencePenalty);
+                request.FrequencyPenalty, request.PresencePenalty, request.Logprobs, request.TopLogprobs);
         }
         catch (ArgumentException ex)
         {
@@ -105,13 +105,22 @@ public sealed class OpenAiController : ControllerBase
 
         if (!request.Stream)
         {
-            var (text, genCount, finish) = Collect(ctx, sdr, stops, ct);
+            string text; int genCount; string finish; ChatLogProbs? logProbs = null;
+            if (request.Logprobs == true)
+            {
+                // logprobs come from the batch path (the streaming Collect path does not surface them).
+                (text, genCount, finish, logProbs) = CollectWithLogProbs(ctx, sdr, stops, ct);
+            }
+            else
+            {
+                (text, genCount, finish) = Collect(ctx, sdr, stops, ct);
+            }
             var response = new ChatCompletionResponse
             {
                 Id = id,
                 Created = created,
                 Model = request.Model,
-                Choices = { new ChatChoice { Index = 0, Message = new ChatMessageOut { Role = "assistant", Content = text }, FinishReason = finish } },
+                Choices = { new ChatChoice { Index = 0, Message = new ChatMessageOut { Role = "assistant", Content = text }, FinishReason = finish, LogProbs = logProbs } },
                 Usage = new Usage { PromptTokens = ctx.PromptTokenCount, CompletionTokens = genCount, TotalTokens = ctx.PromptTokenCount + genCount }
             };
             return Ok(response);
@@ -298,7 +307,7 @@ public sealed class OpenAiController : ControllerBase
     /// <summary>Encodes the prompt and builds the engine request. When <paramref name="responseFormat"/> is
     /// supplied it compiles a structured-output constraint (json_object / json_schema / regex); a malformed
     /// response_format throws <see cref="ArgumentException"/>, which the caller maps to a 400.</summary>
-    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK, double? minP, JToken? responseFormat = null, JObject? logitBias = null, double? frequencyPenalty = null, double? presencePenalty = null)
+    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK, double? minP, JToken? responseFormat = null, JObject? logitBias = null, double? frequencyPenalty = null, double? presencePenalty = null, bool? logprobs = null, int? topLogprobs = null)
     {
         ctx.PromptTokenIds = ctx.Tokenizer.Encode(prompt).TokenIds.ToArray();
         return new SpeculativeDecodingRequest
@@ -314,8 +323,46 @@ public sealed class OpenAiController : ControllerBase
             LogitBias = ParseLogitBias(logitBias),
             FrequencyPenalty = frequencyPenalty ?? 0.0,
             PresencePenalty = presencePenalty ?? 0.0,
+            Logprobs = logprobs ?? false,
+            TopLogprobs = Math.Clamp(topLogprobs ?? 0, 0, 20),
         };
     }
+
+    /// <summary>Runs the batch (non-streaming) generation path, which surfaces per-token log-probabilities,
+    /// applies stop strings to the text, and builds the OpenAI <c>logprobs</c> structure.</summary>
+    private (string Text, int Count, string Finish, ChatLogProbs? LogProbs) CollectWithLogProbs(
+        GenContext ctx, SpeculativeDecodingRequest sdr, IReadOnlyList<string> stops, CancellationToken ct)
+    {
+        var resp = _textGeneration.Generate(ctx.ModelName, ctx.NumericType, sdr, ct);
+        var genTokens = new List<int>(resp.GeneratedTokens);
+        string text = ctx.Tokenizer.Decode(genTokens, skipSpecialTokens: true);
+        int stopAt = FindStop(text, stops);
+        bool stopped = stopAt >= 0;
+        if (stopped) text = text.Substring(0, stopAt);
+        string finish = stopped ? "stop" : (genTokens.Count >= sdr.MaxNewTokens ? "length" : "stop");
+
+        ChatLogProbs? logProbs = null;
+        if (resp.LogProbs is { } lps)
+        {
+            var content = new List<ChatLogProbContent>(lps.Count);
+            foreach (var p in lps)
+            {
+                content.Add(new ChatLogProbContent
+                {
+                    Token = DecodeToken(ctx, p.TokenId),
+                    LogProb = p.LogProb,
+                    TopLogProbs = p.TopLogProbs
+                        .Select(t => new ChatTopLogProb { Token = DecodeToken(ctx, t.TokenId), LogProb = t.LogProb })
+                        .ToList()
+                });
+            }
+            logProbs = new ChatLogProbs { Content = content };
+        }
+        return (text, genTokens.Count, finish, logProbs);
+    }
+
+    private static string DecodeToken(GenContext ctx, int tokenId)
+        => ctx.Tokenizer.Decode(new List<int> { tokenId }, skipSpecialTokens: false) ?? string.Empty;
 
     /// <summary>Parses an OpenAI <c>logit_bias</c> map (token-id string -&gt; bias number) into a typed
     /// dictionary. Throws <see cref="ArgumentException"/> for malformed entries so the caller returns 400.</summary>

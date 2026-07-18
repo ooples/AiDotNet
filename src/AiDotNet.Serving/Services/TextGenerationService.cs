@@ -160,7 +160,9 @@ public sealed class TextGenerationService : ITextGenerationService
             Constraint = request.Constraint,
             LogitBias = request.LogitBias,
             FrequencyPenalty = (float)request.FrequencyPenalty,
-            PresencePenalty = (float)request.PresencePenalty
+            PresencePenalty = (float)request.PresencePenalty,
+            IncludeLogProbs = request.Logprobs,
+            TopLogProbs = request.TopLogprobs
         };
     }
 
@@ -331,7 +333,8 @@ public sealed class TextGenerationService : ITextGenerationService
                     GeneratedTokens = genTokens.ToArray(),
                     NumGenerated = genTokens.Count,
                     AcceptanceRate = wrapper.SpeculationAcceptanceRate ?? 0.0,
-                    RequestId = request.RequestId
+                    RequestId = request.RequestId,
+                    LogProbs = genResult.LogProbs
                 };
             }
             catch (OperationCanceledException)
@@ -424,7 +427,8 @@ public sealed class TextGenerationService : ITextGenerationService
             GeneratedTokens = generated.ToArray(),
             NumGenerated = generated.Count,
             AcceptanceRate = batcher.SpeculationAcceptanceRate ?? 0.0,
-            RequestId = request.RequestId
+            RequestId = request.RequestId,
+            LogProbs = result.LogProbs
         };
     }
 

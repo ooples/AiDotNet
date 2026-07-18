@@ -39,5 +39,11 @@ public class SpeculativeDecodingResponse
     /// Gets or sets any error message if generation failed.
     /// </summary>
     public string? Error { get; set; }
+
+    /// <summary>
+    /// Optional per-generated-token log-probabilities (OpenAI <c>logprobs</c>), present only when the
+    /// request set <see cref="SpeculativeDecodingRequest.Logprobs"/>. One entry per generated token, in order.
+    /// </summary>
+    public System.Collections.Generic.List<AiDotNet.Serving.ContinuousBatching.PositionLogProbs>? LogProbs { get; set; }
 }
 

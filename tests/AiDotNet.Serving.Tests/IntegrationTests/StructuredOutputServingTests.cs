@@ -115,4 +115,49 @@ public class StructuredOutputServingTests
         Assert.Equal(2, resp.NumGenerated);
         Assert.Equal(new[] { 3, 7 }, resp.GeneratedTokens);
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task LogProbs_FlowThroughService()
+    {
+        await Task.Yield();
+        const int vocab = 16;
+
+        Tensor<float> gen(Tensor<float> input)
+        {
+            int seq = input.Shape[^1];
+            var logits = new Tensor<float>(new[] { 1, seq, vocab });
+            for (int p = 0; p < seq; p++)
+            {
+                logits[new[] { 0, p, 5 }] = 10f;
+                logits[new[] { 0, p, 6 }] = 9f;
+            }
+            return logits;
+        }
+
+        var wrapper = new ServableModelWrapper<float>(
+            "sm", inputDimension: 1, outputDimension: vocab, predictFunc: v => v, generationForward: gen);
+        var service = new TextGenerationService(new OneModelRepo("sm", wrapper), NullLogger<TextGenerationService>.Instance);
+
+        var resp = service.Generate("sm", NumericType.Float, new SpeculativeDecodingRequest
+        {
+            InputTokens = new[] { 1, 2 },
+            MaxNewTokens = 3,
+            Temperature = 0,
+            EosTokenId = 999,
+            Logprobs = true,
+            TopLogprobs = 2
+        });
+
+        Assert.Null(resp.Error);
+        Assert.NotNull(resp.LogProbs);
+        Assert.Equal(resp.NumGenerated, resp.LogProbs!.Count);
+        Assert.All(resp.LogProbs, p =>
+        {
+            Assert.Equal(5, p.TokenId);            // greedy picks the top-logit token
+            Assert.True(p.LogProb < 0f);
+            Assert.Equal(2, p.TopLogProbs.Count);  // top_logprobs=2
+            Assert.Equal(5, p.TopLogProbs[0].TokenId);
+            Assert.Equal(6, p.TopLogProbs[1].TokenId);
+        });
+    }
 }

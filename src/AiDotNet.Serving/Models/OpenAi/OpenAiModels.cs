@@ -26,6 +26,8 @@ public sealed class ChatCompletionRequest
     [JsonProperty("logit_bias")] public JObject? LogitBias { get; set; }
     [JsonProperty("frequency_penalty")] public double? FrequencyPenalty { get; set; }
     [JsonProperty("presence_penalty")] public double? PresencePenalty { get; set; }
+    [JsonProperty("logprobs")] public bool? Logprobs { get; set; }
+    [JsonProperty("top_logprobs")] public int? TopLogprobs { get; set; }
 
     /// <summary>Resolves the effective max-new-tokens (max_tokens or max_completion_tokens, else fallback).</summary>
     public int ResolveMaxTokens(int fallback) => MaxTokens ?? MaxCompletionTokens ?? fallback;
@@ -91,6 +93,28 @@ public sealed class ChatChoice
     [JsonProperty("message", NullValueHandling = NullValueHandling.Ignore)] public ChatMessageOut? Message { get; set; }
     [JsonProperty("delta", NullValueHandling = NullValueHandling.Ignore)] public ChatMessageOut? Delta { get; set; }
     [JsonProperty("finish_reason")] public string? FinishReason { get; set; }
+    [JsonProperty("logprobs", NullValueHandling = NullValueHandling.Ignore)] public ChatLogProbs? LogProbs { get; set; }
+}
+
+/// <summary>OpenAI chat <c>logprobs</c> object: per-token log-probabilities of the generated content.</summary>
+public sealed class ChatLogProbs
+{
+    [JsonProperty("content")] public List<ChatLogProbContent> Content { get; set; } = new();
+}
+
+/// <summary>Log-probability entry for one generated token, with its most likely alternatives.</summary>
+public sealed class ChatLogProbContent
+{
+    [JsonProperty("token")] public string Token { get; set; } = string.Empty;
+    [JsonProperty("logprob")] public float LogProb { get; set; }
+    [JsonProperty("top_logprobs")] public List<ChatTopLogProb> TopLogProbs { get; set; } = new();
+}
+
+/// <summary>A single alternative token and its log-probability.</summary>
+public sealed class ChatTopLogProb
+{
+    [JsonProperty("token")] public string Token { get; set; } = string.Empty;
+    [JsonProperty("logprob")] public float LogProb { get; set; }
 }
 
 /// <summary>Non-streaming chat completion response.</summary>

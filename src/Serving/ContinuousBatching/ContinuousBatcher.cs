@@ -1095,15 +1095,23 @@ internal class ContinuousBatcher<T> : IDisposable
 
     private bool ShouldUseSpeculativeDecoding(IReadOnlyCollection<SequenceState<T>> batch, out string reason)
     {
-        // Structured-output requests must never speculate: the greedy draft/verify path picks tokens via
-        // argmax without applying the per-sequence constraint mask, so a drafted token could violate the
-        // required format. Force plain masked decode whenever any batched sequence carries a constraint.
-        // This overrides even ForceOn — correctness of the constraint takes priority over the speed hint.
+        // Some per-request features are incompatible with the greedy draft/verify path, which picks tokens
+        // via argmax and bypasses the per-token sampler:
+        //  - a structured-output Constraint (a drafted token could violate the required format), and
+        //  - IncludeLogProbs (the speculative path never computes the per-token distribution, so logprobs
+        //    would be missing for accepted draft tokens).
+        // Force plain masked/sampled decode whenever any batched sequence needs them. Overrides even ForceOn.
         foreach (var seq in batch)
         {
             if (seq.Request.Constraint is not null)
             {
                 reason = "StructuredOutputConstraint";
+                InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
+                return false;
+            }
+            if (seq.Request.IncludeLogProbs)
+            {
+                reason = "LogProbsRequested";
                 InferenceDiagnostics.RecordDecision("Serving.ContinuousBatching", "SpeculativeDecoding", enabled: false, reason: reason);
                 return false;
             }
