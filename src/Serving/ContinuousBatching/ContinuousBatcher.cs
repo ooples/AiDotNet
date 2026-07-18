@@ -1375,6 +1375,24 @@ internal class ContinuousBatcher<T> : IDisposable
             lastLogits[i] = Convert.ToSingle(logits[indices]);
         }
 
+        // Repetition control (OpenAI frequency_penalty / presence_penalty): reduce a token's logit by
+        // presence (once if it has appeared) + frequency × (times it has appeared) in the text so far.
+        if (request.FrequencyPenalty != 0f || request.PresencePenalty != 0f)
+        {
+            var counts = new Dictionary<int, int>();
+            foreach (int t in sequence.TokenIds)
+            {
+                if (t >= 0 && t < vocabSize)
+                {
+                    counts[t] = counts.TryGetValue(t, out int c) ? c + 1 : 1;
+                }
+            }
+            foreach (var kv in counts)
+            {
+                lastLogits[kv.Key] -= request.PresencePenalty + request.FrequencyPenalty * kv.Value;
+            }
+        }
+
         // Per-token additive logit bias (OpenAI logit_bias): applied first so a structured-output mask can
         // still veto a biased-up token that would break the format, and a -100 ban composes with the mask.
         if (request.LogitBias is { Count: > 0 } bias)

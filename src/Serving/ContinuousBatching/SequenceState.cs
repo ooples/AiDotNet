@@ -352,6 +352,18 @@ public class GenerationRequest<T>
     public float RepetitionPenalty { get; set; } = 1.0f;
 
     /// <summary>
+    /// OpenAI <c>frequency_penalty</c> (default 0): each token's logit is reduced by this value times the
+    /// number of times it has already appeared in the text so far, discouraging verbatim repetition.
+    /// </summary>
+    public float FrequencyPenalty { get; set; } = 0.0f;
+
+    /// <summary>
+    /// OpenAI <c>presence_penalty</c> (default 0): a token's logit is reduced by this value once if it has
+    /// appeared at all in the text so far, encouraging the model to introduce new tokens/topics.
+    /// </summary>
+    public float PresencePenalty { get; set; } = 0.0f;
+
+    /// <summary>
     /// Whether to use beam search.
     /// </summary>
     public bool UseBeamSearch { get; set; } = false;

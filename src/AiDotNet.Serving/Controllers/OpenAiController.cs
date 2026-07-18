@@ -92,7 +92,8 @@ public sealed class OpenAiController : ControllerBase
         try
         {
             sdr = BuildRequest(ctx, prompt, request.ResolveMaxTokens(DefaultMaxTokens),
-                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias);
+                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias,
+                request.FrequencyPenalty, request.PresencePenalty);
         }
         catch (ArgumentException ex)
         {
@@ -179,7 +180,8 @@ public sealed class OpenAiController : ControllerBase
         try
         {
             sdr = BuildRequest(ctx, request.PromptText(), request.ResolveMaxTokens(DefaultMaxTokens),
-                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias);
+                request.Temperature, request.TopP, request.TopK, request.MinP, request.ResponseFormat, request.LogitBias,
+                request.FrequencyPenalty, request.PresencePenalty);
         }
         catch (ArgumentException ex)
         {
@@ -296,7 +298,7 @@ public sealed class OpenAiController : ControllerBase
     /// <summary>Encodes the prompt and builds the engine request. When <paramref name="responseFormat"/> is
     /// supplied it compiles a structured-output constraint (json_object / json_schema / regex); a malformed
     /// response_format throws <see cref="ArgumentException"/>, which the caller maps to a 400.</summary>
-    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK, double? minP, JToken? responseFormat = null, JObject? logitBias = null)
+    private static SpeculativeDecodingRequest BuildRequest(GenContext ctx, string prompt, int maxTokens, double? temperature, double? topP, int? topK, double? minP, JToken? responseFormat = null, JObject? logitBias = null, double? frequencyPenalty = null, double? presencePenalty = null)
     {
         ctx.PromptTokenIds = ctx.Tokenizer.Encode(prompt).TokenIds.ToArray();
         return new SpeculativeDecodingRequest
@@ -310,6 +312,8 @@ public sealed class OpenAiController : ControllerBase
             EosTokenId = ctx.EosTokenId,
             Constraint = StructuredOutputFactory.Build(responseFormat, ctx.Tokenizer, ctx.EosTokenId ?? -1),
             LogitBias = ParseLogitBias(logitBias),
+            FrequencyPenalty = frequencyPenalty ?? 0.0,
+            PresencePenalty = presencePenalty ?? 0.0,
         };
     }
 

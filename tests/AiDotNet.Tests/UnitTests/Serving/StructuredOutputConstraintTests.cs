@@ -161,4 +161,45 @@ public class StructuredOutputConstraintTests
         Assert.DoesNotContain(5, result.GeneratedTokens); // banned
         Assert.All(result.GeneratedTokens, t => Assert.Equal(8, t)); // forced winner
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task Batcher_FrequencyPenalty_BreaksRepetitionLoops()
+    {
+        await Task.Yield();
+
+        // Model narrowly prefers token 5 over 6 (10 vs 9). Greedy would emit 5 forever. A frequency penalty
+        // pushes 5's logit down as it recurs, so after emitting it once the model switches to other tokens
+        // instead of looping — the whole point of frequency_penalty.
+        Tensor<float> model(Tensor<float> input)
+        {
+            int seq = input.Shape[^1];
+            var logits = new Tensor<float>(new[] { 1, seq, Vocab });
+            for (int p = 0; p < seq; p++)
+                for (int i = 0; i < Vocab; i++)
+                    logits[new[] { 0, p, i }] = i == 5 ? 10f : (i == 6 ? 9f : 0f);
+            return logits;
+        }
+
+        using var batcher = new ContinuousBatcher<float>(new ContinuousBatcherConfig
+        {
+            AutoStart = true,
+            EosTokenId = Eos
+        }, model);
+
+        var request = new GenerationRequest<float>
+        {
+            PromptTokenIds = new List<int> { 1 },
+            MaxNewTokens = 6,
+            Temperature = 0f,
+            EosTokenId = Eos,
+            FrequencyPenalty = 5f // each prior occurrence subtracts 5 from the token's logit
+        };
+
+        var result = await batcher.GenerateAsync(request);
+
+        // Without the penalty this would be [5,5,5,5,5,5]; the penalty forces variety.
+        Assert.True(result.GeneratedTokens.Count > 1);
+        Assert.True(result.GeneratedTokens.Distinct().Count() > 1,
+            $"frequency penalty should break the repetition loop; got [{string.Join(",", result.GeneratedTokens)}]");
+    }
 }

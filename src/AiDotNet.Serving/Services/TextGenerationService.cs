@@ -158,7 +158,9 @@ public sealed class TextGenerationService : ITextGenerationService
             SpeculationDepth = request.NumDraftTokens,
             Seed = request.RequestId is { } id ? id.GetHashCode() : (int?)null,
             Constraint = request.Constraint,
-            LogitBias = request.LogitBias
+            LogitBias = request.LogitBias,
+            FrequencyPenalty = (float)request.FrequencyPenalty,
+            PresencePenalty = (float)request.PresencePenalty
         };
     }
 

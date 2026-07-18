@@ -97,6 +97,12 @@ public class SpeculativeDecodingRequest
     /// </summary>
     public IReadOnlyDictionary<int, float>? LogitBias { get; set; }
 
+    /// <summary>Gets or sets the OpenAI <c>frequency_penalty</c> (default 0).</summary>
+    public double FrequencyPenalty { get; set; }
+
+    /// <summary>Gets or sets the OpenAI <c>presence_penalty</c> (default 0).</summary>
+    public double PresencePenalty { get; set; }
+
     internal string? Validate()
     {
         if (InputTokens == null || InputTokens.Length == 0)
