@@ -24,18 +24,18 @@ public static class PretrainedLoader<T>
     /// Loads the model described by <paramref name="source"/>. Blocks on any required download.
     /// </summary>
     /// <param name="source">The pretrained-source descriptor.</param>
-    /// <returns>A weight-loaded <see cref="NeuralNetworkBase{T}"/> (which is an
-    /// <see cref="IFullModel{T, TInput, TOutput}"/> over <see cref="Tensor{T}"/>).</returns>
+    /// <returns>A ready model as an <see cref="IFullModel{T, TInput, TOutput}"/> over <see cref="Tensor{T}"/>:
+    /// a weight-loaded decoder for safetensors/hub sources, or an ONNX-graph adapter for ONNX sources.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> is null.</exception>
     /// <exception cref="NotSupportedException">Thrown for source kinds not yet wired through the facade
-    /// (ONNX, GGUF) or for an unrecognized architecture.</exception>
-    public static NeuralNetworkBase<T> Load(PretrainedSource source) =>
+    /// (GGUF) or for an unrecognized architecture.</exception>
+    public static IFullModel<T, Tensor<T>, Tensor<T>> Load(PretrainedSource source) =>
         LoadAsync(source, CancellationToken.None).GetAwaiter().GetResult();
 
     /// <summary>Asynchronous variant of <see cref="Load"/>.</summary>
     /// <param name="source">The pretrained-source descriptor.</param>
     /// <param name="cancellationToken">Cancellation for the download phase.</param>
-    public static async Task<NeuralNetworkBase<T>> LoadAsync(PretrainedSource source, CancellationToken cancellationToken = default)
+    public static async Task<IFullModel<T, Tensor<T>, Tensor<T>>> LoadAsync(PretrainedSource source, CancellationToken cancellationToken = default)
     {
         Guard.NotNull(source);
 
@@ -51,15 +51,11 @@ public static class PretrainedLoader<T>
             }
 
             case PretrainedModelKind.Onnx:
-                throw new NotSupportedException(
-                    "ONNX models run through the ONNX runtime (OnnxModel<T>) rather than the decoder builder; " +
-                    "facade wiring for PretrainedSource.Onnx is not yet available. Construct OnnxModel<T> directly " +
-                    "and pass it to ConfigureModel(model) in the meantime.");
+                // Run the ONNX graph through the runtime, adapted to the IFullModel contract.
+                return OnnxFullModelAdapter<T>.FromFile(source.Locator);
 
             case PretrainedModelKind.Gguf:
-                throw new NotSupportedException(
-                    "GGUF import (metadata->config + GGUF tensor-name mapping) is not yet wired through the facade; " +
-                    "use PretrainedSource.HuggingFace or PretrainedSource.Safetensors.");
+                return LoadFromGguf(source.Locator, source);
 
             default:
                 throw new NotSupportedException($"Unknown pretrained source kind '{source.Kind}'.");
@@ -88,6 +84,18 @@ public static class PretrainedLoader<T>
         // model's own tensors), so it is safe to dispose immediately afterwards.
         using var weights = ShardedSafetensorsSource.Open(directory);
         return factory(config, weights);
+    }
+
+    private static NeuralNetworkBase<T> LoadFromGguf(string path, PretrainedSource source)
+    {
+        // GGUF is self-describing: its metadata yields the config and its tensors are exposed under Hugging
+        // Face names, so the same architecture registry + builder reconstruct and weight-load the decoder.
+        using var gguf = GgufModelSource.Open(path);
+        if (!PretrainedArchitectures<T>.TryResolve(gguf.Config, source.ArchitectureOverride, out var factory))
+            throw new NotSupportedException(
+                $"GGUF architecture '{gguf.Config.ModelType}' is not supported. Registered architectures: " +
+                $"{string.Join(", ", PretrainedArchitectures<T>.RegisteredNames)}.");
+        return factory(gguf.Config, gguf);
     }
 
     private static async Task<string> DownloadHubModelAsync(PretrainedSource source, CancellationToken cancellationToken)
