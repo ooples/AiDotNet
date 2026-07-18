@@ -407,20 +407,28 @@ public class LicenseServerEndpointTests
     [Fact(Timeout = 60000)]
     public async Task StripeWebhook_LicenseKeyFormat_IsValid()
     {
-        // The webhook generates keys in format: aidn.{12chars}.{16chars}
-        // Validate that the generated format passes production key format validation
-        var keyPart1 = Guid.NewGuid().ToString("N")[..12];
-        var keyPart2 = Guid.NewGuid().ToString("N")[..16];
-        var key = $"aidn.{keyPart1}.{keyPart2}";
+        // The webhook generates server-validated keys in format AIDN-PROD-{TIER}-{32hex}
+        // (see website/supabase/functions/stripe-webhook/index.ts — WEBHOOK_PREFIX="AIDN-PROD",
+        // licenseKey = `${WEBHOOK_PREFIX}-${keySegment}-${keyHex}`). The previous dotted
+        // `aidn.{id}.{sig}` form is NOT what the webhook emits and is rejected by the client's
+        // signed-key checker since #1807 (a signature segment must decode to a 32-byte HMAC tag),
+        // so this test asserts the ACTUAL server-key format the webhook produces.
+        var keyHex = Guid.NewGuid().ToString("N"); // 32 hex chars
+        foreach (var tier in new[] { "PRO", "ENTERPRISE" })
+        {
+            var key = $"AIDN-PROD-{tier}-{keyHex}";
 
-        // Validate through production format checker, not hand-rolled checks
-        Assert.True(LicenseValidator.ValidateKeyFormat(key),
-            $"Generated key '{key}' should pass production format validation");
+            // Validate through the production format checker, not hand-rolled checks.
+            Assert.True(LicenseValidator.ValidateKeyFormat(key),
+                $"Generated key '{key}' should pass production format validation");
+            Assert.True(LicenseValidator.IsServerValidatedKeyFormat(key),
+                $"Generated key '{key}' should be recognised as a server-validated (AIDN-*) key");
 
-        // Also verify the parts structure
-        var parts = key.Split('.');
-        Assert.Equal(3, parts.Length);
-        Assert.Equal("aidn", parts[0]);
+            // Structure: >=4 dash-delimited segments, first is AIDN, last is >=8 hex chars.
+            var parts = key.Split('-');
+            Assert.True(parts.Length >= 4);
+            Assert.Equal("AIDN", parts[0]);
+        }
     }
 
     // ─── BuildRequestBody tests ───
