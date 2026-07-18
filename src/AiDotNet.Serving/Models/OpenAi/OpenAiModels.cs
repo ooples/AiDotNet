@@ -30,12 +30,25 @@ public sealed class ChatCompletionRequest
     [JsonProperty("top_logprobs")] public int? TopLogprobs { get; set; }
     [JsonProperty("tools")] public List<ToolDefinition>? Tools { get; set; }
     [JsonProperty("tool_choice")] public JToken? ToolChoice { get; set; }
+    [JsonProperty("stream_options")] public StreamOptions? StreamOptions { get; set; }
 
     /// <summary>Resolves the effective max-new-tokens (max_tokens or max_completion_tokens, else fallback).</summary>
     internal int ResolveMaxTokens(int fallback) => MaxTokens ?? MaxCompletionTokens ?? fallback;
 
     /// <summary>Normalized stop strings.</summary>
     internal IReadOnlyList<string> ResolveStop() => OpenAiJson.StopList(Stop);
+}
+
+/// <summary>OpenAI <c>stream_options</c>: controls extra data emitted on the SSE stream.</summary>
+public sealed class StreamOptions
+{
+    /// <summary>
+    /// When true, a final SSE chunk (with an empty <c>choices</c> array) carries the authoritative token
+    /// <see cref="Usage"/> for the request. Clients that need exact prompt/completion token counts from a
+    /// streaming response rely on this instead of counting SSE content chunks (a chunk may hold several
+    /// tokens, and some tokens decode to no text).
+    /// </summary>
+    [JsonProperty("include_usage")] public bool IncludeUsage { get; set; }
 }
 
 /// <summary>A chat message. <see cref="Content"/> may be a string or an array of content parts.</summary>
@@ -65,6 +78,7 @@ public sealed class CompletionRequest
     [JsonProperty("logit_bias")] public JObject? LogitBias { get; set; }
     [JsonProperty("frequency_penalty")] public double? FrequencyPenalty { get; set; }
     [JsonProperty("presence_penalty")] public double? PresencePenalty { get; set; }
+    [JsonProperty("stream_options")] public StreamOptions? StreamOptions { get; set; }
 
     internal int ResolveMaxTokens(int fallback) => MaxTokens ?? fallback;
     internal string PromptText() => OpenAiJson.ContentText(Prompt);
@@ -169,6 +183,7 @@ public sealed class ChatCompletionChunk
     [JsonProperty("created")] public long Created { get; set; }
     [JsonProperty("model")] public string Model { get; set; } = string.Empty;
     [JsonProperty("choices")] public List<ChatChoice> Choices { get; set; } = new();
+    [JsonProperty("usage", NullValueHandling = NullValueHandling.Ignore)] public Usage? Usage { get; set; }
 }
 
 /// <summary>A text-completion choice.</summary>

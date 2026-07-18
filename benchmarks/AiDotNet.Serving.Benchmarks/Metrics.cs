@@ -31,8 +31,17 @@ public sealed class RequestResult
     /// <summary>Number of prompt tokens (from server usage, or the synthesized prompt length).</summary>
     public int PromptTokens { get; set; }
 
-    /// <summary>Number of generated tokens.</summary>
+    /// <summary>Number of generated tokens (authoritative, from server usage). Zero and meaningless when
+    /// <see cref="TokenMetricsUnavailable"/> is true.</summary>
     public int OutputTokens { get; set; }
+
+    /// <summary>
+    /// True when the endpoint returned no authoritative token usage, so token-count-derived metrics
+    /// (token throughput, TPOT, prompt/output totals) are UNKNOWN for this request. Such results are
+    /// excluded from those aggregates rather than being back-filled with SSE chunk counts (a chunk may
+    /// carry multiple tokens and some tokens decode to no text, so chunk counts corrupt token accounting).
+    /// </summary>
+    public bool TokenMetricsUnavailable { get; set; }
 
     /// <summary>Token arrival times relative to dispatch, in ms (streaming backends only).</summary>
     public List<double> TokenArrivalsMs { get; } = new();
@@ -133,8 +142,11 @@ public sealed class BenchmarkReport
             SlaTpotMs = o.SlaTpotMs,
         };
 
-        report.TotalPromptTokens = ok.Sum(r => (long)r.PromptTokens);
-        report.TotalOutputTokens = ok.Sum(r => (long)r.OutputTokens);
+        // Token-count-derived metrics use ONLY requests with authoritative usage; results whose endpoint
+        // emitted no usage object (TokenMetricsUnavailable) are excluded rather than counted via chunk counts.
+        var tok = ok.Where(r => !r.TokenMetricsUnavailable).ToList();
+        report.TotalPromptTokens = tok.Sum(r => (long)r.PromptTokens);
+        report.TotalOutputTokens = tok.Sum(r => (long)r.OutputTokens);
 
         if (durationSec > 0)
         {
@@ -144,7 +156,7 @@ public sealed class BenchmarkReport
         }
 
         report.Ttft = Stat.From(ok.Where(r => r.TtftMs.HasValue).Select(r => r.TtftMs!.Value).ToList());
-        report.Tpot = Stat.From(ok.Where(r => r.TpotMs.HasValue).Select(r => r.TpotMs!.Value).ToList());
+        report.Tpot = Stat.From(tok.Where(r => r.TpotMs.HasValue).Select(r => r.TpotMs!.Value).ToList());
         report.Itl = Stat.From(ok.SelectMany(r => r.InterTokenLatencies()).ToList());
         report.E2E = Stat.From(ok.Select(r => r.E2EMs).ToList());
 
