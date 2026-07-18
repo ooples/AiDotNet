@@ -120,42 +120,62 @@ internal sealed class TensorParallelPagedAttention<T>
         var ctx = context.AsWritableSpan();
         var cachedKey = new T[_localDim];
         var cachedVal = new T[_localDim];
-        var scores = new double[basePosition + seqLen];
+        // Per-head score rows for one query position (flattened [head, position]). Each cached K/V row is read
+        // ONCE per position and reused across every head, rather than re-reading the whole _localDim-wide row
+        // (under the cache lock) _localHeads times — the read traffic and lock acquisitions drop by _localHeads.
+        int scoreStride = basePosition + seqLen;
+        var scores = new double[_localHeads * scoreStride];
+        var maxScore = new double[_localHeads];
+        var sumExp = new double[_localHeads];
+        var acc = new double[_localDim];
 
         for (int t = 0; t < seqLen; t++)
         {
             int lastPos = basePosition + t;
             int qBase = t * _localDim;
-            for (int h = 0; h < _localHeads; h++)
-            {
-                int hOff = h * _headDim;
 
-                double maxScore = double.NegativeInfinity;
-                for (int j = 0; j <= lastPos; j++)
+            // Pass 1 — read each cached key row once, score every head against it.
+            for (int h = 0; h < _localHeads; h++) maxScore[h] = double.NegativeInfinity;
+            for (int j = 0; j <= lastPos; j++)
+            {
+                _cache.ReadKey(seqId, j, _layerIndex, cachedKey);
+                for (int h = 0; h < _localHeads; h++)
                 {
-                    _cache.ReadKey(seqId, j, _layerIndex, cachedKey);
+                    int hOff = h * _headDim;
                     double dot = 0.0;
                     for (int d = 0; d < _headDim; d++)
                         dot += Convert.ToDouble(qs[qBase + hOff + d]) * Convert.ToDouble(cachedKey[hOff + d]);
                     double s = dot * _scale;
-                    scores[j] = s;
-                    if (s > maxScore) maxScore = s;
+                    scores[h * scoreStride + j] = s;
+                    if (s > maxScore[h]) maxScore[h] = s;
                 }
-
-                double sumExp = 0.0;
-                for (int j = 0; j <= lastPos; j++) { double e = Math.Exp(scores[j] - maxScore); scores[j] = e; sumExp += e; }
-                double inv = sumExp > 0 ? 1.0 / sumExp : 0.0;
-
-                int ctxBase = t * _localDim + hOff;
-                var acc = new double[_headDim];
-                for (int j = 0; j <= lastPos; j++)
-                {
-                    _cache.ReadValue(seqId, j, _layerIndex, cachedVal);
-                    double w = scores[j] * inv;
-                    for (int d = 0; d < _headDim; d++) acc[d] += w * Convert.ToDouble(cachedVal[hOff + d]);
-                }
-                for (int d = 0; d < _headDim; d++) ctx[ctxBase + d] = NumOps.FromDouble(acc[d]);
             }
+
+            // Softmax per head (over positions 0..lastPos).
+            for (int h = 0; h < _localHeads; h++)
+            {
+                double se = 0.0;
+                int rowBase = h * scoreStride;
+                for (int j = 0; j <= lastPos; j++) { double e = Math.Exp(scores[rowBase + j] - maxScore[h]); scores[rowBase + j] = e; se += e; }
+                sumExp[h] = se;
+            }
+
+            // Pass 2 — read each cached value row once, accumulate the weighted context for every head.
+            Array.Clear(acc, 0, _localDim);
+            for (int j = 0; j <= lastPos; j++)
+            {
+                _cache.ReadValue(seqId, j, _layerIndex, cachedVal);
+                for (int h = 0; h < _localHeads; h++)
+                {
+                    int hOff = h * _headDim;
+                    double inv = sumExp[h] > 0 ? 1.0 / sumExp[h] : 0.0;
+                    double w = scores[h * scoreStride + j] * inv;
+                    for (int d = 0; d < _headDim; d++) acc[hOff + d] += w * Convert.ToDouble(cachedVal[hOff + d]);
+                }
+            }
+
+            int ctxBase = t * _localDim;
+            for (int d = 0; d < _localDim; d++) ctx[ctxBase + d] = NumOps.FromDouble(acc[d]);
         }
 
         // Row-parallel output projection: all-reduce the per-rank head contributions into the full output.

@@ -138,7 +138,7 @@ public class ModelsController : ControllerBase
             var candidatePath = Path.GetFullPath(Path.Combine(modelsRoot, request.Path));
 
             // Ensure the resolved path is within the models directory (with directory boundary check)
-            if (!candidatePath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
+            if (!IsWithinRoot(candidatePath, modelsRoot))
             {
                 _logger.LogWarning("Attempted path traversal: requested path '{Path}' resolves outside model directory",
                     request.Path);
@@ -200,7 +200,7 @@ public class ModelsController : ControllerBase
                 try
                 {
                     var tokenizerPath = Path.GetFullPath(Path.Combine(modelsRoot, request.TokenizerPath!));
-                    if (!tokenizerPath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
+                    if (!IsWithinRoot(tokenizerPath, modelsRoot))
                     {
                         _logger.LogWarning(
                             "Attempted path traversal: tokenizer path '{TokenizerPath}' resolves outside the model directory; skipping tokenizer registration.",
@@ -543,5 +543,21 @@ public class ModelsController : ControllerBase
             LoadedAt = DateTime.UtcNow
         };
         } // end InternalOperation scope
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="candidate"/> (already <see cref="Path.GetFullPath(string)"/>-canonicalized)
+    /// lies inside <paramref name="rootWithSeparator"/> (a canonical directory ending in a separator). The prefix
+    /// comparison is case-sensitive (<see cref="StringComparison.Ordinal"/>) on Unix-like file systems and
+    /// case-insensitive (<see cref="StringComparison.OrdinalIgnoreCase"/>) on Windows — matching how each OS
+    /// actually resolves paths, so <c>/srv/models/x</c> cannot escape a <c>/srv/Models/</c> root on Linux.
+    /// </summary>
+    private static bool IsWithinRoot(string candidate, string rootWithSeparator)
+    {
+        var comparison = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+            System.Runtime.InteropServices.OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return candidate.StartsWith(rootWithSeparator, comparison);
     }
 }

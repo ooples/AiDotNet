@@ -53,8 +53,9 @@ public static class ServingMetrics
         if (tpotSeconds is { } tpot && tpot >= 0) TimePerOutputToken.Observe(tpot);
     }
 
-    /// <summary>Resets all counters and histograms (used by tests for isolation).</summary>
-    public static void Reset()
+    /// <summary>Resets all counters and histograms. Internal: exists only for test isolation — resetting
+    /// process-wide metrics at runtime is a footgun, so it is not part of the supported public surface.</summary>
+    internal static void Reset()
     {
         Interlocked.Exchange(ref _requestsSuccess, 0);
         Interlocked.Exchange(ref _requestsError, 0);
