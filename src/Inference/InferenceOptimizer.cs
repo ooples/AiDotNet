@@ -429,7 +429,11 @@ internal class InferenceOptimizer<T>
             NumHeads = numHeads,
             HeadDimension = headDim,
             BlockSize = blockSize,
-            MaxBatchSize = _config.MaxBatchSize
+            MaxBatchSize = _config.MaxBatchSize,
+            // Sliding-window attention (Mistral-style) on the paged path: each query attends only to the most
+            // recent KVCacheWindowSize keys, matching the contiguous KV cache's sliding-window behavior. 0
+            // (window disabled) keeps full causal attention.
+            WindowSize = _config.UseSlidingWindowKVCache ? Math.Max(0, _config.KVCacheWindowSize) : 0
         });
 
         // Allocate a fresh sequence ID for this optimized model instance (one model == one sequence).

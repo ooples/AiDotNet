@@ -79,6 +79,11 @@ internal class PagedAttentionKernel<T>
             return;
         }
 
+        // Sliding-window attention (Mistral-style): a decode query at the last cached position attends only
+        // to the most recent WindowSize keys. windowStart clamps the lower bound of every per-position loop
+        // below, so the softmax is normalized over the window only. 0 => full causal attention.
+        int windowStart = _config.WindowSize > 0 ? Math.Max(0, seqLen - _config.WindowSize) : 0;
+
         // Allocate working memory
         var scores = new float[seqLen];
         var keyBuffer = new T[numHeads * headDim];
@@ -92,7 +97,7 @@ internal class PagedAttentionKernel<T>
             // Compute attention scores for all positions
             float maxScore = float.NegativeInfinity;
 
-            for (int pos = 0; pos < seqLen; pos++)
+            for (int pos = windowStart; pos < seqLen; pos++)
             {
                 // Read key from paged cache
                 _kvCache.ReadKey(sequenceId, pos, layer, keyBuffer.AsSpan());
@@ -116,9 +121,9 @@ internal class PagedAttentionKernel<T>
                 maxScore = Math.Max(maxScore, score);
             }
 
-            // Softmax
+            // Softmax (over the window only)
             float sumExp = 0;
-            for (int pos = 0; pos < seqLen; pos++)
+            for (int pos = windowStart; pos < seqLen; pos++)
             {
                 scores[pos] = MathF.Exp(scores[pos] - maxScore);
                 sumExp += scores[pos];
@@ -126,7 +131,7 @@ internal class PagedAttentionKernel<T>
 
             if (sumExp > 0)
             {
-                for (int pos = 0; pos < seqLen; pos++)
+                for (int pos = windowStart; pos < seqLen; pos++)
                 {
                     scores[pos] /= sumExp;
                 }
@@ -134,7 +139,7 @@ internal class PagedAttentionKernel<T>
 
             // Compute weighted sum of values
             var headOutput = new float[headDim];
-            for (int pos = 0; pos < seqLen; pos++)
+            for (int pos = windowStart; pos < seqLen; pos++)
             {
                 if (scores[pos] < 1e-10f)
                     continue;
@@ -215,6 +220,10 @@ internal class PagedAttentionKernel<T>
         // If queryPosition not specified, default to end of sequence (autoregressive decode)
         int qPos = queryPosition >= 0 ? queryPosition : seqLen - 1;
 
+        // Sliding-window attention: the query attends only to the most recent WindowSize keys (relative to the
+        // query position). 0 => full causal attention.
+        int windowStart = _config.WindowSize > 0 ? Math.Max(0, (qPos + 1) - _config.WindowSize) : 0;
+
         int numBlocks = blockTable.Length;
 
         // Per-head accumulators for online softmax
@@ -240,10 +249,16 @@ internal class PagedAttentionKernel<T>
             int blockEnd = Math.Min(blockStart + blockSize, seqLen);
             int tokensInBlock = blockEnd - blockStart;
 
+            // Sliding window: skip blocks entirely before the window start.
+            if (blockEnd <= windowStart) continue;
+
             // Process tokens in this block
             for (int tokenOffset = 0; tokenOffset < tokensInBlock; tokenOffset++)
             {
                 int pos = blockStart + tokenOffset;
+
+                // Sliding window: skip positions before the window start.
+                if (pos < windowStart) continue;
 
                 // Read KV from this position
                 _kvCache.ReadKey(sequenceId, pos, layer, keyBuffer.AsSpan());
@@ -564,6 +579,13 @@ internal class PagedAttentionConfig
 
     /// <summary>Whether to use parallel processing for batched attention.</summary>
     public bool UseParallel { get; set; } = true;
+
+    /// <summary>
+    /// Sliding-window attention size (Mistral/Mixtral-style SWA). When &gt; 0, each query attends only to the
+    /// most recent <c>WindowSize</c> key positions, bounding both the attention span and (with paged-cache
+    /// eviction) the KV memory. 0 disables the window (full causal attention).
+    /// </summary>
+    public int WindowSize { get; set; }
 }
 
 /// <summary>
