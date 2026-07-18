@@ -96,7 +96,7 @@ internal static class ModelPersistenceGuard
         // Intentionally NOT short-circuiting on _internalOperationDepth.
         // See the remarks above — the scope is for byte-level Serialize/
         // Deserialize calls, not for user-facing Save/Load entry points.
-        EnforceCore();
+        EnforceCore(LicenseCapabilities.ModelSave);
     }
 
     /// <summary>
@@ -122,7 +122,8 @@ internal static class ModelPersistenceGuard
     internal static void EnforceBeforeLoad()
     {
         if (_internalOperationDepth.Value > 0) return;
-        EnforceCore();
+        // Load is not a paid gate — any Active license (or the trial) permits it.
+        EnforceCore(LicenseCapabilities.None);
     }
 
     /// <summary>
@@ -136,7 +137,7 @@ internal static class ModelPersistenceGuard
     internal static void EnforceBeforeSerialize()
     {
         if (_internalOperationDepth.Value > 0) return;
-        EnforceCore();
+        EnforceCore(LicenseCapabilities.ModelSave);
     }
 
     /// <summary>
@@ -150,7 +151,8 @@ internal static class ModelPersistenceGuard
     internal static void EnforceBeforeDeserialize()
     {
         if (_internalOperationDepth.Value > 0) return;
-        EnforceCore();
+        // Deserialize/load is not a paid gate — any Active license (or the trial) permits it.
+        EnforceCore(LicenseCapabilities.None);
     }
 
     /// <summary>
@@ -257,7 +259,7 @@ internal static class ModelPersistenceGuard
     /// Shared enforcement logic: checks for a license key first (with server validation),
     /// then falls back to trial operation counting. Emits anonymous telemetry events if enabled.
     /// </summary>
-    private static void EnforceCore()
+    private static void EnforceCore(string requiredCapability)
     {
         // Check if a license key is available:
         // 1. Builder's configured key (thread-static, set during BuildAsync)
@@ -272,9 +274,21 @@ internal static class ModelPersistenceGuard
             switch (result.Status)
             {
                 case LicenseKeyStatus.Active:
-                    // Confirmed valid (online, or offline via a verified HMAC signature) — allow.
-                    LicensingTelemetryCollector.Instance.RecordLicensedOperation("persistence");
-                    return;
+                    // Capability-authoritative gating (v2): an Active license lifts the cap for THIS
+                    // operation only when it actually grants the required capability. A token that carries
+                    // NO capabilities is treated as legacy grant-all — the migration bridge for existing
+                    // HMAC/community keys until every key is re-issued with explicit `caps`. An Active
+                    // license that lacks the capability falls THROUGH to trial counting (community
+                    // behaviour) rather than throwing: e.g. a community key still gets its free-trial saves,
+                    // but only a save-capable (pro/enterprise) license gets unlimited saves.
+                    if (string.IsNullOrEmpty(requiredCapability)
+                        || result.Capabilities.Count == 0
+                        || result.HasCapability(requiredCapability))
+                    {
+                        LicensingTelemetryCollector.Instance.RecordLicensedOperation("persistence");
+                        return;
+                    }
+                    break; // Active but capability not granted → fall through to the trial path below.
 
                 case LicenseKeyStatus.ValidationPending:
                     // Server unreachable and not validated in-process. Honour it ONLY when this key has a
