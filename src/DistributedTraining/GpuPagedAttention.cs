@@ -21,31 +21,36 @@ internal sealed class GpuPagedAttention : IDisposable
 {
     private readonly IDirectGpuBackend _backend;
     private readonly DevicePagedKVCache _cache;
-    private readonly int _heads;
+    private readonly int _heads;    // query heads
+    private readonly int _kvHeads;  // KV heads (== query heads for plain MHA; < for grouped-query attention)
     private readonly int _headDim;
     private readonly int _blockSize;
     private readonly float _scale;
+    private readonly bool _gqa;
 
-    private GpuPagedAttention(IDirectGpuBackend backend, int heads, int headDim, int blockSize, int maxBlocks)
+    private GpuPagedAttention(IDirectGpuBackend backend, int heads, int kvHeads, int headDim, int blockSize, int maxBlocks)
     {
         _backend = backend;
         _heads = heads;
+        _kvHeads = kvHeads;
         _headDim = headDim;
         _blockSize = blockSize;
         _scale = 1.0f / (float)Math.Sqrt(headDim);
-        _cache = new DevicePagedKVCache(backend, maxBlocks, blockSize, heads, headDim);
+        _gqa = kvHeads != heads;
+        // The device cache stores the KV heads' K/V.
+        _cache = new DevicePagedKVCache(backend, maxBlocks, blockSize, kvHeads, headDim);
     }
 
     /// <summary>Whether a GPU engine with paged-attention kernels is active in this process.</summary>
     public static bool IsAvailable => TryGetBackend(out _);
 
     /// <summary>Creates a GPU paged-attention head-group, or null when no compatible GPU backend is active.</summary>
-    public static GpuPagedAttention? TryCreate(int heads, int headDim, int blockSize, int maxBlocks)
+    public static GpuPagedAttention? TryCreate(int heads, int kvHeads, int headDim, int blockSize, int maxBlocks)
     {
         if (!TryGetBackend(out var backend) || backend is null) return null;
         try
         {
-            return new GpuPagedAttention(backend, heads, headDim, blockSize, maxBlocks);
+            return new GpuPagedAttention(backend, heads, kvHeads, headDim, blockSize, maxBlocks);
         }
         catch
         {
@@ -79,9 +84,13 @@ internal sealed class GpuPagedAttention : IDisposable
         IGpuBuffer? outBuf = null;
         try
         {
-            outBuf = _backend.PagedAttentionDecode(
-                qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
-                _heads, _headDim, _blockSize, seqLen, _scale);
+            outBuf = _gqa
+                ? _backend.PagedAttentionDecodeGqa(
+                    qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
+                    _heads, _kvHeads, _headDim, _blockSize, seqLen, _scale)
+                : _backend.PagedAttentionDecode(
+                    qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
+                    _heads, _headDim, _blockSize, seqLen, _scale);
             return _backend.DownloadBuffer(outBuf);
         }
         finally
@@ -102,9 +111,13 @@ internal sealed class GpuPagedAttention : IDisposable
         IGpuBuffer? outBuf = null;
         try
         {
-            outBuf = _backend.PagedAttentionPrefill(
-                qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
-                _heads, _headDim, _blockSize, numQueries, startPos, _scale);
+            outBuf = _gqa
+                ? _backend.PagedAttentionPrefillGqa(
+                    qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
+                    _heads, _kvHeads, _headDim, _blockSize, numQueries, startPos, _scale)
+                : _backend.PagedAttentionPrefill(
+                    qBuf, _cache.KeyBlocks, _cache.ValueBlocks, _cache.GetBlockTableBuffer(seqId),
+                    _heads, _headDim, _blockSize, numQueries, startPos, _scale);
             return _backend.DownloadBuffer(outBuf);
         }
         finally
