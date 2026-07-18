@@ -488,6 +488,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // model; any that still overrun get a family-appropriate cap afterwards. ---
         "RAFT",               // optical-flow recurrent GRU update — TemporalDim / ScaledInput timeout
         "SeedASR",            // LLM-integrated ASR — OptimizerStep / DifferentInputs timeout
+        "Qwen3ASR",           // Alibaba LLM-integrated ASR — foundation-scale lazy weights OOM the 16 GB
+                              // runner at the first forward; <float> halves the footprint (first lever).
         "SpikingFullSubNet",  // spiking speech enhancement — Clone / DifferentInputs timeout
         "Qwen3VL",            // instruction-tuned VLM — TrainingError / GradientFlow timeout
         "SimMTM",             // masked time-series foundation model — DifferentInputs / Predict timeout
@@ -2444,6 +2446,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 64, outputSize: 64), " +
                     "new AiDotNet.TextToSpeech.MultiModal.StepAudioOptions { TextEncoderDim = 32, LLMDim = 32, " +
                     "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 2, CodebookSize = 16 })";
+            }
+            else if (model.ClassName == "Qwen3ASR" && model.TypeParameterCount == 1)
+            {
+                // Qwen3-ASR (Alibaba 2025) LLM-integrated ASR defaults to a foundation-scale stack:
+                // EncoderDim 1024, 24 encoder layers, 16 heads, and a 151,936-entry vocabulary. Float FIRST
+                // was tried (Fp32TestClassNames) and MEASURED insufficient: at full scale the training
+                // invariants still time out (>120 s/step across 24 layers) AND the lazy (LLM-dim x vocab)
+                // projection still OutOfMemory-crashes the 16 GB runner — float halves the footprint but a
+                // foundation stack does not fit regardless of precision or iteration count. So (float +) a
+                // CI-smoke scaffold is required: build the SAME architecture (mel encoder -> LLM-integrated
+                // transformer -> CTC vocab head) at reduced width/depth/vocab via a small Qwen3ASROptions;
+                // only the scale shrinks. numMels (64) matches the [1,64,32] AudioNN InputShape height, and
+                // numHeads (2) divides EncoderDim (32). (Floatified to <float> since Qwen3ASR is in
+                // Fp32TestClassNames — same float+scaffold combo StepAudio uses.)
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASROptions { EncoderDim = 32, " +
+                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 64, VocabSize = 64 })";
             }
             else if (model.ClassName == "AnimateDiff" && model.TypeParameterCount == 1)
             {
