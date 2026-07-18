@@ -131,10 +131,17 @@ Enforcement changes: replace the current "any `Active` lifts the trial cap" with
 - **Patched binary / stripped targets:** not preventable client-side; governed by BSL + `AiDotNet.Tensors.Enterprise.targets` gate for the disable flags. ⚠️ (accepted)
 - **CI secret leak:** blast radius limited to a CI-only keypair, `scope:"ci"`, short exp, revocable via CRL. ✅
 
-## 12. Open decisions (need sign-off before implementing)
+## 12. Decisions (RESOLVED — approved for implementation)
 
-1. **CI token tier/caps**: `pro` vs a dedicated `caps:["model:save","tensors:save","model:encrypt"]` set? (Lower blast radius vs simplicity.)
-2. **CRL distribution**: embed-at-release only, online-fetch only, or both (recommended both)?
-3. **`caps` authority**: switch persistence gating fully to `caps` now (breaks "any Active unlocks all"), or phase it so current paid keys aren't disrupted?
-4. **Two keypairs (customer + CI)** vs one — confirm the CI-only keypair.
-5. **Migration window** length for `AIDN-*` community keys.
+1. **CI token caps** → **dedicated minimal caps set**: `caps:["model:save","tensors:save","model:encrypt"]`, `scope:"ci"`, short `exp`. Lowest blast radius. (Depends on caps-enforcement landing — see #3.)
+2. **CRL distribution** → **both**: signed CRL embedded at release (`AiDotNet.LicenseRevocation`) **and** fetched/cached on each online refresh.
+3. **`caps` authority** → **switch now**: `caps` is authoritative immediately; persistence/encryption gating is capability-checked (retire "any `Active` unlocks all"). **Action:** re-issue existing paid keys with `caps` during rollout so they aren't disrupted.
+4. **Keypair topology** → **two keypairs**: a **customer** keypair (private key server-only) and a separate **CI-only** keypair (private key = CI secret). Embed both public keys (two `kid`s). A CI compromise cannot forge customer licenses.
+5. **Migration window** for `AIDN-*` community keys: default **90 days** — keep the online `AIDN-*` path working and auto-re-issue an `aidn2` token on next account visit.
+
+## 13. Implementation phases
+
+- **P1 (client SDK, unblocked now):** `LicenseClaims` (+`jti`/`caps`/`mach`/`scope`); `AsymmetricLicenseVerifier` (CRL + `mach` + `scope`); `LicenseRevocationProvider` (embedded + fetched CRL); `ModelPersistenceGuard` capability-checked gating; `ModuleInitializer` hardening; CI `LicensePublicKey.json` inject step. Mirror in **AiDotNet.Tensors**.
+- **P2 (server, needs Supabase MCP):** `issue-license` edge fn (server signs `aidn2`), `revocations` table + signed CRL endpoint, `validate_license_key` returns `jti`/`caps`, wire `register-community-license`/`stripe-webhook` to the issuer.
+- **P3 (CI):** generate CI-only keypair; set short-exp scoped `aidn2` secret + public-key embed secret; online fallback key; rotation workflow.
+- **P4 (rollout):** re-issue paid keys with `caps`; publish first CRL; deprecate `AIDN-*` community after the 90-day window.
