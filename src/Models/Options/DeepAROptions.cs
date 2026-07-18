@@ -57,6 +57,7 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
         BatchSize = other.BatchSize;
         NumSamples = other.NumSamples;
         LikelihoodType = other.LikelihoodType;
+        StudentTDegreesOfFreedom = other.StudentTDegreesOfFreedom;
         CovariateSize = other.CovariateSize;
         EmbeddingDimension = other.EmbeddingDimension;
     }
@@ -155,6 +156,23 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public string LikelihoodType { get; set; } = "Gaussian";
+
+    /// <summary>
+    /// Gets or sets the fixed degrees-of-freedom ν for the Student-t likelihood head.
+    /// </summary>
+    /// <value>The degrees of freedom, defaulting to 4.0.</value>
+    /// <remarks>
+    /// <para>
+    /// Only used when <see cref="LikelihoodType"/> is "StudentT". Lower ν means heavier tails (more
+    /// probability on extreme moves); ν must exceed 2 for a finite variance. ν≈4 is a strong default for
+    /// financial returns. The value is fixed (not learned) so the likelihood stays differentiable in
+    /// (mean, scale) without needing a differentiable log-Gamma.
+    /// </para>
+    /// <para><b>For Beginners:</b> Controls how "fat" the tails of the predicted distribution are — how much
+    /// room the model leaves for rare, large surprises. Smaller = expects bigger surprises more often.
+    /// </para>
+    /// </remarks>
+    public double StudentTDegreesOfFreedom { get; set; } = 4.0;
 
     /// <summary>
     /// Gets or sets the number of covariates (external features).
