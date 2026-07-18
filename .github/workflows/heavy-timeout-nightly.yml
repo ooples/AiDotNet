@@ -61,10 +61,9 @@ jobs:
         # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
         # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
         env:
-          # Real scope-fenced CI aidn2 token (kid ci-2026a); own secret so the global AIDOTNET_LICENSE_KEY
-          # (other branches) is untouched. AIDOTNET_LICENSE_SCOPE=ci is required for the scoped token to validate.
-          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_CI_LICENSE_KEY }}
-          AIDOTNET_LICENSE_SCOPE: ci
+          # Dedicated enterprise CI license key (save-capable, ~unlimited activations). ModuleInitializer
+          # swaps it for the deterministic synthetic offline license for the suite; it also validates online.
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           $runnerJson = 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
           if (Test-Path $runnerJson) {

@@ -903,12 +903,12 @@ jobs:
         # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
         # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
         env:
-          # Real scope-fenced CI aidn2 token (kid ci-2026a), verified offline against the ci public key
-          # embedded in the build (src/BuildKey/LicensePublicKey.json / the injected var). Kept in its OWN
-          # secret so the global AIDOTNET_LICENSE_KEY (used by other branches) stays untouched. The matching
-          # AIDOTNET_LICENSE_SCOPE=ci is required for the scope-bound token to validate.
-          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_CI_LICENSE_KEY }}
-          AIDOTNET_LICENSE_SCOPE: ci
+          # Dedicated enterprise CI license key (save-capable — lifts the persistence op cap under capability
+          # gating — with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
+          # this online AIDN-* key for the deterministic synthetic OFFLINE license so the persistence-heavy
+          # suite is licensed with no network round-trip; the key still validates online for any job/consumer
+          # that doesn't run the ModuleInitializer hardening.
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           # Sanitize shard name: remove/replace all characters invalid in file paths
           $shardName = "${{ matrix.shard.name }}"

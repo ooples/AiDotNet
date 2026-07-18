@@ -1,1 +1,1 @@
-{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"prod-2026a","x":"kEaBMOkSFRV5p-GtRBbXdmxW7XT6uniKN-_1U--c2bM"},{"kty":"OKP","crv":"Ed25519","kid":"ci-2026a","x":"hvyjriAD_8SYPfoQ1mNydYZ398kAUl6MCyFbu-vw75I"}]}
+{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"prod-2026a","x":"kEaBMOkSFRV5p-GtRBbXdmxW7XT6uniKN-_1U--c2bM"}]}
