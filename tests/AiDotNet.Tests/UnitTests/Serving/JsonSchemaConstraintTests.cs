@@ -124,6 +124,58 @@ public class JsonSchemaConstraintTests
     }
 
     [Fact]
+    public void Const_MatchesOnlyThatValue()
+    {
+        const string schema = @"{""const"":""red""}";
+        Assert.True(AcceptsJson(schema, @"""red"""));
+        Assert.False(AcceptsJson(schema, @"""blue"""));
+    }
+
+    [Fact]
+    public void ArrayItemCount_IsEnforced()
+    {
+        const string schema = @"{""type"":""array"",""items"":{""type"":""integer""},""minItems"":1,""maxItems"":2}";
+        Assert.False(AcceptsJson(schema, @"[]"));      // below minItems
+        Assert.True(AcceptsJson(schema, @"[1]"));
+        Assert.True(AcceptsJson(schema, @"[1,2]"));
+        Assert.False(AcceptsJson(schema, @"[1,2,3]")); // above maxItems
+    }
+
+    [Fact]
+    public void UnenforceableKeywords_AreRejected_NotSilentlyIgnored()
+    {
+        // Numeric range/step keywords cannot be enforced by a finite regex over the decimal encoding.
+        Assert.Throws<ArgumentException>(() =>
+            JsonSchemaConstraint.FromSchema(@"{""type"":""integer"",""minimum"":5}", Vocab.TokenText, Vocab.Eos));
+        Assert.Throws<ArgumentException>(() =>
+            JsonSchemaConstraint.FromSchema(@"{""type"":""number"",""multipleOf"":2}", Vocab.TokenText, Vocab.Eos));
+        // String length is not enforced (callers can use `pattern`); rejected rather than silently ignored.
+        Assert.Throws<ArgumentException>(() =>
+            JsonSchemaConstraint.FromSchema(@"{""type"":""string"",""minLength"":3}", Vocab.TokenText, Vocab.Eos));
+        // A boolean `false` schema permits no value.
+        Assert.Throws<ArgumentException>(() =>
+            JsonSchemaConstraint.FromSchema("false", Vocab.TokenText, Vocab.Eos));
+        // additionalProperties other than false can't be honored by exact-property emission.
+        Assert.Throws<ArgumentException>(() =>
+            JsonSchemaConstraint.FromSchema(
+                @"{""type"":""object"",""properties"":{""a"":{""type"":""integer""}},""additionalProperties"":true}",
+                Vocab.TokenText, Vocab.Eos));
+    }
+
+    [Fact]
+    public void RequiredList_MustCoverAllProperties()
+    {
+        // A partial `required` list (i.e. optional properties) is unsupported and rejected.
+        Assert.Throws<ArgumentException>(() =>
+            JsonSchemaConstraint.FromSchema(
+                @"{""type"":""object"",""properties"":{""a"":{""type"":""integer""},""b"":{""type"":""integer""}},""required"":[""a""]}",
+                Vocab.TokenText, Vocab.Eos));
+        // A full `required` list (matching our all-required emission) is accepted.
+        const string schema = @"{""type"":""object"",""properties"":{""a"":{""type"":""integer""}},""required"":[""a""]}";
+        Assert.True(AcceptsJson(schema, @"{""a"":5}"));
+    }
+
+    [Fact]
     public void InvalidSchema_Throws()
     {
         Assert.Throws<ArgumentException>(() => JsonSchemaConstraint.FromSchema("{ not json", Vocab.TokenText, Vocab.Eos));
