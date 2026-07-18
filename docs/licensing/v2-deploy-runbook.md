@@ -86,16 +86,22 @@ genuinely valid). `LicenseRevocationProvider` lazily loads the last-fetched CRL 
 enforced even on a fully-offline start. Strictly fail-open/best-effort. 8 `OnlineLicenseServicesTests` green
 (18/18 with the aidn2 binding tests); project builds clean.
 
-## Step 6 — CI key (replaces the ModuleInitializer stopgap, optional)
+## Step 6 — CI key — DONE (real ci-2026a aidn2 token wired, isolated)
 
-CI is already green via the `ModuleInitializer` synthetic offline license (no external dependency — the right
-default for a test suite). If you'd rather CI exercise a real aidn2 key:
-```
-python tools/license-issuer/aidn2_issuer.py --tier enterprise --kid ci-2026a --days 90 --sub aidotnet-ci
-# then: gh secret set AIDOTNET_LICENSE_KEY (the token) ; and set AIDOTNET_LICENSE_SCOPE=ci in the test job
-```
-Use the **ci-2026a** keypair from step 1, not the prod key, and give the token `scope:"ci"` so it only works
-in CI.
+CI now exercises a REAL scope-fenced aidn2 token instead of the synthetic ModuleInitializer license:
+- A dedicated **ci-2026a** Ed25519 keypair (separate from prod) was generated; its public key is embedded
+  alongside prod in `src/BuildKey/LicensePublicKey.json` (both keys) + the `AIDOTNET_LICENSE_PUBLIC_KEY_JSON`
+  CI variable.
+- A `scope:"ci"`, no-machine-lock, full-caps token (exp 1y) is stored as the **`AIDOTNET_CI_LICENSE_KEY`**
+  secret; its private half as `AIDOTNET_CI_LICENSE_SIGNING_KEY_PKCS8` (rotation).
+- `sonarcloud.yml` + `heavy-timeout-nightly.yml` test jobs now use `secrets.AIDOTNET_CI_LICENSE_KEY` +
+  `AIDOTNET_LICENSE_SCOPE=ci`. This is kept in its OWN secret so the global `AIDOTNET_LICENSE_KEY` (used by
+  other branches) is untouched — no cross-branch impact, and ModuleInitializer keeps this offline-verifiable
+  token as-is. Proven locally: LicensingIntegration + aidn2 binding tests pass 17/17 with this exact setup.
+
+**Rotation (annual):** re-mint with the same kid using the stored private key —
+`AIDOTNET_CI_LICENSE_SIGNING_KEY_PKCS8` decodes to the Ed25519 PKCS#8 — and update `AIDOTNET_CI_LICENSE_KEY`.
+The embedded public key is unchanged, so only the secret rotates.
 
 ## Step 7 — migrate issuance + retire AIDN-* (rollout)
 
