@@ -28,9 +28,21 @@ public static class PretrainedArchitectures<T>
 
     static PretrainedArchitectures()
     {
+        // LLaMA / Mistral / Qwen2: the default gated-SwiGLU decoder.
         DecoderFactory llama = (config, weights) => LlamaModelBuilder<T>.Build(config, weights);
         foreach (var name in LlamaModelBuilder<T>.SupportedArchitectures)
             Registry[name] = llama;
+
+        // Gemma: GeGLU + (1 + weight) RMSNorm + sqrt(hidden) embedding scale.
+        DecoderFactory gemma = (config, weights) => LlamaModelBuilder<T>.Build(config, weights, DecoderOptions<T>.Gemma);
+        Registry["gemma"] = gemma;
+        Registry["GemmaForCausalLM"] = gemma;
+
+        // Phi-3: LLaMA-style, but its qkv_proj / gate_up_proj projections are fused — split them on read.
+        DecoderFactory phi3 = (config, weights) =>
+            LlamaModelBuilder<T>.Build(config, new FusedProjectionSource(weights, config));
+        Registry["phi3"] = phi3;
+        Registry["Phi3ForCausalLM"] = phi3;
     }
 
     /// <summary>Registers (or replaces) the factory for an architecture / model-type name.</summary>

@@ -140,6 +140,9 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
             AddIfPresent(file, map, hf + "mlp.gate_proj.weight", blk + "ffn_gate.weight");
             AddIfPresent(file, map, hf + "mlp.up_proj.weight", blk + "ffn_up.weight");
             AddIfPresent(file, map, hf + "mlp.down_proj.weight", blk + "ffn_down.weight");
+            // Fused projections (Phi-3): expose the fused HF names so FusedProjectionSource can split them.
+            AddIfPresent(file, map, hf + "self_attn.qkv_proj.weight", blk + "attn_qkv.weight");
+            AddIfPresent(file, map, hf + "mlp.gate_up_proj.weight", blk + "ffn_gate_up.weight");
         }
 
         return (config, map);
