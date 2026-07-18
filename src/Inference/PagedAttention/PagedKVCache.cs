@@ -408,6 +408,26 @@ internal class PagedKVCache<T> : IDisposable
     }
 
     /// <summary>
+    /// Sliding-window KV retention: releases the leading KV blocks of <paramref name="sequenceId"/> that hold
+    /// only positions below <paramref name="keepFromPosition"/> (the window lower bound), returning their
+    /// memory to the pool so a long sequence's KV footprint stays bounded by the window rather than growing
+    /// without limit. The sequence's logical length and absolute token→block indexing for surviving positions
+    /// are unchanged (evicted slots become <c>-1</c> sentinels that the sliding-window attention never reads),
+    /// so no position rebasing is required. Idempotent.
+    /// </summary>
+    /// <param name="sequenceId">The sequence whose stale prefix blocks should be evicted.</param>
+    /// <param name="keepFromPosition">The lowest position still inside the attention window; blocks entirely
+    /// below it are freed.</param>
+    /// <returns>The number of physical blocks released on this call.</returns>
+    public virtual int EvictBlocksBelow(long sequenceId, int keepFromPosition)
+    {
+        lock (_lock)
+        {
+            return _blockTableManager.EvictBelow(sequenceId, keepFromPosition);
+        }
+    }
+
+    /// <summary>
     /// Gets the current length of a sequence.
     /// </summary>
     public virtual int GetSequenceLength(long sequenceId)

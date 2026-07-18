@@ -431,8 +431,10 @@ internal class InferenceOptimizer<T>
             BlockSize = blockSize,
             MaxBatchSize = _config.MaxBatchSize,
             // Sliding-window attention (Mistral-style) on the paged path: each query attends only to the most
-            // recent KVCacheWindowSize keys, matching the contiguous KV cache's sliding-window behavior. 0
-            // (window disabled) keeps full causal attention.
+            // recent KVCacheWindowSize keys. This is now backed by real KV retention — the kernel evicts KV
+            // blocks that fall entirely below the window (PagedKVCache.EvictBlocksBelow), so long sequences
+            // keep a bounded KV footprint instead of leaving old blocks allocated. 0 (window disabled) keeps
+            // full causal attention with no eviction.
             WindowSize = _config.UseSlidingWindowKVCache ? Math.Max(0, _config.KVCacheWindowSize) : 0
         });
 

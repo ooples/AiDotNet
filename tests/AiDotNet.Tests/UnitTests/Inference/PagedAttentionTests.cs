@@ -522,6 +522,47 @@ public class PagedKVCacheTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_EvictBlocksBelow_FreesLeadingBlocks_KeepsWindowReadable_AndIsIdempotent()
+    {
+        await Task.Yield();
+        var config = new PagedKVCacheConfig
+        {
+            BlockSize = 4,
+            NumBlocks = 100,
+            NumLayers = 1,
+            NumHeads = 2,
+            HeadDimension = 2
+        };
+        var cache = new PagedKVCache<float>(config);
+        cache.AllocateSequence(1, 40); // 40 tokens / 4 per block => 10 blocks
+
+        int hd = config.NumHeads * config.HeadDimension; // 4 values per position
+        for (int pos = 0; pos < 40; pos++)
+        {
+            var key = new float[hd];
+            for (int i = 0; i < hd; i++) key[i] = pos * 100 + i; // distinct per position
+            cache.WriteKey(1, pos, 0, key);
+        }
+        int before = cache.BlockManager.AllocatedBlockCount;
+
+        // Keep positions >= 24: logical blocks 0..5 (positions 0..23) are entirely below the window => 6 freed.
+        int freed = cache.EvictBlocksBelow(1, 24);
+        Assert.Equal(6, freed);
+        Assert.Equal(before - 6, cache.BlockManager.AllocatedBlockCount);
+
+        // Idempotent: a second eviction at the same window frees nothing.
+        Assert.Equal(0, cache.EvictBlocksBelow(1, 24));
+
+        // Absolute-position indexing is preserved (no rebasing): a surviving position still reads its data.
+        var read = new float[hd];
+        cache.ReadKey(1, 30, 0, read);
+        for (int i = 0; i < hd; i++) Assert.Equal(30 * 100 + i, read[i]);
+
+        // Logical length is unchanged.
+        Assert.Equal(40, cache.GetSequenceLength(1));
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task PagedKVCache_FreeSequence_RemovesEntry()
     {
         // Arrange

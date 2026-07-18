@@ -314,6 +314,17 @@ internal class PagedAttentionKernel<T>
                 output[offset + d] = accumulators[offset + d] * invSum;
             }
         }
+
+        // Sliding-window KV retention: attention for this step is done, so the KV blocks holding positions
+        // entirely below the window are now unreachable (this query and every later one start at windowStart),
+        // and can be released back to the pool. This makes the WindowSize mask deliver actually-bounded KV
+        // memory instead of leaving old blocks allocated. Idempotent, so the per-layer calls within one step
+        // are safe (all layers share the same windowStart, so a block freed after layer 0 is never read by a
+        // later layer of the same step).
+        if (_config.WindowSize > 0 && windowStart > 0)
+        {
+            _kvCache.EvictBlocksBelow(sequenceId, windowStart);
+        }
     }
 
     /// <summary>
