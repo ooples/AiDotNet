@@ -59,11 +59,68 @@ public sealed class TensorParallelPagedServingEquivalenceTests
         Assert.Equal(reference, sharded); // greedy tokens identical (logits match to fp; argmax stable)
     }
 
+    /// <summary>
+    /// Faithful path: the sharded model reproduces a real trained transformer's blocks — RMSNorm with a trained
+    /// per-layer γ and a GELU feed-forward activation — so tensor-parallel serving (ws 2 and 4) still produces the
+    /// SAME generated tokens as ws1. Proves the faithful norm/activation math is sharding-invariant end-to-end.
+    /// </summary>
+    [Theory(Timeout = 120000)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public async Task TensorParallelPagedServing_Faithful_RmsNormGelu_MatchesUnsharded(int worldSize)
+    {
+        await Task.Yield();
+
+        var rng = RandomHelper.CreateSeededRandom(13579);
+        var embedding = RandomTensor(rng, Vocab, EmbedDim);
+        var lmHead = RandomTensor(rng, Vocab, EmbedDim);
+        var finalGamma = RandomGamma(rng, EmbedDim);
+        var layers = new TensorParallelLayerWeights<double>[NumLayers];
+        for (int l = 0; l < NumLayers; l++)
+        {
+            layers[l] = new TensorParallelLayerWeights<double>
+            {
+                QWeight = RandomTensor(rng, EmbedDim, EmbedDim), QBias = RandomTensor(rng, EmbedDim),
+                KWeight = RandomTensor(rng, EmbedDim, EmbedDim), KBias = RandomTensor(rng, EmbedDim),
+                VWeight = RandomTensor(rng, EmbedDim, EmbedDim), VBias = RandomTensor(rng, EmbedDim),
+                OWeight = RandomTensor(rng, EmbedDim, EmbedDim), OBias = RandomTensor(rng, EmbedDim),
+                UpWeight = RandomTensor(rng, FfnDim, EmbedDim), UpBias = RandomTensor(rng, FfnDim),
+                DownWeight = RandomTensor(rng, EmbedDim, FfnDim), DownBias = RandomTensor(rng, EmbedDim),
+                Norm1Gamma = RandomGamma(rng, EmbedDim), Norm2Gamma = RandomGamma(rng, EmbedDim),
+            };
+        }
+
+        var prompt = new[] { 1, 2, 3 };
+        const int maxNew = 8;
+
+        int[] reference = GenerateThroughBatcher(1, embedding, lmHead, layers, prompt, maxNew, finalGamma);
+        int[] sharded = GenerateThroughBatcher(worldSize, embedding, lmHead, layers, prompt, maxNew, finalGamma);
+
+        Assert.Equal(maxNew, reference.Length);
+        Assert.Equal(reference, sharded);
+    }
+
+    // GELU (tanh approximation), matching a trained transformer's feed-forward activation. Any fixed activation
+    // proves sharding-invariance since ws1 and wsN use the same function; GELU exercises a non-piecewise-linear op.
+    private static double Gelu(double v)
+        => 0.5 * v * (1.0 + System.Math.Tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)));
+
+    private static Tensor<double> RandomGamma(System.Random rng, int dim)
+    {
+        var t = new Tensor<double>(new[] { dim });
+        for (int i = 0; i < dim; i++) t[i] = 0.5 + rng.NextDouble(); // positive scale around 1
+        return t;
+    }
+
     private static int[] GenerateThroughBatcher(
         int worldSize, Tensor<double> embedding, Tensor<double> lmHead, TensorParallelLayerWeights<double>[] layers,
-        int[] prompt, int maxNew)
+        int[] prompt, int maxNew, Tensor<double>? finalNormGamma = null)
     {
-        var model = new TensorParallelPagedModel<double>(worldSize, EmbedDim, NumHeads, NumLayers, FfnDim, Vocab);
+        var model = finalNormGamma is null
+            ? new TensorParallelPagedModel<double>(worldSize, EmbedDim, NumHeads, NumLayers, FfnDim, Vocab)
+            : new TensorParallelPagedModel<double>(
+                worldSize, EmbedDim, NumHeads, NumLayers, FfnDim, Vocab,
+                useRmsNorm: true, finalNormGamma: finalNormGamma, ffnActivation: Gelu);
         model.SetFromFullWeights(embedding, lmHead, layers);
         var composite = new CompositePagedKVCache<double>(model.RankCaches);
 

@@ -30,6 +30,11 @@ internal sealed class TensorParallelLayerWeights<T>
     public required Tensor<T> UpBias { get; init; }
     public required Tensor<T> DownWeight { get; init; }
     public required Tensor<T> DownBias { get; init; }
+
+    // Optional per-layer RMSNorm scale (γ) for the pre-attention (Norm1) and pre-FFN (Norm2) norms, used only in
+    // the faithful path where the model reproduces a real trained transformer's RMSNorm. Null => unit scale.
+    public Tensor<T>? Norm1Gamma { get; init; }
+    public Tensor<T>? Norm2Gamma { get; init; }
 }
 
 /// <summary>
@@ -80,12 +85,23 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
     // Per-rank paged KV caches (each holds this rank's head-group KV).
     private readonly PagedKVCache<T>[] _caches;
 
+    // Faithful path (constructed from a real trained transformer): when set, the pre-attention/pre-FFN/final
+    // norms are RMSNorm with the trained γ (else the parameter-free LayerNorm reference path used by the
+    // primitive equivalence tests), and the FFN uses the trained activation (else ReLU). This lets the sharded
+    // model reproduce a real model's output token-for-token rather than a reference block.
+    private readonly bool _useRmsNorm;
+    private readonly Tensor<T>? _finalNormGamma;
+    private readonly Func<double, double> _ffnActivation;
+    private readonly double _rmsNormEpsilon;
+
     /// <summary>The per-rank paged caches (for the composite cache the scheduler drives).</summary>
     public PagedKVCache<T>[] RankCaches => _caches;
 
     public TensorParallelPagedModel(
         int worldSize, int embedDim, int numHeads, int numLayers, int ffnDim, int vocabSize,
-        int blockSize = 16, int numBlocks = 256)
+        int blockSize = 16, int numBlocks = 256,
+        bool useRmsNorm = false, Tensor<T>? finalNormGamma = null,
+        Func<double, double>? ffnActivation = null, double rmsNormEpsilon = 1e-6)
         : base(new MeanSquaredErrorLoss<T>())
     {
         if (worldSize < 1) throw new ArgumentOutOfRangeException(nameof(worldSize));
@@ -107,6 +123,10 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         _localDim = _localHeads * _headDim;
         _localFfn = ffnDim / worldSize;
         _scale = 1.0 / Math.Sqrt(_headDim);
+        _useRmsNorm = useRmsNorm;
+        _finalNormGamma = finalNormGamma;
+        _ffnActivation = ffnActivation ?? (v => v < 0 ? 0.0 : v); // default ReLU (reference path)
+        _rmsNormEpsilon = rmsNormEpsilon;
 
         _embedding = new Tensor<T>(new[] { vocabSize, embedDim });
         _lmHead = new Tensor<T>(new[] { vocabSize, embedDim });
@@ -172,8 +192,8 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         {
             var w = _layers[l];
 
-            // ---- Attention sub-block: x = x + O( Attn(LN1(x)) ), partials summed over ranks ----
-            var ln1 = LayerNorm(x, seqLen);
+            // ---- Attention sub-block: x = x + O( Attn(Norm1(x)) ), partials summed over ranks ----
+            var ln1 = Normalize(x, seqLen, w.Norm1Gamma);
             var attnOut = new double[seqLen * _embedDim]; // accumulates O-projection partials + bias
             for (int r = 0; r < _worldSize; r++)
             {
@@ -235,15 +255,15 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
             AddBias(attnOut, seqLen, w.OBias); // O bias added once after the reduce
             for (int i = 0; i < x.Length; i++) x[i] += attnOut[i]; // residual
 
-            // ---- MLP sub-block: x = x + Down(ReLU(Up(LN2(x)))), partials summed over ranks ----
-            var ln2 = LayerNorm(x, seqLen);
+            // ---- MLP sub-block: x = x + Down(act(Up(Norm2(x)))), partials summed over ranks ----
+            var ln2 = Normalize(x, seqLen, w.Norm2Gamma);
             var ffnOut = new double[seqLen * _embedDim];
             for (int r = 0; r < _worldSize; r++)
             {
                 int ffnStart = r * _localFfn;
-                // Up-projection for this rank's FFN slice + ReLU -> h_r [seqLen, localFfn].
+                // Up-projection for this rank's FFN slice + activation -> h_r [seqLen, localFfn].
                 var h = ProjectRows(ln2, seqLen, w.UpWeight, w.UpBias, ffnStart, _localFfn);
-                for (int i = 0; i < h.Length; i++) if (h[i] < 0) h[i] = 0.0; // ReLU
+                for (int i = 0; i < h.Length; i++) h[i] = _ffnActivation(h[i]);
                 // Down-projection PARTIAL: ffnOut[t,o] += Σ_f h[t,f] * Down[o, ffnStart+f].
                 AccumulateColumnProjection(ffnOut, h, seqLen, w.DownWeight, ffnStart, _localFfn);
             }
@@ -251,7 +271,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
             for (int i = 0; i < x.Length; i++) x[i] += ffnOut[i]; // residual
         }
 
-        var finalNorm = LayerNorm(x, seqLen);
+        var finalNorm = Normalize(x, seqLen, _finalNormGamma);
         return Project(finalNorm, seqLen); // [1, seqLen, vocab]
     }
 
@@ -308,9 +328,34 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         }
     }
 
-    private double[] LayerNorm(double[] x, int seqLen)
+    // Normalizes each row. Faithful path (_useRmsNorm): RMSNorm y_d = x_d / sqrt(mean(x^2)+eps) * γ_d (γ=1 when
+    // gamma is null) — matching a real trained transformer's RMSNormalizationLayer. Reference path: parameter-free
+    // LayerNorm (mean-center + unit variance) used by the primitive ws-equivalence tests.
+    private double[] Normalize(double[] x, int seqLen, Tensor<T>? gamma)
     {
         var result = new double[seqLen * _embedDim];
+        if (_useRmsNorm)
+        {
+            double[]? g = null;
+            if (gamma is not null)
+            {
+                var gs = gamma.AsSpan();
+                g = new double[_embedDim];
+                for (int d = 0; d < _embedDim; d++) g[d] = Convert.ToDouble(gs[d]);
+            }
+            for (int t = 0; t < seqLen; t++)
+            {
+                int b = t * _embedDim;
+                double ms = 0.0;
+                for (int d = 0; d < _embedDim; d++) { double v = x[b + d]; ms += v * v; }
+                ms /= _embedDim;
+                double inv = 1.0 / Math.Sqrt(ms + _rmsNormEpsilon);
+                for (int d = 0; d < _embedDim; d++)
+                    result[b + d] = x[b + d] * inv * (g is null ? 1.0 : g[d]);
+            }
+            return result;
+        }
+
         for (int t = 0; t < seqLen; t++)
         {
             int b = t * _embedDim;
