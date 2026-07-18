@@ -5,16 +5,19 @@ using AiDotNet.Validation;
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
 /// <summary>
-/// Wrapper for using a small neural network as a draft model.
+/// Ready-to-use <see cref="IDraftModel{T}"/> that wraps any next-token-logits function as the draft model for
+/// speculative decoding. Supply a smaller/faster model's forward pass (tokens -&gt; logits) and this handles the
+/// autoregressive drafting and sampling for you.
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> This class wraps a neural network (like a small transformer)
 /// to use as the "fast guesser" in speculative decoding. The neural network should
-/// be much smaller and faster than the main model you're trying to accelerate.
+/// be much smaller and faster than the main model you're trying to accelerate. You give it a function that
+/// turns tokens into next-token scores; it does the rest.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-internal class NeuralDraftModel<T> : IDraftModel<T>
+public class NeuralDraftModel<T> : IDraftModel<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

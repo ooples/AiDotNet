@@ -3,7 +3,9 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
 /// <summary>
-/// Interface for draft models used in speculative decoding.
+/// Interface for draft models used in speculative decoding. Implement this to plug a custom draft model into
+/// AiDotNet's serving engine (e.g. a small distilled model, an EAGLE/Medusa head, or a domain-specific
+/// heuristic) so the target model verifies your drafts instead of the built-in N-gram prompt-lookup draft.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -11,9 +13,15 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// for verification by the larger target model. They should be lightweight
 /// enough to generate multiple tokens with minimal latency.
 /// </para>
+/// <para><b>For Beginners:</b> Speculative decoding speeds up generation by having a small, fast "draft"
+/// model guess the next few tokens, which the big model then checks all at once. This interface is that draft
+/// model's contract: given the tokens so far, return a handful of guessed next tokens (and their
+/// probabilities). AiDotNet ships an N-gram draft by default; implement this interface if you want to supply
+/// your own faster/smarter guesser.
+/// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-internal interface IDraftModel<T>
+public interface IDraftModel<T>
 {
     /// <summary>
     /// Gets the maximum number of tokens this draft model can generate in one call.

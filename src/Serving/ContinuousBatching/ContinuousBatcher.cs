@@ -790,9 +790,9 @@ internal class ContinuousBatcher<T> : IDisposable
             CreateInputTensor(new List<int> { lastToken }), new InferenceForwardContext(seqId, p));
         int greedy = ArgMaxLastPosition(greedyLogits);
 
-        // 2) Draft by matching the trailing n-gram against the running stream.
+        // 2) Draft the next tokens (custom draft model if supplied, else trailing-n-gram prompt lookup).
         int k = Math.Max(1, depth);
-        var draft = PromptLookupDraft(sequence.TokenIds, k);
+        var draft = DraftForSequence(sequence.TokenIds, k);
 
         var emitted = new List<int>(k + 1);
 
@@ -941,7 +941,7 @@ internal class ContinuousBatcher<T> : IDisposable
             bool eligible = seq.Request.Temperature <= 0f && _config.SupportsBatchedPrefill && depth > 0
                             && (seq.MaxNewTokens - seq.GeneratedLength) > 0;
             if (!eligible) { plain.Add(seq); continue; }
-            var draft = PromptLookupDraft(seq.TokenIds, Math.Max(1, depth));
+            var draft = DraftForSequence(seq.TokenIds, Math.Max(1, depth));
             if (draft.Count == 0) { plain.Add(seq); continue; }
             if (!groups.TryGetValue(draft.Count, out var g)) { g = (new List<SequenceState<T>>(), new List<List<int>>()); groups[draft.Count] = g; }
             g.Seqs.Add(seq);
@@ -999,6 +999,31 @@ internal class ContinuousBatcher<T> : IDisposable
             return draft;
         }
         return draft;
+    }
+
+    /// <summary>
+    /// Produces up to <paramref name="k"/> draft tokens for the greedy-exact speculative decode. When the user
+    /// supplied a custom <see cref="IDraftModel{T}"/> (via the batcher ctor) it drives the draft; otherwise the
+    /// built-in prompt-lookup draft is used. Greedy-exactness is preserved regardless of draft source because
+    /// every drafted token is still verified against the target model's argmax before acceptance.
+    /// </summary>
+    private List<int> DraftForSequence(IReadOnlyList<int> tokens, int k)
+    {
+        if (_draftModelOverride is { } draftModel)
+        {
+            var input = new Vector<int>(tokens.Count);
+            for (int i = 0; i < tokens.Count; i++) input[i] = tokens[i];
+
+            // Greedy path: temperature 1 keeps the draft model's sampling well-defined (no divide-by-zero);
+            // the target-argmax verify below is what guarantees identical output.
+            var result = draftModel.GenerateDraft(input, k, MathHelper.GetNumericOperations<T>().One);
+
+            int count = Math.Min(k, result.Tokens.Length);
+            var drafted = new List<int>(count);
+            for (int i = 0; i < count; i++) drafted.Add(result.Tokens[i]);
+            return drafted;
+        }
+        return PromptLookupDraft(tokens, k);
     }
 
     // Argmax over the last position of a logits tensor ([1,S,vocab], [S,vocab], [1,vocab], or [vocab]).

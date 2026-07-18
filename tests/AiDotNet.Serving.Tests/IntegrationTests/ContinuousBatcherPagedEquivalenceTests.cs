@@ -219,6 +219,75 @@ public class ContinuousBatcherPagedEquivalenceTests
             $"prompt-lookup speculation should accept some drafts (acceptance={spec.SpeculationAcceptanceRate}).");
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task PagedBatcher_CustomDraftModel_IsUsedForSpeculation()
+    {
+        await Task.Yield();
+        // A user can now supply their own public IDraftModel<T>; the batcher must verify ITS drafts instead
+        // of the built-in N-gram prompt-lookup draft.
+        var wrapper = BuildWrapper();
+        var model = wrapper.IncrementalModel;
+        var cache = wrapper.IncrementalCache;
+        if (model is null || cache is null)
+        {
+            Assert.Fail("wrapper must expose the incremental model + paged cache");
+            return;
+        }
+
+        var spy = new SpyDraftModel(Vocab);
+        var config = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EosTokenId = 999,
+            EnableSpeculativeDecoding = true,
+            SpeculationDepth = 4
+        };
+        using var batcher = new ContinuousBatcher<float>(config, model, cache, spy);
+
+        _ = DriveGreedy(batcher, new[] { 1, 2, 3 }, 12);
+
+        Assert.True(spy.CallCount > 0,
+            "the user-supplied IDraftModel must be invoked for speculation (not the built-in N-gram draft).");
+    }
+
+    /// <summary>A minimal public-interface draft model that records that it was asked to draft.</summary>
+    private sealed class SpyDraftModel : AiDotNet.Inference.SpeculativeDecoding.IDraftModel<float>
+    {
+        private readonly int _vocab;
+        private int _callCount;
+
+        public SpyDraftModel(int vocab) => _vocab = vocab;
+
+        public int CallCount => System.Threading.Volatile.Read(ref _callCount);
+        public int MaxDraftTokens => 4;
+        public int VocabSize => _vocab;
+        public void Reset() { }
+
+        public AiDotNet.Inference.SpeculativeDecoding.DraftResult<float> GenerateDraft(
+            Vector<int> inputTokens, int numDraftTokens, float temperature)
+        {
+            System.Threading.Interlocked.Increment(ref _callCount);
+            int n = Math.Max(1, numDraftTokens);
+            int last = inputTokens.Length > 0 ? ((inputTokens[inputTokens.Length - 1] % _vocab) + _vocab) % _vocab : 0;
+
+            var tokens = new Vector<int>(n);
+            var probs = new Matrix<float>(n, _vocab);
+            var tokenProbs = new Vector<float>(n);
+            for (int i = 0; i < n; i++)
+            {
+                tokens[i] = last;
+                probs[i, last] = 1f;
+                tokenProbs[i] = 1f;
+            }
+            return new AiDotNet.Inference.SpeculativeDecoding.DraftResult<float>
+            {
+                Tokens = tokens,
+                Probabilities = probs,
+                TokenProbabilities = tokenProbs
+            };
+        }
+    }
+
     // Drives one greedy sequence on an existing batcher to completion and returns its generated tokens.
     private static int[] DriveGreedy(ContinuousBatcher<float> batcher, int[] prompt, int maxNew)
     {

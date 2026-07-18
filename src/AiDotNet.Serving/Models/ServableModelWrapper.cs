@@ -41,6 +41,11 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     // defaults. Null => serving defaults (a raw model wrapped without the facade).
     private readonly AiDotNet.Configuration.InferenceOptimizationConfig? _servingInferenceConfig;
 
+    // Optional user-supplied draft model for speculative decoding (implements the public
+    // AiDotNet.Inference.SpeculativeDecoding.IDraftModel&lt;T&gt;). When set, the continuous-batching engine
+    // verifies this draft's guesses instead of the built-in N-gram prompt-lookup draft. Null => default draft.
+    private readonly AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? _customDraftModel;
+
     // The optimized, context-aware model backing incremental decode (writes/reads paged KV per sequence
     // id via PredictWithContext), or null when this model has no incremental path. Exposed to the
     // continuous-batching engine (and its equivalence tests) so ONE shared batcher can drive the same
@@ -290,13 +295,15 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableSpeculativeDecoding = false,
         Func<Tensor<T>, Tensor<T>>? generationForward = null,
         bool quantizeIncrementalWeights = false,
-        AiDotNet.Configuration.InferenceOptimizationConfig? servingInferenceConfig = null)
+        AiDotNet.Configuration.InferenceOptimizationConfig? servingInferenceConfig = null,
+        AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? draftModel = null)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         Guard.NotNull(model);
 
         _modelName = modelName;
         _servingInferenceConfig = servingInferenceConfig;
+        _customDraftModel = draftModel;
         _enableBatching = enableBatching;
         _enableSpeculativeDecoding = enableSpeculativeDecoding;
 
@@ -784,7 +791,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                 {
                     config.SchedulerConfig.MaxBatchSize = facade.MaxBatchSize;
                 }
-                _sharedBatcher = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<T>(config, model, cache);
+                _sharedBatcher = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<T>(config, model, cache, _customDraftModel);
             }
             return _sharedBatcher;
         }
