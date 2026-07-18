@@ -32,10 +32,10 @@ public sealed class ChatCompletionRequest
     [JsonProperty("tool_choice")] public JToken? ToolChoice { get; set; }
 
     /// <summary>Resolves the effective max-new-tokens (max_tokens or max_completion_tokens, else fallback).</summary>
-    public int ResolveMaxTokens(int fallback) => MaxTokens ?? MaxCompletionTokens ?? fallback;
+    internal int ResolveMaxTokens(int fallback) => MaxTokens ?? MaxCompletionTokens ?? fallback;
 
     /// <summary>Normalized stop strings.</summary>
-    public IReadOnlyList<string> ResolveStop() => OpenAiJson.StopList(Stop);
+    internal IReadOnlyList<string> ResolveStop() => OpenAiJson.StopList(Stop);
 }
 
 /// <summary>A chat message. <see cref="Content"/> may be a string or an array of content parts.</summary>
@@ -45,7 +45,7 @@ public sealed class ChatMessage
     [JsonProperty("content")] public JToken? Content { get; set; }
 
     /// <summary>Flattens content (string or content-part array) to text.</summary>
-    public string TextContent() => OpenAiJson.ContentText(Content);
+    internal string TextContent() => OpenAiJson.ContentText(Content);
 }
 
 /// <summary>OpenAI <c>/v1/completions</c> request.</summary>
@@ -66,9 +66,9 @@ public sealed class CompletionRequest
     [JsonProperty("frequency_penalty")] public double? FrequencyPenalty { get; set; }
     [JsonProperty("presence_penalty")] public double? PresencePenalty { get; set; }
 
-    public int ResolveMaxTokens(int fallback) => MaxTokens ?? fallback;
-    public string PromptText() => OpenAiJson.ContentText(Prompt);
-    public IReadOnlyList<string> ResolveStop() => OpenAiJson.StopList(Stop);
+    internal int ResolveMaxTokens(int fallback) => MaxTokens ?? fallback;
+    internal string PromptText() => OpenAiJson.ContentText(Prompt);
+    internal IReadOnlyList<string> ResolveStop() => OpenAiJson.StopList(Stop);
 }
 
 // ============================ Responses ============================
