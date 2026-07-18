@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 
 namespace AiDotNet.Inference.PagedAttention;
@@ -29,11 +28,31 @@ namespace AiDotNet.Inference.PagedAttention;
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
 internal sealed class RadixPrefixCache<T>
 {
+    // One trie node per distinct token position along a registered prefix path. A node carries a base
+    // sequence id iff the path from the root to it is a registered prefix. This lets lookup walk the prompt
+    // ONCE (O(n)) instead of reconstructing and hashing an O(len) key for every candidate length (O(n^2)).
+    private sealed class RadixNode
+    {
+        internal readonly RadixNode? Parent;
+        internal readonly int Token; // the token leading from Parent to this node (unused on the root)
+        internal Dictionary<int, RadixNode>? Children;
+        internal long? BaseSequenceId;
+        internal LinkedListNode<RadixNode>? LruNode; // non-null iff this node is a registered prefix
+
+        internal RadixNode(RadixNode? parent, int token)
+        {
+            Parent = parent;
+            Token = token;
+        }
+    }
+
     private readonly PagedKVCache<T> _cache;
     private readonly int _capacity;
     private readonly object _lock = new();
-    private readonly Dictionary<string, long> _registry = new();
-    private readonly LinkedList<string> _lru = new();
+    private readonly RadixNode _root = new(null, 0);
+    // LRU over the registered-prefix nodes (each carries a BaseSequenceId); front = least-recently-used.
+    // Count == number of registered prefixes, so capacity is enforced against _lru.Count.
+    private readonly LinkedList<RadixNode> _lru = new();
 
     // Base sequence ids live in a strictly negative range, disjoint from the positive live-sequence ids
     // the batcher allocates — so a prefix base can never collide with an in-flight sequence.
@@ -75,14 +94,40 @@ internal sealed class RadixPrefixCache<T>
 
         lock (_lock)
         {
-            for (int len = promptTokens.Count - 1; len >= 1; len--)
+            // Walk the prompt once, collecting the registered STRICT-prefix nodes (depth 1..count-1) along
+            // the path. If a token has no matching child the path breaks — no longer prefix can match, since
+            // any registered prefix shares this prompt's exact leading tokens.
+            List<RadixNode>? candidates = null;
+            var node = _root;
+            int limit = promptTokens.Count - 1; // strict prefix: never reuse the full prompt
+            for (int depth = 1; depth <= limit; depth++)
             {
-                string key = PrefixKey(promptTokens, len);
-                if (_registry.TryGetValue(key, out long baseSeqId) &&
-                    _cache.ForkSequence(baseSeqId, targetSequenceId))
+                if (node.Children is null ||
+                    !node.Children.TryGetValue(promptTokens[depth - 1], out var child))
                 {
-                    Touch(key);
-                    return len;
+                    break;
+                }
+                node = child;
+                if (node.BaseSequenceId.HasValue)
+                {
+                    (candidates ??= new List<RadixNode>()).Add(node);
+                }
+            }
+
+            if (candidates is null)
+            {
+                return 0;
+            }
+
+            // Try the deepest registered prefix first; on a fork failure fall back to a shallower one
+            // (preserving the previous longest-that-forks semantics). Depth of a node == its prefix length.
+            for (int i = candidates.Count - 1; i >= 0; i--)
+            {
+                var cand = candidates[i];
+                if (_cache.ForkSequence(cand.BaseSequenceId!.Value, targetSequenceId))
+                {
+                    Touch(cand);
+                    return Depth(cand);
                 }
             }
         }
@@ -106,57 +151,88 @@ internal sealed class RadixPrefixCache<T>
             return;
         }
 
-        string key = PrefixKey(promptTokens, promptTokens.Count);
         lock (_lock)
         {
-            if (_registry.ContainsKey(key))
+            // Walk/create the trie path for the full prompt.
+            var node = _root;
+            for (int i = 0; i < promptTokens.Count; i++)
             {
-                Touch(key);
+                node.Children ??= new Dictionary<int, RadixNode>();
+                if (!node.Children.TryGetValue(promptTokens[i], out var child))
+                {
+                    child = new RadixNode(node, promptTokens[i]);
+                    node.Children[promptTokens[i]] = child;
+                }
+                node = child;
+            }
+
+            if (node.BaseSequenceId.HasValue)
+            {
+                Touch(node); // already registered — just refresh its LRU position
                 return;
             }
 
             long baseSeqId = Interlocked.Decrement(ref _nextBaseId); // -1, -2, -3, ...
             if (!_cache.ForkSequence(sourceSequenceId, baseSeqId))
             {
-                return; // best-effort: skip registration if the fork fails
+                PruneIfEmpty(node); // best-effort: drop the dead path we may have just created
+                return;
             }
 
-            _registry[key] = baseSeqId;
-            _lru.AddLast(key);
+            node.BaseSequenceId = baseSeqId;
+            node.LruNode = _lru.AddLast(node);
             EvictIfNeeded();
         }
     }
 
-    // Caller must hold _lock.
-    private void Touch(string key)
+    // Caller must hold _lock. Distance from the root == the node's registered-prefix length.
+    private static int Depth(RadixNode node)
     {
-        _lru.Remove(key);
-        _lru.AddLast(key);
+        int depth = 0;
+        for (var n = node; n.Parent is not null; n = n.Parent)
+        {
+            depth++;
+        }
+        return depth;
+    }
+
+    // Caller must hold _lock.
+    private void Touch(RadixNode node)
+    {
+        if (node.LruNode is not null)
+        {
+            _lru.Remove(node.LruNode);
+            node.LruNode = _lru.AddLast(node);
+        }
     }
 
     // Caller must hold _lock.
     private void EvictIfNeeded()
     {
-        while (_registry.Count > _capacity && _lru.First is not null)
+        while (_lru.Count > _capacity && _lru.First is not null)
         {
-            string oldest = _lru.First.Value;
+            var oldest = _lru.First.Value;
             _lru.RemoveFirst();
-            if (_registry.TryGetValue(oldest, out long evictedBase))
+            oldest.LruNode = null;
+            if (oldest.BaseSequenceId is { } evictedBase)
             {
-                _registry.Remove(oldest);
+                oldest.BaseSequenceId = null;
                 _cache.FreeSequence(evictedBase);
             }
+            PruneIfEmpty(oldest); // reclaim now-dead trie nodes so the trie can't grow unbounded
         }
     }
 
-    private static string PrefixKey(IReadOnlyList<int> tokens, int length)
+    // Caller must hold _lock. Removes childless, unregistered nodes walking up toward the root so an evicted
+    // (or failed-to-register) leaf does not leave dangling internal nodes behind.
+    private static void PruneIfEmpty(RadixNode node)
     {
-        var sb = new StringBuilder(length * 4);
-        for (int i = 0; i < length; i++)
+        while (node.Parent is not null &&
+               !node.BaseSequenceId.HasValue &&
+               (node.Children is null || node.Children.Count == 0))
         {
-            sb.Append(tokens[i]);
-            sb.Append(',');
+            node.Parent.Children!.Remove(node.Token);
+            node = node.Parent;
         }
-        return sb.ToString();
     }
 }
