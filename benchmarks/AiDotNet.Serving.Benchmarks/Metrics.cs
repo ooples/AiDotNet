@@ -203,4 +203,62 @@ public sealed class BenchmarkReport
     /// <summary>Serializes the report to indented JSON.</summary>
     public string ToJson() =>
         JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+
+    /// <summary>Loads a report previously written with <see cref="ToJson"/>.</summary>
+    public static BenchmarkReport FromJson(string json) =>
+        JsonSerializer.Deserialize<BenchmarkReport>(json) ?? throw new FormatException("empty report");
+
+    /// <summary>
+    /// Renders a side-by-side comparison table of several backends' reports (e.g. AiDotNet vs vLLM / TGI / SGLang
+    /// / TensorRT-LLM run against the SAME model + workload). The first report is the baseline; each metric shows
+    /// the value and, for the others, the ratio vs the baseline (higher-is-better for throughput/goodput, and the
+    /// baseline's advantage for latency where lower-is-better).
+    /// </summary>
+    public static string CompareConsole(IReadOnlyList<(string Label, BenchmarkReport Report)> entries)
+    {
+        if (entries.Count == 0) return "(no reports)";
+        var sb = new StringBuilder();
+        int w = 18;
+        string Col(string s) => s.Length >= w ? s.Substring(0, w) : s.PadLeft(w);
+
+        sb.AppendLine("====================== SERVING HEAD-TO-HEAD ======================");
+        sb.Append("  metric".PadRight(26));
+        foreach (var e in entries) sb.Append(Col(e.Label));
+        sb.AppendLine();
+        sb.AppendLine("  " + new string('-', 24 + w * entries.Count));
+
+        void Row(string name, Func<BenchmarkReport, double> sel, bool higherBetter)
+        {
+            sb.Append(("  " + name).PadRight(26));
+            double base0 = sel(entries[0].Report);
+            for (int i = 0; i < entries.Count; i++)
+            {
+                double v = sel(entries[i].Report);
+                string cell = double.IsNaN(v) ? "n/a" : v.ToString("0.0", CultureInfo.InvariantCulture);
+                if (i > 0 && !double.IsNaN(v) && !double.IsNaN(base0) && base0 != 0 && v != 0)
+                {
+                    double ratio = higherBetter ? base0 / v : v / base0; // >1 => baseline better
+                    cell += $" ({ratio.ToString("0.00", CultureInfo.InvariantCulture)}x)";
+                }
+                sb.Append(Col(cell));
+            }
+            sb.AppendLine();
+        }
+
+        Row("output tok/s", r => r.OutputThroughput, higherBetter: true);
+        Row("total tok/s", r => r.TotalTokenThroughput, higherBetter: true);
+        Row("req/s", r => r.RequestThroughput, higherBetter: true);
+        Row("goodput req/s", r => r.GoodputPerSec ?? double.NaN, higherBetter: true);
+        sb.AppendLine("  " + new string('-', 24 + w * entries.Count));
+        Row("TTFT p50 ms", r => r.Ttft.P50, higherBetter: false);
+        Row("TTFT p99 ms", r => r.Ttft.P99, higherBetter: false);
+        Row("ITL p50 ms", r => r.Itl.P50, higherBetter: false);
+        Row("TPOT mean ms", r => r.Tpot.Mean, higherBetter: false);
+        Row("E2E p50 ms", r => r.E2E.P50, higherBetter: false);
+        sb.AppendLine("  " + new string('-', 24 + w * entries.Count));
+        sb.AppendLine($"  baseline = {entries[0].Label}; ratios: throughput/goodput = baseline/other (>1 baseline faster),");
+        sb.AppendLine("  latency = other/baseline (>1 baseline lower). Run all backends with the SAME model+workload.");
+        sb.Append("==================================================================");
+        return sb.ToString();
+    }
 }
