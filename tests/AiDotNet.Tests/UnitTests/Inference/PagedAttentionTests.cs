@@ -680,6 +680,34 @@ public class PagedKVCacheTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task CompositePagedKVCache_FansAllocateExtendTruncateFree_ToAllRanks()
+    {
+        await Task.Yield();
+        // Two per-rank caches (tensor-parallel serving) behind one composite the scheduler drives.
+        static PagedKVCacheConfig Cfg() => new() { BlockSize = 16, NumBlocks = 100, NumLayers = 1, NumHeads = 2, HeadDimension = 4 };
+        var r0 = new PagedKVCache<float>(Cfg());
+        var r1 = new PagedKVCache<float>(Cfg());
+        var comp = new CompositePagedKVCache<float>(new[] { r0, r1 });
+
+        Assert.True(comp.AllocateSequence(1, 20));
+        Assert.Equal(20, r0.GetSequenceLength(1));
+        Assert.Equal(20, r1.GetSequenceLength(1));
+        Assert.Equal(20, comp.GetSequenceLength(1)); // answered from rank 0
+
+        Assert.True(comp.ExtendSequence(1, 5));
+        Assert.Equal(25, r0.GetSequenceLength(1));
+        Assert.Equal(25, r1.GetSequenceLength(1));
+
+        Assert.True(comp.TruncateSequence(1, 10));
+        Assert.Equal(10, r0.GetSequenceLength(1));
+        Assert.Equal(10, r1.GetSequenceLength(1));
+
+        comp.FreeSequence(1);
+        Assert.Equal(0, r0.ActiveSequenceCount);
+        Assert.Equal(0, r1.ActiveSequenceCount);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task PagedKVCache_GetStats_ReturnsValidStats()
     {
         // Arrange

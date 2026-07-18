@@ -57,7 +57,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Gets the number of active sequences.
     /// </summary>
-    public int ActiveSequenceCount
+    public virtual int ActiveSequenceCount
     {
         get { lock (_lock) return _sequenceMetadata.Count; }
     }
@@ -130,7 +130,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <param name="sequenceId">The sequence ID.</param>
     /// <param name="initialTokens">Number of initial tokens (e.g., prompt length).</param>
     /// <returns>True if allocation succeeded.</returns>
-    public bool AllocateSequence(long sequenceId, int initialTokens)
+    public virtual bool AllocateSequence(long sequenceId, int initialTokens)
     {
         lock (_lock)
         {
@@ -163,7 +163,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <param name="sequenceId">The sequence ID.</param>
     /// <param name="additionalTokens">Number of additional tokens.</param>
     /// <returns>True if extension succeeded.</returns>
-    public bool ExtendSequence(long sequenceId, int additionalTokens)
+    public virtual bool ExtendSequence(long sequenceId, int additionalTokens)
     {
         lock (_lock)
         {
@@ -182,7 +182,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Frees all cache blocks for a sequence.
     /// </summary>
-    public void FreeSequence(long sequenceId)
+    public virtual void FreeSequence(long sequenceId)
     {
         lock (_lock)
         {
@@ -197,7 +197,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <param name="sourceSequenceId">The source sequence ID.</param>
     /// <param name="newSequenceId">The new sequence ID.</param>
     /// <returns>True if fork succeeded.</returns>
-    public bool ForkSequence(long sourceSequenceId, long newSequenceId)
+    public virtual bool ForkSequence(long sourceSequenceId, long newSequenceId)
     {
         lock (_lock)
         {
@@ -363,7 +363,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Gets the block table for a sequence (for paged attention kernel).
     /// </summary>
-    public int[]? GetBlockTable(long sequenceId)
+    public virtual int[]? GetBlockTable(long sequenceId)
     {
         // GetBlockTableArray returns a fresh copy; take the lock so the snapshot is consistent with a
         // concurrent allocator mutating the same sequence's block table.
@@ -388,7 +388,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <param name="sequenceId">The sequence to truncate.</param>
     /// <param name="newLength">The new logical length (0 ≤ newLength ≤ current length).</param>
     /// <returns>True if the sequence exists and was truncated; false if it is unknown.</returns>
-    public bool TruncateSequence(long sequenceId, int newLength)
+    public virtual bool TruncateSequence(long sequenceId, int newLength)
     {
         if (newLength < 0)
             throw new ArgumentOutOfRangeException(nameof(newLength), "New length must be non-negative.");
@@ -410,7 +410,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Gets the current length of a sequence.
     /// </summary>
-    public int GetSequenceLength(long sequenceId)
+    public virtual int GetSequenceLength(long sequenceId)
     {
         lock (_lock)
         {
@@ -421,7 +421,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Checks if more tokens can be added to a sequence without new allocation.
     /// </summary>
-    public bool HasCapacityFor(long sequenceId, int additionalTokens)
+    public virtual bool HasCapacityFor(long sequenceId, int additionalTokens)
     {
         lock (_lock)
         {
@@ -443,7 +443,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Gets statistics about the cache.
     /// </summary>
-    public PagedKVCacheStats GetStats()
+    public virtual PagedKVCacheStats GetStats()
     {
         lock (_lock)
         {
@@ -471,7 +471,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Releases resources.
     /// </summary>
-    public void Dispose()
+    public virtual void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
