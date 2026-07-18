@@ -93,6 +93,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
     private readonly Tensor<T>? _finalNormGamma;
     private readonly Func<double, double> _ffnActivation;
     private readonly double _rmsNormEpsilon;
+    private readonly double[]? _lmHeadBias; // optional [vocab] bias added after the LM-head projection
 
     /// <summary>The per-rank paged caches (for the composite cache the scheduler drives).</summary>
     public PagedKVCache<T>[] RankCaches => _caches;
@@ -101,7 +102,8 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         int worldSize, int embedDim, int numHeads, int numLayers, int ffnDim, int vocabSize,
         int blockSize = 16, int numBlocks = 256,
         bool useRmsNorm = false, Tensor<T>? finalNormGamma = null,
-        Func<double, double>? ffnActivation = null, double rmsNormEpsilon = 1e-6)
+        Func<double, double>? ffnActivation = null, double rmsNormEpsilon = 1e-6,
+        Tensor<T>? lmHeadBias = null)
         : base(new MeanSquaredErrorLoss<T>())
     {
         if (worldSize < 1) throw new ArgumentOutOfRangeException(nameof(worldSize));
@@ -127,6 +129,12 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
         _finalNormGamma = finalNormGamma;
         _ffnActivation = ffnActivation ?? (v => v < 0 ? 0.0 : v); // default ReLU (reference path)
         _rmsNormEpsilon = rmsNormEpsilon;
+        if (lmHeadBias is not null)
+        {
+            var lb = lmHeadBias.AsSpan();
+            _lmHeadBias = new double[vocabSize];
+            for (int v = 0; v < vocabSize && v < lb.Length; v++) _lmHeadBias[v] = Convert.ToDouble(lb[v]);
+        }
 
         _embedding = new Tensor<T>(new[] { vocabSize, embedDim });
         _lmHead = new Tensor<T>(new[] { vocabSize, embedDim });
@@ -397,7 +405,7 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
             for (int vch = 0; vch < _vocabSize; vch++)
             {
                 int wBase = vch * _embedDim;
-                double acc = 0.0;
+                double acc = _lmHeadBias is null ? 0.0 : _lmHeadBias[vch];
                 for (int d = 0; d < _embedDim; d++) acc += hidden[hBase + d] * Convert.ToDouble(head[wBase + d]);
                 outSpan[oBase + vch] = NumOps.FromDouble(acc);
             }
