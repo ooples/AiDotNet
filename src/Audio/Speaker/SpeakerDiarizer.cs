@@ -586,13 +586,26 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
             return OnnxEncoder.Run(input);
         }
 
-        // Native mode: forward pass through layers
-        var current = input;
-        foreach (var layer in Layers)
+        // Inference must be deterministic (SameInput -> SameEmbedding). The model defaults to training
+        // mode on construction (NeuralNetworkBase.IsTrainingMode = true) and the embedding stack includes
+        // dropout (dropoutRate 0.1), so a fresh Predict would otherwise apply stochastic dropout and
+        // return a different embedding on each call. Force inference mode for the forward and restore the
+        // prior mode afterward so the training path (which sets training mode itself) is unaffected.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
         {
-            current = layer.Forward(current);
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            return current;
         }
-        return current;
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     /// <summary>

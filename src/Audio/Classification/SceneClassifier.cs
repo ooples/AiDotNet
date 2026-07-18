@@ -352,7 +352,9 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         var featureTensor = CreateFeatureTensor(featureStruct);
 
         // Get predictions
-        var output = Predict(featureTensor);
+        // Feed LOGITS (not the softmaxed Predict output) to ApplySoftmax so scene probabilities are
+        // softmaxed exactly once (PredictCore now returns probabilities for the inference contract).
+        var output = ForwardLogits(featureTensor);
         var probabilities = ApplySoftmax(output);
 
         // Find best prediction
@@ -411,7 +413,9 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 
         var featureStruct = ExtractFeaturesInternal(audio);
         var featureTensor = CreateFeatureTensor(featureStruct);
-        var output = Predict(featureTensor);
+        // Feed LOGITS (not the softmaxed Predict output) to ApplySoftmax so scene probabilities are
+        // softmaxed exactly once (PredictCore now returns probabilities for the inference contract).
+        var output = ForwardLogits(featureTensor);
         var probabilities = ApplySoftmax(output);
 
         return probabilities;
@@ -546,6 +550,25 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        // Classifier inference contract: Predict returns a NON-NEGATIVE class distribution
+        // (probabilities), per AudioClassifierTestBase.ClassOutput_ShouldBeNonNegative and the standard
+        // PyTorch convention (the forward/loss path uses raw logits; inference applies softmax). Training
+        // is unaffected — the tape forward (base ForwardForTraining) walks the layers directly and never
+        // calls PredictCore, so softmaxing here does NOT double-softmax the CrossEntropyWithLogits loss.
+        // The internal probability paths (Classify / GetSceneProbabilities) call ForwardLogits + a single
+        // ApplySoftmax, so they still softmax exactly once. softmax of the uniform rule-based fallback is
+        // a no-op, and the ONNX logits become probabilities too, keeping all three paths consistent.
+        return PostprocessOutput(ForwardLogits(input));
+    }
+
+    /// <summary>
+    /// Native forward to per-scene LOGITS (or the ONNX graph's logits, or the uniform rule-based
+    /// fallback). The linear classifier head is intentionally not soft-maxed here: <see cref="PredictCore"/>
+    /// softmaxes for inference and the training tape (base ForwardForTraining) consumes these logits
+    /// directly via CrossEntropyWithLogitsLoss.
+    /// </summary>
+    private Tensor<T> ForwardLogits(Tensor<T> input)
+    {
         if (IsOnnxMode && OnnxEncoder is not null)
         {
             return OnnxEncoder.Run(input);
@@ -554,14 +577,10 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         // Native mode - use layers
         if (!_useNativeMode || Layers.Count == 0)
         {
-            // Fallback to rule-based classification
+            // Fallback to rule-based classification (a uniform distribution; softmax leaves it unchanged).
             return ClassifyWithRulesAsTensor(input);
         }
 
-        // Forward pass to per-scene LOGITS. Do NOT softmax here — the head is a linear projection and
-        // each probability path (Classify / GetSceneProbabilities / PostprocessOutput) softmaxes exactly
-        // once. ONNX mode above likewise returns raw logits, so both modes hand callers a consistent
-        // logits tensor.
         var current = input;
         foreach (var layer in Layers)
         {
