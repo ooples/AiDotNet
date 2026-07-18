@@ -499,6 +499,22 @@ public class InferenceOptimizationConfig
     /// </remarks>
     public SpeculativeMethod SpeculativeMethod { get; set; } = SpeculativeMethod.Auto;
 
+    /// <summary>
+    /// Gets or sets the maximum number of prompt tokens to prefill per scheduler step (chunked prefill).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When &gt; 0, a long prompt's prefill is split into chunks of at most this many tokens so decode steps
+    /// for other in-flight requests are interleaved with it, keeping inter-token latency low under mixed load
+    /// (vLLM-style chunked prefill). 0 disables chunking (each prompt prefills in a single step).
+    /// </para>
+    /// <para><b>For Beginners:</b> Without this, one very long prompt can hog the engine while everyone else
+    /// waits. Chunked prefill feeds the long prompt in bite-sized pieces so other users' words keep streaming.
+    /// A value like 512 is a good starting point; 0 turns it off.
+    /// </para>
+    /// </remarks>
+    public int MaxPrefillChunkTokens { get; set; } = 0;
+
     #endregion
 
     #region Inference Quantization (Advanced)

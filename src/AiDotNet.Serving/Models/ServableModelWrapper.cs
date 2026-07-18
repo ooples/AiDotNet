@@ -785,7 +785,13 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                     EnableSpeculativeDecoding = facade?.EnableSpeculativeDecoding ?? true,
                     SpeculationDepth = (facade is { SpeculationDepth: > 0 }) ? facade.SpeculationDepth : 4,
                     SpeculationPolicy = facade?.SpeculationPolicy ?? AiDotNet.Configuration.SpeculationPolicy.Auto,
-                    UseTreeSpeculation = facade?.UseTreeSpeculation ?? false
+                    UseTreeSpeculation = facade?.UseTreeSpeculation ?? false,
+                    // Speculative METHOD (Auto/ClassicDraftModel/Eagle/Medusa): the batcher enables tree
+                    // speculation for Eagle/Medusa, so this must flow from the facade or those methods are inert.
+                    SpeculativeMethod = facade?.SpeculativeMethod ?? AiDotNet.Configuration.SpeculativeMethod.Auto,
+                    // Chunked prefill: split a long prompt's prefill into chunks so decode for other in-flight
+                    // requests interleaves (0 = off). Without flowing it, the chunked-prefill path is unreachable.
+                    MaxPrefillChunkTokens = (facade is { MaxPrefillChunkTokens: > 0 }) ? facade.MaxPrefillChunkTokens : 0
                 };
                 if (facade is { MaxBatchSize: > 0 })
                 {
