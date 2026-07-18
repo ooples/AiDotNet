@@ -87,11 +87,15 @@ public sealed class RegexTokenConstraint : ITokenConstraint
             }
         }
 
-        // Dead-end safety net: if nothing (not even EOS) is permitted, keep EOS open so decoding can stop
-        // rather than sampling from an all -inf distribution. A well-formed pattern should not reach here.
-        if (allowed.Length == 0 && !eosAllowed && _eosTokenId >= 0 && _eosTokenId < logits.Length)
+        // Fail closed: nothing (not even EOS) is permitted — the current state is not accepting and no token
+        // can extend the match, so the pattern can no longer be satisfied. Rather than opening EOS to fake a
+        // successful stop (emitting output that doesn't match the regex), signal the dead-end so the engine
+        // fails this sequence with an error. A well-formed pattern reached through this mask never gets here.
+        if (allowed.Length == 0 && !eosAllowed)
         {
-            logits[_eosTokenId] = 0f;
+            throw new StructuredOutputConstraintException(
+                "Structured-output regex constraint reached a dead-end: no token can continue the pattern " +
+                "and the output so far is not a complete match.");
         }
     }
 

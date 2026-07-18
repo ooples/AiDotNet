@@ -531,7 +531,16 @@ internal class ContinuousBatcher<T> : IDisposable
             // Stateless full-context prefill (fallback for models without the paged incremental path).
             var inputTokens = CreateInputTensor(sequence.TokenIds);
             var logits = _model(inputTokens);
-            int nextToken = SampleFromLogits(logits, sequence);
+            int nextToken;
+            try
+            {
+                nextToken = SampleFromLogits(logits, sequence);
+            }
+            catch (StructuredOutput.StructuredOutputConstraintException ex)
+            {
+                FailSequenceWithError(sequence, ex.Message);
+                return null;
+            }
             sequence.AppendToken(nextToken);
             firstToken = nextToken;
         }
@@ -603,7 +612,16 @@ internal class ContinuousBatcher<T> : IDisposable
         // Prefill complete: register the prompt as a reusable prefix (KV now holds exactly the prompt),
         // then sample the first token.
         _prefixCache?.Register(prompt, seqId);
-        int nextToken = SampleFromLogits(logits, sequence);
+        int nextToken;
+        try
+        {
+            nextToken = SampleFromLogits(logits, sequence);
+        }
+        catch (StructuredOutput.StructuredOutputConstraintException ex)
+        {
+            FailSequenceWithError(sequence, ex.Message);
+            return null;
+        }
         sequence.AppendToken(nextToken);
         return nextToken;
     }
@@ -663,7 +681,17 @@ internal class ContinuousBatcher<T> : IDisposable
             _pagedPositions[seq.SequenceId] = promptLens[i];
             // Register the prompt (TokenIds still holds exactly the prompt) as a reusable prefix.
             _prefixCache?.Register(seq.TokenIds, seq.SequenceId);
-            int nextToken = SampleFromLogits(logits, seq, batchIndex: i, lastPositionOverride: promptLens[i] - 1);
+            int nextToken;
+            try
+            {
+                nextToken = SampleFromLogits(logits, seq, batchIndex: i, lastPositionOverride: promptLens[i] - 1);
+            }
+            catch (StructuredOutput.StructuredOutputConstraintException ex)
+            {
+                // Fail only this row; the other prefilled sequences in the batch still commit their tokens.
+                FailSequenceWithError(seq, ex.Message);
+                continue;
+            }
             seq.AppendToken(nextToken);
             seq.PrefillComplete = true;
             seq.Status = SequenceStatus.Generating;
@@ -690,7 +718,16 @@ internal class ContinuousBatcher<T> : IDisposable
         var logits = _model(inputTokens);
 
         // Sample next token
-        int nextToken = SampleFromLogits(logits, sequence);
+        int nextToken;
+        try
+        {
+            nextToken = SampleFromLogits(logits, sequence);
+        }
+        catch (StructuredOutput.StructuredOutputConstraintException ex)
+        {
+            FailSequenceWithError(sequence, ex.Message);
+            return Array.Empty<int>();
+        }
         sequence.AppendToken(nextToken);
 
         return new[] { nextToken };
@@ -710,7 +747,16 @@ internal class ContinuousBatcher<T> : IDisposable
         var logits = model.PredictWithContext(input, new InferenceForwardContext(seqId, position));
         _pagedPositions[seqId] = position + 1;
 
-        int nextToken = SampleFromLogits(logits, sequence);
+        int nextToken;
+        try
+        {
+            nextToken = SampleFromLogits(logits, sequence);
+        }
+        catch (StructuredOutput.StructuredOutputConstraintException ex)
+        {
+            FailSequenceWithError(sequence, ex.Message);
+            return Array.Empty<int>();
+        }
         sequence.AppendToken(nextToken);
         return new[] { nextToken };
     }
@@ -746,7 +792,17 @@ internal class ContinuousBatcher<T> : IDisposable
         for (int i = 0; i < batch; i++)
         {
             var seq = sequences[i];
-            int nextToken = SampleFromLogits(logits, seq, batchIndex: i);
+            int nextToken;
+            try
+            {
+                nextToken = SampleFromLogits(logits, seq, batchIndex: i);
+            }
+            catch (StructuredOutput.StructuredOutputConstraintException ex)
+            {
+                // Fail only this row; the rest of the batched decode still commits their tokens.
+                FailSequenceWithError(seq, ex.Message);
+                continue;
+            }
             seq.AppendToken(nextToken);
             _pagedPositions[seq.SequenceId] = positions[i] + 1;
             results.Add((seq, nextToken));
@@ -1729,6 +1785,20 @@ internal class ContinuousBatcher<T> : IDisposable
         }
     }
 
+    // Fails a single sequence with an error message and completes it (resolving its pending task with
+    // StopReason.Error and the message on the result), WITHOUT disturbing the rest of the batch. Used when a
+    // per-sequence operation cannot continue — e.g. a structured-output constraint reaching a non-accepting
+    // dead-end, where failing closed is required rather than emitting output that violates the constraint.
+    private void FailSequenceWithError(SequenceState<T> sequence, string errorMessage)
+    {
+        if (sequence.Status is SequenceStatus.Completed or SequenceStatus.Failed)
+        {
+            return;
+        }
+        sequence.Fail(errorMessage);
+        CompleteSequence(sequence);
+    }
+
     private void CompleteSequence(SequenceState<T> sequence)
     {
         // Release this sequence's paged KV blocks (no-op on the stateless path) and its RNG.
@@ -1754,7 +1824,8 @@ internal class ContinuousBatcher<T> : IDisposable
             QueueTime = sequence.QueueTime,
             GenerationTime = sequence.GenerationTime,
             TokensPerSecond = sequence.TokensPerSecond,
-            LogProbs = sequence.LogProbs
+            LogProbs = sequence.LogProbs,
+            Error = sequence.ErrorMessage
         };
 
         // Complete the pending task

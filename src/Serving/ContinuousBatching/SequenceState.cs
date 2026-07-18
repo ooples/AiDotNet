@@ -214,6 +214,11 @@ public class SequenceState<T>
     }
 
     /// <summary>
+    /// An optional human-readable error message, set when the sequence failed (see <see cref="Fail"/>).
+    /// </summary>
+    public string? ErrorMessage { get; private set; }
+
+    /// <summary>
     /// Marks the sequence as cancelled.
     /// </summary>
     public void Cancel()
@@ -230,6 +235,7 @@ public class SequenceState<T>
     {
         Status = SequenceStatus.Failed;
         FinishReason = StopReason.Error;
+        ErrorMessage = errorMessage;
         CompletedAt = DateTime.UtcNow;
     }
 }

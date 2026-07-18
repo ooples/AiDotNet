@@ -108,11 +108,15 @@ public sealed class TokenFsmConstraint : ITokenConstraint
             }
         }
 
-        // Safety net: a well-formed DFA never dead-ends, but if a state has no outgoing transitions and is
-        // not accepting (or EOS is out of the vocab range), leave EOS open so sampling can still terminate.
-        if (!eosAllowed && allowed.Count == 0 && _eosTokenId >= 0 && _eosTokenId < logits.Length)
+        // Fail closed: a non-accepting state with no outgoing transitions cannot satisfy the required
+        // format and is not a valid completion. Rather than opening EOS to fake a successful stop (which
+        // would emit output that violates the constraint), signal the dead-end so the engine fails this
+        // sequence with an error. A well-formed DFA reached through this mask never gets here.
+        if (!eosAllowed && allowed.Count == 0)
         {
-            logits[_eosTokenId] = 0f;
+            throw new StructuredOutputConstraintException(
+                "Structured-output constraint reached a non-accepting dead-end state: no valid token can " +
+                "continue the required format and the output so far is not a complete valid instance.");
         }
     }
 

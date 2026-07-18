@@ -86,11 +86,15 @@ public sealed class JsonGrammarConstraint : ITokenConstraint
             else logits[i] = float.NegativeInfinity;
         }
 
-        // Dead-end safety net (a well-formed automaton should not reach here): keep EOS open so decoding can
-        // still terminate rather than sampling from an all -inf distribution.
-        if (!anyAllowed && _eosTokenId >= 0 && _eosTokenId < logits.Length)
+        // Fail closed: no token is permitted and the JSON value is not yet complete (EOS not allowed), so the
+        // input can no longer become valid JSON. Rather than opening EOS to fake a successful stop (emitting
+        // malformed JSON), signal the dead-end so the engine fails this sequence with an error. A well-formed
+        // automaton reached through this mask never gets here.
+        if (!anyAllowed)
         {
-            logits[_eosTokenId] = 0f;
+            throw new StructuredOutputConstraintException(
+                "JSON-grammar constraint reached a dead-end: no token can continue a valid JSON value and " +
+                "the output so far is not a complete JSON value.");
         }
     }
 
