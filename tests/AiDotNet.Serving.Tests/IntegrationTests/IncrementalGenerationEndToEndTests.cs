@@ -13,6 +13,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
+using AiDotNet.Serving.StructuredOutput;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -91,6 +92,33 @@ public class IncrementalGenerationEndToEndTests
         Assert.Equal(resp.NumGenerated, resp.GeneratedTokens.Length);
         Assert.All(resp.GeneratedTokens, t => Assert.InRange(t, 0, Vocab - 1));
         Assert.Equal(new[] { 1, 2, 3 }, resp.AllTokens[..3]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StructuredConstraint_IsHonored_OnIncrementalPagedPath()
+    {
+        await Task.Yield();
+        var (service, wrapper) = BuildService();
+
+        // This exercises the PRODUCTION path — the KV-cached incremental paged batcher — not the stateless
+        // fallback. The constraint forces an exact token sequence regardless of the model's own logits.
+        Assert.True(wrapper.SupportsIncrementalGeneration);
+
+        var request = new SpeculativeDecodingRequest
+        {
+            InputTokens = new[] { 1, 2, 3 },
+            MaxNewTokens = 5,           // larger than the constrained output
+            EosTokenId = 999,           // out of range -> constraint's stop-on-complete must terminate
+            NumDraftTokens = 2,         // speculation requested; the constraint must disable it
+            Temperature = 0,
+            Constraint = TokenFsmConstraint.FromSequence(new[] { 4, 7, 5 }, eosTokenId: 999)
+        };
+
+        var resp = service.Generate("lm", NumericType.Float, request);
+
+        Assert.Null(resp.Error);
+        Assert.Equal(new[] { 4, 7, 5 }, resp.GeneratedTokens); // forced tokens on the paged path
+        Assert.Equal(3, resp.NumGenerated);                    // stopped exactly when the constraint completed
     }
 
     [Fact(Timeout = 120000)]
