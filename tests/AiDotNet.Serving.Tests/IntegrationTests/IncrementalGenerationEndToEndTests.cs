@@ -337,7 +337,7 @@ public class IncrementalGenerationEndToEndTests
 
         // Production loader path: FromModel must detect the facade, unwrap its inner network for the paged
         // incremental path, and thread GetInferenceOptimizationConfigForServing() into the batcher.
-        var wrapper = ServableModelWrapper<float>.FromModel(
+        using var wrapper = ServableModelWrapper<float>.FromModel(
             "facade-lm", facade, enableBatching: true, enableSpeculativeDecoding: false,
             enableTextGeneration: true);
 

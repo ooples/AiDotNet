@@ -212,6 +212,7 @@ public class StructuredOutputServingTests
     [Fact(Timeout = 120000)]
     public async Task ChatCompletions_Tools_ForcesValidToolCall()
     {
+        await Task.Yield();
         var tokenizer = CharacterTokenizer.CreateAscii();
         int vocab = tokenizer.VocabularySize;
 

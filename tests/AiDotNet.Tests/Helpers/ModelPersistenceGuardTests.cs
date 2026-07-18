@@ -523,8 +523,7 @@ public class ModelPersistenceGuardTests : IDisposable
             {
                 var manager = new TrialStateManager(_trialFilePath);
                 int operationsAfter = manager.GetStatus().OperationsUsed;
-                Assert.True(operationsAfter > operationsBefore,
-                    "user-facing EnforceBeforeSave (depth 0) must still count against the trial");
+                Assert.Equal(operationsBefore + 1, operationsAfter);
             }
         });
     }

@@ -74,7 +74,7 @@ public sealed class BenchmarkReport
     public Stat Itl { get; set; } = Stat.Empty;         // ms (all inter-token gaps)
     public Stat E2E { get; set; } = Stat.Empty;         // ms
 
-    public double GoodputPerSec { get; set; }           // req/s meeting both SLAs
+    public double? GoodputPerSec { get; set; }          // req/s meeting both SLAs; null = unavailable (no request had both TTFT+TPOT)
     public double SlaTtftMs { get; set; }
     public double SlaTpotMs { get; set; }
 
@@ -148,11 +148,13 @@ public sealed class BenchmarkReport
         report.Itl = Stat.From(ok.SelectMany(r => r.InterTokenLatencies()).ToList());
         report.E2E = Stat.From(ok.Select(r => r.E2EMs).ToList());
 
-        // Goodput: requests that met BOTH SLAs, normalized by wall-clock.
-        int good = ok.Count(r =>
-            (r.TtftMs ?? 0) <= o.SlaTtftMs &&
-            (r.TpotMs ?? 0) <= o.SlaTpotMs);
-        report.GoodputPerSec = durationSec > 0 ? good / durationSec : 0;
+        // Goodput: requests that met BOTH SLAs, normalized by wall-clock. Only requests that actually
+        // HAVE both measurements can be judged — a missing TTFT/TPOT is not a pass. If no request has
+        // both (e.g. a non-streaming backend), goodput is unavailable (null) rather than trivially "all met".
+        var judgeable = ok.Where(r => r.TtftMs.HasValue && r.TpotMs.HasValue).ToList();
+        report.GoodputPerSec = (judgeable.Count > 0 && durationSec > 0)
+            ? judgeable.Count(r => r.TtftMs!.Value <= o.SlaTtftMs && r.TpotMs!.Value <= o.SlaTpotMs) / durationSec
+            : (double?)null;
 
         return report;
     }
@@ -181,7 +183,7 @@ public sealed class BenchmarkReport
         sb.AppendLine($"  ITL  (per token)      {F(Itl.Mean),8} {F(Itl.P50),8} {F(Itl.P90),8} {F(Itl.P99),8}");
         sb.AppendLine($"  E2E                   {F(E2E.Mean),8} {F(E2E.P50),8} {F(E2E.P90),8} {F(E2E.P99),8}");
         sb.AppendLine("  --------------------------------------------------------------");
-        sb.AppendLine($"  goodput (TTFT<={SlaTtftMs}ms, TPOT<={SlaTpotMs}ms) : {GoodputPerSec.ToString("0.00", CultureInfo.InvariantCulture)} req/s");
+        sb.AppendLine($"  goodput (TTFT<={SlaTtftMs}ms, TPOT<={SlaTpotMs}ms) : {(GoodputPerSec.HasValue ? GoodputPerSec.Value.ToString("0.00", CultureInfo.InvariantCulture) + " req/s" : "n/a (needs TTFT+TPOT)")}");
         sb.Append("================================================================");
         return sb.ToString();
     }

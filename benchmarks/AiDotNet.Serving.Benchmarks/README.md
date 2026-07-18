@@ -12,12 +12,13 @@ against vLLM, TGI, and TensorRT-LLM.
 ## Design
 
 - **`--backend openai`** — drives `/v1/chat/completions` or `/v1/completions` with `stream=true`
-  and parses the SSE token stream. Works against **vLLM**, **TGI** (OpenAI route), and **AiDotNet
-  once it exposes the OpenAI API**. This is the common denominator that makes comparisons fair.
-- **`--backend aidotnet-native`** — drives AiDotNet's current `api/inference/generate/{model}`
+  and parses the SSE token stream. Works against **vLLM**, **TGI** (OpenAI route), and **AiDotNet**,
+  which now exposes the OpenAI API (`/v1/chat/completions`, `/v1/completions`) via this serving layer.
+  This is the common denominator that makes comparisons fair.
+- **`--backend aidotnet-native`** — drives AiDotNet's `api/inference/generate/{model}`
   endpoint (token-ID native, **non-streaming**). Use it to measure the engine's raw throughput and
-  end-to-end latency **today**. TTFT / ITL / TPOT are unavailable on this path because the endpoint
-  returns the whole completion at once — which is exactly why the OpenAI streaming route is being added.
+  end-to-end latency. TTFT / ITL / TPOT are unavailable on this path because the endpoint returns the
+  whole completion at once — prefer the streaming `--backend openai` route for those latency metrics.
 
 The load driver honors a **Poisson arrival schedule** (`--request-rate`) bounded by a
 **concurrency cap** (`--concurrency`), the same model vLLM's `benchmark_serving.py` uses.
