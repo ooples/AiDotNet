@@ -208,7 +208,7 @@ public sealed class OpenAiController : ControllerBase
                     {
                         // The batch path surfaces logprobs and reliably drives a constrained generation to
                         // completion; the streaming Collect path is used only for plain free-form output.
-                        (text, genCount, finish, logProbs) = CollectWithLogProbs(ctx, choiceSdr, stops, ct);
+                        (text, genCount, finish, logProbs) = await CollectWithLogProbsAsync(ctx, choiceSdr, stops, ct);
                     }
                     else
                     {
@@ -491,10 +491,10 @@ public sealed class OpenAiController : ControllerBase
 
     /// <summary>Runs the batch (non-streaming) generation path, which surfaces per-token log-probabilities,
     /// applies stop strings to the text, and builds the OpenAI <c>logprobs</c> structure.</summary>
-    private (string Text, int Count, string Finish, ChatLogProbs? LogProbs) CollectWithLogProbs(
+    private async Task<(string Text, int Count, string Finish, ChatLogProbs? LogProbs)> CollectWithLogProbsAsync(
         GenContext ctx, SpeculativeDecodingRequest sdr, IReadOnlyList<string> stops, CancellationToken ct)
     {
-        var resp = _textGeneration.Generate(ctx.ModelName, ctx.NumericType, sdr, ct);
+        var resp = await _textGeneration.GenerateAsync(ctx.ModelName, ctx.NumericType, sdr, ct).ConfigureAwait(false);
 
         // Propagate engine/generation failures instead of building a successful (but truncated) 200. A client
         // cancellation surfaces as OperationCanceledException (the framework handles it); any other reported

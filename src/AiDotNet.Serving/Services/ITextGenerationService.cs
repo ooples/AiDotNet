@@ -1,4 +1,5 @@
 using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 
@@ -32,6 +33,14 @@ public interface ITextGenerationService
     /// generation, the response's <see cref="SpeculativeDecodingResponse.Error"/> is populated.
     /// </returns>
     SpeculativeDecodingResponse Generate(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asynchronous variant of <see cref="Generate"/>. Request-serving controllers must use this so the
+    /// ASP.NET request thread is released to the thread pool while the shared batching engine drives the
+    /// completion, rather than being blocked for the whole generation (which starves the pool under load).
+    /// </summary>
+    /// <returns>A task producing the generation response (see <see cref="Generate"/> for the contract).</returns>
+    Task<SpeculativeDecodingResponse> GenerateAsync(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Returns whether the named model (loaded with <paramref name="numericType"/>) supports

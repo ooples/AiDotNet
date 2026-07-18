@@ -334,7 +334,7 @@ public class InferenceController : ControllerBase
     [ProducesResponseType(typeof(SpeculativeDecodingResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult GenerateWithSpeculativeDecoding(string modelName, [FromBody] SpeculativeDecodingRequest request)
+    public async Task<IActionResult> GenerateWithSpeculativeDecoding(string modelName, [FromBody] SpeculativeDecodingRequest request)
     {
         var sw = Stopwatch.StartNew();
 
@@ -371,7 +371,7 @@ public class InferenceController : ControllerBase
             // HttpContext can be null outside a request pipeline (e.g. unit tests); fall back to a
             // non-cancelling token rather than NRE-ing into the 500 handler.
             var requestAborted = HttpContext?.RequestAborted ?? System.Threading.CancellationToken.None;
-            var response = _textGenerationService.Generate(modelName, modelInfo.NumericType, request, requestAborted);
+            var response = await _textGenerationService.GenerateAsync(modelName, modelInfo.NumericType, request, requestAborted);
 
             sw.Stop();
             response.ProcessingTimeMs = sw.ElapsedMilliseconds;
