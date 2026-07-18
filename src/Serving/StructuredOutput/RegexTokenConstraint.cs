@@ -640,12 +640,23 @@ internal sealed class RegexNfa
             }
         }
 
+        // Upper bound on a single quantifier's repetition count. `response_format.regex` is request-controlled,
+        // so an unbounded bound (e.g. a{2147483647}) would materialize billions of NFA fragments and exhaust
+        // memory/CPU before generation even starts. Bounds larger than this — or numerically too large to be an
+        // int — are rejected with ArgumentException, which the serving factory maps to an HTTP 400.
+        private const int MaxQuantifierRepetitions = 1000;
+
         private int ParseInt()
         {
             var sb = new StringBuilder();
             while (More && char.IsDigit(Peek)) sb.Append(Next());
             if (sb.Length == 0) throw new FormatException($"Expected a number at position {_i} in regex '{_p}'.");
-            return int.Parse(sb.ToString());
+            if (!int.TryParse(sb.ToString(), out int value) || value > MaxQuantifierRepetitions)
+            {
+                throw new ArgumentException(
+                    $"Quantifier repetition '{sb}' exceeds the maximum allowed count of {MaxQuantifierRepetitions} in regex '{_p}'.");
+            }
+            return value;
         }
     }
 }

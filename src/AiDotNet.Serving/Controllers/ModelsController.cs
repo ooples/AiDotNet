@@ -190,17 +190,32 @@ public class ModelsController : ControllerBase
             // token-ID endpoint; the OpenAI endpoints will report the missing tokenizer if used.
             if (!string.IsNullOrWhiteSpace(request.TokenizerPath))
             {
-                try
+                // The tokenizer path is user-controlled and handed to the loader, so canonicalize and
+                // boundary-check it against the model directory exactly like the model path above —
+                // otherwise it could be used to read arbitrary local files. A path that resolves outside
+                // the model directory is treated as a failed (skipped) tokenizer registration: the model
+                // still loads and remains usable via the native token-ID endpoint.
+                var tokenizerPath = Path.GetFullPath(Path.Combine(modelsRoot, request.TokenizerPath!));
+                if (!tokenizerPath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
                 {
-                    _tokenizers.LoadAndRegister(request.Name, request.TokenizerPath!);
-                    _logger.LogInformation("Registered tokenizer for model '{ModelName}' from '{TokenizerPath}'",
-                        request.Name, request.TokenizerPath);
+                    _logger.LogWarning(
+                        "Attempted path traversal: tokenizer path '{TokenizerPath}' resolves outside the model directory; skipping tokenizer registration.",
+                        request.TokenizerPath);
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogWarning(ex, "Failed to load tokenizer for model '{ModelName}' from '{TokenizerPath}'; " +
-                        "the model is loaded but the OpenAI API will be unavailable for it.",
-                        request.Name, request.TokenizerPath);
+                    try
+                    {
+                        _tokenizers.LoadAndRegister(request.Name, tokenizerPath);
+                        _logger.LogInformation("Registered tokenizer for model '{ModelName}' from '{TokenizerPath}'",
+                            request.Name, tokenizerPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to load tokenizer for model '{ModelName}' from '{TokenizerPath}'; " +
+                            "the model is loaded but the OpenAI API will be unavailable for it.",
+                            request.Name, tokenizerPath);
+                    }
                 }
             }
 
