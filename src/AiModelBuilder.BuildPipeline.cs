@@ -277,6 +277,82 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Auto-evaluates a financial or time-series forecasting model with financial-performance metrics — the
+    /// money-side analogue of <see cref="ComputeClusterEvaluation"/>. Runs whenever the trained model is a
+    /// financial/forecasting family (<see cref="Finance.Interfaces.IFinancialModel{T}"/> or
+    /// <see cref="Interfaces.ITimeSeriesModel{T}"/>), scoring its held-out predictions as a trading signal and mirroring
+    /// the metric values into <see cref="AiModelResult{T,TInput,TOutput}.ConfiguredMetrics"/>.
+    /// </summary>
+    /// <remarks>
+    /// The model's level forecasts are differenced against the previous realized value to per-step changes
+    /// (<c>predictedChange[i] = predicted[i] - actual[i-1]</c>, <c>realizedChange[i] = actual[i] - actual[i-1]</c>),
+    /// so the strategy goes long when the model forecasts a rise above the last realized value. Computed on the
+    /// held-out test partition, so this is an out-of-sample measure. Any metric added via
+    /// <c>ConfigureFinancialMetric</c> extends the default set. Failures are swallowed with a trace warning —
+    /// the trained model is unaffected and <see cref="AiModelResult{T,TInput,TOutput}.FinancialEvaluation"/>
+    /// is left null.
+    /// </remarks>
+    private void ComputeFinancialEvaluation(
+        AiModelResult<T, TInput, TOutput> result,
+        OptimizationResult<T, TInput, TOutput>.DatasetResult testResult)
+    {
+        if (_model is not (Finance.Interfaces.IFinancialModel<T> or Interfaces.ITimeSeriesModel<T>))
+        {
+            return;
+        }
+
+        try
+        {
+            var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(testResult.Predictions);
+            var actual = ConversionsHelper.ConvertToVector<T, TOutput>(testResult.Y);
+
+            int n = Math.Min(predicted.Length, actual.Length);
+            if (n < 3)
+            {
+                // Need at least two return steps (differencing drops one) for the metrics to be defined.
+                return;
+            }
+
+            // Difference the level forecasts to per-step CHANGES: at step i the model forecasts predicted[i]
+            // against the last realized value actual[i-1], and the realized change is actual[i]-actual[i-1].
+            // sign(predictedChange) is then the long/short signal the financial metrics score.
+            var predictedChange = new double[n - 1];
+            var realizedChange = new double[n - 1];
+            for (int i = 1; i < n; i++)
+            {
+                double prevActual = Convert.ToDouble(actual[i - 1]);
+                predictedChange[i - 1] = Convert.ToDouble(predicted[i]) - prevActual;
+                realizedChange[i - 1] = Convert.ToDouble(actual[i]) - prevActual;
+            }
+
+            var evaluator = new Finance.Evaluation.FinancialEvaluator<T>();
+            if (_configuredFinancialMetric is not null)
+            {
+                evaluator.AddMetric(_configuredFinancialMetric);
+            }
+
+            var evaluation = evaluator.Evaluate(predictedChange, realizedChange);
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            foreach (var kv in evaluation.Metrics)
+            {
+                if (!double.IsNaN(kv.Value) && !double.IsInfinity(kv.Value))
+                {
+                    result.SetConfiguredMetric(kv.Key, numOps.FromDouble(kv.Value));
+                }
+            }
+
+            result.SetFinancialEvaluation(evaluation);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Financial evaluation could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.FinancialEvaluation is null.");
+        }
+    }
+
+    /// <summary>
     /// Calibrates the configured drift detector on the training residuals, checks it against the test
     /// residuals, and attaches the attributed <see cref="DriftDetection.DriftReport"/> plus the live
     /// <see cref="DriftDetection.DriftMonitor{T}"/> to the result.
@@ -5430,6 +5506,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         RunConfiguredCrossValidation(finalResult, preparedX, preparedY, optimizer);
         ComputeConfiguredMetrics(finalResult, optimizationResult.TestResult);
         ComputeClusterEvaluation(finalResult, preparedX, preparedY);
+        ComputeFinancialEvaluation(finalResult, optimizationResult.TestResult);
         ComputeDriftMonitoring(finalResult, optimizationResult);
         ComputeActiveLearningSelection(finalResult, optimizationResult);
         ComputeQueryStrategySelection(finalResult);
