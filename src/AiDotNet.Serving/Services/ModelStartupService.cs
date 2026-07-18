@@ -245,7 +245,8 @@ public class ModelStartupService : IHostedService
     {
         if (modelConfig.EnableTextGeneration)
         {
-            LoadGenerativeModel<T>(modelConfig.Name, path, modelConfig.QuantizeKvCacheWeights);
+            LoadGenerativeModel<T>(modelConfig.Name, path, modelConfig.QuantizeKvCacheWeights,
+                modelConfig.EnablePagedKvCache, modelConfig.PagedKvCacheBlockSize);
             return;
         }
 
@@ -257,7 +258,8 @@ public class ModelStartupService : IHostedService
     /// the KV-cached incremental generation path enabled (paged KV cache, per-request session
     /// isolation, and prompt-prefix sharing).
     /// </summary>
-    private void LoadGenerativeModel<T>(string name, string path, bool quantizeKvCacheWeights)
+    private void LoadGenerativeModel<T>(string name, string path, bool quantizeKvCacheWeights,
+        bool enablePagedKvCache, int pagedKvCacheBlockSize)
     {
         using var _ = Helpers.ModelPersistenceGuard.InternalOperation();
 
@@ -269,7 +271,9 @@ public class ModelStartupService : IHostedService
             licenseKey: null,
             decryptionToken: null,
             enableTextGeneration: true,
-            quantizeKvCacheWeights: quantizeKvCacheWeights);
+            quantizeKvCacheWeights: quantizeKvCacheWeights,
+            enablePagedKvCache: enablePagedKvCache,
+            pagedKvCacheBlockSize: pagedKvCacheBlockSize);
 
         var success = _modelRepository.LoadModel(name, servableModel, path);
         if (!success)
@@ -278,8 +282,8 @@ public class ModelStartupService : IHostedService
         }
 
         _logger.LogDebug(
-            "Generative model '{Name}' registered (incremental generation: {Incremental}, quantized KV: {Quantized})",
-            name, servableModel.SupportsIncrementalGeneration, quantizeKvCacheWeights);
+            "Generative model '{Name}' registered (incremental generation: {Incremental}, quantized KV: {Quantized}, paged KV: {Paged}, block size: {BlockSize})",
+            name, servableModel.SupportsIncrementalGeneration, quantizeKvCacheWeights, enablePagedKvCache, pagedKvCacheBlockSize);
     }
 
     /// <summary>

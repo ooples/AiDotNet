@@ -32,4 +32,21 @@ public interface ITextGenerationService
     /// generation, the response's <see cref="SpeculativeDecodingResponse.Error"/> is populated.
     /// </returns>
     SpeculativeDecodingResponse Generate(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns whether the named model (loaded with <paramref name="numericType"/>) supports
+    /// token-level text generation. Used by the OpenAI-compatible layer to fail fast before it
+    /// starts writing a streaming response.
+    /// </summary>
+    bool SupportsGeneration(string modelName, NumericType numericType);
+
+    /// <summary>
+    /// Streams generated token IDs one at a time (true incremental decode with sampling), enabling
+    /// real time-to-first-token and Server-Sent-Events responses. Honors
+    /// <see cref="SpeculativeDecodingRequest.Temperature"/>, <see cref="SpeculativeDecodingRequest.TopP"/>,
+    /// and <see cref="SpeculativeDecodingRequest.TopK"/>. Enumeration is lazy; each <c>MoveNext</c>
+    /// advances one decode step. Stops at EOS, at <see cref="SpeculativeDecodingRequest.MaxNewTokens"/>,
+    /// or when <paramref name="cancellationToken"/> is signaled.
+    /// </summary>
+    System.Collections.Generic.IEnumerable<int> GenerateStream(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default);
 }
