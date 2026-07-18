@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Models.OpenAi;
+using AiDotNet.Serving.Observability;
 using AiDotNet.Serving.Services;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Validation;
@@ -84,6 +86,8 @@ public sealed class OpenAiController : ControllerBase
         if (request == null || request.Messages == null || request.Messages.Count == 0)
             return OpenAiError(StatusCodes.Status400BadRequest, "'messages' is required and cannot be empty.");
 
+        var sw = Stopwatch.StartNew();
+
         // Multi-LoRA: the model field may be "baseModel@adapter" to serve a shared base with a per-request
         // adapter. Resolve the base model for lookup and carry the adapter through to the engine.
         (string baseModel, string? adapterId) = SplitModelAndAdapter(request.Model);
@@ -110,6 +114,7 @@ public sealed class OpenAiController : ControllerBase
         }
         catch (ArgumentException ex)
         {
+            ServingMetrics.RecordRequest(success: false, promptTokens: 0, generationTokens: 0, durationSeconds: sw.Elapsed.TotalSeconds);
             return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "response_format");
         }
         sdr.AdapterId = adapterId;
@@ -157,6 +162,7 @@ public sealed class OpenAiController : ControllerBase
                 completionTokens += genCount;
             }
             response.Usage = new Usage { PromptTokens = ctx.PromptTokenCount, CompletionTokens = completionTokens, TotalTokens = ctx.PromptTokenCount + completionTokens };
+            ServingMetrics.RecordRequest(success: true, promptTokens: ctx.PromptTokenCount, generationTokens: completionTokens, durationSeconds: sw.Elapsed.TotalSeconds);
             return Ok(response);
         }
 
@@ -173,10 +179,12 @@ public sealed class OpenAiController : ControllerBase
         string prev = string.Empty;
         string finishReason = "length";
         bool stopped = false;
+        double? ttftSeconds = null;
 
         foreach (int tok in _textGeneration.GenerateStream(ctx.ModelName, ctx.NumericType, sdr, ct))
         {
             ids.Add(tok);
+            ttftSeconds ??= sw.Elapsed.TotalSeconds;
             string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
 
             int stopAt = FindStop(full, stops);
@@ -204,6 +212,7 @@ public sealed class OpenAiController : ControllerBase
             Choices = { new ChatChoice { Index = 0, Delta = new ChatMessageOut(), FinishReason = finishReason } }
         }, ct);
         await WriteDoneAsync(ct);
+        RecordStreamMetrics(ctx.PromptTokenCount, ids.Count, sw.Elapsed.TotalSeconds, ttftSeconds);
         return new EmptyResult();
     }
 
@@ -215,6 +224,8 @@ public sealed class OpenAiController : ControllerBase
     {
         if (request == null || request.Prompt == null)
             return OpenAiError(StatusCodes.Status400BadRequest, "'prompt' is required.");
+
+        var sw = Stopwatch.StartNew();
 
         if (!TryPrepare(request.Model, out var ctx, out var error))
             return error!;
@@ -228,6 +239,7 @@ public sealed class OpenAiController : ControllerBase
         }
         catch (ArgumentException ex)
         {
+            ServingMetrics.RecordRequest(success: false, promptTokens: 0, generationTokens: 0, durationSeconds: sw.Elapsed.TotalSeconds);
             return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "response_format");
         }
         var stops = request.ResolveStop();
@@ -243,6 +255,7 @@ public sealed class OpenAiController : ControllerBase
                 Choices = { new CompletionChoice { Index = 0, Text = text, FinishReason = finish } },
                 Usage = new Usage { PromptTokens = ctx.PromptTokenCount, CompletionTokens = genCount, TotalTokens = ctx.PromptTokenCount + genCount }
             };
+            ServingMetrics.RecordRequest(success: true, promptTokens: ctx.PromptTokenCount, generationTokens: genCount, durationSeconds: sw.Elapsed.TotalSeconds);
             return Ok(response);
         }
 
@@ -250,10 +263,12 @@ public sealed class OpenAiController : ControllerBase
         var ids = new List<int>();
         string prev = string.Empty;
         bool stopped = false;
+        double? ttftSeconds = null;
 
         foreach (int tok in _textGeneration.GenerateStream(ctx.ModelName, ctx.NumericType, sdr, ct))
         {
             ids.Add(tok);
+            ttftSeconds ??= sw.Elapsed.TotalSeconds;
             string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
 
             int stopAt = FindStop(full, stops);
@@ -277,6 +292,7 @@ public sealed class OpenAiController : ControllerBase
         string finishReason = stopped ? "stop" : (ids.Count >= sdr.MaxNewTokens ? "length" : "stop");
         await WriteChunkAsync(CompletionChunk(id, created, request.Model, string.Empty, finishReason), ct);
         await WriteDoneAsync(ct);
+        RecordStreamMetrics(ctx.PromptTokenCount, ids.Count, sw.Elapsed.TotalSeconds, ttftSeconds);
         return new EmptyResult();
     }
 
@@ -463,6 +479,14 @@ public sealed class OpenAiController : ControllerBase
 
         string finish = stopped ? "stop" : (ids.Count >= sdr.MaxNewTokens ? "length" : "stop");
         return (text, ids.Count, finish);
+    }
+
+    /// <summary>Records Prometheus request metrics for a completed streaming generation, deriving TPOT
+    /// (inter-token latency) from the total duration minus TTFT over the remaining tokens.</summary>
+    private static void RecordStreamMetrics(int promptTokens, int genCount, double totalSeconds, double? ttftSeconds)
+    {
+        double? tpot = (ttftSeconds is { } t && genCount > 1) ? (totalSeconds - t) / (genCount - 1) : null;
+        ServingMetrics.RecordRequest(success: true, promptTokens, genCount, totalSeconds, ttftSeconds, tpot);
     }
 
     private static int FindStop(string text, IReadOnlyList<string> stops)
