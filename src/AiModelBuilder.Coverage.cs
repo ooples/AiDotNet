@@ -28,6 +28,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private ITextVectorizer<T>? _configuredTextVectorizer;
     private IClusterMetric<T>? _configuredClusterMetric;
     private IExternalClusterMetric<T>? _configuredExternalClusterMetric;
+    private Finance.Evaluation.IFinancialMetric<T>? _configuredFinancialMetric;
     private ICurriculumScheduler<T>? _configuredCurriculumScheduler;
     private ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T>? _configuredExplorationStrategy;
     private ReinforcementLearning.IntrinsicMotivation.IIntrinsicRewardModule<T>? _configuredIntrinsicRewardModule;
@@ -137,6 +138,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureClusterMetric(IClusterMetric<T> metric)
     {
         _configuredClusterMetric = metric;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures an extra financial metric to score a forecasting/financial model on, on top of the default
+    /// set (directional accuracy, strategy Sharpe/Sortino, max drawdown, profit factor, information coefficient).
+    /// </summary>
+    /// <param name="metric">The financial metric implementation to add.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Financial metrics judge a forecaster on <i>money</i> rather than error:
+    /// they treat the model's prediction as a trading signal (go long when it forecasts a rise) and measure
+    /// how that would have performed on the held-out data. The default set runs automatically for any
+    /// financial or time-series forecasting model — you do not need to configure anything. This is the
+    /// optional extension knob (the money-side analogue of <see cref="ConfigureClusterMetric"/>): it adds one
+    /// more metric on top of the default set and does not replace it.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureFinancialMetric(Finance.Evaluation.IFinancialMetric<T> metric)
+    {
+        _configuredFinancialMetric = metric;
         return this;
     }
 
