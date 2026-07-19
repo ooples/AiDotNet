@@ -737,7 +737,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // iteration cap below for the multi-iter probes. Self-relative invariants + paper architecture
         // preserved; family bases (NeuralNetwork / AudioNN / VisionLanguage / EmbeddingModel) are generic
         // over T so the floatify rewrite compiles. ---
-        "ACEStep", "AudioVisualEventLocalizationNetwork", "BASIC", "ConvolutionalNeuralNetwork",
+        "CLIPA", "ACEStep", "AudioVisualEventLocalizationNetwork", "BASIC", "ConvolutionalNeuralNetwork",
         "DCGAN", "Data2VecASR", "DeepBeliefNetwork", "DenseNetNetwork", "Donut", "EmotiVoice", "Emu",
         "ExtremeLearningMachine", "Kokoro", "MCDropoutNeuralNetwork", "MPLUGOwl2",
         "Mamba2", "MedCLIP", "MedFlamingo", "MinMo", "LLaVANeXTVideo", "NaturalSpeech2", "NeuFlowV2",
@@ -3354,6 +3354,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 128, outputSize: 4), " +
                     $"new {vlmOptionsType} {{ VisionDim = 128, DecoderDim = 128, " +
                     "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "CLIPA"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.Encoders.", System.StringComparison.Ordinal))
+            {
+                // CLIPA (Li et al., "An Inverse Scaling Law for CLIP Training"): a foundation-scale dual
+                // encoder — VisionEmbeddingDim 1280, 32 vision layers, 224px/14-patch (ViT-H/14),
+                // TextEmbeddingDim 1024. Its <double> training OOM-crashed the 16 GB runner (Gen A-C
+                // shard). The generic VisionLanguage shrink uses NumLayers/EmbeddingDim, which CLIPAOptions
+                // does NOT expose (it uses VisionEmbeddingDim / NumVisionLayers / NumVisionHeads /
+                // TextEmbeddingDim / ProjectionDim), so it was silently building at full scale. Construct
+                // the SAME dual-encoder architecture at CI-smoke width/depth via the real option names
+                // (paper structure preserved, only scale shrinks). Floatified via Fp32TestClassNames.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Encoders.CLIPAOptions { ImageSize = 32, PatchSize = 8, " +
+                    "VisionEmbeddingDim = 32, NumVisionLayers = 1, NumVisionHeads = 2, " +
+                    "TextEmbeddingDim = 32, NumTextLayers = 1, ProjectionDim = 32 })";
             }
             else if ((model.ClassName is "InternViT" or "DINOv2" or "DINOv3" or "RADIOv25" or "SigLIPSO" or "PerceptionEncoder")
                      && typeName.StartsWith(
