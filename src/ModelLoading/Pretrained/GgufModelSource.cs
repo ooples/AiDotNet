@@ -1,7 +1,12 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using AiDotNet.Agentic.Models.Local;
+using AiDotNet.Tokenization.Algorithms;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Models;
 using Newtonsoft.Json.Linq;
+using GgufVocabulary = AiDotNet.Tokenization.Vocabulary.Vocabulary;
 // GgufFile also exists in AiDotNet.Tensors.NumericOperations (pulled in via a global using); this alias
 // pins every reference in this file to the Agentic safetensors/GGUF reader's type.
 using GgufFile = AiDotNet.Agentic.Models.Local.GgufFile;
@@ -123,6 +128,120 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
         Array.Copy(all, slice.Index * sliceSize, result, 0, sliceSize);
         return result;
     }
+
+    /// <summary>
+    /// Builds the model's tokenizer from the GGUF <c>tokenizer.ggml.*</c> metadata: the vocabulary
+    /// (<c>tokens</c>), BPE merge ranks (<c>merges</c>), added/control tokens (<c>token_type</c>), and the
+    /// BOS/EOS/UNK/PAD ids. Returns a byte-level <see cref="BpeTokenizer"/> — the GPT-2 scheme SmolLM2,
+    /// Llama-BPE, Qwen, and the rest of the GGUF BPE models use — so it tokenizes identically to llama.cpp.
+    /// </summary>
+    /// <exception cref="InvalidDataException">Thrown when the GGUF has no tokenizer vocabulary metadata.</exception>
+    public ITokenizer BuildTokenizer()
+    {
+        var md = _file.Metadata;
+        object? Meta(string key) => md.TryGetValue(key, out var v) ? v : null;
+
+        if (Meta("tokenizer.ggml.tokens") is not object[] tokensArr || tokensArr.Length == 0)
+        {
+            throw new InvalidDataException(
+                "GGUF file has no 'tokenizer.ggml.tokens' metadata; it carries weights only and cannot build a tokenizer.");
+        }
+
+        // Vocabulary: token string -> id (the array index), and the reverse for id-based lookups.
+        var idToToken = new string[tokensArr.Length];
+        var tokenToId = new Dictionary<string, int>(tokensArr.Length, StringComparer.Ordinal);
+        for (int i = 0; i < tokensArr.Length; i++)
+        {
+            string tok = Convert.ToString(tokensArr[i], CultureInfo.InvariantCulture) ?? string.Empty;
+            idToToken[i] = tok;
+            // Keep the lowest id for a repeated token string (matches how BPE would pick it).
+            if (!tokenToId.ContainsKey(tok))
+            {
+                tokenToId[tok] = i;
+            }
+        }
+
+        // Merge ranks: each "a b" line's order is its priority (lower = merged earlier).
+        var merges = new Dictionary<(string, string), int>();
+        if (Meta("tokenizer.ggml.merges") is object[] mergesArr)
+        {
+            for (int rank = 0; rank < mergesArr.Length; rank++)
+            {
+                string line = Convert.ToString(mergesArr[rank], CultureInfo.InvariantCulture) ?? string.Empty;
+                int sep = line.IndexOf(' ');
+                if (sep <= 0 || sep >= line.Length - 1)
+                {
+                    continue;
+                }
+
+                var pair = (line.Substring(0, sep), line.Substring(sep + 1));
+                if (!merges.ContainsKey(pair))
+                {
+                    merges[pair] = rank;
+                }
+            }
+        }
+
+        // Added/control tokens (GGUF token types CONTROL=3 and USER_DEFINED=4) are matched whole, pre-BPE.
+        var specialStrings = new List<string>();
+        if (Meta("tokenizer.ggml.token_type") is object[] typeArr)
+        {
+            int limit = Math.Min(typeArr.Length, idToToken.Length);
+            for (int i = 0; i < limit; i++)
+            {
+                int type = Convert.ToInt32(typeArr[i], CultureInfo.InvariantCulture);
+                if ((type == 3 || type == 4) && !string.IsNullOrEmpty(idToToken[i]))
+                {
+                    specialStrings.Add(idToToken[i]);
+                }
+            }
+        }
+
+        string TokenForId(int? id) =>
+            id is int v && v >= 0 && v < idToToken.Length ? idToToken[v] : string.Empty;
+
+        int? bosId = AsInt(Meta("tokenizer.ggml.bos_token_id"));
+        int? eosId = AsInt(Meta("tokenizer.ggml.eos_token_id"));
+        int? unkId = AsInt(Meta("tokenizer.ggml.unknown_token_id"));
+        int? padId = AsInt(Meta("tokenizer.ggml.padding_token_id"));
+
+        // Byte-level BPE has no true unknown token (every byte maps to a token); fall back to EOS so the
+        // vocabulary always has a valid UNK id without inventing a spurious entry.
+        string unkToken = TokenForId(unkId);
+        if (string.IsNullOrEmpty(unkToken))
+        {
+            unkToken = TokenForId(eosId);
+        }
+
+        var specialTokens = new SpecialTokens
+        {
+            BosToken = TokenForId(bosId),
+            EosToken = TokenForId(eosId),
+            UnkToken = string.IsNullOrEmpty(unkToken) ? string.Empty : unkToken,
+            PadToken = TokenForId(padId),
+        };
+
+        var vocabulary = new GgufVocabulary(
+            tokenToId, string.IsNullOrEmpty(unkToken) ? TokenForId(eosId) : unkToken);
+
+        return new BpeTokenizer(
+            vocabulary, merges, specialTokens, pattern: null, byteLevel: true, specialTokenStrings: specialStrings);
+    }
+
+    // Reads a GGUF metadata integer that may be boxed as any of the spec's integer/uint value types.
+    private static int? AsInt(object? value) => value switch
+    {
+        null => null,
+        int i => i,
+        uint u => checked((int)u),
+        long l => checked((int)l),
+        ulong ul => checked((int)ul),
+        short s => s,
+        ushort us => us,
+        byte b => b,
+        sbyte sb => sb,
+        _ => null,
+    };
 
     /// <inheritdoc/>
     public void Dispose() => _stream.Dispose();

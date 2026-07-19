@@ -47,6 +47,24 @@ namespace AiDotNet.Tokenization.Algorithms
         private readonly Dictionary<string, List<string>> _cache;
         private readonly Regex _patternRegex;
 
+        // Byte-level BPE (GPT-2 / Radford et al. 2019): the vocabulary and merges live in a "byte-mapped"
+        // alphabet where every one of the 256 byte values is a single visible Unicode character (space is
+        // 'Ġ', newline 'Ċ', …). When enabled, encoding UTF-8-encodes each pre-token, maps its bytes into this
+        // alphabet before merging, and decoding maps the characters back to bytes and UTF-8-decodes. This is
+        // what GPT-2/GPT-3/RoBERTa/CLIP and every GGUF/Hugging Face BPE checkpoint use, so a raw-character BPE
+        // can never reproduce their token boundaries. Left off by default so corpus-trained char-level
+        // tokenizers keep their existing behavior.
+        private readonly bool _byteLevel;
+        private readonly Dictionary<byte, char>? _byteEncoder;
+        private readonly Dictionary<char, byte>? _byteDecoder;
+
+        // Added/control tokens (e.g. GPT-2 "<|endoftext|>", ChatML "<|im_start|>") are matched as whole units
+        // before byte-level BPE, exactly like Hugging Face's added-token handling: the text is split on them,
+        // the token itself is emitted verbatim (it is its own vocabulary entry), and only the surrounding
+        // spans run through BPE. Without this a control token would be shattered into byte pieces. Null when
+        // the tokenizer has no added tokens.
+        private readonly Regex? _specialSplitRegex;
+
         /// <summary>
         /// Creates a new BPE tokenizer with the specified vocabulary and merge rules.
         /// </summary>
@@ -60,20 +78,107 @@ namespace AiDotNet.Tokenization.Algorithms
         /// rules like ("t", "h") -> 0 meaning "merge t and h first" (lower number = higher priority).
         /// </para>
         /// </remarks>
+        /// <param name="byteLevel">
+        /// When <c>true</c>, encode/decode use the GPT-2 byte-level alphabet (see <see cref="_byteLevel"/>).
+        /// Required for any vocabulary whose tokens are byte-mapped (GPT-2/RoBERTa/CLIP/GGUF checkpoints).
+        /// </param>
+        /// <param name="specialTokenStrings">
+        /// Added/control token strings to match as whole units before BPE (e.g. <c>&lt;|im_start|&gt;</c>).
+        /// Must already be present in <paramref name="vocabulary"/>. Null/empty to disable.
+        /// </param>
         public BpeTokenizer(
             IVocabulary vocabulary,
             Dictionary<(string, string), int> merges,
             SpecialTokens? specialTokens = null,
-            string? pattern = null)
+            string? pattern = null,
+            bool byteLevel = false,
+            IEnumerable<string>? specialTokenStrings = null)
             : base(vocabulary, specialTokens ?? SpecialTokens.Gpt())
         {
             Guard.NotNull(merges);
             _bpeMerges = merges;
             _cache = new Dictionary<string, List<string>>();
 
+            _byteLevel = byteLevel;
+
+            // Build the added-token splitter, longest-first so a longer token wins over a prefix of it.
+            var specials = specialTokenStrings?.Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
+            if (specials is { Count: > 0 })
+            {
+                var alternation = string.Join(
+                    "|", specials.OrderByDescending(s => s.Length).Select(Regex.Escape));
+                _specialSplitRegex = new Regex(alternation, RegexOptions.Compiled, RegexTimeout);
+            }
+            if (byteLevel)
+            {
+                _byteEncoder = BuildByteToUnicode();
+                _byteDecoder = new Dictionary<char, byte>(_byteEncoder.Count);
+                foreach (var kv in _byteEncoder)
+                {
+                    _byteDecoder[kv.Value] = kv.Key;
+                }
+            }
+
             // Default GPT-2 pattern for pre-tokenization
             pattern ??= @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+";
             _patternRegex = new Regex(pattern, RegexOptions.Compiled, RegexTimeout);
+        }
+
+        /// <summary>
+        /// Builds the GPT-2 byte-to-Unicode table: a reversible map from all 256 byte values onto visible,
+        /// non-whitespace Unicode code points, matching <c>bytes_to_unicode()</c> in the GPT-2 encoder and
+        /// Hugging Face's ByteLevel pre-tokenizer exactly.
+        /// </summary>
+        private static Dictionary<byte, char> BuildByteToUnicode()
+        {
+            // The three "printable" byte ranges GPT-2's bytes_to_unicode keeps as-is:
+            // '!'..'~' (0x21..0x7E), U+00A1..U+00AC, and U+00AE..U+00FF. Code points are written numerically
+            // to keep this source file pure ASCII.
+            var bs = new List<int>();
+            for (int i = 0x21; i <= 0x7E; i++) bs.Add(i);
+            for (int i = 0xA1; i <= 0xAC; i++) bs.Add(i);
+            for (int i = 0xAE; i <= 0xFF; i++) bs.Add(i);
+
+            var cs = new List<int>(bs);
+            int n = 0;
+            for (int b = 0; b < 256; b++)
+            {
+                if (!bs.Contains(b))
+                {
+                    bs.Add(b);
+                    cs.Add(256 + n);
+                    n++;
+                }
+            }
+
+            var map = new Dictionary<byte, char>(256);
+            for (int i = 0; i < bs.Count; i++)
+            {
+                map[(byte)bs[i]] = (char)cs[i];
+            }
+
+            return map;
+        }
+
+        // Maps a pre-token to the GPT-2 byte-level alphabet: UTF-8 bytes -> visible characters.
+        private string ToByteLevel(string word)
+        {
+            var encoder = _byteEncoder
+                ?? throw new InvalidOperationException("Byte-level encoder is not initialized.");
+            return MapBytes(word, encoder);
+        }
+
+        // UTF-8-encodes a string and maps each byte through the GPT-2 byte-to-Unicode table.
+        private static string MapBytes(string word, Dictionary<byte, char> encoder)
+        {
+            var bytes = Encoding.UTF8.GetBytes(word);
+            var chars = new char[bytes.Length];
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                chars[i] = encoder[bytes[i]];
+            }
+
+            return new string(chars);
         }
 
         /// <summary>
@@ -101,7 +206,8 @@ namespace AiDotNet.Tokenization.Algorithms
             IEnumerable<string> corpus,
             int vocabSize,
             SpecialTokens? specialTokens = null,
-            string? pattern = null)
+            string? pattern = null,
+            bool byteLevel = false)
         {
             if (corpus == null)
                 throw new ArgumentNullException(nameof(corpus));
@@ -110,6 +216,10 @@ namespace AiDotNet.Tokenization.Algorithms
 
             var corpusList = corpus.ToList();
             specialTokens ??= SpecialTokens.Gpt();
+
+            // Byte-level training learns merges over the GPT-2 byte alphabet, so the trained vocabulary is
+            // byte-mapped and encode/decode round-trip any input exactly (as they do at inference).
+            var byteEncoder = byteLevel ? BuildByteToUnicode() : null;
 
             // Step 1: Build character vocabulary
             var vocabulary = new Vocabulary.Vocabulary(specialTokens.UnkToken);
@@ -125,7 +235,7 @@ namespace AiDotNet.Tokenization.Algorithms
             {
                 var emptyMerges = new Dictionary<(string, string), int>();
                 pattern ??= @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+";
-                return new BpeTokenizer(vocabulary, emptyMerges, specialTokens, pattern);
+                return new BpeTokenizer(vocabulary, emptyMerges, specialTokens, pattern, byteLevel);
             }
 
             // Step 2: Pre-tokenize and get word frequencies
@@ -139,8 +249,9 @@ namespace AiDotNet.Tokenization.Algorithms
                     .Cast<Match>()
                     .Select(m => m.Value);
 
-                foreach (var word in words)
+                foreach (var rawWord in words)
                 {
+                    var word = byteEncoder is null ? rawWord : MapBytes(rawWord, byteEncoder);
                     wordFreqs[word] = wordFreqs.GetValueOrDefault(word, 0) + 1;
                 }
             }
@@ -214,7 +325,7 @@ namespace AiDotNet.Tokenization.Algorithms
                 splits = newSplits;
             }
 
-            return new BpeTokenizer(vocabulary, merges, specialTokens, pattern);
+            return new BpeTokenizer(vocabulary, merges, specialTokens, pattern, byteLevel);
         }
 
         /// <summary>
@@ -227,10 +338,43 @@ namespace AiDotNet.Tokenization.Algorithms
 
             var tokens = new List<string>();
 
-            // Pre-tokenize using the pattern
-            var matches = _patternRegex.Matches(text);
-            foreach (var word in matches.Cast<Match>().Select(m => m.Value))
+            // No added tokens: run the whole text through BPE.
+            if (_specialSplitRegex is null)
             {
+                TokenizeChunk(text, tokens);
+                return tokens;
+            }
+
+            // Split on added/control tokens, emitting each verbatim and BPE-ing only the spans between them.
+            int last = 0;
+            foreach (Match m in _specialSplitRegex.Matches(text))
+            {
+                if (m.Index > last)
+                {
+                    TokenizeChunk(text.Substring(last, m.Index - last), tokens);
+                }
+
+                tokens.Add(m.Value);
+                last = m.Index + m.Length;
+            }
+
+            if (last < text.Length)
+            {
+                TokenizeChunk(text.Substring(last), tokens);
+            }
+
+            return tokens;
+        }
+
+        // Runs one span of ordinary text (no added tokens) through pattern pre-tokenization and BPE.
+        private void TokenizeChunk(string text, List<string> tokens)
+        {
+            var matches = _patternRegex.Matches(text);
+            foreach (var rawWord in matches.Cast<Match>().Select(m => m.Value))
+            {
+                // Byte-level BPE maps each pre-token into the GPT-2 byte alphabet before merging, so the
+                // symbols and merges share the same space as the vocabulary. Char-level BPE merges directly.
+                var word = _byteLevel ? ToByteLevel(rawWord) : rawWord;
 
                 // Check cache
                 if (_cache.TryGetValue(word, out var cachedTokens))
@@ -244,8 +388,6 @@ namespace AiDotNet.Tokenization.Algorithms
                 _cache[word] = bpeTokens;
                 tokens.AddRange(bpeTokens);
             }
-
-            return tokens;
         }
 
         /// <summary>
@@ -308,7 +450,34 @@ namespace AiDotNet.Tokenization.Algorithms
             if (tokens == null || tokens.Count == 0)
                 return string.Empty;
 
-            return string.Join("", tokens);
+            if (!_byteLevel)
+            {
+                return string.Join("", tokens);
+            }
+
+            // Byte-level: the concatenated token text is in the GPT-2 byte alphabet. Map every character back
+            // to its byte and UTF-8-decode the result, so multi-byte characters that BPE split across tokens
+            // are reassembled correctly (an exact inverse of ToByteLevel). Characters outside the alphabet
+            // (e.g. an un-skipped special token) fall back to their own UTF-8 bytes.
+            var decoder = _byteDecoder
+                ?? throw new InvalidOperationException("Byte-level decoder is not initialized.");
+            var bytes = new List<byte>(tokens.Sum(t => t.Length));
+            foreach (var token in tokens)
+            {
+                foreach (var c in token)
+                {
+                    if (decoder.TryGetValue(c, out var b))
+                    {
+                        bytes.Add(b);
+                    }
+                    else
+                    {
+                        bytes.AddRange(Encoding.UTF8.GetBytes(c.ToString()));
+                    }
+                }
+            }
+
+            return Encoding.UTF8.GetString(bytes.ToArray());
         }
     }
 }

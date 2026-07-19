@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using AiDotNet.ModelLoading.Pretrained;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization.Models;
 using Xunit;
 
 namespace AiDotNet.Tests.ModelLoading
@@ -18,6 +20,39 @@ namespace AiDotNet.Tests.ModelLoading
     /// </summary>
     public class GgufEndToEndTests
     {
+        /// <summary>
+        /// Parity check: the tokenizer built from a real SmolLM2 GGUF must produce byte-for-byte the same
+        /// token ids as llama.cpp for the same text (ground truth captured from llama.cpp's /tokenize on
+        /// SmolLM2-135M-Instruct-Q8_0). Gated on the model file being present locally (set
+        /// AIDOTNET_SMOLLM2_GGUF), since the multi-hundred-MB checkpoint is not committed.
+        /// </summary>
+        [Fact]
+        public void Gguf_Tokenizer_MatchesLlamaCpp_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return; // local-only: requires the real SmolLM2 GGUF checkpoint.
+            }
+
+            using var src = GgufModelSource.Open(path);
+            var tokenizer = src.BuildTokenizer();
+            var opts = new EncodingOptions { AddSpecialTokens = false };
+
+            Assert.Equal(
+                new[] { 19556, 905 },
+                tokenizer.Encode("Hello world", opts).TokenIds.ToArray());
+            Assert.Equal(
+                new[] { 504, 2365, 6354, 16438, 27003, 690, 260, 23790, 2767, 30 },
+                tokenizer.Encode("The quick brown fox jumps over the lazy dog.", opts).TokenIds.ToArray());
+            Assert.Equal(
+                new[] { 1604, 3987, 46477, 24, 94, 727 },
+                tokenizer.Encode("def fibonacci(n):", opts).TokenIds.ToArray());
+
+            // Round-trip: ids -> exact original text (byte-level BPE is lossless).
+            Assert.Equal("Hello world", tokenizer.Decode(new List<int> { 19556, 905 }, skipSpecialTokens: true));
+        }
+
         [Fact]
         public void Gguf_EndToEnd_Llama_TiedHead_BuildsAndForwards()
         {
