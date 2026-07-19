@@ -157,43 +157,75 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
         // llama.cpp ties the LM head when there is no separate output.weight tensor.
         bool hasOutput = TensorExists(file, "output.weight");
 
-        var configJson = new JObject
+        JObject configJson;
+        if (string.Equals(modelType, "dbrx", StringComparison.OrdinalIgnoreCase))
         {
-            ["architectures"] = new JArray(),
-            ["model_type"] = modelType,
-            ["hidden_size"] = hidden,
-            ["intermediate_size"] = ffn,
-            ["num_hidden_layers"] = layers,
-            ["num_attention_heads"] = heads,
-            ["num_key_value_heads"] = kvHeads,
-            ["vocab_size"] = vocab,
-            ["rms_norm_eps"] = normEps,
-            ["rope_theta"] = ropeTheta,
-            ["max_position_embeddings"] = maxPos,
-            ["tie_word_embeddings"] = !hasOutput,
-            // hidden_act is informational only — every decoder builder fixes its own gate activation via
-            // DecoderOptions, so it is left at the config default rather than guessed from the GGUF arch.
-        };
-        // Family-specific fields the builders actually consume: an explicit head dim (Gemma), the Gemma-2
-        // attention/final logit soft-caps, and the Cohere logit multiplier. Only emit them when present so
-        // HuggingFaceConfig keeps its own defaults (e.g. head_dim = hidden/heads) for models that omit them.
-        if (headDim is { } hd)
-            configJson["head_dim"] = hd;
-        if (OptionalDouble(file, $"{arch}.attn_logit_softcapping") is { } attnCap)
-            configJson["attn_logit_softcapping"] = attnCap;
-        if (OptionalDouble(file, $"{arch}.final_logit_softcapping") is { } finalCap)
-            configJson["final_logit_softcapping"] = finalCap;
-        if (OptionalDouble(file, $"{arch}.logit_scale") is { } logitScale)
-            configJson["logit_scale"] = logitScale;
-        if (expertCount > 0)
+            // DBRX uses a distinct nested config schema (d_model / n_heads with nested attn_config /
+            // ffn_config); HuggingFaceConfig.Parse routes it to its DBRX branch. The norm epsilon slot is
+            // fixed at 1e-5 there, so it is not carried across.
+            configJson = new JObject
+            {
+                ["architectures"] = new JArray(),
+                ["model_type"] = "dbrx",
+                ["d_model"] = hidden,
+                ["n_heads"] = heads,
+                ["n_layers"] = layers,
+                ["vocab_size"] = vocab,
+                ["max_seq_len"] = maxPos,
+                ["tie_word_embeddings"] = !hasOutput,
+                ["attn_config"] = new JObject
+                {
+                    ["kv_n_heads"] = kvHeads,
+                    ["rope_theta"] = ropeTheta,
+                },
+                ["ffn_config"] = new JObject
+                {
+                    ["moe_num_experts"] = expertCount,
+                    ["moe_top_k"] = OptionalInt(file, $"{arch}.expert_used_count") ?? 0,
+                    ["ffn_hidden_size"] = ffn,
+                },
+            };
+        }
+        else
         {
-            configJson["num_local_experts"] = expertCount;
-            if (OptionalInt(file, $"{arch}.expert_used_count") is { } used)
-                configJson["num_experts_per_tok"] = used;
-            if (OptionalInt(file, $"{arch}.expert_feed_forward_length") is { } expFfn)
-                configJson["moe_intermediate_size"] = expFfn;
-            if (OptionalInt(file, $"{arch}.expert_shared_feed_forward_length") is { } sharedFfn)
-                configJson["shared_expert_intermediate_size"] = sharedFfn;
+            configJson = new JObject
+            {
+                ["architectures"] = new JArray(),
+                ["model_type"] = modelType,
+                ["hidden_size"] = hidden,
+                ["intermediate_size"] = ffn,
+                ["num_hidden_layers"] = layers,
+                ["num_attention_heads"] = heads,
+                ["num_key_value_heads"] = kvHeads,
+                ["vocab_size"] = vocab,
+                ["rms_norm_eps"] = normEps,
+                ["rope_theta"] = ropeTheta,
+                ["max_position_embeddings"] = maxPos,
+                ["tie_word_embeddings"] = !hasOutput,
+                // hidden_act is informational only — every decoder builder fixes its own gate activation via
+                // DecoderOptions, so it is left at the config default rather than guessed from the GGUF arch.
+            };
+            // Family-specific fields the builders actually consume: an explicit head dim (Gemma), the Gemma-2
+            // attention/final logit soft-caps, and the Cohere logit multiplier. Only emit them when present so
+            // HuggingFaceConfig keeps its own defaults (e.g. head_dim = hidden/heads) for models that omit them.
+            if (headDim is { } hd)
+                configJson["head_dim"] = hd;
+            if (OptionalDouble(file, $"{arch}.attn_logit_softcapping") is { } attnCap)
+                configJson["attn_logit_softcapping"] = attnCap;
+            if (OptionalDouble(file, $"{arch}.final_logit_softcapping") is { } finalCap)
+                configJson["final_logit_softcapping"] = finalCap;
+            if (OptionalDouble(file, $"{arch}.logit_scale") is { } logitScale)
+                configJson["logit_scale"] = logitScale;
+            if (expertCount > 0)
+            {
+                configJson["num_local_experts"] = expertCount;
+                if (OptionalInt(file, $"{arch}.expert_used_count") is { } used)
+                    configJson["num_experts_per_tok"] = used;
+                if (OptionalInt(file, $"{arch}.expert_feed_forward_length") is { } expFfn)
+                    configJson["moe_intermediate_size"] = expFfn;
+                if (OptionalInt(file, $"{arch}.expert_shared_feed_forward_length") is { } sharedFfn)
+                    configJson["shared_expert_intermediate_size"] = sharedFfn;
+            }
         }
         var config = HuggingFaceConfig.Parse(configJson.ToString());
 
@@ -225,7 +257,8 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
         bool starcoder2 = string.Equals(modelType, "starcoder2", StringComparison.OrdinalIgnoreCase);
         bool mixtral = string.Equals(modelType, "mixtral", StringComparison.OrdinalIgnoreCase);
         bool qwen2Moe = string.Equals(modelType, "qwen2_moe", StringComparison.OrdinalIgnoreCase);
-        bool moe = numExperts > 0 && (mixtral || qwen2Moe);
+        bool dbrx = string.Equals(modelType, "dbrx", StringComparison.OrdinalIgnoreCase);
+        bool moe = numExperts > 0 && (mixtral || qwen2Moe || dbrx);
 
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         var experts = new Dictionary<string, ExpertSlice>(StringComparer.Ordinal);
