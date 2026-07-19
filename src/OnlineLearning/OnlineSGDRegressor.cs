@@ -199,18 +199,70 @@ public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
     }
 
     /// <summary>
+    /// Batch training over the full dataset, following scikit-learn <c>SGDRegressor.fit</c>: run
+    /// multiple epochs (up to <c>max_iter</c>) of single-pass SGD, stopping early once the mean
+    /// training loss stops improving by more than <c>tol</c> for <c>n_iter_no_change</c> consecutive
+    /// epochs. The base one-pass <see cref="PartialFit(Matrix{T}, Vector{T})"/> underfits — e.g. a
+    /// constant shift added to every target is not cleanly absorbed by the intercept in a single
+    /// pass — so the paper's multi-epoch fit is required for convergence. (For true streaming/online
+    /// use, call <see cref="PartialFit(Matrix{T}, Vector{T})"/> directly for a single pass.)
+    /// </summary>
+    public override void Train(Matrix<T> x, Vector<T> y)
+    {
+        // scikit-learn SGDRegressor defaults: max_iter=1000, tol=1e-3, n_iter_no_change=5.
+        const int maxIter = 1000;
+        const double tol = 1e-3;
+        const int nIterNoChange = 5;
+
+        double bestLoss = double.PositiveInfinity;
+        int noImprovementEpochs = 0;
+
+        for (int epoch = 0; epoch < maxIter; epoch++)
+        {
+            PartialFit(x, y);
+
+            // Mean squared training loss over the full dataset.
+            var predictions = Predict(x);
+            double sumSquared = 0.0;
+            for (int i = 0; i < y.Length; i++)
+            {
+                double residual = NumOps.ToDouble(predictions[i]) - NumOps.ToDouble(y[i]);
+                sumSquared += residual * residual;
+            }
+            double loss = sumSquared / y.Length;
+
+            // Early stop when the loss fails to improve by more than tol for n_iter_no_change epochs.
+            if (loss > bestLoss - tol)
+            {
+                if (++noImprovementEpochs >= nIterNoChange) break;
+            }
+            else
+            {
+                noImprovementEpochs = 0;
+            }
+
+            if (loss < bestLoss) bestLoss = loss;
+        }
+    }
+
+    /// <summary>
     /// Computes the gradient of the loss function.
     /// </summary>
     private double ComputeLossGradient(double prediction, double target)
     {
         double residual = prediction - target;
 
+        // Gradients follow the scikit-learn SGDRegressor convention: the squared-error loss is
+        // 0.5 * (prediction - target)^2, so its gradient w.r.t. the prediction is exactly the
+        // residual (no factor of 2). The previous 2.0 * residual doubled the effective learning
+        // rate, pushing the paper-default eta0 = 0.01 past the stability bound and diverging on
+        // unstandardized features.
         return _lossType switch
         {
-            SGDLossType.SquaredError => 2.0 * residual,
+            SGDLossType.SquaredError => residual,
             SGDLossType.Huber => ComputeHuberGradient(residual),
             SGDLossType.EpsilonInsensitive => ComputeEpsilonInsensitiveGradient(residual),
-            _ => 2.0 * residual
+            _ => residual
         };
     }
 
@@ -219,14 +271,17 @@ public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
     /// </summary>
     private double ComputeHuberGradient(double residual)
     {
+        // scikit-learn Huber convention: quadratic region gradient is the residual, linear region
+        // gradient is epsilon * sign(residual) (no factor of 2), consistent with the 0.5 * r^2 /
+        // epsilon * (|r| - 0.5 * epsilon) loss definition.
         double absRes = Math.Abs(residual);
         if (absRes <= _epsilon)
         {
-            return 2.0 * residual;
+            return residual;
         }
         else
         {
-            return 2.0 * _epsilon * Math.Sign(residual);
+            return _epsilon * Math.Sign(residual);
         }
     }
 
