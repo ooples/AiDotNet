@@ -674,6 +674,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // family, so the audio branch's Fp32 auto-cap does not apply — this universal
         // smoke-cap trims MoreData while keeping the paper architecture + train-path coverage.
         "DepthAnythingV2",
+        // MetaCLIP (arXiv:2309.16671): CLIP ViT-B dual-encoder (12-layer 768-dim vision +
+        // 12-layer 512-dim text). Its single-forward / gradient / shape / determinism
+        // invariants pass fast at <float> (verified ~31 s for five), but the many-iteration
+        // training probes (250-iter MoreData etc.) run both transformer stacks per step and
+        // overran the 120 s gate. VisionLanguage family, no audio auto-cap — smoke-cap trims
+        // the iteration counts while keeping the paper-scale dual encoder.
+        "MetaCLIP",
         // XDecoder: unified segmentation foundation model whose MoreData passes SOLO (~1m34s) but is
         // heavy enough to flake under a loaded parallel shard (Gen T-Z). Smoke-iteration counts make
         // it fast + deterministic — same paper-scale-preserving trim as the other seg foundations.
