@@ -328,6 +328,116 @@ internal class PagedAttentionKernel<T>
     }
 
     /// <summary>
+    /// Computes causal self-attention for a fresh prefill block whose Q/K/V are supplied directly as
+    /// contiguous, already-projected (and, for RoPE models, already-rotated) buffers laid out
+    /// [rowLen, numHeads*headDim] in position order.
+    /// </summary>
+    /// <remarks>
+    /// This is the prefill counterpart to <see cref="ComputeTiledPagedAttention"/>: instead of round-tripping
+    /// every query through the paged KV cache (block-table lookups + per-token allocations, O(seqLen^2) paged
+    /// reads over a full prefill), it reads K/V straight from the contiguous buffers the projection GEMM just
+    /// produced. Query position <paramref name="q"/> attends causally to keys [0..q] using the same
+    /// online-softmax accumulation as the paged kernel, so results match the per-token paged path. It is
+    /// cache-agnostic (the caller persists KV separately for the decode continuation) and does NOT support
+    /// sliding-window eviction — callers must keep the per-token paged path when a window is configured.
+    /// </remarks>
+    /// <param name="queries">Query buffer [rowLen, numHeads*headDim], RoPE-applied if the model uses RoPE.</param>
+    /// <param name="keys">Key buffer [rowLen, numHeads*headDim], RoPE-applied if the model uses RoPE.</param>
+    /// <param name="values">Value buffer [rowLen, numHeads*headDim].</param>
+    /// <param name="rowLen">Number of query/key positions in this prefill block.</param>
+    /// <param name="output">Output buffer [rowLen, numHeads*headDim].</param>
+    /// <param name="scale">Attention scale factor (typically 1/sqrt(head_dim)).</param>
+    /// <param name="alibiSlopes">Optional per-head ALiBi slopes; null for RoPE/no positional bias.</param>
+    public void ComputeContiguousCausalPrefill(
+        ReadOnlySpan<float> queries,
+        ReadOnlySpan<float> keys,
+        ReadOnlySpan<float> values,
+        int rowLen,
+        Span<float> output,
+        float scale,
+        float[]? alibiSlopes = null)
+    {
+        int numHeads = _config.NumHeads;
+        int headDim = _config.HeadDimension;
+        int projDim = numHeads * headDim;
+
+        var pool = ArrayPool<float>.Shared;
+        var accumulators = pool.Rent(numHeads * headDim);
+        var maxScores = pool.Rent(numHeads);
+        var sumExps = pool.Rent(numHeads);
+        try
+        {
+            for (int q = 0; q < rowLen; q++)
+            {
+                int qBase = q * projDim;
+
+                // Reset per-query online-softmax accumulators.
+                Array.Clear(accumulators, 0, numHeads * headDim);
+                for (int head = 0; head < numHeads; head++)
+                {
+                    maxScores[head] = float.NegativeInfinity;
+                    sumExps[head] = 0f;
+                }
+
+                // Causal: query position q attends only to key positions [0..q].
+                for (int pos = 0; pos <= q; pos++)
+                {
+                    int kBase = pos * projDim;
+                    for (int head = 0; head < numHeads; head++)
+                    {
+                        int offset = head * headDim;
+
+                        float score = 0;
+                        for (int d = 0; d < headDim; d++)
+                        {
+                            score += queries[qBase + offset + d] * keys[kBase + offset + d];
+                        }
+                        score *= scale;
+
+                        // ALiBi bias: -slope[head] * |keyPos - queryPos|; causal => q - pos.
+                        if (alibiSlopes != null)
+                        {
+                            score += -alibiSlopes[head] * (q - pos);
+                        }
+
+                        // Online-softmax update (matches ComputeTiledPagedAttention).
+                        float oldMax = maxScores[head];
+                        float newMax = Math.Max(oldMax, score);
+                        float expOld = MathF.Exp(oldMax - newMax);
+                        float expNew = MathF.Exp(score - newMax);
+
+                        for (int d = 0; d < headDim; d++)
+                        {
+                            accumulators[offset + d] =
+                                accumulators[offset + d] * expOld + expNew * values[kBase + offset + d];
+                        }
+
+                        sumExps[head] = sumExps[head] * expOld + expNew;
+                        maxScores[head] = newMax;
+                    }
+                }
+
+                // Normalize and write this query's output.
+                for (int head = 0; head < numHeads; head++)
+                {
+                    int offset = head * headDim;
+                    float invSum = sumExps[head] > 0 ? 1.0f / sumExps[head] : 0;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        output[qBase + offset + d] = accumulators[offset + d] * invSum;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            pool.Return(accumulators);
+            pool.Return(maxScores);
+            pool.Return(sumExps);
+        }
+    }
+
+    /// <summary>
     /// Updates the KV cache with new key and value tensors.
     /// </summary>
     /// <param name="key">Key tensor [num_heads, head_dim].</param>

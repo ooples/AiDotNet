@@ -524,6 +524,19 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
                 long sequenceId = seqIds[b];
                 int position = basePositions[b];
                 int rowLen = rowLengths is not null ? rowLengths[b] : seqLen;
+
+                // Fast prefill: a fresh multi-token sequence (starts at position 0) with no sliding window
+                // computes causal attention directly over the contiguous projected Q/K/V — no per-token
+                // round-trip through the paged cache. Sliding-window models and continuation prefills
+                // (position > 0: chunked prefill or a prefix-cache hit that leaves prior KV in the cache)
+                // keep the per-token paged path below, which reads prior cached KV and evicts window blocks.
+                if (rowLen > 1 && position == 0 && kernel.Config.WindowSize == 0)
+                {
+                    PrefillRowContiguous(b, sequenceId, seqLen, rowLen, projDim, scale,
+                        qFlat, kFlat, vFlat, attnData, alibiSlopes, kernel);
+                    continue;
+                }
+
                 for (int t = 0; t < rowLen; t++)
                 {
                     int rowBase = (b * seqLen + t) * projDim;
@@ -581,6 +594,74 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Fast prefill for one fresh sequence: copies the row's already-projected Q/K/V out of the flattened
+    /// GEMM result into contiguous per-position buffers, applies RoPE, persists K/V to the paged cache for
+    /// the decode continuation, then computes causal attention over the contiguous buffers in one pass
+    /// (<see cref="PagedAttentionKernel{T}.ComputeContiguousCausalPrefill"/>) instead of round-tripping every
+    /// query through the paged cache. Numerically equivalent to the per-token paged path (same weights, same
+    /// RoPE, same online-softmax order) but avoids O(seqLen^2) paged block-table reads plus per-token allocs.
+    /// </summary>
+    private void PrefillRowContiguous(
+        int b, long sequenceId, int seqLen, int rowLen, int projDim, float scale,
+        ReadOnlySpan<T> qFlat, ReadOnlySpan<T> kFlat, ReadOnlySpan<T> vFlat,
+        T[] attnData, float[]? alibiSlopes, PagedAttentionKernel<T> kernel)
+    {
+        int rowStart = b * seqLen * projDim;
+        int n = rowLen * projDim;
+        var pool = ArrayPool<float>.Shared;
+        var qRoped = pool.Rent(n);
+        var kRoped = pool.Rent(n);
+        var vLocal = pool.Rent(n);
+        var attnLocal = pool.Rent(n);
+        try
+        {
+            for (int t = 0; t < rowLen; t++)
+            {
+                int src = rowStart + t * projDim;
+                var qSpan = qRoped.AsSpan(t * projDim, projDim);
+                var kSpan = kRoped.AsSpan(t * projDim, projDim);
+                var vSpan = vLocal.AsSpan(t * projDim, projDim);
+                for (int d = 0; d < projDim; d++)
+                {
+                    qSpan[d] = Convert.ToSingle(qFlat[src + d]);
+                    kSpan[d] = Convert.ToSingle(kFlat[src + d]);
+                    vSpan[d] = Convert.ToSingle(vFlat[src + d]);
+                }
+
+                if (_ropeLayer != null)
+                {
+                    ApplyRoPEToSpan(qSpan, t);
+                    ApplyRoPEToSpan(kSpan, t);
+                }
+
+                // Persist RoPE-applied K/V so the decode continuation reads keys consistent with this prefill.
+                kernel.UpdateCache(kSpan, vSpan, sequenceId, t, LayerIndex);
+            }
+
+            kernel.ComputeContiguousCausalPrefill(
+                qRoped.AsSpan(0, n), kRoped.AsSpan(0, n), vLocal.AsSpan(0, n),
+                rowLen, attnLocal.AsSpan(0, n), scale, alibiSlopes);
+
+            for (int t = 0; t < rowLen; t++)
+            {
+                int dst = (b * seqLen + t) * projDim;
+                int lo = t * projDim;
+                for (int d = 0; d < projDim; d++)
+                {
+                    attnData[dst + d] = NumOps.FromDouble(attnLocal[lo + d]);
+                }
+            }
+        }
+        finally
+        {
+            pool.Return(qRoped);
+            pool.Return(kRoped);
+            pool.Return(vLocal);
+            pool.Return(attnLocal);
+        }
     }
 
     // Builds the [inDim, outDim] weight tensors used by the batched-GEMM projection path, once, from the
