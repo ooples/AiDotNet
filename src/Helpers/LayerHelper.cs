@@ -21324,6 +21324,15 @@ public static class LayerHelper<T>
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
+        // Input feature projection (Whisper's conv front-end role): map the raw audio feature
+        // dimension (mel bins / feature width) up to the encoder width before the transformer.
+        // Without it the first MultiHeadAttention receives the raw feature dim (e.g. 32) and throws
+        // "embedding dimension (32) does not match weight dimension (1280)". FullyConnectedLayer
+        // infers its input dim lazily on the first forward, so any input width projects to
+        // audioEncoderDim.
+        yield return new FullyConnectedLayer<T>(audioEncoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>();
+
         // Whisper-style audio encoder
         for (int i = 0; i < numAudioEncoderLayers; i++)
         {
