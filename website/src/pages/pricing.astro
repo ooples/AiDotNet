@@ -42,6 +42,11 @@ const base = import.meta.env.BASE_URL;
         <p class="font-semibold mb-1">Community license created!</p>
         <p class="text-sm">Your license key: <code id="community-key-display" class="px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 font-mono text-xs"></code></p>
         <p class="text-xs mt-2 opacity-80">Set <code>AIDOTNET_LICENSE_KEY</code> or save to <code>~/.aidotnet/license.key</code></p>
+        <details id="community-bootstrap" class="hidden mt-3 text-left mx-auto max-w-xl">
+          <summary class="text-xs cursor-pointer opacity-80">Advanced: offline bootstrap token (optional)</summary>
+          <p class="text-xs mt-1 opacity-70">Short-lived (7 days), load-only. Use it as <code>AIDOTNET_LICENSE_KEY</code> to load models offline immediately, before your first online check-in — the SDK swaps it for a machine-bound token once it validates online. Most users can ignore this and just use the key above.</p>
+          <code id="community-bootstrap-display" class="block mt-1 px-2 py-1 rounded bg-green-100 dark:bg-green-900/30 font-mono text-[10px] break-all"></code>
+        </details>
       </div>
 
       <!-- Community license existing key notice -->
@@ -401,6 +406,14 @@ const base = import.meta.env.BASE_URL;
               const keyEl = document.getElementById('community-key-display');
               if (successEl && keyEl) {
                 keyEl.textContent = data.license_key;
+                // Optional v2 offline bootstrap token — surfaced only when the edge function returns one
+                // (it's community load-only and short-lived, so safe to show; most users ignore it).
+                const bootstrapEl = document.getElementById('community-bootstrap');
+                const bootstrapCode = document.getElementById('community-bootstrap-display');
+                if (bootstrapEl && bootstrapCode && typeof data.bootstrap_token === 'string' && data.bootstrap_token) {
+                  bootstrapCode.textContent = data.bootstrap_token;
+                  bootstrapEl.classList.remove('hidden');
+                }
                 successEl.classList.remove('hidden');
                 successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }

@@ -284,6 +284,12 @@
 	  <EmbeddedResource Include="BuildKey\LicensePublicKey.json" Condition="Exists('BuildKey\LicensePublicKey.json')">
 	    <LogicalName>AiDotNet.LicensePublicKey</LogicalName>
 	  </EmbeddedResource>
+	  <!-- Signed revocation deny-list (CRL) for aidn2 tokens, verified by LicenseRevocationProvider against
+	       the embedded public key. Optional/additive: absent => nothing revoked (fail-open). Injected at
+	       release (and refreshed) with the current signed CRL; also refetched at runtime on online validation. -->
+	  <EmbeddedResource Include="BuildKey\LicenseRevocation.json" Condition="Exists('BuildKey\LicenseRevocation.json')">
+	    <LogicalName>AiDotNet.LicenseRevocation</LogicalName>
+	  </EmbeddedResource>
 	  <EmbeddedResource Include="IntegrityHash\IntegrityHash.bin" Condition="Exists('IntegrityHash\IntegrityHash.bin')">
 	    <LogicalName>AiDotNet.IntegrityHash</LogicalName>
 	  </EmbeddedResource>

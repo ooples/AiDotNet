@@ -76,10 +76,35 @@ internal static class TestModuleInitializer
         // (e.g., ModelPersistenceGuardTests, AiModelBuilderLicensingTests) clear this
         // in their own setup via ClearAllLicenseSources().
         //
-        // Only injected when no real license key is already configured (e.g. via a CI
-        // secret) — that real key validates against the official embedded build key, so
-        // we must NOT clobber its build key with the test one below.
-        if (string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY")))
+        // Injected UNLESS a real OFFLINE-verifiable key is already configured. A key that validates
+        // offline — v2 `aidn2` (asymmetric) or legacy `aidn.` (HMAC) — lifts the persistence cap
+        // deterministically without the network, so we keep it (this is the CI `aidn2` key path) and must
+        // NOT clobber its build key. But a MISSING key, or a server-only `AIDN-*` key, would force the
+        // entire save/load-heavy suite onto the online license server every operation AND — for a
+        // community-tier key under capability-authoritative gating — fail to lift the save cap, draining
+        // the free-trial op budget until persistence tests throw LicenseRequiredException. In those cases
+        // install a synthetic offline license so the suite is deterministically licensed; the real
+        // online/community-key path is exercised explicitly by LicenseE2ETests, not the whole suite.
+        // Keep the configured env key ONLY when it actually VERIFIES offline as Active AND grants the
+        // persistence capability the save/load-heavy suite needs — not merely when its SHAPE looks
+        // offline-verifiable. A structural check (IsAsymmetricKeyFormat/IsSignedKeyFormat) would keep a
+        // forged, expired, scope-mismatched, revoked, or capability-limited (e.g. community, no model:save)
+        // token, skip the synthetic license, and let the shared trial budget drain until persistence tests
+        // throw LicenseRequiredException. So run the real offline validator (ServerUrl="" = offline-only) and
+        // require Active + (model:save cap OR legacy empty caps = grant-all migration bridge) — exactly what
+        // ModelPersistenceGuard itself honours. The scope-bound CI aidn2 key still qualifies because CI sets
+        // AIDOTNET_LICENSE_SCOPE, so it verifies Active here and is (correctly) kept.
+        string? _envLicenseKey = System.Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY");
+        bool _envKeyOfflineUsable = false;
+        if (!string.IsNullOrWhiteSpace(_envLicenseKey))
+        {
+            var _envResult = new AiDotNet.Helpers.LicenseValidator(
+                new AiDotNet.Models.AiDotNetLicenseKey(_envLicenseKey!) { ServerUrl = string.Empty }).Validate();
+            _envKeyOfflineUsable = _envResult.Status == AiDotNet.Enums.LicenseKeyStatus.Active
+                && (_envResult.Capabilities.Count == 0
+                    || _envResult.HasCapability(AiDotNet.Helpers.LicenseCapabilities.ModelSave));
+        }
+        if (!_envKeyOfflineUsable)
         {
             // Inject the test build key process-wide so offline license validation
             // (HMAC-SHA256 of the key against the embedded build key, per the
