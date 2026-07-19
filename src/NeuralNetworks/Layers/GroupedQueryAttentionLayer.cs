@@ -90,6 +90,10 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     private Tensor<T> _valueBias;
     private readonly bool _useProjectionBias;
 
+    // Attention-logit soft-cap (Gemma-2 attn_logit_softcapping): when > 0, each scaled Q·Kᵀ score is
+    // passed through softcap·tanh(score / softcap) before the softmax. 0 disables it (standard SDPA).
+    private readonly double _attnLogitSoftcap;
+
     // Positional encoding
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
@@ -130,6 +134,13 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// Gets the dimension of each attention head.
     /// </summary>
     public int HeadDimension => _headDimension;
+
+    /// <summary>
+    /// Gets the attention-logit soft-cap magnitude (Gemma-2 <c>attn_logit_softcapping</c>);
+    /// 0 when disabled. When positive, each scaled Q·Kᵀ score is passed through
+    /// <c>softcap·tanh(score / softcap)</c> before the softmax.
+    /// </summary>
+    public double AttnLogitSoftcap => _attnLogitSoftcap;
 
     /// <summary>
     /// Gets the number of query heads per KV head group.
@@ -195,7 +206,8 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         IInitializationStrategy<T>? initializationStrategy = null,
         bool deferAllocation = false,
         int? headDimension = null,
-        bool useProjectionBias = false)
+        bool useProjectionBias = false,
+        double attnLogitSoftcap = 0.0)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
@@ -226,6 +238,13 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _embeddingDimension = embeddingDimension;
         _headsPerGroup = numHeads / numKVHeads;
         _useProjectionBias = useProjectionBias;
+        if (attnLogitSoftcap < 0.0)
+        {
+            throw new ArgumentException(
+                $"attnLogitSoftcap ({attnLogitSoftcap}) must be non-negative (0 disables the cap).",
+                nameof(attnLogitSoftcap));
+        }
+        _attnLogitSoftcap = attnLogitSoftcap;
 
         InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         _weightsDeferred = deferAllocation;
@@ -423,6 +442,15 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _lastExpandedValues = cacheBwd ? expandedValues : null;
 
         // Compute attention with weights caching: [batch, numHeads, seqQ, seqKV]
+        // The attention-logit soft-cap flows only through the standard fused SDPA path; the ALiBi
+        // FlashAttention path has no soft-cap parameter, so reject the (never-faithful) combination
+        // rather than silently dropping the cap.
+        if (_alibiLayer != null && _attnLogitSoftcap > 0.0)
+        {
+            throw new InvalidOperationException(
+                "attnLogitSoftcap is not supported together with ALiBi positional bias; " +
+                "the soft-cap applies only to the standard scaled dot-product attention path.");
+        }
         var (context, attentionWeights) = _alibiLayer != null
             ? ComputeALiBiAttention(queries, expandedKeys, expandedValues, seqLen, batchSize)
             : ComputeStandardAttentionWithWeights(queries, expandedKeys, expandedValues);
@@ -533,7 +561,8 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             queries, keys, values,
             mask: null,
             scale: 1.0 / Math.Sqrt(headDim),
-            out attentionWeightsOut);
+            out attentionWeightsOut,
+            softcap: _attnLogitSoftcap);
     }
 
     /// <summary>
