@@ -184,6 +184,31 @@ public static class LlamaModelBuilder<T>
         dense.SetParameters(new Vector<T>(full));
     }
 
+    // Loads a DenseLayer's weights ([in, out]) and its real bias ([out]) — for biased models (StarCoder2).
+    internal static void LoadDenseBiased(DenseLayer<T> dense, INamedTensorSource weights, string weightName, string biasName, int outDim, int inDim)
+    {
+        var wInOut = TransposeOutInToInOut(weights, weightName, outDim, inDim);
+        var bias = ReadTensor(weights, biasName, outDim);
+        dense.SetParameters(new Vector<T>(Concat(wInOut, bias)));
+    }
+
+    // Loads a GQA layer's Q/K/V/O weights AND their real q/k/v/o biases (StarCoder2), in the layer's
+    // biased SetParameters order (Q, K, V, O weights, then q, k, v biases, then the output bias).
+    internal static void LoadAttentionBiased(GroupedQueryAttentionLayer<T> attn, INamedTensorSource weights,
+        string layerPrefix, int numHeads, int numKVHeads, int headDim, int hidden)
+    {
+        int kvDim = numKVHeads * headDim, qDim = numHeads * headDim;
+        var qT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.q_proj.weight", outDim: qDim, inDim: hidden);
+        var kT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.k_proj.weight", outDim: kvDim, inDim: hidden);
+        var vT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.v_proj.weight", outDim: kvDim, inDim: hidden);
+        var oT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.o_proj.weight", outDim: hidden, inDim: qDim);
+        var qB = ReadTensor(weights, layerPrefix + "self_attn.q_proj.bias", qDim);
+        var kB = ReadTensor(weights, layerPrefix + "self_attn.k_proj.bias", kvDim);
+        var vB = ReadTensor(weights, layerPrefix + "self_attn.v_proj.bias", kvDim);
+        var oB = ReadTensor(weights, layerPrefix + "self_attn.o_proj.bias", hidden);
+        attn.SetParameters(new Vector<T>(Concat(qT, kT, vT, oT, qB, kB, vB, oB)));
+    }
+
     // Reads an RMSNorm weight and writes it into the layer's gamma, optionally as (weight + 1) for the
     // Gemma convention where the norm scales by (1 + weight).
     internal static void LoadGamma(RMSNormalizationLayer<T> norm, INamedTensorSource weights, string name, int hidden, bool addOne)
@@ -243,7 +268,7 @@ public static class LlamaModelBuilder<T>
         return false;
     }
 
-    private static T[] Concat(params T[][] parts)
+    internal static T[] Concat(params T[][] parts)
     {
         int total = 0;
         foreach (var part in parts) total += part.Length;

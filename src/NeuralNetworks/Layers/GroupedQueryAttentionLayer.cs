@@ -79,6 +79,16 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     private Tensor<T> _outputWeights;
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _outputBias;
+    // Optional projection biases (StarCoder2-style attention). Zero-length when unused, so the parameter
+    // layout is byte-identical to the bias-free default; Optional=true also omits them from the
+    // source-generated trainable-parameter set when zero-sized.
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Optional = true)]
+    private Tensor<T> _queryBias;
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Optional = true)]
+    private Tensor<T> _keyBias;
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Optional = true)]
+    private Tensor<T> _valueBias;
+    private readonly bool _useProjectionBias;
 
     // Positional encoding
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
@@ -161,8 +171,12 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
               + 2L * _embeddingDimension * (_numKVHeads * _headDimension)     // K + V
               + (long)(_numHeads * _headDimension) * _embeddingDimension      // output
               + _embeddingDimension                                          // output bias
+              + (_useProjectionBias                                          // optional q/k/v biases
+                  ? (long)_numHeads * _headDimension + 2L * _numKVHeads * _headDimension
+                  : 0L)
             : _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-              _outputWeights.Length + _outputBias.Length;
+              _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
+              _outputBias.Length;
 
     /// <summary>
     /// Creates a new Grouped-Query Attention layer.
@@ -180,7 +194,8 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null,
         bool deferAllocation = false,
-        int? headDimension = null)
+        int? headDimension = null,
+        bool useProjectionBias = false)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
@@ -210,6 +225,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _headDimension = headDimension ?? (embeddingDimension / numHeads);
         _embeddingDimension = embeddingDimension;
         _headsPerGroup = numHeads / numKVHeads;
+        _useProjectionBias = useProjectionBias;
 
         InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         _weightsDeferred = deferAllocation;
@@ -225,6 +241,9 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             _valueWeights = new Tensor<T>([0]);
             _outputWeights = new Tensor<T>([0]);
             _outputBias = new Tensor<T>([0]);
+            _queryBias = new Tensor<T>([0]);
+            _keyBias = new Tensor<T>([0]);
+            _valueBias = new Tensor<T>([0]);
         }
         else
         {
@@ -236,6 +255,10 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             // Output projection: [numHeads * headDim, embDim]
             _outputWeights = new Tensor<T>([numHeads * _headDimension, embeddingDimension]);
             _outputBias = new Tensor<T>([embeddingDimension]);
+            // Projection biases: zero-length unless enabled (StarCoder2-style).
+            _queryBias = new Tensor<T>([useProjectionBias ? numHeads * _headDimension : 0]);
+            _keyBias = new Tensor<T>([useProjectionBias ? numKVHeads * _headDimension : 0]);
+            _valueBias = new Tensor<T>([useProjectionBias ? numKVHeads * _headDimension : 0]);
 
             InitializeParameters();
         }
@@ -260,6 +283,9 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             _valueWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
             _outputWeights = new Tensor<T>([_numHeads * _headDimension, _embeddingDimension]);
             _outputBias = new Tensor<T>([_embeddingDimension]);
+            _queryBias = new Tensor<T>([_useProjectionBias ? _numHeads * _headDimension : 0]);
+            _keyBias = new Tensor<T>([_useProjectionBias ? _numKVHeads * _headDimension : 0]);
+            _valueBias = new Tensor<T>([_useProjectionBias ? _numKVHeads * _headDimension : 0]);
             InitializeParameters();
             // Flip the flag LAST (volatile release): a concurrent reader either sees true and
             // blocks on the lock above, or sees false with every tensor allocated + initialized —
@@ -357,6 +383,14 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         var Q_flat = Engine.TensorMatMul(input2D, _queryWeights);
         var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
         var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
+
+        // Optional projection biases (StarCoder2). Broadcast [outDim] over the flattened [N, outDim] projection.
+        if (_queryBias.Length > 0)
+        {
+            Q_flat = Engine.TensorBroadcastAdd(Q_flat, Engine.Reshape(_queryBias, new[] { 1, _numHeads * _headDimension }));
+            K_flat = Engine.TensorBroadcastAdd(K_flat, Engine.Reshape(_keyBias, new[] { 1, _numKVHeads * _headDimension }));
+            V_flat = Engine.TensorBroadcastAdd(V_flat, Engine.Reshape(_valueBias, new[] { 1, _numKVHeads * _headDimension }));
+        }
 
         // Reshape Q: [batch, seq, numHeads, headDim] -> [batch, numHeads, seq, headDim]
         var queries = Engine.TensorPermute(
@@ -560,11 +594,14 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     {
         EnsureWeightsMaterialized();
         int totalParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-                          _outputWeights.Length + _outputBias.Length;
+                          _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
+                          _outputBias.Length;
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias })
+        // Order: Q/K/V/O weights, optional q/k/v biases (zero-length when unused → layout unchanged),
+        // then the output bias LAST (the tensor-parallel partitioner reads it tail-wise).
+        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias })
         {
             for (int i = 0; i < tensor.Length; i++)
                 parameters[index++] = tensor[i];
@@ -576,8 +613,8 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         EnsureWeightsMaterialized();
-        var gradTensors = new[] { _queryWeightsGradient, _keyWeightsGradient, _valueWeightsGradient, _outputWeightsGradient, _outputBiasGradient };
-        var weightTensors = new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias };
+        var gradTensors = new[] { _queryWeightsGradient, _keyWeightsGradient, _valueWeightsGradient, _outputWeightsGradient, null, null, null, _outputBiasGradient };
+        var weightTensors = new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias };
         int totalParams = weightTensors.Sum(w => w.Length);
         var result = new Vector<T>(totalParams);
         int index = 0;
@@ -613,12 +650,13 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     {
         EnsureWeightsMaterialized();
         int expectedParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-                             _outputWeights.Length + _outputBias.Length;
+                             _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
+                             _outputBias.Length;
         if (parameters.Length != expectedParams)
             throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
 
         int index = 0;
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias })
+        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias })
         {
             for (int i = 0; i < tensor.Length; i++)
                 tensor[i] = parameters[index++];

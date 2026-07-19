@@ -502,6 +502,73 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         [Fact]
+        public void GQA_ProjectionBias_ChangesParamCount_ButDefaultIsUnchanged()
+        {
+            // Default (bias-free): 4 weight matrices [8x8]=256 + output bias 8 = 264.
+            var plain = new GroupedQueryAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, numHeads: 2, numKVHeads: 2);
+            plain.Forward(new Tensor<double>(new[] { 1, 4, 8 }));
+            Assert.Equal(264, plain.ParameterCount);
+
+            // With projection biases: + q/k/v biases (8 each) = 264 + 24 = 288.
+            var biased = new GroupedQueryAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, numHeads: 2, numKVHeads: 2, useProjectionBias: true);
+            biased.Forward(new Tensor<double>(new[] { 1, 4, 8 }));
+            Assert.Equal(288, biased.ParameterCount);
+
+            // SetParameters round-trips through the biased layout.
+            var p = biased.GetParameters();
+            Assert.Equal(288, p.Length);
+            for (int i = 0; i < p.Length; i++) p[i] = (i % 5) * 0.1;
+            biased.SetParameters(p);
+            var q = biased.GetParameters();
+            for (int i = 0; i < p.Length; i++) Assert.Equal(p[i], q[i], 9);
+        }
+
+        [Fact]
+        public void Builder_StarCoder2_LayerNormBias_BiasedAttn_NonGatedMlp_BuildsAndForwards()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""Starcoder2ForCausalLM""],
+                ""model_type"": ""starcoder2"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""tie_word_embeddings"": false }");
+
+            int h = 8, ffn = 16, vocab = 6, heads = 2, kvHeads = 2, headDim = 4;
+            int qDim = heads * headDim, kvDim = kvHeads * headDim;
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 83),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 84),
+                ["model.layers.0.input_layernorm.bias"] = Fill(h, 85),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(qDim * h, 86),
+                ["model.layers.0.self_attn.q_proj.bias"] = Fill(qDim, 87),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(kvDim * h, 88),
+                ["model.layers.0.self_attn.k_proj.bias"] = Fill(kvDim, 89),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(kvDim * h, 90),
+                ["model.layers.0.self_attn.v_proj.bias"] = Fill(kvDim, 91),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * qDim, 92),
+                ["model.layers.0.self_attn.o_proj.bias"] = Fill(h, 93),
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 94),
+                ["model.layers.0.post_attention_layernorm.bias"] = Fill(h, 95),
+                ["model.layers.0.mlp.c_fc.weight"] = Fill(ffn * h, 96),
+                ["model.layers.0.mlp.c_fc.bias"] = Fill(ffn, 97),
+                ["model.layers.0.mlp.c_proj.weight"] = Fill(h * ffn, 98),
+                ["model.layers.0.mlp.c_proj.bias"] = Fill(h, 99),
+                ["model.norm.weight"] = Fill(h, 100),
+                ["model.norm.bias"] = Fill(h, 101),
+                ["lm_head.weight"] = Fill(vocab * h, 102),
+            };
+
+            var net = StarCoder2ModelBuilder<double>.Build(config, new InMemorySource(t));
+            Assert.Equal(4, net.Layers.Count); // embed + block + final layernorm + lm head
+            Assert.IsType<StarCoder2DecoderBlock<double>>(net.Layers[1]);
+
+            var tokens = new Tensor<double>(new[] { 1, 3 });
+            tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+
+            Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
+        }
+
+        [Fact]
         public void Architectures_ResolvesGemmaAndPhi3()
         {
             var gemma = HuggingFaceConfig.Parse(@"{ ""architectures"": [""GemmaForCausalLM""], ""model_type"": ""gemma"",

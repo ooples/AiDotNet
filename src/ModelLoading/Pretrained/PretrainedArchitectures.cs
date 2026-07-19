@@ -58,6 +58,11 @@ public static class PretrainedArchitectures<T>
         DecoderFactory cohere = (config, weights) => CohereModelBuilder<T>.Build(config, weights);
         foreach (var name in CohereModelBuilder<T>.SupportedArchitectures)
             Registry[name] = cohere;
+
+        // StarCoder2: LayerNorm (with bias) + biased attention projections + non-gated GELU MLP (with bias).
+        DecoderFactory starcoder2 = (config, weights) => StarCoder2ModelBuilder<T>.Build(config, weights);
+        foreach (var name in StarCoder2ModelBuilder<T>.SupportedArchitectures)
+            Registry[name] = starcoder2;
     }
 
     /// <summary>Registers (or replaces) the factory for an architecture / model-type name.</summary>
