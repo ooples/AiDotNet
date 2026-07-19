@@ -141,8 +141,15 @@ namespace AiDotNet.Tokenization.Core
 
             if (skipSpecialTokens)
             {
-                var specialTokensList = SpecialTokens.GetAllSpecialTokens();
-                tokens = tokens.Where(t => !specialTokensList.Contains(t)).ToList();
+                // Filter special tokens in place with an O(1) set lookup. The previous
+                // Where(...).ToList() allocated a second size-n list and did an O(m) List.Contains
+                // per token; under streaming this ran once per generated token over the full
+                // sequence, making detokenization the top serving allocation site (dotnet-trace).
+                var specialTokenSet = new HashSet<string>(SpecialTokens.GetAllSpecialTokens());
+                if (specialTokenSet.Count > 0)
+                {
+                    tokens.RemoveAll(specialTokenSet.Contains);
+                }
             }
 
             return CleanupTokens(tokens);
