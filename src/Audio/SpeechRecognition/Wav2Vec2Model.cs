@@ -102,6 +102,12 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private List<ILayer<T>> _featureEncoderLayers = [];
 
     /// <summary>
+    /// Convolutional positional-embedding layer (depthwise Conv1D over time). Sits between the feature
+    /// projection and the transformer; RunModel applies it as a residual: x = x + posConv(x).
+    /// </summary>
+    private ILayer<T>? _posConv;
+
+    /// <summary>
     /// Transformer encoder layers.
     /// </summary>
     private List<ILayer<T>> _transformerLayers = [];
@@ -424,41 +430,51 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Layers.Clear();
         Layers.AddRange(layers);
 
-        // Feature encoder: 7 conv layers + 1 projection = 8
-        int featureEncoderCount = 8;
-        // Transformer layers: numTransformerLayers * 3 (selfAttn + ff + ffOut) + 1 CTC projection
-        int transformerCount = _numTransformerLayers * 3;
-        int expectedTotal = featureEncoderCount + transformerCount + 1;
+        // Feature encoder: 7 Conv1D + 1 feature-projection Dense + 1 feature-projection LayerNorm = 9
+        // (see CreateWav2Vec2Layers — the LayerNorm was added for paper-faithful feature projection).
+        int featureEncoderCount = 9;
+        // 1 convolutional positional-embedding layer (depthwise Conv1D) between projection and transformer.
+        int posConvCount = 1;
+        // Transformer layers: numTransformerLayers residual TransformerEncoderBlocks (one per layer;
+        // each block internally does MHA + FFN + the two LayerNorms), + 1 CTC projection.
+        int transformerCount = _numTransformerLayers;
+        int expectedTotal = featureEncoderCount + posConvCount + transformerCount + 1;
 
         if (Architecture.Layers != null && layers.Count != expectedTotal)
         {
             System.Diagnostics.Debug.WriteLine(
-                $"[Wav2Vec2] Warning: Expected {expectedTotal} layers (8 encoder + {transformerCount} transformer + 1 CTC), " +
+                $"[Wav2Vec2] Warning: Expected {expectedTotal} layers (9 encoder + 1 pos-conv + {transformerCount} transformer + 1 CTC), " +
                 $"but got {layers.Count}. Layer distribution may be incorrect.");
         }
 
         DistributeLayersToSubLists();
     }
 
-    // Re-links the typed forward-path sub-lists (_featureEncoderLayers / _transformerLayers /
+    // Re-links the typed forward-path sub-lists (_featureEncoderLayers / _posConv / _transformerLayers /
     // _ctcProjection) to the CURRENT contents of Layers. The forward reads these fields, NOT Layers,
     // so they must be rebuilt whenever Layers is replaced — critically after deserialization, where the
     // base clears Layers and adds freshly-deserialized (trained) layers. Without this, a cloned/loaded
     // model keeps its ctor's random-init sub-list layers and predicts as if untrained (#1221 class:
-    // Clone_AfterTraining). Distribution order matches CreateWav2Vec2Layers: [0..7]=feature encoder,
-    // [8..8+3N-1]=transformer, [^1]=CTC projection.
+    // Clone_AfterTraining). Distribution order matches CreateWav2Vec2Layers: [0..8]=feature encoder,
+    // [9]=positional conv, [10..10+N-1]=transformer (one residual TransformerEncoderBlock each),
+    // [^1]=CTC projection.
     private void DistributeLayersToSubLists()
     {
         _featureEncoderLayers.Clear();
         _transformerLayers.Clear();
+        _posConv = null;
 
-        int featureEncoderCount = 8;
-        int transformerCount = _numTransformerLayers * 3;
+        int featureEncoderCount = 9;
+        int transformerCount = _numTransformerLayers;
 
         for (int i = 0; i < featureEncoderCount && i < Layers.Count; i++)
             _featureEncoderLayers.Add(Layers[i]);
 
-        int transformerStart = featureEncoderCount;
+        int posConvIndex = featureEncoderCount;
+        if (posConvIndex < Layers.Count)
+            _posConv = Layers[posConvIndex];
+
+        int transformerStart = featureEncoderCount + 1; // +1 for the positional conv
         for (int i = 0; i < transformerCount && transformerStart + i < Layers.Count; i++)
             _transformerLayers.Add(Layers[transformerStart + i]);
 
@@ -673,7 +689,18 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         for (int i = convCount; i < _featureEncoderLayers.Count; i++)
             x = _featureEncoderLayers[i].Forward(x);
 
-        // Transformer encoder (MHA + FFN blocks, walked in order as they were emitted).
+        // Convolutional positional embedding (Baevski et al. 2020 §2), added as a residual so the
+        // otherwise position-agnostic self-attention sees relative position: x = x + GELU(conv(x)).
+        // _posConv is a depthwise Conv1D over time and consumes [B, C, T], so transpose in and out.
+        if (_posConv is not null)
+        {
+            var xt = Engine.TensorPermute(x, new[] { 0, 2, 1 });   // [1, hidden, T'] channels-major
+            var pos = _posConv.Forward(xt);                        // depthwise conv + GELU -> [1, hidden, T']
+            pos = Engine.TensorPermute(pos, new[] { 0, 2, 1 });    // [1, T', hidden]
+            x = Engine.TensorAdd(x, pos);
+        }
+
+        // Transformer encoder (residual TransformerEncoderBlocks, walked in order as they were emitted).
         foreach (var layer in _transformerLayers)
             x = layer.Forward(x);
 
@@ -719,6 +746,14 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             x = _featureEncoderLayers[i].Forward(x);
             activations[$"Layer_{idx++}_{_featureEncoderLayers[i].GetType().Name}"] = x.Clone();
+        }
+        // Convolutional positional embedding residual (matches RunModel): x = x + posConv(x).
+        if (_posConv is not null)
+        {
+            var xt = Engine.TensorPermute(x, new[] { 0, 2, 1 });
+            var pos = Engine.TensorPermute(_posConv.Forward(xt), new[] { 0, 2, 1 });
+            x = Engine.TensorAdd(x, pos);
+            activations[$"Layer_{idx++}_{_posConv.GetType().Name}"] = x.Clone();
         }
         foreach (var layer in _transformerLayers)
         {

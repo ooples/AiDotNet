@@ -132,7 +132,7 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         foreach (var l in Layers)
         {
             c = l.Forward(c);
-            if (l is MultiHeadAttentionLayer<T>) { if (currentLayer == targetLayer) return c; currentLayer++; }
+            if (l is TransformerEncoderBlock<T>) { if (currentLayer == targetLayer) return c; currentLayer++; }
         }
         return c;
     }
@@ -144,7 +144,7 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         if (IsOnnxMode) return ExtractEmbeddings(audio);
         var layerOutputs = new List<Tensor<T>>();
         var c = audio;
-        foreach (var l in Layers) { c = l.Forward(c); if (l is MultiHeadAttentionLayer<T>) layerOutputs.Add(c); }
+        foreach (var l in Layers) { c = l.Forward(c); if (l is TransformerEncoderBlock<T>) layerOutputs.Add(c); }
         if (layerOutputs.Count == 0) return c;
         var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         int count = layerOutputs.Count;

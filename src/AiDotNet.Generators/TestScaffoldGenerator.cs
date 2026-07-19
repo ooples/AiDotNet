@@ -512,17 +512,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // generation — they have manual reduced-scale scaffolds — so they are not listed here.)
         "HuBERTASR", "Wav2Vec2ASR", "WavLMASR", "BESTRQ", "W2vBERT", "SPIRAL", "AVHuBERT",
         "WavLMRobust", "OmnilangualASR", "MMS", "USM", "XLSR",
-        // Wav2Vec2 (Audio/Foundations, CreateDefaultFoundationModelLayers) and Wav2Vec2Model
-        // (Audio/SpeechRecognition, CreateWav2Vec2Layers): the same wav2vec-2 lineage as the ASR
-        // foundation family above — BERT-base-scale 12-layer/768-dim conv-encoder + transformer. Their
-        // multi-second per-step forward+backward overran the gate SOLELY on the many-iteration training
-        // invariants (Wav2Vec2Model.MoreData: 120 s timeout at 250 iters; Wav2Vec2.LossStrictlyDecreases:
-        // 180 s timeout at 100 iters) — every correctness invariant (DifferentInputs / GradientFlow /
-        // ForwardPass-finite / Clone / Training-direction) already passes. Both are AudioNN family and
-        // hit the generic audio branch, so <float> + its Fp32-gated smoke-iteration caps fit them to the
-        // timeout exactly like Wav2Vec2ASR, WITHOUT the MoreDataTolerance double-define that
-        // HeavyTrainingTimeoutClassNames would cause (the audio branch already emits MoreDataTolerance).
-        "Wav2Vec2", "Wav2Vec2Model",
+        // wav2vec-2 lineage foundation/ASR models sharing the BERT-base-scale (12-layer / 768-dim
+        // conv-encoder + RESIDUAL transformer) design. Wav2Vec2 / HuBERT / WavLM use
+        // CreateDefaultFoundationModelLayers; Wav2Vec2Model uses CreateWav2Vec2Layers. After the
+        // paper-faithful residual-TransformerEncoderBlock refactor, every CORRECTNESS invariant passes,
+        // but the residual blocks are costlier per step, so at paper width (768/12) even the smoke-capped
+        // many-iteration training invariants overran the 120/180 s gate. All four are AudioNN family and
+        // get a CI-smoke constructor (below) + <float> here, whose Fp32-gated audio-branch smoke-iteration
+        // caps fit them to budget — the same recipe as Wav2Vec2ASR, and WITHOUT the MoreDataTolerance
+        // double-define that HeavyTrainingTimeoutClassNames would cause (the audio branch already emits it).
+        "Wav2Vec2", "Wav2Vec2Model", "HuBERT", "WavLM",
         // ConvTransformer (SpeechRecognition/ConformerFamily): same deep conv+attention ASR encoder;
         // routes to the audio branch and already gets its relaxed MoreDataTolerance there, but without
         // this membership it missed the smoke-iteration caps and MoreData (250 iters) timed out solo.
@@ -2690,6 +2689,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "hiddenDim: 64, numTransformerLayers: 2, numHeads: 4, ffDim: 128)";
+            }
+            else if ((model.ClassName is "Wav2Vec2" or "HuBERT" or "WavLM") && model.TypeParameterCount == 1)
+            {
+                // Foundations Wav2Vec2 / HuBERT / WavLM share CreateDefaultFoundationModelLayers, whose
+                // paper default is BERT-base scale (768-wide, 12 RESIDUAL transformer layers). After the
+                // residual-TransformerEncoderBlock refactor each per-step forward+backward is multi-second
+                // even at <float>, so the smoke-capped training invariants still overran the 120/180 s gate
+                // at full width. Build the SAME architecture (Dense/BN conv encoder -> feature projection ->
+                // residual transformer) at CI-smoke width/depth via the model's Options, so the invariants
+                // run inside the timeout. Mirrors the Wav2Vec2Model reduced-scale fixture above; the models
+                // build their layers from Options (the architecture only carries I/O metadata for the
+                // [1,64,32] raw-audio InputShape the isAudio branch emits). NumAttentionHeads divides
+                // HiddenDim (64/4). The Options type name matches the class name + "Options".
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    $"new AiDotNet.Audio.Foundations.{model.ClassName}Options {{ HiddenDim = 64, NumLayers = 2, " +
+                    "NumAttentionHeads = 4, FeedForwardDim = 128, FeatureEncoderDim = 64 })";
             }
             else if (model.ClassName == "FasterWhisper" && model.TypeParameterCount == 1)
             {
