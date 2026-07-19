@@ -467,6 +467,41 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         [Fact]
+        public void Builder_Cohere_LayerNormParallelResidual_BuildsAndForwards()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""CohereForCausalLM""],
+                ""model_type"": ""cohere"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""tie_word_embeddings"": true, ""logit_scale"": 0.5 }");
+            Assert.Equal(0.5, config.LogitScale);
+
+            int h = 8, ffn = 16, vocab = 6, heads = 2, kvHeads = 2, headDim = 4;
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 73),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 74), // single norm (parallel residual)
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(heads * headDim * h, 75),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(kvHeads * headDim * h, 76),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(kvHeads * headDim * h, 77),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * heads * headDim, 78),
+                ["model.layers.0.mlp.gate_proj.weight"] = Fill(ffn * h, 79),
+                ["model.layers.0.mlp.up_proj.weight"] = Fill(ffn * h, 80),
+                ["model.layers.0.mlp.down_proj.weight"] = Fill(h * ffn, 81),
+                ["model.norm.weight"] = Fill(h, 82),
+            };
+
+            var net = CohereModelBuilder<double>.Build(config, new InMemorySource(t));
+            Assert.Equal(4, net.Layers.Count); // embed + block + final layernorm + lm head
+            Assert.IsType<CohereDecoderBlock<double>>(net.Layers[1]);
+
+            var tokens = new Tensor<double>(new[] { 1, 3 });
+            tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+
+            Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
+        }
+
+        [Fact]
         public void Architectures_ResolvesGemmaAndPhi3()
         {
             var gemma = HuggingFaceConfig.Parse(@"{ ""architectures"": [""GemmaForCausalLM""], ""model_type"": ""gemma"",
