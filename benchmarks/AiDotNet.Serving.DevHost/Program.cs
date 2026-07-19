@@ -28,7 +28,11 @@ if (Environment.GetEnvironmentVariable("DEVHOST_GPU") == "1")
 }
 else
 {
-    Console.WriteLine("[DevHost] CPU engine.");
+    // Force the CPU engine: the Tensors runtime auto-configures an available GPU at static init, so without
+    // this the model would silently run on OpenCL even here. Explicit ResetToCpu keeps DEVHOST_GPU unset =
+    // CPU.
+    AiDotNetEngine.ResetToCpu();
+    Console.WriteLine($"[DevHost] CPU engine ({AiDotNetEngine.Current.GetType().Name}).");
 }
 
 // ---------------------------------------------------------------------------
