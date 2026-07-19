@@ -409,7 +409,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
     /// <param name="graphStore">Optional graph storage backend for Graph RAG (e.g., MemoryGraphStore, FileGraphStore).</param>
     /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
-    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
+    /// <param name="documentStore">Optional document store. When a knowledge graph is also present it is folded
+    /// into a hybrid vector + graph retriever; when supplied WITHOUT a knowledge graph (and no explicit
+    /// <paramref name="retriever"/>) a default dense vector retriever is built over it so vector-only RAG works.</param>
+    /// <param name="chunkingStrategy">Optional chunking strategy used to split source documents into passages before indexing/embedding.</param>
+    /// <param name="contextCompressor">Optional context compressor used to shrink retrieved passages before they reach the generator.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
@@ -447,21 +451,29 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         IGraphStore<T>? graphStore = null,
         KnowledgeGraph<T>? knowledgeGraph = null,
-        IDocumentStore<T>? documentStore = null)
+        IDocumentStore<T>? documentStore = null,
+        IChunkingStrategy? chunkingStrategy = null,
+        IContextCompressor<T>? contextCompressor = null)
     {
         // Configure standard RAG components
         _ragRetriever = retriever;
         _ragReranker = reranker;
         _ragGenerator = generator;
         _queryProcessors = queryProcessors;
+        _chunkingStrategy = chunkingStrategy;
+        _contextCompressor = contextCompressor;
+        _ragDocumentStore = documentStore;
 
         // Configure Graph RAG components
-        // If all Graph RAG parameters are null, clear Graph RAG fields
-        if (graphStore == null && knowledgeGraph == null && documentStore == null)
+        // If EVERY parameter is null, clear all RAG fields (full disable).
+        if (retriever == null && reranker == null && generator == null && queryProcessors == null
+            && graphStore == null && knowledgeGraph == null && documentStore == null
+            && chunkingStrategy == null && contextCompressor == null)
         {
             _graphStore = null;
             _knowledgeGraph = null;
             _hybridGraphRetriever = null;
+            _ragDocumentStore = null;
             return this;
         }
 
@@ -493,7 +505,233 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             _hybridGraphRetriever = null;
         }
 
+        // FIX (documentStore-dropped bug): previously a document store supplied WITHOUT a knowledge
+        // graph was silently dropped (only consumed by the hybrid retriever above). Now, when a store
+        // is provided without a graph and the caller did not pass an explicit retriever, build a default
+        // dense/vector retriever over it so vector-only RAG is reachable through the facade.
+        if (documentStore != null && _knowledgeGraph == null && _ragRetriever == null)
+        {
+            _ragRetriever = BuildDefaultVectorRetriever(documentStore);
+        }
+
         return this;
+    }
+
+    /// <summary>
+    /// Builds a default dense vector retriever over the supplied document store, honoring the
+    /// configured embedding model when present and falling back to a deterministic stub embedder
+    /// (sized to the store's vector dimension) otherwise so the retriever is always usable.
+    /// </summary>
+    /// <param name="documentStore">The document store to retrieve from. Must not be null.</param>
+    /// <returns>A ready-to-use <see cref="IRetriever{T}"/> over the store.</returns>
+    private IRetriever<T> BuildDefaultVectorRetriever(IDocumentStore<T> documentStore)
+    {
+        // The vector search / similarity metric already lives inside the document store implementation
+        // (the store's GetSimilarWithFilters does the comparison). When the caller configured a
+        // similarity metric via ConfigureSimilarityMetric it is honored by store construction helpers
+        // (ConfigureVectorStore / ConfigureVectorIndex); here we simply pair the store with an embedder.
+        var embeddingModel = _configuredEmbeddingModel ?? BuildDefaultEmbeddingModel(documentStore.VectorDimension);
+        return new RetrievalAugmentedGeneration.Retrievers.VectorRetriever<T>(documentStore, embeddingModel);
+    }
+
+    /// <summary>
+    /// Creates a deterministic default embedding model of the requested dimension for wiring a
+    /// vector retriever when no embedding model was explicitly configured.
+    /// </summary>
+    /// <param name="dimension">The embedding dimension; must match the target store's vector dimension.</param>
+    /// <returns>A default <see cref="IEmbeddingModel{T}"/>.</returns>
+    private static IEmbeddingModel<T> BuildDefaultEmbeddingModel(int dimension)
+    {
+        int safeDimension = dimension > 0 ? dimension : 768;
+        return new RetrievalAugmentedGeneration.Embeddings.StubEmbeddingModel<T>(embeddingDimension: safeDimension);
+    }
+
+    /// <summary>
+    /// Configures a vector document store as the RAG backend in a single call, building a default dense
+    /// vector retriever over it so every <see cref="IDocumentStore{T}"/> implementation is reachable
+    /// through the facade.
+    /// </summary>
+    /// <param name="store">The document store to retrieve from (in-memory, FAISS, Pinecone, Qdrant, etc.).</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// The retriever is a <see cref="RetrievalAugmentedGeneration.Retrievers.VectorRetriever{T}"/> that pairs
+    /// the store with the embedding model configured via <c>ConfigureEmbeddingModel</c> (falling back to a
+    /// deterministic stub embedder sized to the store's vector dimension when none was configured). The
+    /// similarity metric used for comparison is the one baked into the supplied store; to also select the
+    /// metric from the facade use <see cref="ConfigureVectorIndex"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the one-call way to say "here is my document database, use it for
+    /// retrieval." After calling it, <c>AiModelResult.RagRetriever</c> and <c>AiModelResult.DocumentStore</c>
+    /// are populated and vector-only RAG works.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureVectorStore(IDocumentStore<T> store, int defaultTopK = 5)
+    {
+        if (store == null) throw new ArgumentNullException(nameof(store));
+
+        _ragDocumentStore = store;
+        var embeddingModel = _configuredEmbeddingModel ?? BuildDefaultEmbeddingModel(store.VectorDimension);
+        _ragRetriever = new RetrievalAugmentedGeneration.Retrievers.VectorRetriever<T>(store, embeddingModel, defaultTopK);
+        return this;
+    }
+
+    /// <summary>
+    /// Configures an in-memory vector search index (Flat / HNSW / IVF / LSH) with a chosen similarity
+    /// metric, adapts it into a document store, and builds a dense retriever over it.
+    /// </summary>
+    /// <param name="indexKind">Which in-memory index to build. Defaults to an exact flat index.</param>
+    /// <param name="vectorDimension">The embedding dimension for the store (0 = inferred on first add).</param>
+    /// <param name="metric">The similarity metric for the index. When null, the metric configured via
+    /// <c>ConfigureSimilarityMetric</c> is used, otherwise cosine similarity.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This surfaces the library's in-memory vector indexes directly from the facade. The chosen metric flows
+    /// into index construction (and, if not already set, is recorded as the builder's configured similarity
+    /// metric so evaluation sees it too). The resulting index is wrapped in a document store and paired with
+    /// the configured embedding model (or a deterministic stub) to form a retriever.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when you want to pick the search algorithm and distance measure
+    /// yourself instead of supplying a prebuilt document store.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureVectorIndex(
+        VectorIndexKind indexKind = VectorIndexKind.Flat,
+        int vectorDimension = 0,
+        RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? metric = null,
+        int defaultTopK = 5)
+    {
+        var effectiveMetric = metric
+            ?? _configuredSimilarityMetric
+            ?? new RetrievalAugmentedGeneration.VectorSearch.Metrics.CosineSimilarityMetric<T>();
+
+        // Record the metric so downstream construction and evaluation see the same choice.
+        _configuredSimilarityMetric ??= effectiveMetric;
+
+        var index = BuildVectorIndex(indexKind, effectiveMetric);
+        var store = new VectorIndexDocumentStore<T>(index, vectorDimension);
+        _ragDocumentStore = store;
+
+        var embeddingModel = _configuredEmbeddingModel ?? BuildDefaultEmbeddingModel(vectorDimension);
+        _ragRetriever = new RetrievalAugmentedGeneration.Retrievers.VectorRetriever<T>(store, embeddingModel, defaultTopK);
+        return this;
+    }
+
+    /// <summary>
+    /// Constructs the selected in-memory vector index using the supplied similarity metric.
+    /// </summary>
+    private static RetrievalAugmentedGeneration.VectorSearch.Indexes.IVectorIndex<T> BuildVectorIndex(
+        VectorIndexKind kind,
+        RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T> metric)
+    {
+        switch (kind)
+        {
+            case VectorIndexKind.HNSW:
+                return new RetrievalAugmentedGeneration.VectorSearch.Indexes.HNSWIndex<T>(metric);
+            case VectorIndexKind.IVF:
+                return new RetrievalAugmentedGeneration.VectorSearch.Indexes.IVFIndex<T>(metric);
+            case VectorIndexKind.LSH:
+                return new RetrievalAugmentedGeneration.VectorSearch.Indexes.LSHIndex<T>(metric);
+            case VectorIndexKind.Flat:
+            default:
+                return new RetrievalAugmentedGeneration.VectorSearch.Indexes.FlatIndex<T>(metric);
+        }
+    }
+
+    /// <summary>
+    /// Materializes a declarative <see cref="RetrievalAugmentedGeneration.Configuration.RAGConfiguration{T}"/>
+    /// (typically produced by <see cref="RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder{T}"/>)
+    /// into the builder's RAG fields: chunking strategy, embedding model, document store + retriever,
+    /// reranker, and context compressor.
+    /// </summary>
+    /// <param name="config">The RAG configuration to apply. Must not be null.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This reconciles the previously orphaned <c>RAGConfiguration</c>/<c>RAGConfigurationBuilder</c> types with
+    /// the facade. Strategy names are mapped to concrete components that require no external resources; entries
+    /// that would need API keys or model files (e.g., hosted embedding providers, cross-encoder rerankers) fall
+    /// back to safe deterministic defaults so the pipeline is fully wired and runnable from code.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you built a <c>RAGConfiguration</c> describing your pipeline in plain
+    /// strings/numbers, this turns that description into real components on the builder.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureRAG(RetrievalAugmentedGeneration.Configuration.RAGConfiguration<T> config)
+    {
+        if (config == null) throw new ArgumentNullException(nameof(config));
+
+        // 1. Chunking strategy (non-generic; no external dependencies).
+        _chunkingStrategy = BuildChunkingStrategy(config.Chunking);
+
+        // 2. Embedding model. Hosted providers need credentials, so for the pure code path we use the
+        //    already-configured model when present, otherwise a deterministic stub of the requested size.
+        int embeddingDimension = config.Embedding.EmbeddingDimension > 0 ? config.Embedding.EmbeddingDimension : 768;
+        _configuredEmbeddingModel ??= BuildDefaultEmbeddingModel(embeddingDimension);
+
+        // 3. Document store + retriever. Build a flat in-memory index over the configured metric and pair it
+        //    with the embedding model, honoring the requested retrieval top-K.
+        var metric = _configuredSimilarityMetric
+            ?? new RetrievalAugmentedGeneration.VectorSearch.Metrics.CosineSimilarityMetric<T>();
+        _configuredSimilarityMetric ??= metric;
+        var index = BuildVectorIndex(VectorIndexKind.Flat, metric);
+        var store = new VectorIndexDocumentStore<T>(index, embeddingDimension);
+        _ragDocumentStore = store;
+        int retrievalTopK = config.Retrieval.TopK > 0 ? config.Retrieval.TopK : 5;
+        _ragRetriever = new RetrievalAugmentedGeneration.Retrievers.VectorRetriever<T>(store, _configuredEmbeddingModel, retrievalTopK);
+
+        // 4. Reranking (optional).
+        _ragReranker = config.Reranking.Enabled ? BuildReranker(config.Reranking) : null;
+
+        // 5. Context compression (optional).
+        _contextCompressor = config.ContextCompression.Enabled ? BuildContextCompressor(config.ContextCompression) : null;
+
+        return this;
+    }
+
+    private static IChunkingStrategy BuildChunkingStrategy(RetrievalAugmentedGeneration.Configuration.ChunkingConfig chunking)
+    {
+        string strategy = (chunking.Strategy ?? string.Empty).ToLowerInvariant();
+        int chunkSize = chunking.ChunkSize > 0 ? chunking.ChunkSize : 1000;
+        int overlap = chunking.ChunkOverlap >= 0 ? chunking.ChunkOverlap : 0;
+
+        if (strategy.Contains("recursive"))
+            return new RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterChunkingStrategy(chunkSize, overlap);
+        if (strategy.Contains("sentence"))
+            return new RetrievalAugmentedGeneration.ChunkingStrategies.SentenceChunkingStrategy(chunkSize);
+        if (strategy.Contains("sliding") || strategy.Contains("window"))
+            return new RetrievalAugmentedGeneration.ChunkingStrategies.SlidingWindowChunkingStrategy(chunkSize, Math.Max(1, chunkSize - overlap));
+
+        // Default / "fixed": fixed-size character chunking.
+        return new RetrievalAugmentedGeneration.ChunkingStrategies.FixedSizeChunkingStrategy(chunkSize, overlap);
+    }
+
+    private static IReranker<T> BuildReranker(RetrievalAugmentedGeneration.Configuration.RerankingConfig reranking)
+    {
+        string strategy = (reranking.Strategy ?? string.Empty).ToLowerInvariant();
+
+        if (strategy.Contains("diversity"))
+            return new RetrievalAugmentedGeneration.Rerankers.DiversityReranker<T>();
+        if (strategy.Contains("middle") || strategy.Contains("lost"))
+            return new RetrievalAugmentedGeneration.RerankingStrategies.LostInTheMiddleReranker<T>();
+        if (strategy.Contains("rrf") || strategy.Contains("reciprocal") || strategy.Contains("fusion"))
+            return new RetrievalAugmentedGeneration.RerankingStrategies.ReciprocalRankFusion<T>();
+
+        // Cross-encoder / Cohere / LLM rerankers require external resources; default to identity.
+        return new RetrievalAugmentedGeneration.Rerankers.IdentityReranker<T>();
+    }
+
+    private static IContextCompressor<T> BuildContextCompressor(RetrievalAugmentedGeneration.Configuration.ContextCompressionConfig compression)
+    {
+        int maxLength = compression.MaxLength > 0 ? compression.MaxLength : 500;
+        double ratio = compression.CompressionRatio > 0 && compression.CompressionRatio <= 1 ? compression.CompressionRatio : 0.5;
+
+        // Selective / LLM / summarizer variants need embeddings or external models; AutoCompressor is a
+        // dependency-free extractive compressor honoring the requested length and ratio.
+        return new RetrievalAugmentedGeneration.ContextCompression.AutoCompressor<T>(maxLength, ratio);
     }
 
     /// <summary>

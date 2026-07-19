@@ -392,6 +392,21 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </remarks>
     public IEnumerable<IQueryProcessor>? QueryProcessors { get; set; }
 
+    /// <summary>
+    /// Gets or sets the chunking strategy used to split source documents into passages before embedding/indexing.
+    /// </summary>
+    public IChunkingStrategy? ChunkingStrategy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the context compressor used to shrink retrieved passages before generation.
+    /// </summary>
+    public IContextCompressor<T>? ContextCompressor { get; set; }
+
+    /// <summary>
+    /// Gets or sets the document store backing vector retrieval.
+    /// </summary>
+    public IDocumentStore<T>? DocumentStore { get; set; }
+
     // ============================================================================
     // Graph RAG Properties
     // ============================================================================

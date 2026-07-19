@@ -687,7 +687,10 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
     /// <param name="graphStore">Optional graph storage backend for Graph RAG (e.g., MemoryGraphStore, FileGraphStore).</param>
     /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
-    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
+    /// <param name="documentStore">Optional document store. Folded into a hybrid retriever when a knowledge graph is
+    /// also present; otherwise (with no explicit <paramref name="retriever"/>) a default dense vector retriever is built over it.</param>
+    /// <param name="chunkingStrategy">Optional chunking strategy used to split source documents into passages before indexing/embedding.</param>
+    /// <param name="contextCompressor">Optional context compressor used to shrink retrieved passages before they reach the generator.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
@@ -696,7 +699,9 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         IGraphStore<T>? graphStore = null,
         KnowledgeGraph<T>? knowledgeGraph = null,
-        IDocumentStore<T>? documentStore = null);
+        IDocumentStore<T>? documentStore = null,
+        IChunkingStrategy? chunkingStrategy = null,
+        IContextCompressor<T>? contextCompressor = null);
 
     /// <summary>
     /// Configures advanced knowledge graph capabilities including embeddings, community detection,
@@ -2393,5 +2398,36 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="metric">The similarity metric implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureSimilarityMetric(RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T> metric);
+
+    /// <summary>
+    /// Configures a vector document store as the RAG backend, building a default dense retriever over it.
+    /// </summary>
+    /// <param name="store">The document store to retrieve from.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureVectorStore(IDocumentStore<T> store, int defaultTopK = 5);
+
+    /// <summary>
+    /// Configures an in-memory vector index (Flat / HNSW / IVF / LSH) with a similarity metric and builds
+    /// a dense retriever over it.
+    /// </summary>
+    /// <param name="indexKind">Which in-memory index to build.</param>
+    /// <param name="vectorDimension">The embedding dimension (0 = inferred on first add).</param>
+    /// <param name="metric">The similarity metric; when null the configured metric (or cosine) is used.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureVectorIndex(
+        AiDotNet.Enums.VectorIndexKind indexKind = AiDotNet.Enums.VectorIndexKind.Flat,
+        int vectorDimension = 0,
+        RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? metric = null,
+        int defaultTopK = 5);
+
+    /// <summary>
+    /// Materializes a declarative RAG configuration into the builder's RAG components (chunking, embedding,
+    /// document store + retriever, reranking, context compression).
+    /// </summary>
+    /// <param name="config">The RAG configuration to apply.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRAG(RetrievalAugmentedGeneration.Configuration.RAGConfiguration<T> config);
 
 }
