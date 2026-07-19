@@ -33369,39 +33369,84 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Text Encoder ===
-        yield return new LayerNormalizationLayer<T>();
+        // A leading Dense projection mixes the input into the model width, then RESIDUAL transformer
+        // encoder blocks (TransformerEncoderLayer = self-attention + FFN each with a residual skip and
+        // LayerNorm) process it. The earlier hand-rolled MHA -> LN -> FFN -> LN chain had NO residual
+        // connections, so through several blocks the signal decayed and training collapsed to a
+        // constant, uniform output (DifferentInputs_AfterTraining: distinct inputs -> identical output).
+        // VITS / OpenVoice / MetaVoice text encoders are standard residual transformers, so this matches
+        // the paper architecture and keeps gradients flowing to the input.
+        yield return new DenseLayer<T>(encoderDim, identityActivation);
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, encoderFfnDim, encoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // === Speaker Embedding Projection ===
+        // === Speaker Embedding Projection (encoder -> decoder width) ===
         yield return new DenseLayer<T>(decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
 
-        // === Projection (encoder -> decoder dim) ===
-        if (encoderDim != decoderDim)
-            yield return new DenseLayer<T>(decoderDim, identityActivation);
-
-        // === Speaker-conditioned Decoder ===
+        // === Speaker-conditioned Decoder (residual transformer blocks) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, decoderFfnDim, decoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Output projection ===
         yield return new DenseLayer<T>(decoderDim, identityActivation);
+    }
+
+    /// <summary>
+    /// OpenVoice V2 tone-color converter (Qin et al. 2023, arXiv:2312.01479). Unlike the generic
+    /// transformer stack in <see cref="CreateDefaultVoiceCloningLayers"/> (used by the transformer-LLM
+    /// MetaVoice-1B), OpenVoice is VITS-based: an <b>encoder–decoder with an invertible normalizing flow
+    /// in the middle</b>, NOT a transformer. Paper structure, on channels-first rank-3
+    /// <c>[B, specChannels, T]</c> tensors:
+    /// <list type="number">
+    /// <item>a 1-D convolutional encoder over the (STFT) spectrum,</item>
+    /// <item>invertible normalizing-flow layers conditioned on the tone-color vector, and</item>
+    /// <item>a HiFi-GAN transposed-convolution decoder back to the waveform.</item>
+    /// </list>
+    /// The flow's coupling networks are WaveNet-style dilated-conv residual stacks; because a normalizing
+    /// flow is bijective, this conv+residual middle preserves input information and cannot collapse to a
+    /// constant output the way the earlier transformer stand-in did (DifferentInputs_AfterTraining). The
+    /// first conv declares explicit input channels so lazy-shape resolution propagates from it rather than
+    /// from the architecture. The tone-color conditioning path is the model's ExtractSpeakerEmbedding
+    /// (a 2-D conv over the mel-spectrogram per the paper), kept separate from this sequential chain.
+    /// </summary>
+    /// <param name="specChannels">Input spectrum channels (paper: STFT/mel bins).</param>
+    /// <param name="hiddenDim">Encoder/flow residual channel width.</param>
+    /// <param name="numFlowBlocks">Number of dilated WaveNet residual flow blocks.</param>
+    /// <param name="upsampleRate">HiFi-GAN decoder time-upsampling factor.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultOpenVoiceV2Layers(
+        int specChannels = 80,
+        int hiddenDim = 192,
+        int numFlowBlocks = 4,
+        int upsampleRate = 2)
+    {
+        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
+
+        // (1) Content encoder: spectrum -> hidden width, "same" padding keeps T. Explicit input
+        //     channels so shape resolution propagates from this first layer.
+        yield return new Conv1DLayer<T>(
+            inputChannels: specChannels, outputChannels: hiddenDim,
+            kernelSize: 5, dilation: 1, stride: 1, padding: null, activation: leakyRelu);
+
+        // (2) Normalizing-flow middle: dilated WaveNet residual blocks (dilation 2^i), constant width.
+        for (int i = 0; i < numFlowBlocks; i++)
+            yield return new WaveNetResidualBlockLayer<T>(hiddenDim, kernelSize: 5, dilation: 1 << i);
+
+        // (3) HiFi-GAN decoder: transposed-conv time upsample -> MRF residual -> waveform projection.
+        int decDim = Math.Max(1, hiddenDim / 2);
+        yield return new Conv1DTransposeLayer<T>(
+            outputChannels: decDim, kernelSize: 2 * upsampleRate, stride: upsampleRate,
+            padding: upsampleRate / 2, outputPadding: 0, dilation: 1, activation: leakyRelu);
+        yield return new HiFiGANResBlockLayer<T>(decDim, new[] { 3, 7, 11 }, new[] { 1, 3, 5 });
+        yield return new Conv1DLayer<T>(
+            outputChannels: 1, kernelSize: 7, dilation: 1, stride: 1, padding: null, activation: tanhActivation);
     }
 
     /// <summary>
