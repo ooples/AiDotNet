@@ -627,6 +627,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // convergence tests to smoke level for every Fp32 member, keeping the encoder paper-scale
         // while the train path stays covered.
         "WavLMSER",
+        // --- Foundation-scale vision models (256²/224² ViT & optical-flow transformers) whose
+        // <double> per-step forward+backward OOMs / overruns the 120 s gate on the 16 GB runner.
+        // <float> is the FIRST lever: it halves the activation/tape footprint and roughly doubles
+        // throughput while PRESERVING the paper architecture (only the numeric precision changes),
+        // so the self-relative training invariants stay intact. Sibling Video/Motion (RAFT) and
+        // Video-SR (RealisVSR) models are already floated above, so the Video/VisionLanguage test
+        // bases compile as <float>. ---
+        // DepthAnythingV2 (Yang et al., 2024 — arXiv:2406.09414): DINOv2 ViT backbone (S/B/L/G) +
+        // DPT dense-prediction decoder, trained at 518² in the paper (our default 256²), with a
+        // ScaleInvariantDepthLoss. The foundation ViT encoder OOM-killed the runner at <double>
+        // (DepthAnythingV2 OutOfMemoryException across its forward/train invariants).
+        "DepthAnythingV2",
+        // MetaCLIP (Xu et al., 2023 — arXiv:2309.16671): a standard CLIP dual-encoder — ViT-B-scale
+        // vision transformer (768-dim) + 512-dim text transformer at 224². The paper "strictly
+        // follows the CLIP training setup" (architecture unchanged; the contribution is data
+        // curation), so it is a genuine foundation-scale dual encoder whose <double> training
+        // footprint overran the gate.
+        "MetaCLIP",
+        // DPFlow (2025 — arXiv:2501.10440): high-resolution adaptive optical-flow estimator — an
+        // 8-layer iterative refinement transformer run over stacked frame pairs (6-channel) at 256².
+        // Same heavy iterative-flow profile as RAFT (already floated above); its <double> per-step
+        // cost overran the 120 s gate (DifferentInputs / ScaledInput timeout).
+        "DPFlow",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
