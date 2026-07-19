@@ -226,21 +226,26 @@ internal class PagedAttentionKernel<T>
 
         int numBlocks = blockTable.Length;
 
-        // Per-head accumulators for online softmax
-        var maxScores = new float[numHeads];
-        var sumExps = new float[numHeads];
-        var accumulators = new float[numHeads * headDim];
-
-#if NET5_0_OR_GREATER
-        Array.Fill(maxScores, float.NegativeInfinity);
-        Array.Fill(sumExps, 0f);
-#else
-        ArrayPolyfill.Fill(maxScores, float.NegativeInfinity);
-        ArrayPolyfill.Fill(sumExps, 0f);
-#endif
-
-        var keyBuffer = new T[numHeads * headDim];
-        var valueBuffer = new T[numHeads * headDim];
+        // Per-head online-softmax scratch. Pooled: this method runs once per decode token, per layer, per
+        // sequence, so a fresh new[] here was the top compute-path allocation site (dotnet-trace). The
+        // pooled arrays may be longer than requested; only [0, numHeads*headDim) is used, so the tail is
+        // ignored. accumulators is zero-initialized for the used region below; keyBuffer/valueBuffer are
+        // fully overwritten by ReadKey/ReadValue before each read.
+        var floatPool = ArrayPool<float>.Shared;
+        var tPool = ArrayPool<T>.Shared;
+        var maxScores = floatPool.Rent(numHeads);
+        var sumExps = floatPool.Rent(numHeads);
+        var accumulators = floatPool.Rent(numHeads * headDim);
+        var keyBuffer = tPool.Rent(numHeads * headDim);
+        var valueBuffer = tPool.Rent(numHeads * headDim);
+        try
+        {
+        Array.Clear(accumulators, 0, numHeads * headDim);
+        for (int head = 0; head < numHeads; head++)
+        {
+            maxScores[head] = float.NegativeInfinity;
+            sumExps[head] = 0f;
+        }
 
         // Process block by block (tiled computation)
         for (int blockIdx = 0; blockIdx < numBlocks; blockIdx++)
@@ -324,6 +329,15 @@ internal class PagedAttentionKernel<T>
         if (_config.WindowSize > 0 && windowStart > 0)
         {
             _kvCache.EvictBlocksBelow(sequenceId, windowStart);
+        }
+        }
+        finally
+        {
+            floatPool.Return(maxScores);
+            floatPool.Return(sumExps);
+            floatPool.Return(accumulators);
+            tPool.Return(keyBuffer);
+            tPool.Return(valueBuffer);
         }
     }
 
