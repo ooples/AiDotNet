@@ -51,7 +51,7 @@ public static class StarCoder2ModelBuilder<T>
         {
             var attention = new GroupedQueryAttentionLayer<T>(
                 sequenceLength: maxPos, embeddingDimension: hidden, numHeads: numHeads, numKVHeads: numKVHeads,
-                headDimension: explicitHeadDim ? headDim : null, useProjectionBias: true);
+                headDimension: explicitHeadDim ? headDim : null, useProjectionBias: true, useCausalMask: true);
             attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, config.RopeTheta, maxPos);
 
             var block = new StarCoder2DecoderBlock<T>(hidden, intermediate, attention, normEps);

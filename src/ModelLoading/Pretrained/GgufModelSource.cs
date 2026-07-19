@@ -219,13 +219,23 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
             EosToken = TokenForId(eosId),
             UnkToken = string.IsNullOrEmpty(unkToken) ? string.Empty : unkToken,
             PadToken = TokenForId(padId),
+            // Decoder LMs have no BERT-style sentinels; clear the defaults so AddSpecialTokensToSequence
+            // never injects out-of-vocabulary [CLS]/[SEP]/[MASK] into a prompt.
+            ClsToken = string.Empty,
+            SepToken = string.Empty,
+            MaskToken = string.Empty,
         };
 
         var vocabulary = new GgufVocabulary(
             tokenToId, string.IsNullOrEmpty(unkToken) ? TokenForId(eosId) : unkToken);
 
+        // Honor the checkpoint's add_bos_token flag so encoding matches llama.cpp (SmolLM2: false).
+        bool addBos = Meta("tokenizer.ggml.add_bos_token") is bool b && b;
+        string bosToken = TokenForId(bosId);
+
         return new BpeTokenizer(
-            vocabulary, merges, specialTokens, pattern: null, byteLevel: true, specialTokenStrings: specialStrings);
+            vocabulary, merges, specialTokens, pattern: null, byteLevel: true,
+            specialTokenStrings: specialStrings, addBosToken: addBos, bosToken: bosToken);
     }
 
     // Reads a GGUF metadata integer that may be boxed as any of the spec's integer/uint value types.

@@ -79,7 +79,8 @@ public static class LlamaModelBuilder<T>
         {
             var attention = new GroupedQueryAttentionLayer<T>(
                 sequenceLength: maxPos, embeddingDimension: hidden, numHeads: numHeads, numKVHeads: numKVHeads,
-                headDimension: explicitHeadDim ? headDim : null, useProjectionBias: opt.UseAttentionQkvBias);
+                headDimension: explicitHeadDim ? headDim : null, useProjectionBias: opt.UseAttentionQkvBias,
+                useCausalMask: true);
             attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, config.RopeTheta, maxPos);
 
             // Gated FFN (bias-free): SiLU gate for LLaMA/Mistral/Qwen2/Phi-3, GELU (GeGLU) for Gemma.
