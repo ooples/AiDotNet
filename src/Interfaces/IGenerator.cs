@@ -35,32 +35,10 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("Generator")]
-public interface IGenerator<T>
+public interface IGenerator<T> : ITextGenerator
 {
-    /// <summary>
-    /// Generates a text response based on a prompt.
-    /// </summary>
-    /// <param name="prompt">The input prompt or question.</param>
-    /// <returns>The generated text response.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method generates text based solely on the provided prompt, without
-    /// additional context. It's suitable for general-purpose text generation tasks.
-    /// In RAG systems, this is typically called with prompts that have been augmented
-    /// with retrieved context.
-    /// </para>
-    /// <para><b>For Beginners:</b> This generates text from a prompt.
-    /// 
-    /// For example:
-    /// - Prompt: "Explain photosynthesis in simple terms"
-    /// - Generated: "Photosynthesis is how plants make food using sunlight..."
-    /// 
-    /// In RAG, the prompt usually includes both the question and retrieved documents:
-    /// - Prompt: "Context: [3 documents about photosynthesis]\n\nQuestion: Explain photosynthesis"
-    /// - Generated: Answer based on those specific documents
-    /// </para>
-    /// </remarks>
-    string Generate(string prompt);
+    // string Generate(string prompt) is inherited from ITextGenerator — buffered text generation from a
+    // prompt (in RAG, a prompt already augmented with retrieved context). See ITextGenerator for details.
 
     /// <summary>
     /// Generates a grounded answer using provided context documents.
