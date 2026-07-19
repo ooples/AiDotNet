@@ -119,104 +119,197 @@ namespace AiDotNet.Tests.ModelLoading
                 return;
             }
 
+            using var gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+            if (!gpuEngine.IsGpuAvailable)
+            {
+                return;
+            }
+
             AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
             var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
             var net = (NeuralNetwork<float>)model;
 
-            // Probe for a GPU; skip cleanly if none.
-            bool gpuOk = AiDotNet.Tensors.Engines.AiDotNetEngine.AutoDetectAndConfigureGpu();
-            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            var ids = new[] { 504, 3575, 282, 4649, 314 };
+            static Tensor<float> MakeInput(int[] tok)
+            {
+                var t = new Tensor<float>(new[] { 1, tok.Length });
+                for (int i = 0; i < tok.Length; i++) t[0, i] = tok[i];
+                return t;
+            }
+            static Tensor<float> Clone(Tensor<float> t)
+                => new Tensor<float>(t.Contiguous().AsSpan().ToArray(), t.Shape.ToArray());
+
+            // Run the whole chain on GPU (no mid-run engine toggle — toggling invalidates the OpenCL
+            // context), capturing each layer's materialized output; then the same on CPU. The first layer
+            // whose chained GPU output diverges from CPU is the one whose GPU op is wrong.
+            var gpuOuts = new System.Collections.Generic.List<float[]>();
+            var shapes = new System.Collections.Generic.List<int[]>();
+            var names = new System.Collections.Generic.List<string>();
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+            try
+            {
+                var xg = MakeInput(ids);
+                foreach (var layer in net.Layers)
+                {
+                    xg = layer.Forward(xg);
+                    var mat = xg.Contiguous();
+                    gpuOuts.Add(mat.AsSpan().ToArray());
+                    shapes.Add(xg.Shape.ToArray());
+                    names.Add(layer.GetType().Name);
+                    xg = mat;
+                }
+            }
+            finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
+
+            var cpuOuts = new System.Collections.Generic.List<float[]>();
+            {
+                var xc = MakeInput(ids);
+                foreach (var layer in net.Layers)
+                {
+                    xc = layer.Forward(xc);
+                    var mat = xc.Contiguous();
+                    cpuOuts.Add(mat.AsSpan().ToArray());
+                    xc = mat;
+                }
+            }
+
+            var report = new StringBuilder();
+            int firstDiverging = -1;
+            for (int li = 0; li < cpuOuts.Count; li++)
+            {
+                var c = cpuOuts[li];
+                var g = gpuOuts[li];
+                float maxAbs = 0f;
+                int n = Math.Min(c.Length, g.Length);
+                for (int i = 0; i < n; i++) maxAbs = MathF.Max(maxAbs, MathF.Abs(c[i] - g[i]));
+                report.AppendLine($"layer {li} {names[li]}: maxAbsDiff={maxAbs:E3} shape=[{string.Join(",", shapes[li])}]");
+                if (firstDiverging < 0 && maxAbs > 1e-2f) firstDiverging = li;
+            }
+
+            Assert.True(firstDiverging < 0,
+                $"First diverging GPU layer: {firstDiverging}\n{report}");
+        }
+
+        /// <summary>
+        /// Drives the actual ContinuousBatcher (the live serving path, which the direct-Forward checks
+        /// bypass) on CPU vs GPU, with speculative decoding off and on, and asserts the greedy first token
+        /// is llama.cpp's (7042 " Paris") in every combination. Reproduces the GPU-serving garbage in a unit
+        /// test and isolates whether it is the batcher path itself or speculation. Gated on the model + a GPU.
+        /// </summary>
+        [Fact]
+        public void Gguf_Batcher_CpuVsGpu_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return;
+            }
+
+            // AutoDetectAndConfigureGpu() does not wire the GPU in this test process, but a
+            // DirectGpuTensorEngine constructs and reports availability (the Tensors op tests use it), so set
+            // it as the current engine directly to actually exercise the GPU path.
+            bool gpuOk;
+            using (var probe = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine()) gpuOk = probe.IsGpuAvailable;
             if (!gpuOk)
             {
                 return;
             }
 
             var ids = new[] { 504, 3575, 282, 4649, 314 };
-            var input = new Tensor<float>(new[] { 1, ids.Length });
-            for (int i = 0; i < ids.Length; i++) input[0, i] = ids[i];
 
-            static Tensor<float> Clone(Tensor<float> t)
-                => new Tensor<float>(t.Contiguous().AsSpan().ToArray(), t.Shape.ToArray());
-
-            var report = new StringBuilder();
-            var x = input;
-            int firstDiverging = -1;
-            for (int li = 0; li < net.Layers.Count; li++)
+            int RunBatcher(bool onGpu, bool speculation)
             {
-                var layer = net.Layers[li];
-
-                AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
-                var cpuOut = layer.Forward(Clone(x));
-
-                AiDotNet.Tensors.Engines.AiDotNetEngine.AutoDetectAndConfigureGpu();
-                Tensor<float> gpuOut;
-                try { gpuOut = layer.Forward(Clone(x)); }
-                finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
-
-                var c = cpuOut.Contiguous().AsSpan();
-                var g = gpuOut.Contiguous().AsSpan();
-                float maxAbs = 0f;
-                for (int i = 0; i < c.Length; i++) maxAbs = MathF.Max(maxAbs, MathF.Abs(c[i] - g[i]));
-
-                report.AppendLine(
-                    $"layer {li} {layer.GetType().Name}: maxAbsDiff={maxAbs:E3} outShape=[{string.Join(",", cpuOut.Shape.ToArray())}]");
-                if (firstDiverging < 0 && maxAbs > 1e-2f) firstDiverging = li;
-
-                x = cpuOut; // continue the reference forward on CPU
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine = null;
+                if (onGpu)
+                {
+                    gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+                    AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+                }
+                else
+                {
+                    AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                }
+                try
+                {
+                    var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+                    var net = (NeuralNetwork<float>)model;
+                    var wrapper = new AiDotNet.Serving.Models.ServableModelWrapper<float>(
+                        "m", (AiDotNet.Interfaces.IFullModel<float, Tensor<float>, Tensor<float>>)net,
+                        new[] { 1 }, enableSpeculativeDecoding: false, generationForward: net.Predict);
+                    var config = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig
+                    {
+                        AutoStart = false,
+                        EosTokenId = 2,
+                        EnableSpeculativeDecoding = speculation
+                    };
+                    using var batcher = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<float>(
+                        config, tokens => wrapper.Forward(tokens));
+                    var req = new AiDotNet.Serving.ContinuousBatching.GenerationRequest<float>
+                    {
+                        PromptTokenIds = ids.ToList(),
+                        MaxNewTokens = 1,
+                        Temperature = 0f,
+                        EosTokenId = 2
+                    };
+                    var task = batcher.GenerateAsync(req);
+                    int guard = 40;
+                    while (!task.IsCompleted && guard-- > 0) batcher.Step();
+                    var result = task.GetAwaiter().GetResult();
+                    return result.GeneratedTokens.Count > 0 ? result.GeneratedTokens[0] : -1;
+                }
+                finally
+                {
+                    AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                    gpuEngine?.Dispose();
+                }
             }
 
-            // Full-forward comparison: the per-layer diff feeds each GPU layer a CPU-reference input, so it
-            // misses any bug that only appears when GPU-resident tensors are CHAINED across the whole forward.
-            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
-            var logitsCpu = net.Predict(Clone(input));
-            AiDotNet.Tensors.Engines.AiDotNetEngine.AutoDetectAndConfigureGpu();
-            Tensor<float> logitsGpu;
-            try { logitsGpu = net.Predict(Clone(input)); }
-            finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
-
-            int seq = ids.Length, vocab = logitsCpu.Shape[2];
-            int ArgmaxLast(Tensor<float> lg)
+            // Direct (non-batcher) greedy on the same engine: does model.Predict / wrapper.Forward already
+            // diverge on GPU, or only the batcher path?
+            (int model, int wrapper) RunDirect(bool onGpu)
             {
-                var s = lg.Contiguous().AsSpan();
-                int baseIdx = (seq - 1) * vocab, best = 0; float bv = float.NegativeInfinity;
-                for (int v = 0; v < vocab; v++) { float x2 = s[baseIdx + v]; if (x2 > bv) { bv = x2; best = v; } }
-                return best;
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine = null;
+                if (onGpu)
+                {
+                    gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+                    AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+                }
+                else { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
+                try
+                {
+                    var (m, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+                    var net = (NeuralNetwork<float>)m;
+                    var wrap = new AiDotNet.Serving.Models.ServableModelWrapper<float>(
+                        "m", (AiDotNet.Interfaces.IFullModel<float, Tensor<float>, Tensor<float>>)net,
+                        new[] { 1 }, enableSpeculativeDecoding: false, generationForward: net.Predict);
+                    var inp = new Tensor<float>(new[] { 1, ids.Length });
+                    for (int i = 0; i < ids.Length; i++) inp[0, i] = ids[i];
+                    int Arg(Tensor<float> lg)
+                    {
+                        var s = lg.Contiguous().AsSpan();
+                        int v = lg.Shape[2], baseI = (lg.Shape[1] - 1) * v, best = 0; float bv = float.NegativeInfinity;
+                        for (int i = 0; i < v; i++) { float xi = s[baseI + i]; if (xi > bv) { bv = xi; best = i; } }
+                        return best;
+                    }
+                    int aModel = Arg(net.Predict(new Tensor<float>(inp.Contiguous().AsSpan().ToArray(), inp.Shape.ToArray())));
+                    int aWrap = Arg(wrap.Forward(new Tensor<float>(inp.Contiguous().AsSpan().ToArray(), inp.Shape.ToArray())));
+                    return (aModel, aWrap);
+                }
+                finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); gpuEngine?.Dispose(); }
             }
-            int argCpu = ArgmaxLast(logitsCpu), argGpu = ArgmaxLast(logitsGpu);
-            report.AppendLine($"FULL-FORWARD (built on CPU) greedy: CPU={argCpu} (expect 7042) GPU={argGpu}");
 
-            // Reproduce the DevHost scenario: BUILD the model while the GPU engine is active (the Tensors
-            // runtime auto-configures a GPU at static init), then predict on GPU. If weight-loading during a
-            // GPU-active build doesn't take effect (host writes vs stale GPU-resident buffers), this is wrong.
-            AiDotNet.Tensors.Engines.AiDotNetEngine.AutoDetectAndConfigureGpu();
-            int argBuiltOnGpu, argAfterWrap, argViaWrapper, argViaBackgroundThread;
-            try
-            {
-                var (modelG, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
-                var netG = (NeuralNetwork<float>)modelG;
-                argBuiltOnGpu = ArgmaxLast(netG.Predict(Clone(input)));
+            var cpuDirect = RunDirect(false);
+            var gpuDirect = RunDirect(true);
+            int cpuNoSpec = RunBatcher(false, false);
+            int gpuNoSpec = RunBatcher(true, false);
+            int gpuSpec = RunBatcher(true, true);
 
-                // Wrapping runs BuildIncrementalModel (clone + inference-optimize + warmup) on the active GPU
-                // engine — the DevHost serving path. Check whether that corrupts the underlying model.
-                var wrapper = new AiDotNet.Serving.Models.ServableModelWrapper<float>(
-                    "m", (AiDotNet.Interfaces.IFullModel<float, Tensor<float>, Tensor<float>>)netG,
-                    new[] { 1 }, enableSpeculativeDecoding: false, generationForward: netG.Predict);
-                argAfterWrap = ArgmaxLast(netG.Predict(Clone(input)));
-                argViaWrapper = ArgmaxLast(wrapper.Forward(Clone(input)));
-
-                // The ContinuousBatcher runs Forward on a BACKGROUND thread. If AiDotNetEngine.Current does
-                // not propagate to that thread (or GPU state is thread-affine), the batcher forward runs on
-                // the wrong engine over GPU-resident weights -> garbage, even though the same call on the
-                // main thread is correct. This reproduces the exact serving discrepancy.
-                argViaBackgroundThread = System.Threading.Tasks.Task.Run(
-                    () => ArgmaxLast(wrapper.Forward(Clone(input)))).GetAwaiter().GetResult();
-            }
-            finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
-            report.AppendLine($"built-on-GPU greedy: {argBuiltOnGpu}; after wrap: {argAfterWrap}; via wrapper.Forward: {argViaWrapper}; via BACKGROUND thread: {argViaBackgroundThread} (all expect 7042)");
-
-            Assert.True(firstDiverging < 0 && argCpu == argGpu && argBuiltOnGpu == argCpu
-                        && argAfterWrap == argCpu && argViaWrapper == argCpu && argViaBackgroundThread == argCpu,
-                $"firstDivergingLayer={firstDiverging}, builtCpu CPU={argCpu} GPU={argGpu}, builtGpu={argBuiltOnGpu}, afterWrap={argAfterWrap}, viaWrapper={argViaWrapper}, viaBgThread={argViaBackgroundThread}\n{report}");
+            Assert.True(cpuDirect.model == 7042 && cpuDirect.wrapper == 7042
+                        && gpuDirect.model == 7042 && gpuDirect.wrapper == 7042
+                        && cpuNoSpec == 7042 && gpuNoSpec == 7042 && gpuSpec == 7042,
+                $"greedy first token (expect 7042 ' Paris'): " +
+                $"CPU model={cpuDirect.model} wrapper={cpuDirect.wrapper} batcher={cpuNoSpec}; " +
+                $"GPU model={gpuDirect.model} wrapper={gpuDirect.wrapper} batcher(noSpec)={gpuNoSpec} batcher(spec)={gpuSpec}");
         }
 
         [Fact]
