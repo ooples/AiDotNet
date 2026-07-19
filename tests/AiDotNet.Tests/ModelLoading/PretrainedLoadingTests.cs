@@ -229,7 +229,7 @@ namespace AiDotNet.Tests.ModelLoading
             var tokens = new Tensor<double>(new[] { 1, 3 });
             tokens[0, 0] = 1; tokens[0, 1] = 5; tokens[0, 2] = 2;
             var logits = net.Predict(tokens);
-            Assert.Equal(new[] { 1, 3, vocab }, logits.Shape);
+            Assert.Equal(new[] { 1, 3, vocab }, logits.Shape.ToArray());
         }
 
         [Fact]
@@ -262,7 +262,7 @@ namespace AiDotNet.Tests.ModelLoading
 
             var tokens = new Tensor<double>(new[] { 1, 2 });
             tokens[0, 0] = 1; tokens[0, 1] = 3;
-            Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape);
+            Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape.ToArray());
 
             // (1 + weight) RMSNorm: the block's pre-attention gamma is the loaded weight + 1.
             var block = Assert.IsType<PreLNTransformerBlock<double>>(net.Layers[1]);
@@ -315,7 +315,7 @@ namespace AiDotNet.Tests.ModelLoading
             var net = LlamaModelBuilder<double>.Build(config, fused);
             var tokens = new Tensor<double>(new[] { 1, 2 });
             tokens[0, 0] = 0; tokens[0, 1] = 5;
-            Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape);
+            Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape.ToArray());
         }
 
         [Fact]
@@ -356,7 +356,7 @@ namespace AiDotNet.Tests.ModelLoading
 
             var tokens = new Tensor<double>(new[] { 1, 3 });
             tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
-            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape.ToArray());
 
             var block = Assert.IsType<MoEDecoderBlock<double>>(net.Layers[1]);
             Assert.Equal(4, block.Moe.NumExperts);
@@ -452,7 +452,7 @@ namespace AiDotNet.Tests.ModelLoading
             var tokens = new Tensor<double>(new[] { 1, 3 });
             tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
             var logits = net.Predict(tokens);
-            Assert.Equal(new[] { 1, 3, vocab }, logits.Shape);
+            Assert.Equal(new[] { 1, 3, vocab }, logits.Shape.ToArray());
             // Final soft-capping bounds every logit strictly within (-30, 30).
             for (int s = 0; s < 3; s++)
                 for (int vv = 0; vv < vocab; vv++)
@@ -464,6 +464,70 @@ namespace AiDotNet.Tests.ModelLoading
             for (int i = 0; i < h; i++) Assert.Equal(inNorm[i] + 1.0, gamma[i], 9);
 
             Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
+        }
+
+        [Fact]
+        public void Builder_Gemma2_AttnLogitSoftcap_ParsesAndAltersAttention()
+        {
+            // Two Gemma-2 configs identical except attn_logit_softcapping (present vs absent) and with
+            // NO final_logit_softcapping (so the output-logit path is identical between them). The cap
+            // must (1) parse, (2) be threaded by the builder into the attention layer, and (3) actually
+            // flow into the fused SDPA and change the logits; if it were silently dropped the two models
+            // would be byte-identical. A tiny cap is used so it bites the toy model's small scores (the
+            // soft-cap MATH itself is proven in the Tensors GpuCpuConsistency + CPU unit tests).
+            const string body = @"""model_type"": ""gemma2"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""tie_word_embeddings"": true, ""hidden_act"": ""gelu_pytorch_tanh""";
+            var capped = HuggingFaceConfig.Parse(
+                @"{ ""architectures"": [""Gemma2ForCausalLM""], " + body + @", ""attn_logit_softcapping"": 0.001 }");
+            var plain = HuggingFaceConfig.Parse(
+                @"{ ""architectures"": [""Gemma2ForCausalLM""], " + body + @" }");
+            Assert.Equal(0.001, capped.AttnLogitSoftcapping);
+            Assert.Null(plain.AttnLogitSoftcapping);
+
+            int h = 8, ffn = 16, vocab = 6, heads = 2, kvHeads = 2, headDim = 4;
+            var weights = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 61),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 60),
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 62),
+                ["model.layers.0.pre_feedforward_layernorm.weight"] = Fill(h, 63),
+                ["model.layers.0.post_feedforward_layernorm.weight"] = Fill(h, 64),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(heads * headDim * h, 65),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(kvHeads * headDim * h, 66),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(kvHeads * headDim * h, 67),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * heads * headDim, 68),
+                ["model.layers.0.mlp.gate_proj.weight"] = Fill(ffn * h, 69),
+                ["model.layers.0.mlp.up_proj.weight"] = Fill(ffn * h, 70),
+                ["model.layers.0.mlp.down_proj.weight"] = Fill(h * ffn, 71),
+                ["model.norm.weight"] = Fill(h, 72),
+            };
+
+            var cappedNet = Gemma2ModelBuilder<double>.Build(capped, new InMemorySource(weights));
+            var plainNet = Gemma2ModelBuilder<double>.Build(plain, new InMemorySource(weights));
+            Assert.Equal(4, cappedNet.Layers.Count); // embed + block + final norm + lm head (no final softcap)
+
+            // (2) Structural proof the builder threaded config.attn_logit_softcapping into the layer.
+            var cappedAttn = Assert.IsType<GroupedQueryAttentionLayer<double>>(
+                Assert.IsType<Gemma2DecoderBlock<double>>(cappedNet.Layers[1]).AttentionLayer);
+            var plainAttn = Assert.IsType<GroupedQueryAttentionLayer<double>>(
+                Assert.IsType<Gemma2DecoderBlock<double>>(plainNet.Layers[1]).AttentionLayer);
+            Assert.Equal(0.001, cappedAttn.AttnLogitSoftcap);
+            Assert.Equal(0.0, plainAttn.AttnLogitSoftcap);
+
+            // (3) Functional proof the cap flows into the forward and changes the output.
+            var tokens = new Tensor<double>(new[] { 1, 3 });
+            tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+            var cappedLogits = cappedNet.Predict(tokens);
+            var plainLogits = plainNet.Predict(tokens);
+            Assert.Equal(new[] { 1, 3, vocab }, cappedLogits.Shape.ToArray());
+
+            double maxDelta = 0.0;
+            for (int s = 0; s < 3; s++)
+                for (int vv = 0; vv < vocab; vv++)
+                    maxDelta = Math.Max(maxDelta, Math.Abs(cappedLogits[0, s, vv] - plainLogits[0, s, vv]));
+            Assert.True(maxDelta > 1e-6,
+                $"attn_logit_softcapping did not change the attention output (max delta {maxDelta}); the cap was dropped.");
         }
 
         [Fact]
@@ -496,7 +560,7 @@ namespace AiDotNet.Tests.ModelLoading
 
             var tokens = new Tensor<double>(new[] { 1, 3 });
             tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
-            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape.ToArray());
 
             Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
         }
@@ -563,7 +627,7 @@ namespace AiDotNet.Tests.ModelLoading
 
             var tokens = new Tensor<double>(new[] { 1, 3 });
             tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
-            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape.ToArray());
 
             Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
         }
@@ -605,7 +669,7 @@ namespace AiDotNet.Tests.ModelLoading
 
             var tokens = new Tensor<double>(new[] { 1, 2 });
             tokens[0, 0] = 1; tokens[0, 1] = 3;
-            Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape);
+            Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape.ToArray());
         }
 
         [Fact]
@@ -656,7 +720,7 @@ namespace AiDotNet.Tests.ModelLoading
 
             var tokens = new Tensor<double>(new[] { 1, 3 });
             tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
-            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape.ToArray());
 
             Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
         }
@@ -741,7 +805,7 @@ namespace AiDotNet.Tests.ModelLoading
 
             var tokens = new Tensor<double>(new[] { 1, 3 });
             tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
-            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape.ToArray());
 
             Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
         }

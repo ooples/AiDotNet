@@ -44,7 +44,7 @@ namespace AiDotNet.Tests.ModelLoading
                 var tokens = new Tensor<double>(new[] { 1, 3 });
                 tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
                 var logits = net.Predict(tokens);
-                Assert.Equal(new[] { 1, 3, 6 }, logits.Shape);
+                Assert.Equal(new[] { 1, 3, 6 }, logits.Shape.ToArray());
             }
             finally { File.Delete(path); }
         }
@@ -80,7 +80,7 @@ namespace AiDotNet.Tests.ModelLoading
                 var net = Assert.IsType<NeuralNetwork<double>>(model);
                 var tokens = new Tensor<double>(new[] { 1, 2 });
                 tokens[0, 0] = 0; tokens[0, 1] = 3;
-                Assert.Equal(new[] { 1, 2, 6 }, net.Predict(tokens).Shape);
+                Assert.Equal(new[] { 1, 2, 6 }, net.Predict(tokens).Shape.ToArray());
             }
             finally { File.Delete(path); }
         }

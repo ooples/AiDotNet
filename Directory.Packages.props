@@ -248,8 +248,15 @@
          PersistentInputRegistry}; the src/Training mirror classes stay as the consumer-side primitives
          (the fused-primitive centralization in #1847/#1848 wires every consumer through them) and now
          run against the fixed engine. 0.113.0 is PUBLISHED to NuGet and is a superset of 0.112.0 (also
-         carries #765 compiled-ReduceMax axis fill), so all rationale above is retained. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.116.0" />
+         carries #765 compiled-ReduceMax axis fill), so all rationale above is retained.
+
+         Bumped 0.116.0 -> 0.117.0: brings AiDotNet.Tensors #816 — the optional attention-logit
+         soft-cap on ScaledDotProductAttention (softcap*tanh(scaledScore/softcap) before softmax)
+         implemented across the CPU backend and all six GPU backend kernels. Activates the Gemma-2
+         attn_logit_softcapping path: GroupedQueryAttentionLayer now forwards its soft-cap into the
+         fused SDPA primitive, and Gemma2ModelBuilder wires config.attn_logit_softcapping into it.
+         Default 0 leaves every other SDPA caller byte-identical. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.117.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.114.0" />

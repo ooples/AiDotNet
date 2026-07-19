@@ -56,7 +56,8 @@ public static class Gemma2ModelBuilder<T>
         {
             var attention = new GroupedQueryAttentionLayer<T>(
                 sequenceLength: maxPos, embeddingDimension: hidden, numHeads: numHeads, numKVHeads: numKVHeads,
-                headDimension: explicitHeadDim ? headDim : null);
+                headDimension: explicitHeadDim ? headDim : null,
+                attnLogitSoftcap: config.AttnLogitSoftcapping ?? 0.0);
             attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, config.RopeTheta, maxPos);
 
             var block = new Gemma2DecoderBlock<T>(hidden, intermediate, attention, config.RmsNormEps);
