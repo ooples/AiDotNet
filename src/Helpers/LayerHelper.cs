@@ -30546,6 +30546,16 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDim, gelu);
         yield return new LayerNormalizationLayer<T>(hiddenDim);
 
+        // Convolutional positional embedding (Baevski et al. 2020 §2). Self-attention is position-agnostic,
+        // so wav2vec 2.0 injects RELATIVE position with a convolution over time applied to the transformer
+        // input, added as a residual: x = x + GELU(conv(x)). The paper uses a grouped conv (kernel 128,
+        // groups 16); we use a DEPTHWISE conv (groups = channels) — the same relative-positional-conv
+        // mechanism, parameter-efficient (channels*K weights, not the ~75M of an ungrouped kernel-128 conv
+        // at 768-wide) and built on an existing autodiff-/serialization-tested layer. Odd kernel 127 with
+        // padding 63 is exact "same" padding so T is preserved and the residual add in RunModel is
+        // shape-safe. GELU is folded into the conv layer; RunModel does the transpose + residual add.
+        yield return new DepthwiseConv1DLayer<T>(hiddenDim, kernelSize: 127, padding: 63, activation: gelu);
+
         // Transformer encoder: paper-faithful RESIDUAL blocks (Baevski et al. 2020; Vaswani et al. 2017).
         // TransformerEncoderBlock is a Post-LN block = residual self-attention + residual GELU-FFN with a
         // LayerNorm after each sublayer. The residual connections are the gradient highway a 12-deep
