@@ -203,15 +203,14 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
+            // OpenVoice V2 is VITS-based: a 1-D conv encoder + invertible normalizing flow + HiFi-GAN
+            // decoder (Qin et al. 2023, §Approach), NOT a transformer stack. See
+            // LayerHelper.CreateDefaultOpenVoiceV2Layers. specChannels matches the model's MelChannels.
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVoiceCloningLayers(
-                    _options.SpeakerEmbeddingDim,
-                    _options.EncoderDim,
-                    _options.DecoderDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
+                LayerHelper<T>.CreateDefaultOpenVoiceV2Layers(
+                    specChannels: base.MelChannels,
+                    hiddenDim: _options.DecoderDim,
+                    numFlowBlocks: _options.NumEncoderLayers
                 )
             );
     }

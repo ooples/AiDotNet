@@ -687,6 +687,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // probe overran the gate at <double>; <float> halves the per-step recurrent-update compute while
         // preserving the self-relative training invariants, paired with the HeavyTrainingTimeout cap below.
         "SEARAFT",
+        // MetaVoice-1B (metavoiceio/metavoice-src): 1.2B-transformer voice cloner (residual
+        // TransformerEncoder stack). <float> halves the per-step cost of its multi-block 256-dim
+        // encoder+decoder; paired with the HeavyTrainingTimeout MoreData cap below (same float+cap
+        // combination as the other heavy transformer models).
+        "MetaVoice1B",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -764,6 +769,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // other training invariants running; the OpticalFlow family branch emits no iteration overrides so
         // this fires exactly once. Same float + cap combination as RAFT above.
         "SEARAFT",
+        // MetaVoice-1B (metavoiceio/metavoice-src): 1.2B-transformer voice cloner whose layer chain is a
+        // residual TransformerEncoder stack (CreateDefaultVoiceCloningLayers). The 50+200-iter MoreData
+        // probe over the multi-block 256-dim encoder+decoder overran the 120 s gate. The universal
+        // smoke-cap trims MoreData (1+2 iters) and keeps the other training invariants running.
+        "MetaVoice1B",
         // ViT-family encoders (Dosovitskiy et al. 2021) sharing CreateDefaultViTLayers. Restoring the
         // paper's residual transformer blocks (TransformerEncoderLayer) fixed their correctness
         // failures (DifferentInputs collapse / GradientFlow / Clone) but the 12-layer residual
@@ -2615,6 +2625,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions { TextEncoderDim = 32, " +
                     "LLMDim = 32, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 2, CodebookSize = 16 })";
+            }
+            else if (model.ClassName == "OpenVoiceV2" && model.TypeParameterCount == 1)
+            {
+                // OpenVoice V2 (VITS) builds a 1-D conv encoder + normalizing flow + HiFi-GAN decoder
+                // whose first conv declares explicit input channels, so shape resolution propagates from
+                // that layer and the architecture dims are not load-bearing. A 1-D architecture keeps the
+                // base happy; the rank-3 [1, 80, 16] test input is set via the InputShape override.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1280, outputSize: 32))";
+            }
+            else if (IsVoiceCloningTTS(model.ClassName) && model.TypeParameterCount == 1)
+            {
+                // MetaVoice-1B (transformer LLM voice cloner) builds its layer chain from options
+                // (speaker-embedding dim = 256) and consumes [seq, 256] embedding sequences — see the
+                // matching InputShape override. The generic fallback architecture (inputWidth = 32) makes
+                // the base's construction-time lazy-shape resolution size the first LayerNorm to 32, which
+                // then mismatches the [8, 256] test input at forward time ("Gamma shape (32) does not
+                // match ... input shape (8, 256)"). Build a 2-D architecture whose input matches [8, 256]
+                // so the lazy LayerNorms resolve to 256 up front.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 8, inputWidth: 256, inputDepth: 1, outputSize: 4))";
             }
             else if (model.ClassName == "AnimateDiff" && model.TypeParameterCount == 1)
             {
@@ -4647,16 +4682,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // The IsTextToMelTTS class-list keeps the vocoder default
             // working while routing the text-input models to a paper-
             // faithful token-ID input shape.
-            if (IsVoiceCloningTTS(model.ClassName))
+            if (model.ClassName == "OpenVoiceV2")
             {
-                // Voice-cloning models (MetaVoice1B, OpenVoiceV2) build their
-                // layer chain via CreateDefaultVoiceCloningLayers, whose first
-                // real layer is MultiHeadAttention(speakerEmbeddingDim = 256).
-                // They consume speaker/text embedding sequences [seq, 256], not
-                // mel-spectrograms, so the vocoder default [8, 80] trips
-                // `Input embedding dimension (80) does not match weight
-                // dimension (256)`. Emit the embedding-sequence shape so the
-                // encoder→speaker-projection→decoder chain actually runs.
+                // OpenVoice V2 is VITS-based (Qin et al. 2023): a 1-D conv encoder + invertible
+                // normalizing flow + HiFi-GAN transposed-conv decoder (CreateDefaultOpenVoiceV2Layers),
+                // operating on channels-first rank-3 [B, specChannels=80, T] spectra. The decoder
+                // upsamples T by 2 (16 -> 32) and projects to a single waveform channel, so a
+                // [1, 80, 16] spectrum -> [1, 1, 32] waveform.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 16 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 32 };");
+            }
+            else if (IsVoiceCloningTTS(model.ClassName))
+            {
+                // MetaVoice-1B is a 1.2B transformer LLM voice cloner; its layer chain
+                // (CreateDefaultVoiceCloningLayers) is a residual transformer whose first real layer is
+                // MultiHeadAttention(speakerEmbeddingDim = 256). It consumes speaker/text embedding
+                // sequences [seq, 256], not mel-spectrograms, so the vocoder default [8, 80] trips
+                // `Input embedding dimension (80) does not match weight dimension (256)`. Emit the
+                // embedding-sequence shape so the encoder→projection→decoder chain actually runs.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 8, 256 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 256 };");
             }
