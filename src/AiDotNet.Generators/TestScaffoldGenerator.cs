@@ -672,6 +672,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // architecture at reduced width/depth. (The failing ModelFamily model is the
         // TextToSpeech.CodecBased.FishSpeech.)
         "FishSpeech",
+        // VoiceCraft (Peng et al., 2024 — arXiv:2403.16973): codec-based LLM-TTS in the SAME
+        // foundation family as FishSpeech/Qwen2Audio. Defaults to LLMDim 1024, 12 LLM layers, and an
+        // 8×1024 codebook output projection (NumCodebooks*CodebookSize = 8192 wide) — its training
+        // OOM-crashes the 16 GB runner at <double> (verified: LossStrictlyDecreases threw
+        // OutOfMemoryException in Adam8BitOptimizer.Step). Float FIRST halves the footprint; as with its
+        // measured-insufficient siblings FishSpeech/Qwen2Audio, float alone is not enough at foundation
+        // width, so a CI-smoke constructorExpr (below) rebuilds the same architecture at reduced
+        // width/depth. (The failing ModelFamily model is the TextToSpeech.CodecBased.VoiceCraft, not the
+        // Audio.Generation namesake.)
+        "VoiceCraft",
+        // SEA-RAFT (Wang et al., 2024 — arXiv:2405.14793): rigid-motion optical-flow refinement, the
+        // recurrent-GRU-update sibling of RAFT (already floated above). Its 50+200-iteration MoreData
+        // probe overran the gate at <double>; <float> halves the per-step recurrent-update compute while
+        // preserving the self-relative training invariants, paired with the HeavyTrainingTimeout cap below.
+        "SEARAFT",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -743,6 +758,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // invariants running on CI; the OpticalFlow family branch emits no iteration overrides so this
         // fires exactly once.
         "RAFT",
+        // SEA-RAFT (Wang et al. 2024): rigid-motion optical-flow refinement, RAFT's recurrent-GRU sibling.
+        // Same O(pixels^2) correlation cost, so even at <float> (Fp32TestClassNames) the 50+200-iter
+        // MoreData probe overran 120 s. The universal smoke-cap trims MoreData (1+2 iters) and keeps the
+        // other training invariants running; the OpticalFlow family branch emits no iteration overrides so
+        // this fires exactly once. Same float + cap combination as RAFT above.
+        "SEARAFT",
         // ViT-family encoders (Dosovitskiy et al. 2021) sharing CreateDefaultViTLayers. Restoring the
         // paper's residual transformer blocks (TransformerEncoderLayer) fixed their correctness
         // failures (DifferentInputs collapse / GradientFlow / Clone) but the 12-layer residual
@@ -2575,6 +2596,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.TextToSpeech.CodecBased.FishSpeechOptions { LLMDim = 32, " +
                     "NumLLMLayers = 1, NumCodebooks = 2, CodebookSize = 16, NumGroups = 1 })";
+            }
+            else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1 && typeName.Contains("CodecBased"))
+            {
+                // VoiceCraft (Peng et al., 2024 — arXiv:2403.16973) codec-based LLM-TTS defaults to a
+                // foundation-scale codec-LM: TextEncoderDim 512, LLMDim 1024, 12 LLM layers, 8 heads, and
+                // an 8×1024 codebook (NumCodebooks*CodebookSize = 8192-wide output projection). Its training
+                // OOM-crashes the 16 GB runner at <double>, and — like its siblings FishSpeech/Qwen2Audio —
+                // float alone is insufficient at that width. Build the SAME architecture (text encoder ->
+                // semantic LLM -> codec heads) at CI-smoke width/depth via a small VoiceCraftOptions; only
+                // the scale shrinks (InitializeLayers reads these dims). Floatified to <float> by the
+                // generator since VoiceCraft is in Fp32TestClassNames. (Gated on CodecBased so it targets
+                // the failing TextToSpeech.CodecBased.VoiceCraft, not the Audio.Generation namesake.)
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions { TextEncoderDim = 32, " +
+                    "LLMDim = 32, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 2, CodebookSize = 16 })";
             }
             else if (model.ClassName == "AnimateDiff" && model.TypeParameterCount == 1)
             {
