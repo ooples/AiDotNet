@@ -26,7 +26,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// </para>
 /// </summary>
 /// <typeparam name="T">Element type — <c>float</c> (GPU) or <c>double</c> (CPU/accuracy).</typeparam>
-public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
+public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
 {
     private readonly int _tradableCount;
     private readonly IPortfolioReward _reward;
@@ -64,12 +64,8 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
         : base(BuildTensor(assetPrices, featureColumns), windowSize, FromDouble(initialCapital), transactionCost,
                allowShortSelling, randomStart: false, maxEpisodeLength: 0, seed: seed)
     {
-        ArgumentNullException.ThrowIfNull(assetPrices);
-        if (assetPrices.Count == 0)
-        {
-            throw new ArgumentException("At least one tradable asset is required.", nameof(assetPrices));
-        }
-
+        // assetPrices is already validated (non-null, non-empty, equal-length series) by BuildTensor, which
+        // runs in the base(...) initializer above before this body.
         _tradableCount = assetPrices.Count;
         _reward = reward ?? throw new ArgumentNullException(nameof(reward));
         _maxLeverage = maxLeverage > 0 ? maxLeverage : throw new ArgumentOutOfRangeException(nameof(maxLeverage));
@@ -92,23 +88,54 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
     private static Tensor<T> BuildTensor(IReadOnlyList<double[]> assetPrices, IReadOnlyList<double[]>? featureColumns)
     {
         ArgumentNullException.ThrowIfNull(assetPrices);
+        if (assetPrices.Count == 0)
+        {
+            throw new ArgumentException("At least one tradable asset series is required.", nameof(assetPrices));
+        }
+
+        if (assetPrices[0] is null || assetPrices[0].Length == 0)
+        {
+            throw new ArgumentException("Asset series must be non-empty.", nameof(assetPrices));
+        }
+
         int n = assetPrices.Count;
         int m = featureColumns?.Count ?? 0;
         int time = assetPrices[0].Length;
+
+        // Every asset and feature series must be present and share the exact time length. Zero-padding a short
+        // or missing series would manufacture prices/signals the model would then trade on, so reject instead.
+        for (int i = 0; i < n; i++)
+        {
+            if (assetPrices[i] is null || assetPrices[i].Length != time)
+            {
+                throw new ArgumentException(
+                    $"All asset series must be non-null and of equal length ({time}); series {i} does not match.",
+                    nameof(assetPrices));
+            }
+        }
+
+        for (int j = 0; j < m; j++)
+        {
+            if (featureColumns![j] is null || featureColumns[j].Length != time)
+            {
+                throw new ArgumentException(
+                    $"All feature series must be non-null and match the asset-series length ({time}); feature {j} does not match.",
+                    nameof(featureColumns));
+            }
+        }
+
         int assets = n + m;
         var data = new T[time * assets];
-
         for (int t = 0; t < time; t++)
         {
             for (int i = 0; i < n; i++)
             {
-                data[(t * assets) + i] = FromDouble(t < assetPrices[i].Length ? assetPrices[i][t] : 0.0);
+                data[(t * assets) + i] = FromDouble(assetPrices[i][t]);
             }
 
             for (int j = 0; j < m; j++)
             {
-                var col = featureColumns![j];
-                data[(t * assets) + n + j] = FromDouble(t < col.Length ? col[t] : 0.0);
+                data[(t * assets) + n + j] = FromDouble(featureColumns![j][t]);
             }
         }
 
@@ -123,6 +150,12 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
     /// </summary>
     protected override void ApplyAction(Vector<T> action, Vector<T> prices)
     {
+        if (action.Length != _tradableCount)
+        {
+            throw new ArgumentException(
+                $"Action length {action.Length} must equal the tradable-asset count {_tradableCount}.", nameof(action));
+        }
+
         double portfolioValue = ToDouble(_portfolioValue);
         if (!(portfolioValue > 0))
         {
@@ -135,7 +168,7 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
         double gross = 0;
         for (int i = 0; i < _tradableCount; i++)
         {
-            double w = i < action.Length ? ToDouble(action[i]) : 0.0;
+            double w = ToDouble(action[i]);
             if (double.IsNaN(w) || double.IsInfinity(w))
             {
                 w = 0.0;
@@ -155,8 +188,9 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
             }
         }
 
-        // Reconcile each position toward its target; accumulate traded notional. Sells first (frees cash),
-        // then buys — same ordering the base env's own portfolio variant uses.
+        // Reconcile each position toward its exact target weight. Sells run first (they free cash), then buys —
+        // so buy sizing sees the cash the sells released. Turnover accumulates the quantity ACTUALLY filled
+        // (ExecuteTrade caps a buy to available cash and clamps a no-short sell), not the requested delta.
         double turnoverNotional = 0;
         for (int pass = 0; pass < 2; pass++)
         {
@@ -168,8 +202,7 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
                     continue;
                 }
 
-                // 0.98 headroom leaves room for transaction cost so a full-weight buy isn't rejected for cash.
-                double desiredUnits = 0.98 * weights[i] * (portfolioValue / price);
+                double desiredUnits = weights[i] * (portfolioValue / price);
                 if (double.IsNaN(desiredUnits) || double.IsInfinity(desiredUnits))
                 {
                     continue;
@@ -182,18 +215,40 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
                     continue; // pass 0 = sells, pass 1 = buys
                 }
 
-                turnoverNotional += Math.Abs(delta) * price;
+                if (!isSell)
+                {
+                    // Cost-aware fill: a buy can only draw the cash on hand after the transaction and slippage
+                    // charges it will incur, so cap the increase to what cash affords rather than reserving a
+                    // fixed headroom fraction. This also keeps ExecuteTrade (which checks cash before filling)
+                    // from silently rejecting the whole order.
+                    double unitCost = price * (1.0 + TransactionCost + _slippageCoefficient);
+                    double affordable = unitCost > 0 ? ToDouble(_cash) / unitCost : 0.0;
+                    if (delta > affordable)
+                    {
+                        delta = affordable;
+                    }
+
+                    if (delta <= 0)
+                    {
+                        continue;
+                    }
+                }
+
+                double before = ToDouble(_positions[i]);
                 ExecuteTrade(i, FromDouble(delta), prices[i]);
+                double filled = ToDouble(_positions[i]) - before;
+                turnoverNotional += Math.Abs(filled) * price;
             }
         }
 
         _lastTurnover = turnoverNotional / portfolioValue;
 
-        // Post-trade exposures (tradable assets only).
-        double grossNotional = 0, shortNotional = 0;
+        // Post-trade positions marked at current prices.
+        double grossNotional = 0, shortNotional = 0, positionValue = 0;
         for (int i = 0; i < _tradableCount; i++)
         {
             double notional = ToDouble(_positions[i]) * ToDouble(prices[i]);
+            positionValue += notional;
             grossNotional += Math.Abs(notional);
             if (notional < 0)
             {
@@ -201,18 +256,28 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
             }
         }
 
-        _grossExposure = grossNotional / portfolioValue;
-        _shortExposure = shortNotional / portfolioValue;
-
-        // Financing frictions deducted from cash so portfolio value reflects true costs: turnover-proportional
-        // slippage + short-borrow + gross carry. (The per-trade transaction cost is already applied inside
-        // ExecuteTrade.)
+        // Financing frictions are deducted from cash FIRST — turnover-proportional slippage + short-borrow +
+        // gross carry (the per-trade transaction cost is already applied inside ExecuteTrade) — THEN exposures
+        // are taken against the resulting post-cost NAV, so the cached ratios and the reward context reflect
+        // every cost rather than the pre-cost book.
         double financing = (_slippageCoefficient * turnoverNotional)
                            + (_borrowCostPerStep * shortNotional)
                            + (_holdingCostPerStep * grossNotional);
         if (financing > 0 && double.IsFinite(financing))
         {
             _cash = FromDouble(ToDouble(_cash) - financing);
+        }
+
+        double nav = ToDouble(_cash) + positionValue;
+        if (nav > 0 && double.IsFinite(nav))
+        {
+            _grossExposure = grossNotional / nav;
+            _shortExposure = shortNotional / nav;
+        }
+        else
+        {
+            _grossExposure = 0;
+            _shortExposure = 0;
         }
     }
 
@@ -245,6 +310,10 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
 
     /// <summary>Gross exposure after the most recent step (sum |position notional| / value).</summary>
     public double GrossExposure => _grossExposure;
+
+    /// <summary>Current portfolio value (cash + marked positions). Equals the initial capital right after
+    /// <see cref="TradingEnvironment{T}.Reset"/>, before any step — the pre-trade baseline a backtest seeds with.</summary>
+    public double CurrentValue => ToDouble(_portfolioValue);
 
     /// <summary>
     /// Resets the per-episode reward statistics and drawdown peak. Call after <see cref="TradingEnvironment{T}.Reset"/>

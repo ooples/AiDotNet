@@ -150,6 +150,24 @@ public static class PortfolioExperimentRunner
         ArgumentNullException.ThrowIfNull(experiments);
         ArgumentNullException.ThrowIfNull(agentFactory);
 
+        // Train and holdout must share the same observation schema — same tradable-asset count and the same
+        // number of feature columns — or the agent trained on one cannot be evaluated on the other.
+        if (trainAssetPrices.Count != holdoutAssetPrices.Count)
+        {
+            throw new ArgumentException(
+                $"Train and holdout must have the same number of tradable assets ({trainAssetPrices.Count} vs {holdoutAssetPrices.Count}).",
+                nameof(holdoutAssetPrices));
+        }
+
+        int trainFeatures = trainFeatureColumns?.Count ?? 0;
+        int holdoutFeatures = holdoutFeatureColumns?.Count ?? 0;
+        if (trainFeatures != holdoutFeatures)
+        {
+            throw new ArgumentException(
+                $"Train and holdout must have the same number of feature columns ({trainFeatures} vs {holdoutFeatures}).",
+                nameof(holdoutFeatureColumns));
+        }
+
         int tradableCount = holdoutAssetPrices.Count;
         var outcomes = new List<PortfolioExperimentOutcome>(experiments.Count);
 
@@ -161,7 +179,10 @@ public static class PortfolioExperimentRunner
             var agent = agentFactory(trainEnv.ObservationSpaceDimension, trainEnv.ActionSpaceSize);
             PortfolioAgentTrainer.Train(agent, trainEnv, trainEpisodes);
 
-            // Evaluate the trained agent on the untouched holdout (greedy — no exploration).
+            // Evaluate the trained agent on the untouched holdout (greedy — no exploration). Reset the agent's
+            // per-episode state first so a recurrent policy starts the holdout with a clean hidden state rather
+            // than one carried over from the last training step.
+            agent.ResetEpisode();
             var agentEnv = experiment.BuildEnvironment<T>(holdoutAssetPrices, holdoutFeatureColumns, windowSize, initialCapital);
             var agentResult = PortfolioBacktest.Run(agentEnv, s => agent.SelectAction(s, explore: false));
 

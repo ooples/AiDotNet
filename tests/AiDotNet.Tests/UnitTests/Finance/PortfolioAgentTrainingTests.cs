@@ -61,7 +61,8 @@ public sealed class PortfolioAgentTrainingTests
         double meanReturn = PortfolioAgentTrainer.Train(agent, env, episodes: 3);
 
         Assert.Equal(3, agent.ResetCalls);                     // one reset per episode
-        Assert.True(agent.SelectCalls > 0);                    // stepped
+        // 30 observations with a window of 5 → 25 steps per episode → 75 across 3 episodes.
+        Assert.Equal(75, agent.SelectCalls);
         Assert.Equal(agent.SelectCalls, agent.StoreCalls);     // one transition stored per action
         Assert.Equal(agent.SelectCalls, agent.TrainCalls);     // learned each step
         Assert.True(double.IsFinite(meanReturn));
@@ -69,27 +70,37 @@ public sealed class PortfolioAgentTrainingTests
 
     [Fact]
     [Trait("category", "unit")]
-    public void Experiment_runner_flags_an_agent_that_beats_the_baseline_on_holdout()
+    public void Experiment_runner_ranks_by_holdout_sharpe_and_flags_beat_baseline_per_experiment()
     {
-        // Holdout: asset 0 rises steadily, asset 1 DECLINES. An agent concentrated in the riser must beat the
-        // equal-weight baseline on Sharpe — the baseline holds half its book in the decliner, which both lowers
-        // return and adds variance, dragging its risk-adjusted score below the pure-riser agent's.
+        // Holdout: asset 0 rises steadily, asset 1 DECLINES. The two experiments get DISTINGUISHABLE policies
+        // (assigned by the factory call order the runner iterates in): the first concentrates in the riser
+        // (positive Sharpe, beats the equal-weight baseline), the second holds only the decliner (negative
+        // Sharpe, loses to it). That makes both the ranking and the per-experiment beat-baseline flags
+        // non-vacuous — a single shared policy would give both experiments identical holdout metrics.
         var holdoutPrices = new List<double[]> { Ramp(100, 3, 50), Ramp(100, -1, 50) };
         var trainPrices = new List<double[]> { Ramp(100, 2, 50), Ramp(100, -0.8, 50) };
         var experiments = new List<PortfolioExperiment>
         {
-            new("total-return", new TotalReturnReward()),
-            new("diff-sharpe", new DifferentialSharpeReward()),
+            new("riser", new TotalReturnReward()),
+            new("decliner", new DifferentialSharpeReward()),
         };
 
+        int call = 0;
         var outcomes = PortfolioExperimentRunner.Run<double>(
             trainPrices, null, holdoutPrices, null, windowSize: 5, initialCapital: 100_000,
-            experiments, agentFactory: (_, _) => new FixedWeightAgent(new[] { 1.0, 0.0 }), trainEpisodes: 1);
+            experiments,
+            agentFactory: (_, _) => new FixedWeightAgent(call++ == 0 ? new[] { 1.0, 0.0 } : new[] { 0.0, 1.0 }),
+            trainEpisodes: 1);
 
         Assert.Equal(2, outcomes.Count);
-        Assert.All(outcomes, o => Assert.True(o.BeatBaseline, $"{o.Name}: agent Sharpe {o.Agent.AnnualizedSharpe} vs base {o.BaselineEqualWeight.AnnualizedSharpe}"));
-        // Ranked by holdout Sharpe (descending).
-        Assert.True(outcomes[0].Agent.AnnualizedSharpe >= outcomes[1].Agent.AnnualizedSharpe);
+        // Ranked by holdout Sharpe (descending) — the riser experiment must come first, by exact name.
+        Assert.Equal("riser", outcomes[0].Name);
+        Assert.Equal("decliner", outcomes[1].Name);
+        Assert.True(outcomes[0].Agent.AnnualizedSharpe > outcomes[1].Agent.AnnualizedSharpe,
+            $"riser Sharpe {outcomes[0].Agent.AnnualizedSharpe} should exceed decliner {outcomes[1].Agent.AnnualizedSharpe}");
+        // The riser beats the equal-weight baseline; the pure-decliner does not.
+        Assert.True(outcomes[0].BeatBaseline, $"riser should beat baseline: {outcomes[0].Agent.AnnualizedSharpe} vs {outcomes[0].BaselineEqualWeight.AnnualizedSharpe}");
+        Assert.False(outcomes[1].BeatBaseline, $"decliner should not beat baseline: {outcomes[1].Agent.AnnualizedSharpe} vs {outcomes[1].BaselineEqualWeight.AnnualizedSharpe}");
     }
 
     [Fact]

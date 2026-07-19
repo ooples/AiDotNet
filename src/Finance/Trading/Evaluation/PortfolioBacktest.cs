@@ -46,7 +46,9 @@ public static class PortfolioBacktest
         environment.ResetEpisodeState();
         var state = environment.Reset();
 
-        var values = new List<double>();
+        // Seed with the pre-trade baseline (initial capital) so total return, Sharpe, and drawdown all include
+        // the very first step's move rather than starting the series one step in.
+        var values = new List<double> { environment.CurrentValue };
         double turnoverSum = 0;
         int steps = 0;
         bool done = false;
