@@ -20050,22 +20050,17 @@ public static class LayerHelper<T>
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // --- Transformer Encoder ---
-        // N layers of multi-head self-attention + feed-forward with layer normalization.
+        // N paper-faithful RESIDUAL blocks (Baevski et al. 2020 / Vaswani et al. 2017). The previous
+        // stack emitted bare MHA + LayerNorm + FFN + LayerNorm with NO residual/skip connection, so a
+        // 12-deep encoder had no gradient highway and collapsed toward a uniform, input-insensitive
+        // output — the exact failure master #1838 fixed across the BERT/ASR factories by switching to
+        // TransformerEncoderBlock<T> (Post-LN: residual MHA + residual GELU-FFN + per-sublayer LayerNorm).
+        // One block per layer; the wav2vec-2/HuBERT/WavLM foundation models walk Layers linearly, so a
+        // block is a single Forward. NOTE: these models count encoder layers via
+        // `is TransformerEncoderBlock<T>` (was `is MultiHeadAttentionLayer<T>`) — keep in sync.
         for (int i = 0; i < numLayers; i++)
         {
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
-
-            yield return new LayerNormalizationLayer<T>();
-
-            // Position-wise feed-forward network
-            yield return new DenseLayer<T>(feedForwardDim, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(hiddenDim, numAttentionHeads, feedForwardDim, dropoutRate, geluActivation);
         }
     }
 

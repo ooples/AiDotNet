@@ -140,7 +140,7 @@ public class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         foreach (var l in Layers)
         {
             c = l.Forward(c);
-            if (l is MultiHeadAttentionLayer<T>) { if (currentLayer == targetLayer) return c; currentLayer++; }
+            if (l is TransformerEncoderBlock<T>) { if (currentLayer == targetLayer) return c; currentLayer++; }
         }
         return c;
     }
@@ -162,7 +162,7 @@ public class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         foreach (var l in Layers)
         {
             c = l.Forward(c);
-            if (l is MultiHeadAttentionLayer<T>) layerOutputs.Add(c);
+            if (l is TransformerEncoderBlock<T>) layerOutputs.Add(c);
         }
 
         if (layerOutputs.Count == 0) return c;
