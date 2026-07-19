@@ -123,10 +123,13 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             seed: null);
-        // Sub-model Clone()s can land a float32 weight ~1 ULP off (re-init/round-trip), so clone output
-        // may differ from the original by ~1 ULP. That is inherent cross-instance FP-order variance, not
-        // a correctness bug; the Clone_ShouldProduceIdenticalOutput contract compares with a PyTorch-style
-        // dtype-aware tolerance, so no bit-exact SetParameters copy is needed here.
+        // Sub-model Clone()s re-init/round-trip weights, landing each a few ULPs off; the diffusion
+        // sampler then COMPOUNDS those per-weight ULP diffs across its denoising steps into a ~2-3e-5
+        // output divergence that straddles the Clone_ShouldProduceIdenticalOutput tolerance (flaky:
+        // passes or fails depending on FP-reduction order). Copy this instance's EXACT parameter vector
+        // into the rebuilt clone so its weights are bit-identical (the fast COW path above is already
+        // bit-exact; this makes the rebuild path match it), giving a deterministic identical output.
+        rebuilt.SetParameters(GetParameters());
         return rebuilt;
     }
 
