@@ -41,7 +41,6 @@ public class SpyNetLayer<T> : LayerBase<T>
 {
     #region Fields
 
-    private readonly IEngine _engine;
     private readonly int _numLevels;
     // Non-readonly: lazy ctor leaves these = -1 until OnFirstForward.
     private int _inputChannels;
@@ -71,10 +70,8 @@ public class SpyNetLayer<T> : LayerBase<T>
     /// <param name="inputWidth">Width of input frames.</param>
     /// <param name="inputChannels">Number of input channels (typically 3 for RGB).</param>
     /// <param name="numLevels">Number of pyramid levels (default: 5).</param>
-    /// <param name="engine">Optional computation engine (CPU or GPU). If null, uses default CPU engine.</param>
     public SpyNetLayer(
-        int numLevels = 5,
-        IEngine? engine = null)
+        int numLevels = 5)
         : base([-1, -1, -1], [2, -1, -1])
     {
         // Reject numLevels <= 0 at construction. The pyramid loop below
@@ -88,7 +85,6 @@ public class SpyNetLayer<T> : LayerBase<T>
                 nameof(numLevels),
                 $"SpyNetLayer requires numLevels >= 1; got {numLevels}.");
 
-        _engine = engine ?? new CpuEngine();
         _inputHeight = -1; // resolved in OnFirstForward
         _inputWidth = -1;  // resolved in OnFirstForward
         _inputChannels = -1; // resolved in OnFirstForward (single-frame channels)
@@ -838,19 +834,16 @@ public class SpyNetLayer<T> : LayerBase<T>
             }
         }
 
-        // Engine.GridSample is NHWC: it reads its input as [batch, H, W, C] and its grid as
-        // [batch, outH, outW, 2] (every other caller — RIFE / FILM / UPRNet / SpatialTransformer —
-        // passes NHWC). SpyNet works in channels-first [C, H, W], so convert to NHWC for the sample
-        // and convert the warped result back. Passing the raw NCHW [1, C, H, W] made GridSample
-        // interpret it as [batch=1, H=C, W=H, channels=W], silently relabelling channels — e.g. a
-        // 3-channel frame warped into a 2-"channel" tensor at the coarse 2×2 pyramid level, so
-        // ConcatenateForModule (which copies `channels` planes from `warped2` using img1's channel
-        // count) read past its end → IndexOutOfRange. (#1789 BasicVSR++ / SpyNet; the grid is already
-        // in GridSample's [B, outH, outW, 2] layout so only the image layout was wrong.)
+        // Engine.GridSample is NCHW (PyTorch F.grid_sample convention, standardized in Tensors #777):
+        // input [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. SpyNet
+        // already works in channels-first [C, H, W], so pass the NCHW image directly — no permute. (An
+        // earlier revision permuted to NHWC because the engine was NHWC at the time; that flipped after
+        // #777, so the permute became backwards: it re-labelled the image's H dim as "channels", warping
+        // a 3-channel frame into a 2-"channel" tensor at the coarse 2×2 pyramid level, which made
+        // ConcatenateForModule read past its end → IndexOutOfRange. The grid is already in GridSample's
+        // [B, outH, outW, 2] layout with align-corners normalization, so it needs no change.)
         var image4D = hasBatch ? image : image.Reshape(new[] { 1, channels, height, width });
-        var imageNHWC = _engine.TensorPermute(image4D, new[] { 0, 2, 3, 1 });     // [B, H, W, C]
-        var warpedNHWC = _engine.GridSample(imageNHWC, grid);                     // [B, H, W, C]
-        var warped = _engine.TensorPermute(warpedNHWC, new[] { 0, 3, 1, 2 });     // [B, C, H, W]
+        var warped = Engine.GridSample(image4D, grid);                           // [B, C, H, W]
 
         // Remove batch dimension if input didn't have it.
         if (!hasBatch && warped.Rank == 4)

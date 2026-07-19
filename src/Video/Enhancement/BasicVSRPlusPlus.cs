@@ -745,12 +745,11 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         // Sampling grid in GridSample's [batch, H, W, 2] normalized-coordinate layout.
         var grid = BuildFlowGrid(flow, height, width);
 
-        // Engine.GridSample is NHWC (every caller — SPyNet / RIFE / FILM / UPRNet —
-        // permutes into [batch, H, W, C] first); convert, sample, and convert back.
+        // Engine.GridSample is NCHW (PyTorch F.grid_sample convention, Tensors #777): input
+        // [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. Features
+        // are already channels-first, so pass them directly — no permute.
         var feature4D = hasBatch ? feature : Engine.TensorExpandDims(feature, 0);
-        var featureNHWC = Engine.TensorPermute(feature4D, new[] { 0, 2, 3, 1 });
-        var warpedNHWC = Engine.GridSample(featureNHWC, grid);
-        var warped = Engine.TensorPermute(warpedNHWC, new[] { 0, 3, 1, 2 });
+        var warped = Engine.GridSample(feature4D, grid);
 
         return hasBatch ? warped : Engine.TensorSqueeze(warped, axis: 0);
     }
