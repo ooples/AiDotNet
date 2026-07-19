@@ -260,9 +260,16 @@ public class SpyNetLayer<T> : LayerBase<T>
         _cachedPyramid1.AddRange(pyramid1);
         _cachedPyramid2.AddRange(pyramid2);
 
-        // Initialize flow at coarsest level (zeros)
-        int coarseH = height >> (_numLevels - 1);
-        int coarseW = width >> (_numLevels - 1);
+        // Initialize flow at the coarsest level (zeros). Size it from the ACTUAL coarsest pyramid
+        // level rather than `height >> (_numLevels - 1)`: BuildPyramid's per-level halving rounds
+        // (e.g. ceil / floor of odd dims) independently of the shift, so the two can disagree by a
+        // pixel — leaving the initial flow mismatched with img1/img2 at the coarsest level and
+        // overrunning the warp/concat buffers (IndexOutOfRange in ConcatenateForModule on the
+        // BasicVSR++ second-order alignment path). Deriving from the pyramid keeps flow, img1 and
+        // warped2 exactly aligned at every level (finer levels already upsample flow to levelH/levelW).
+        var coarsestLevel = pyramid1[_numLevels - 1];
+        int coarseH = hasBatch ? coarsestLevel.Shape[2] : coarsestLevel.Shape[1];
+        int coarseW = hasBatch ? coarsestLevel.Shape[3] : coarsestLevel.Shape[2];
         var flowShape = hasBatch ? new[] { batch, 2, coarseH, coarseW } : new[] { 2, coarseH, coarseW };
         var flow = new Tensor<T>(flowShape);
 
