@@ -48,6 +48,11 @@ public static class PretrainedArchitectures<T>
         DecoderFactory mixtral = (config, weights) => MoEModelBuilder<T>.Build(config, weights);
         foreach (var name in MoEModelBuilder<T>.SupportedArchitectures)
             Registry[name] = mixtral;
+
+        // Gemma-2: sandwiched dual RMSNorms + GeGLU + (1+w) norm + embed scale + final-logit soft-capping.
+        DecoderFactory gemma2 = (config, weights) => Gemma2ModelBuilder<T>.Build(config, weights);
+        foreach (var name in Gemma2ModelBuilder<T>.SupportedArchitectures)
+            Registry[name] = gemma2;
     }
 
     /// <summary>Registers (or replaces) the factory for an architecture / model-type name.</summary>
