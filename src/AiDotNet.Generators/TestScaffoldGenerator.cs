@@ -692,6 +692,43 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // encoder+decoder; paired with the HeavyTrainingTimeout MoreData cap below (same float+cap
         // combination as the other heavy transformer models).
         "MetaVoice1B",
+        // --- #1789 green-shard sweep: three more genuine <double> training TIMEOUTS (not assertion
+        // failures) surfaced once training became a real tape+Adam step. Each model is correct at a
+        // single forward but blows the 180 s per-test gate under the multi-iteration training/clone
+        // invariants; <float> halves per-step compute + tape/activation footprint while preserving the
+        // paper architecture and the self-relative invariants. Their family bases are already generic
+        // over T (AudioNN / NeuralNetwork), so the floatify rewrite compiles. ---
+        // Chirp3 (Google USM-scale multilingual ASR): a deep Conformer-class encoder over long audio —
+        // same deep-ASR footprint as the Conformer/CTC family already floated above; its Generated A-C
+        // training invariants timed out at <double>.
+        "Chirp3",
+        // DAGMANonlinear (NOTEARS/DAG-GNN-style nonlinear causal discovery via continuous optimization):
+        // a per-node MLP stack trained by an iterative augmented-Lagrangian loop with an acyclicity
+        // constraint — many inner optimization steps per outer iteration, so the <double> Generated D-F
+        // training invariants overran the gate. (DistilWhisper, the other D-F heavy model, is already
+        // floated above.)
+        "DAGMANonlinear",
+        // SALM (NVIDIA Speech-Augmented Language Model): a Conformer/audio encoder + LLM adapter —
+        // foundation-scale audio-LM whose <double> Generated Q-S training invariants timed out. Audio
+        // family, so <float> also picks up the audio-branch smoke-iteration cap.
+        "SALM",
+        // --- #1789 green-shard sweep: Generated T-Z <double> training TIMEOUTS (not assertion failures);
+        // each is correct at a single forward but overran the 120/180 s per-test gate under the
+        // multi-iteration training invariants. <float> halves per-step compute + tape/activation footprint
+        // while preserving the paper architecture and the self-relative invariants. ---
+        // VideoFlow (video optical-flow net): iterative per-frame-pair flow refinement — same heavy
+        // iterative-flow profile as RAFT/DPFlow already floated above; its MoreData probe timed out.
+        "VideoFlow",
+        // TabDPTNetwork (tabular deep prior-fitted transformer): an in-context transformer over the full
+        // support set, so each training step attends over many rows — the MoreData invariant overran the gate.
+        "TabDPTNetwork",
+        // Zamba2LanguageModel (hybrid Mamba/attention LLM): deep SSM+attention decoder whose <double>
+        // MoreData and LossStrictlyDecreasesOnMemorizationTask invariants timed out (120 s / 180 s).
+        "Zamba2LanguageModel",
+        // ViTAdapter (Chen et al. 2023, dense-prediction ViT adapter): full ViT backbone + spatial-prior
+        // adapter — every training invariant (Training_ShouldReduceLoss, TrainingError, MoreData,
+        // LossStrictlyDecreases) overran the gate at <double>. Segmentation family, base is generic over T.
+        "ViTAdapter",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -5155,6 +5192,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // any standard vocab size).
             if (isLang)
             {
+                // The scaffold body is emitted as Tensor<double> and float-rewritten as a whole when this
+                // model is in Fp32TestClassNames — but GeneratedTestFloatify only converts generic <double>
+                // TYPE-ARGS, never `double` VALUE expressions (rng.NextDouble(), the `double value` param,
+                // (double) casts). Those flow into a Tensor<float> element under float, which is a narrowing
+                // conversion (CS0266). Cast token/continuous VALUES to the scaffold's element type explicitly
+                // so a floated language model compiles; double scaffolds get an identity (double) cast.
+                string elemCast = useFloat ? "(float)" : "(double)";
                 // Language models are EmbeddingLayer-first: they consume INTEGER token IDs. The base
                 // CreateConstantTensor(0.1)/(0.9) feed a constant continuous tensor, which the embedding
                 // treats as continuous → projects to scalar multiples of one vector → the following
@@ -5179,7 +5223,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("            return tensor;");
                 sb.AppendLine("        }");
                 sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = rng.NextDouble();");
+                sb.AppendLine($"            tensor[i] = {elemCast}rng.NextDouble();");
                 sb.AppendLine("        return tensor;");
                 sb.AppendLine("    }");
                 sb.AppendLine();
@@ -5199,7 +5243,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("            return tensor;");
                 sb.AppendLine("        }");
                 sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = value;");
+                sb.AppendLine($"            tensor[i] = {elemCast}value;");
                 sb.AppendLine("        return tensor;");
                 sb.AppendLine("    }");
                 sb.AppendLine();
@@ -5218,8 +5262,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        // collapse to token 0 under (int) truncation).");
                 sb.AppendLine("        var input1 = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
                 sb.AppendLine("        var input2 = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
-                sb.AppendLine("        for (int i = 0; i < input1.Length; i++) input1[i] = (double)(i % 50);");
-                sb.AppendLine("        for (int i = 0; i < input2.Length; i++) input2[i] = (double)((i + 25) % 50);");
+                sb.AppendLine($"        for (int i = 0; i < input1.Length; i++) input1[i] = {elemCast}(i % 50);");
+                sb.AppendLine($"        for (int i = 0; i < input2.Length; i++) input2[i] = {elemCast}((i + 25) % 50);");
                 sb.AppendLine("        var output1 = network.Predict(input1);");
                 sb.AppendLine("        var output2 = network.Predict(input2);");
                 sb.AppendLine("        double sumSquared = 0; int minLen = System.Math.Min(output1.Length, output2.Length);");
