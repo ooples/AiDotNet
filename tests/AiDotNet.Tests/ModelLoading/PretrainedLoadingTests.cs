@@ -418,6 +418,55 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         [Fact]
+        public void Builder_Gemma2_DualNorms_Softcap_BuildsAndForwards()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""Gemma2ForCausalLM""],
+                ""model_type"": ""gemma2"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""tie_word_embeddings"": true, ""hidden_act"": ""gelu_pytorch_tanh"",
+                ""final_logit_softcapping"": 30.0 }");
+            Assert.Equal(30.0, config.FinalLogitSoftcapping);
+
+            int h = 8, ffn = 16, vocab = 6, heads = 2, kvHeads = 2, headDim = 4;
+            var inNorm = Fill(h, 60);
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 61),
+                ["model.layers.0.input_layernorm.weight"] = inNorm,
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 62),
+                ["model.layers.0.pre_feedforward_layernorm.weight"] = Fill(h, 63),
+                ["model.layers.0.post_feedforward_layernorm.weight"] = Fill(h, 64),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(heads * headDim * h, 65),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(kvHeads * headDim * h, 66),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(kvHeads * headDim * h, 67),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * heads * headDim, 68),
+                ["model.layers.0.mlp.gate_proj.weight"] = Fill(ffn * h, 69),
+                ["model.layers.0.mlp.up_proj.weight"] = Fill(ffn * h, 70),
+                ["model.layers.0.mlp.down_proj.weight"] = Fill(h * ffn, 71),
+                ["model.norm.weight"] = Fill(h, 72),
+            };
+
+            var net = Gemma2ModelBuilder<double>.Build(config, new InMemorySource(t));
+            Assert.Equal(5, net.Layers.Count); // embed + block + final norm + lm head + softcap
+
+            var tokens = new Tensor<double>(new[] { 1, 3 });
+            tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+            var logits = net.Predict(tokens);
+            Assert.Equal(new[] { 1, 3, vocab }, logits.Shape);
+            // Final soft-capping bounds every logit strictly within (-30, 30).
+            for (int s = 0; s < 3; s++)
+                for (int vv = 0; vv < vocab; vv++)
+                    Assert.True(Math.Abs(logits[0, s, vv]) < 30.0);
+
+            // Sandwich norm uses the Gemma (1 + weight) convention.
+            var block = Assert.IsType<Gemma2DecoderBlock<double>>(net.Layers[1]);
+            var gamma = block.NormInput.GetGammaTensor();
+            for (int i = 0; i < h; i++) Assert.Equal(inNorm[i] + 1.0, gamma[i], 9);
+
+            Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
+        }
+
+        [Fact]
         public void Architectures_ResolvesGemmaAndPhi3()
         {
             var gemma = HuggingFaceConfig.Parse(@"{ ""architectures"": [""GemmaForCausalLM""], ""model_type"": ""gemma"",

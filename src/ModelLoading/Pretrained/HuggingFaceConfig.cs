@@ -65,6 +65,9 @@ public sealed class HuggingFaceConfig
     /// <summary>On-disk weight precision, e.g. <c>"bfloat16"</c>. Empty when unspecified.</summary>
     public string TorchDtype { get; private init; } = string.Empty;
 
+    /// <summary>Final-logit soft-cap magnitude (Gemma-2 <c>final_logit_softcapping</c>); null when absent.</summary>
+    public double? FinalLogitSoftcapping { get; private init; }
+
     /// <summary>Number of MoE experts (<c>num_local_experts</c>); 0 for a dense (non-MoE) decoder.</summary>
     public int NumLocalExperts { get; private init; }
 
@@ -134,6 +137,7 @@ public sealed class HuggingFaceConfig
             TieWordEmbeddings = (bool?)root["tie_word_embeddings"] ?? false,
             HiddenActivation = (string?)root["hidden_act"] ?? "silu",
             TorchDtype = (string?)root["torch_dtype"] ?? string.Empty,
+            FinalLogitSoftcapping = OptionalDouble(root, "final_logit_softcapping"),
             NumLocalExperts = OptionalInt(root, "num_local_experts") ?? 0,
             NumExpertsPerTok = OptionalInt(root, "num_experts_per_tok") ?? 0,
             BosTokenId = OptionalInt(root, "bos_token_id"),
