@@ -234,23 +234,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return pooled;
         }
 
-        /// <summary>
-        /// Generates a deterministic fallback embedding based on the text hash.
-        /// Used when the ONNX model file is not available (e.g., in unit tests).
-        /// </summary>
-        protected override Vector<T> GenerateFallbackEmbedding(string text)
-        {
-            var hash = text.ToLowerInvariant().GetHashCode();
-            var values = new T[_dimension];
-            for (int i = 0; i < _dimension; i++)
-            {
-                // Generate deterministic values based on text hash and position
-                double val = Math.Sin(hash * 0.0001 + i * 0.1) * 0.5;
-                values[i] = NumOps.FromDouble(val);
-            }
-            return new Vector<T>(values).Normalize();
-        }
-
         private Vector<T> CreateZeroVector()
         {
             var values = new T[_dimension];

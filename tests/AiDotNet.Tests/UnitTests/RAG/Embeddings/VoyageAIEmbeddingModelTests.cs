@@ -1,320 +1,201 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
+using Newtonsoft.Json.Linq;
 using Xunit;
-using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class VoyageAIEmbeddingModelTests
     {
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithValidParameters_CreatesInstance()
+        private sealed class StubHandler : HttpMessageHandler
         {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
+            private readonly HttpStatusCode _status;
+            private readonly string _responseBody;
+            public string LastRequestBody { get; private set; } = "";
+            public Uri LastRequestUri { get; private set; }
 
+            public StubHandler(string responseBody, HttpStatusCode status = HttpStatusCode.OK)
+            {
+                _responseBody = responseBody;
+                _status = status;
+            }
+
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                LastRequestUri = request.RequestUri;
+                if (request.Content is not null)
+                    LastRequestBody = await request.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                return new HttpResponseMessage(_status) { Content = new StringContent(_responseBody ?? "") };
+            }
+        }
+
+        private static VoyageAIEmbeddingModel<double> ModelWith(StubHandler handler, int dimension)
+            => new("test-api-key", "voyage-3", "document", dimension, new HttpClient(handler));
+
+        // ────────── Constructor validation ──────────
+
+        [Fact]
+        public void Constructor_WithValidParameters_CreatesInstance()
+        {
+            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", "document", 1024);
             Assert.NotNull(model);
             Assert.Equal(1024, model.EmbeddingDimension);
             Assert.Equal(16000, model.MaxTokens);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithNullApiKey_ThrowsArgumentNullException()
+        [Fact]
+        public void Constructor_WithNullApiKey_ThrowsArgumentException()
         {
-            Assert.Throws<ArgumentNullException>(() =>
-                new VoyageAIEmbeddingModel<double>(null, "voyage-model-path.onnx", "document", 1024));
+            var ex = Assert.Throws<ArgumentException>(() =>
+                new VoyageAIEmbeddingModel<double>(null, "voyage-3", "document", 1024));
+            Assert.Contains("API key cannot be empty", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithNullModel_ThrowsArgumentNullException()
+        [Fact]
+        public void Constructor_WithNullModel_ThrowsArgumentException()
         {
-            Assert.Throws<ArgumentNullException>(() =>
+            var ex = Assert.Throws<ArgumentException>(() =>
                 new VoyageAIEmbeddingModel<double>("test-api-key", null, "document", 1024));
+            Assert.Contains("Model cannot be empty", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithNullInputType_ThrowsArgumentNullException()
+        [Fact]
+        public void Constructor_WithNullInputType_ThrowsArgumentException()
         {
-            Assert.Throws<ArgumentNullException>(() =>
-                new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", null, 1024));
+            var ex = Assert.Throws<ArgumentException>(() =>
+                new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", null, 1024));
+            Assert.Contains("Input type cannot be empty", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithValidText_ThrowsFileNotFoundForMissingModel()
+        [Fact]
+        public void Constructor_WithZeroDimension_ThrowsArgumentException()
         {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("This is a test sentence."));
+            var ex = Assert.Throws<ArgumentException>(() =>
+                new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", "document", 0));
+            Assert.Contains("Dimension must be positive", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithSameTextTwice_ThrowsFileNotFoundForMissingModel()
+        [Fact]
+        public void MaxTokens_ReturnsCorrectValue()
         {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithSingleText_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_ReturnsNormalizedVector_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Test normalization"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithNullText_ThrowsArgumentException()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<ArgumentException>(() => model.Embed(null));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithEmptyText_ThrowsArgumentException()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithWhitespaceText_ThrowsArgumentException()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<ArgumentException>(() => model.Embed("   "));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_WithValidTexts_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-            var texts = new List<string> { "First text", "Second text", "Third text" };
-
-            Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-            var texts = new List<string>();
-
-            Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-            var texts = new List<string> { "First", "Second", "Third" };
-
-            Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithFloatType_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new VoyageAIEmbeddingModel<float>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithCustomDimension_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 512);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Testing custom dimension"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_Deterministic_MultipleInstances_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Determinism test"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_AllRowsAreNormalized_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-            var texts = new List<string> { "First", "Second", "Third" };
-
-            Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithLongText_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-            var longText = string.Join(" ", Enumerable.Repeat("word", 2000));
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed(longText));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithDifferentInputTypes_CreatesInstances()
-        {
-            var documentModel = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-            var queryModel = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "query", 1024);
-
-            Assert.NotNull(documentModel);
-            Assert.NotNull(queryModel);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task MaxTokens_ReturnsCorrectValue()
-        {
-            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
-
+            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", "document", 1024);
             Assert.Equal(16000, model.MaxTokens);
         }
 
-        // ────────── Success-path tests via mock embedding model ──────────
-        // These test the EmbeddingModelBase behavior (dimension, normalization, batch consistency)
-        // without requiring an actual ONNX model file.
+        // ────────── Input validation (no network) ──────────
 
-        [Fact(Timeout = 60000)]
-        public async Task MockEmbed_WithValidText_ReturnsVectorOfCorrectDimension()
+        [Fact]
+        public void Embed_WithNullText_ThrowsArgumentException()
         {
-            using var model = new MockEmbeddingModel(1024);
-
-            var embedding = model.Embed("Test sentence");
-
-            Assert.NotNull(embedding);
-            Assert.Equal(1024, embedding.Length);
+            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", "document", 1024);
+            Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task MockEmbed_ReturnsNormalizedVector()
+        [Fact]
+        public void Embed_WithEmptyText_ThrowsArgumentException()
         {
-            using var model = new MockEmbeddingModel(512);
-
-            var embedding = model.Embed("Test normalization");
-
-            var magnitude = 0.0;
-            for (int i = 0; i < embedding.Length; i++)
-                magnitude += embedding[i] * embedding[i];
-            magnitude = Math.Sqrt(magnitude);
-            Assert.Equal(1.0, magnitude, 5);
+            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", "document", 1024);
+            Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task MockEmbed_WithSameText_ReturnsSameEmbedding()
+        [Fact]
+        public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
-            using var model = new MockEmbeddingModel(384);
-
-            var embedding1 = model.Embed("Hello world");
-            var embedding2 = model.Embed("Hello world");
-
-            for (int i = 0; i < embedding1.Length; i++)
-                Assert.Equal(embedding1[i], embedding2[i], 10);
+            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", "document", 1024);
+            Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task MockEmbed_WithDifferentTexts_ReturnsDifferentEmbeddings()
+        [Fact]
+        public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
-            using var model = new MockEmbeddingModel(384);
-
-            var embedding1 = model.Embed("Hello world");
-            var embedding2 = model.Embed("Goodbye world");
-
-            var hasDifference = false;
-            for (int i = 0; i < embedding1.Length; i++)
-            {
-                if (Math.Abs(embedding1[i] - embedding2[i]) > 1e-10)
-                {
-                    hasDifference = true;
-                    break;
-                }
-            }
-            Assert.True(hasDifference, "Embeddings for different texts should be different");
+            var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", "document", 1024);
+            Assert.Throws<ArgumentException>(() => model.EmbedBatch(new List<string>()));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task MockEmbedBatch_ReturnsCorrectDimensions()
+        // ────────── Failure surfaces (no fake fallback) ──────────
+
+        [Fact]
+        public void Embed_WhenApiReturnsError_ThrowsInsteadOfFakeVector()
         {
-            using var model = new MockEmbeddingModel(256);
-            var texts = new List<string> { "First", "Second", "Third" };
+            var handler = new StubHandler("{\"detail\":\"unauthorized\"}", HttpStatusCode.Unauthorized);
+            var model = ModelWith(handler, 3);
 
-            var embeddings = model.EmbedBatch(texts);
-
-            Assert.Equal(3, embeddings.Rows);
-            Assert.Equal(256, embeddings.Columns);
+            var ex = Assert.Throws<HttpRequestException>(() => model.Embed("hello"));
+            Assert.Contains("Voyage AI API request failed", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task MockEmbedBatch_ProducesSameAsIndividualCalls()
+        [Fact]
+        public void EmbedBatch_WhenApiReturnsError_ThrowsInsteadOfFakeVector()
         {
-            using var model = new MockEmbeddingModel(384);
-            var texts = new List<string> { "Alpha", "Beta", "Gamma" };
+            var handler = new StubHandler("boom", HttpStatusCode.InternalServerError);
+            var model = ModelWith(handler, 3);
 
-            var batchEmbeddings = model.EmbedBatch(texts);
-            var individualEmbeddings = texts.Select(t => model.Embed(t)).ToList();
-
-            for (int i = 0; i < texts.Count; i++)
-            {
-                for (int j = 0; j < model.EmbeddingDimension; j++)
-                    Assert.Equal(individualEmbeddings[i][j], batchEmbeddings[i, j], 10);
-            }
+            Assert.Throws<HttpRequestException>(() =>
+                model.EmbedBatch(new List<string> { "a", "b" }));
         }
 
-        /// <summary>
-        /// Deterministic mock embedding model for testing base class behavior
-        /// without ONNX dependencies. Uses hash-based vector generation.
-        /// </summary>
-        private sealed class MockEmbeddingModel : AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase<double>
+        // ────────── Real Voyage API endpoint/body/response ──────────
+
+        [Fact]
+        public void Embed_PostsToVoyageEndpointWithCorrectBodyAndParsesResponse()
         {
-            private readonly int _dimension;
-            public override int EmbeddingDimension => _dimension;
-            public override int MaxTokens => 512;
+            var handler = new StubHandler(
+                "{\"object\":\"list\",\"data\":[{\"object\":\"embedding\",\"embedding\":[0.1,0.2,0.3],\"index\":0}],\"model\":\"voyage-3\"}");
+            var model = ModelWith(handler, 3);
 
-            public MockEmbeddingModel(int dimension) { _dimension = dimension; }
+            var embedding = model.Embed("hello world");
 
-            protected override Vector<double> EmbedCore(string text)
-            {
-                // Use stable FNV-1a hash instead of GetHashCode (randomized per process in .NET 6+)
-                uint hash = 2166136261;
-                foreach (char c in text.ToLowerInvariant())
-                {
-                    hash ^= c;
-                    hash *= 16777619;
-                }
+            // Parsed the real response
+            Assert.Equal(3, embedding.Length);
+            Assert.Equal(0.1, embedding[0], 6);
+            Assert.Equal(0.2, embedding[1], 6);
+            Assert.Equal(0.3, embedding[2], 6);
 
-                var values = new double[_dimension];
-                for (int i = 0; i < _dimension; i++)
-                    values[i] = Math.Sin(hash * 0.0001 + i * 0.1) * 0.5;
+            // Hit the real Voyage endpoint
+            Assert.Equal("https://api.voyageai.com/v1/embeddings", handler.LastRequestUri.ToString());
 
-                var vec = new Vector<double>(values);
-                return vec.Normalize();
-            }
+            // Correct request body: model, input[], input_type
+            var body = JObject.Parse(handler.LastRequestBody);
+            Assert.Equal("voyage-3", (string)body["model"]);
+            Assert.Equal("document", (string)body["input_type"]);
+            Assert.Equal("hello world", (string)body["input"][0]);
+        }
 
-            protected override void Dispose(bool disposing) => base.Dispose(disposing);
+        [Fact]
+        public async Task EmbedBatchAsync_PostsAllInputsAndReturnsMatrix()
+        {
+            var handler = new StubHandler(
+                "{\"data\":[{\"embedding\":[0.1,0.2,0.3],\"index\":0},{\"embedding\":[0.4,0.5,0.6],\"index\":1}]}");
+            var model = ModelWith(handler, 3);
+
+            var matrix = await model.EmbedBatchAsync(new List<string> { "a", "b" });
+
+            Assert.Equal(2, matrix.Rows);
+            Assert.Equal(3, matrix.Columns);
+            Assert.Equal(0.4, matrix[1, 0], 6);
+
+            var body = JObject.Parse(handler.LastRequestBody);
+            Assert.Equal("a", (string)body["input"][0]);
+            Assert.Equal("b", (string)body["input"][1]);
+        }
+
+        [Fact]
+        public void Constructor_WithDifferentInputTypes_CreatesInstances()
+        {
+            var documentModel = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", "document", 1024);
+            var queryModel = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-3", "query", 1024);
+
+            Assert.NotNull(documentModel);
+            Assert.NotNull(queryModel);
         }
     }
 }

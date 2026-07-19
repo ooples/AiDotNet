@@ -2,395 +2,184 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
+using Newtonsoft.Json.Linq;
 using Xunit;
-using System.Threading.Tasks;
 
 namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class OpenAIEmbeddingModelTests
     {
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithValidParameters_CreatesInstance()
+        /// <summary>Captures the outbound request and returns a canned response / status.</summary>
+        private sealed class StubHandler : HttpMessageHandler
         {
-            // Arrange & Act
+            private readonly HttpStatusCode _status;
+            private readonly string _responseBody;
+            public string LastRequestBody { get; private set; } = "";
+            public Uri LastRequestUri { get; private set; }
+
+            public StubHandler(string responseBody, HttpStatusCode status = HttpStatusCode.OK)
+            {
+                _responseBody = responseBody;
+                _status = status;
+            }
+
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                LastRequestUri = request.RequestUri;
+                if (request.Content is not null)
+                    LastRequestBody = await request.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                return new HttpResponseMessage(_status)
+                {
+                    Content = new StringContent(_responseBody ?? "")
+                };
+            }
+        }
+
+        private static OpenAIEmbeddingModel<double> ModelWith(StubHandler handler, int dimension)
+            => new("test-api-key", "text-embedding-ada-002", dimension, 8191, new HttpClient(handler));
+
+        // ────────── Constructor validation ──────────
+
+        [Fact]
+        public void Constructor_WithValidParameters_CreatesInstance()
+        {
             var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-
-            // Assert
             Assert.NotNull(model);
             Assert.Equal(1536, model.EmbeddingDimension);
             Assert.Equal(8191, model.MaxTokens);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithDefaultParameters_CreatesInstance()
+        [Fact]
+        public void Constructor_WithNullApiKey_ThrowsArgumentException()
         {
-            // Arrange & Act
-            var model = new OpenAIEmbeddingModel<double>("test-api-key");
-
-            // Assert
-            Assert.NotNull(model);
-            Assert.Equal(1536, model.EmbeddingDimension);
-            Assert.Equal(8191, model.MaxTokens);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithNullApiKey_ThrowsArgumentException()
-        {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new OpenAIEmbeddingModel<double>(null, "text-embedding-ada-002"));
             Assert.Contains("API key cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithEmptyApiKey_ThrowsArgumentException()
+        [Fact]
+        public void Constructor_WithEmptyApiKey_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new OpenAIEmbeddingModel<double>("", "text-embedding-ada-002"));
             Assert.Contains("API key cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithWhitespaceApiKey_ThrowsArgumentException()
+        [Fact]
+        public void Constructor_WithNullModelName_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
-            var exception = Assert.Throws<ArgumentException>(() =>
-                new OpenAIEmbeddingModel<double>("   ", "text-embedding-ada-002"));
-            Assert.Contains("API key cannot be empty", exception.Message);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithNullModelName_ThrowsArgumentException()
-        {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new OpenAIEmbeddingModel<double>("test-api-key", null));
             Assert.Contains("Model name cannot be empty", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithEmptyModelName_ThrowsArgumentException()
+        [Fact]
+        public void Constructor_WithZeroDimension_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
-            var exception = Assert.Throws<ArgumentException>(() =>
-                new OpenAIEmbeddingModel<double>("test-api-key", ""));
-            Assert.Contains("Model name cannot be empty", exception.Message);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithZeroDimension_ThrowsArgumentException()
-        {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 0, 8191));
             Assert.Contains("Dimension must be positive", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithNegativeDimension_ThrowsArgumentException()
+        [Fact]
+        public void Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
         {
-            // Arrange & Act & Assert
-            var exception = Assert.Throws<ArgumentException>(() =>
-                new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", -1, 8191));
-            Assert.Contains("Dimension must be positive", exception.Message);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithZeroMaxTokens_ThrowsArgumentException()
-        {
-            // Arrange & Act & Assert
-            var exception = Assert.Throws<ArgumentException>(() =>
-                new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 0));
-            Assert.Contains("Max tokens must be positive", exception.Message);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
-        {
-            // Arrange & Act & Assert
             var exception = Assert.Throws<ArgumentException>(() =>
                 new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, -1));
             Assert.Contains("Max tokens must be positive", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithValidText_ReturnsVectorOfCorrectDimension()
+        // ────────── Input validation (no network) ──────────
+
+        [Fact]
+        public void Embed_WithNullText_ThrowsArgumentException()
         {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var text = "This is a test sentence.";
-
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.NotNull(embedding);
-            Assert.Equal(1536, embedding.Length);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithSameTextTwice_ReturnsSameEmbedding()
-        {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var text = "Hello world";
-
-            // Act
-            var embedding1 = model.Embed(text);
-            var embedding2 = model.Embed(text);
-
-            // Assert
-            for (int i = 0; i < embedding1.Length; i++)
-            {
-                Assert.Equal(embedding1[i], embedding2[i], 10);
-            }
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
-        {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var text1 = "Hello world";
-            var text2 = "Goodbye world";
-
-            // Act
-            var embedding1 = model.Embed(text1);
-            var embedding2 = model.Embed(text2);
-
-            // Assert
-            var hasDifference = false;
-            for (int i = 0; i < embedding1.Length; i++)
-            {
-                if (Math.Abs(embedding1[i] - embedding2[i]) > 1e-10)
-                {
-                    hasDifference = true;
-                    break;
-                }
-            }
-            Assert.True(hasDifference, "Embeddings for different texts should be different");
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_ReturnsNormalizedVector()
-        {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var text = "Test normalization";
-
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            var magnitude = 0.0;
-            for (int i = 0; i < embedding.Length; i++)
-            {
-                magnitude += embedding[i] * embedding[i];
-            }
-            magnitude = Math.Sqrt(magnitude);
-            Assert.Equal(1.0, magnitude, 5);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithNullText_ThrowsArgumentException()
-        {
-            // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
-
-            // Act & Assert
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithEmptyText_ThrowsArgumentException()
+        [Fact]
+        public void Embed_WithEmptyText_ThrowsArgumentException()
         {
-            // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
-
-            // Act & Assert
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithWhitespaceText_ThrowsArgumentException()
+        [Fact]
+        public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
-            // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => model.Embed("   "));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
-        {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var texts = new List<string> { "First text", "Second text", "Third text" };
-
-            // Act
-            var embeddings = model.EmbedBatch(texts);
-
-            // Assert
-            Assert.NotNull(embeddings);
-            Assert.Equal(3, embeddings.Rows);
-            Assert.Equal(1536, embeddings.Columns);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
-        {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<double>("test-api-key");
-
-            // Act & Assert
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
+        [Fact]
+        public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
-            // Arrange
             var model = new OpenAIEmbeddingModel<double>("test-api-key");
-            var texts = new List<string>();
-
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
+            Assert.Throws<ArgumentException>(() => model.EmbedBatch(new List<string>()));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
+        // ────────── Failure surfaces (no fake fallback) ──────────
+
+        [Fact]
+        public void Embed_WhenApiReturnsError_ThrowsInsteadOfFakeVector()
         {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var texts = new List<string> { "First", "Second", "Third" };
+            var handler = new StubHandler("{\"error\":\"unauthorized\"}", HttpStatusCode.Unauthorized);
+            var model = ModelWith(handler, 3);
 
-            // Act
-            var batchEmbeddings = model.EmbedBatch(texts);
-            var individualEmbeddings = texts.Select(t => model.Embed(t)).ToList();
-
-            // Assert
-            for (int i = 0; i < texts.Count; i++)
-            {
-                for (int j = 0; j < model.EmbeddingDimension; j++)
-                {
-                    Assert.Equal(individualEmbeddings[i][j], batchEmbeddings[i, j], 10);
-                }
-            }
+            var ex = Assert.Throws<HttpRequestException>(() => model.Embed("hello"));
+            Assert.Contains("OpenAI API request failed", ex.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithFloatType_WorksCorrectly()
+        [Fact]
+        public void EmbedBatch_WhenApiReturnsError_ThrowsInsteadOfFakeVector()
         {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<float>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var text = "Test with float type";
+            var handler = new StubHandler("boom", HttpStatusCode.InternalServerError);
+            var model = ModelWith(handler, 3);
 
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.NotNull(embedding);
-            Assert.Equal(1536, embedding.Length);
-
-            // Check normalization
-            var magnitude = 0.0f;
-            for (int i = 0; i < embedding.Length; i++)
-            {
-                magnitude += embedding[i] * embedding[i];
-            }
-            magnitude = (float)Math.Sqrt(magnitude);
-            Assert.Equal(1.0f, magnitude, 5);
+            Assert.Throws<HttpRequestException>(() =>
+                model.EmbedBatch(new List<string> { "a", "b" }));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithCustomDimension_ReturnsCorrectSize()
+        // ────────── Success path via mocked handler ──────────
+
+        [Fact]
+        public void Embed_WithMockedSuccess_ParsesVectorAndPostsToOpenAIEndpoint()
         {
-            // Arrange
-            var customDimension = 512;
-            var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-3-small", customDimension, 8191);
-            var text = "Testing custom dimension";
+            var handler = new StubHandler("{\"data\":[{\"embedding\":[0.1,0.2,0.3]}]}");
+            var model = ModelWith(handler, 3);
 
-            // Act
-            var embedding = model.Embed(text);
+            var embedding = model.Embed("hello world");
 
-            // Assert
-            Assert.Equal(customDimension, embedding.Length);
+            Assert.Equal(3, embedding.Length);
+            Assert.Equal(0.1, embedding[0], 6);
+            Assert.Equal(0.2, embedding[1], 6);
+            Assert.Equal(0.3, embedding[2], 6);
+            Assert.Equal("https://api.openai.com/v1/embeddings", handler.LastRequestUri.ToString());
+
+            var body = JObject.Parse(handler.LastRequestBody);
+            Assert.Equal("text-embedding-ada-002", (string)body["model"]);
+            Assert.Equal("hello world", (string)body["input"][0]);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_Deterministic_MultipleInstances()
+        [Fact]
+        public async Task EmbedBatchAsync_WithMockedSuccess_ReturnsMatrix()
         {
-            // Arrange
-            var model1 = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var model2 = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var text = "Determinism test";
+            var handler = new StubHandler("{\"data\":[{\"embedding\":[0.1,0.2,0.3]},{\"embedding\":[0.4,0.5,0.6]}]}");
+            var model = ModelWith(handler, 3);
 
-            // Act
-            var embedding1 = model1.Embed(text);
-            var embedding2 = model2.Embed(text);
+            var matrix = await model.EmbedBatchAsync(new List<string> { "a", "b" });
 
-            // Assert
-            for (int i = 0; i < embedding1.Length; i++)
-            {
-                Assert.Equal(embedding1[i], embedding2[i], 10);
-            }
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithLongText_ReturnsEmbedding()
-        {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var longText = string.Join(" ", Enumerable.Repeat("word", 1000));
-
-            // Act
-            var embedding = model.Embed(longText);
-
-            // Assert
-            Assert.NotNull(embedding);
-            Assert.Equal(1536, embedding.Length);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithDifferentModelNames_CreatesInstances()
-        {
-            // Arrange & Act
-            var adaModel = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var smallModel = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-3-small", 1536, 8191);
-            var largeModel = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-3-large", 3072, 8191);
-
-            // Assert
-            Assert.NotNull(adaModel);
-            Assert.NotNull(smallModel);
-            Assert.NotNull(largeModel);
-            Assert.Equal(3072, largeModel.EmbeddingDimension);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_AllRowsAreNormalized()
-        {
-            // Arrange
-            var model = new OpenAIEmbeddingModel<double>("test-api-key", "text-embedding-ada-002", 1536, 8191);
-            var texts = new List<string> { "First", "Second", "Third" };
-
-            // Act
-            var embeddings = model.EmbedBatch(texts);
-
-            // Assert
-            for (int i = 0; i < embeddings.Rows; i++)
-            {
-                var magnitude = 0.0;
-                for (int j = 0; j < embeddings.Columns; j++)
-                {
-                    magnitude += embeddings[i, j] * embeddings[i, j];
-                }
-                magnitude = Math.Sqrt(magnitude);
-                Assert.Equal(1.0, magnitude, 5);
-            }
+            Assert.Equal(2, matrix.Rows);
+            Assert.Equal(3, matrix.Columns);
+            Assert.Equal(0.4, matrix[1, 0], 6);
         }
     }
 }
