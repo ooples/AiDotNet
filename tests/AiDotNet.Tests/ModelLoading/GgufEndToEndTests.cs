@@ -191,6 +191,84 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         /// <summary>
+        /// Localizes the block-12 OpenCL divergence to a single sub-op: feeds an identical (CPU-reference)
+        /// block input through each PreLNTransformerBlock sub-op (Norm1, attention, residual add, Norm2,
+        /// FFN gate/up, gate*up, FFN down, residual add) on GPU and on CPU, and reports the per-sub-op max
+        /// abs diff. Gated on the model + a GPU; runs the whole GPU chain then the CPU chain (no mid-run
+        /// engine toggle, which invalidates the OpenCL context).
+        /// </summary>
+        [Fact]
+        public void Gguf_Block12_SubOpDiff_CpuVsGpu_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return;
+            }
+            using var gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+            if (!gpuEngine.IsGpuAvailable)
+            {
+                return;
+            }
+
+            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+            var net = (NeuralNetwork<float>)model;
+            var ids = new[] { 504, 3575, 282, 4649, 314 };
+            static Tensor<float> Clone(Tensor<float> t)
+                => new Tensor<float>(t.Contiguous().AsSpan().ToArray(), t.Shape.ToArray());
+
+            // block-12 input = the CPU-reference output of layers 0..11.
+            Tensor<float> blkInput;
+            {
+                var xc = new Tensor<float>(new[] { 1, ids.Length });
+                for (int i = 0; i < ids.Length; i++) xc[0, i] = ids[i];
+                for (int li = 0; li < 12; li++) xc = net.Layers[li].Forward(xc).Contiguous();
+                blkInput = Clone(xc);
+            }
+            var blk = (AiDotNet.NeuralNetworks.Layers.PreLNTransformerBlock<float>)net.Layers[12];
+
+            System.Collections.Generic.List<(string Name, float[] Data)> RunSubOps()
+            {
+                var eng = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+                var steps = new System.Collections.Generic.List<(string, float[])>();
+                void Cap(string n, Tensor<float> t) => steps.Add((n, t.Contiguous().AsSpan().ToArray()));
+
+                var normed1 = blk.Norm1.Forward(Clone(blkInput)); Cap("norm1", normed1);
+                var attnOut = blk.AttentionLayer.Forward(normed1); Cap("attn", attnOut);
+                var afterAttn = eng.TensorAdd(Clone(blkInput), attnOut); Cap("residual1", afterAttn);
+                var normed2 = blk.Norm2.Forward(afterAttn); Cap("norm2", normed2);
+                int rank = afterAttn.Shape.Length, featureDim = afterAttn.Shape[rank - 1], flatN = 1;
+                for (int i = 0; i < rank - 1; i++) flatN *= afterAttn.Shape[i];
+                var normed2Flat = eng.Reshape(normed2, new[] { flatN, featureDim });
+                var gateOut = blk.FfnGate!.Forward(normed2Flat); Cap("ffnGate", gateOut);
+                var upOut = blk.FfnUp.Forward(normed2Flat); Cap("ffnUp", upOut);
+                var ffnHidden = eng.TensorMultiply(gateOut, upOut); Cap("gate*up", ffnHidden);
+                var ffnDownOut = blk.FfnDown.Forward(ffnHidden); Cap("ffnDown", ffnDownOut);
+                var ffnReshaped = eng.Reshape(ffnDownOut, afterAttn.Shape.ToArray());
+                var output = eng.TensorAdd(afterAttn, ffnReshaped); Cap("residual2", output);
+                return steps;
+            }
+
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+            System.Collections.Generic.List<(string Name, float[] Data)> gpu;
+            try { gpu = RunSubOps(); } finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
+            var cpu = RunSubOps();
+
+            var report = new StringBuilder();
+            string? firstBad = null;
+            for (int i = 0; i < cpu.Count; i++)
+            {
+                float maxAbs = 0f;
+                int n = Math.Min(cpu[i].Data.Length, gpu[i].Data.Length);
+                for (int j = 0; j < n; j++) maxAbs = MathF.Max(maxAbs, MathF.Abs(cpu[i].Data[j] - gpu[i].Data[j]));
+                report.AppendLine($"{cpu[i].Name}: maxAbsDiff={maxAbs:E3}");
+                if (firstBad is null && maxAbs > 1e-2f) firstBad = cpu[i].Name;
+            }
+            Assert.True(firstBad is null, $"First diverging block-12 sub-op: {firstBad}\n{report}");
+        }
+
+        /// <summary>
         /// Drives the actual ContinuousBatcher (the live serving path, which the direct-Forward checks
         /// bypass) on CPU vs GPU, with speculative decoding off and on, and asserts the greedy first token
         /// is llama.cpp's (7042 " Paris") in every combination. Reproduces the GPU-serving garbage in a unit
