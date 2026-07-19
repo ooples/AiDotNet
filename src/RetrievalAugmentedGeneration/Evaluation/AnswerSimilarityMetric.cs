@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
@@ -43,6 +44,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 [PipelineStage(PipelineStage.Evaluation)]
 public class AnswerSimilarityMetric<T> : RAGMetricBase<T>
 {
+    private readonly IEmbeddingModel<T>? _embeddingModel;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AnswerSimilarityMetric{T}"/> class.
+    /// </summary>
+    /// <param name="embeddingModel">
+    /// Optional embedding model. When supplied, similarity is the cosine similarity between the
+    /// embeddings of the answer and the ground truth (semantic similarity). When <c>null</c>, the
+    /// metric falls back to the offline lexical Jaccard word-overlap heuristic.
+    /// </param>
+    public AnswerSimilarityMetric(IEmbeddingModel<T>? embeddingModel = null)
+    {
+        _embeddingModel = embeddingModel;
+    }
+
     /// <summary>
     /// Gets the name of this metric.
     /// </summary>
@@ -67,15 +83,14 @@ public class AnswerSimilarityMetric<T> : RAGMetricBase<T>
     /// <returns>Similarity score (0-1).</returns>
     protected override T EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)
     {
-        var words1 = GetWords(answer.Answer);
-        var words2 = GetWords(groundTruth!);
+        if (_embeddingModel != null)
+        {
+            // Semantic similarity via embeddings; negative cosine is clamped to 0 by the base class.
+            var cosine = EmbeddingCosine(_embeddingModel, answer.Answer, groundTruth!);
+            return NumOps.FromDouble(cosine);
+        }
 
-        var intersection = words1.Intersect(words2).Count();
-        var union = words1.Union(words2).Count();
-
-        if (union == 0)
-            return NumOps.Zero;
-
-        return NumOps.Divide(NumOps.FromDouble(intersection), NumOps.FromDouble(union));
+        // Offline lexical fallback: Jaccard word overlap.
+        return NumOps.FromDouble(JaccardSimilarity(answer.Answer, groundTruth!));
     }
 }
