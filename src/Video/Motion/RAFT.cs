@@ -493,9 +493,9 @@ public class RAFT<T> : OpticalFlowBase<T>
         for (int i = 0; i + 1 < nsSpan.Length; i += 2) { nsSpan[i] = NumOps.FromDouble(sx); nsSpan[i + 1] = NumOps.FromDouble(sy); }
         var grid = Engine.TensorAdd(baseGrid, Engine.TensorMultiply(flowNHWC, normScale));
 
-        var imageNHWC = Engine.TensorPermute(image, new[] { 0, 2, 3, 1 }); // [B,H,W,C]
-        var warpedNHWC = Engine.GridSample(imageNHWC, grid);               // [B,H,W,C]
-        return Engine.TensorPermute(warpedNHWC, new[] { 0, 3, 1, 2 });     // [B,C,H,W]
+        // Engine.GridSample is NCHW (PyTorch convention): image is already [B,C,H,W],
+        // pass it directly. The grid is [B,H,W,2] regardless of image layout.
+        return Engine.GridSample(image, grid);                            // [B,C,H,W]
     }
 
     private Tensor<T> GRUUpdate(Tensor<T> hiddenState, Tensor<T> gruInput)
