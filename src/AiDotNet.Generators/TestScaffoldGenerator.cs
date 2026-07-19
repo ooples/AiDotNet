@@ -687,6 +687,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // probe overran the gate at <double>; <float> halves the per-step recurrent-update compute while
         // preserving the self-relative training invariants, paired with the HeavyTrainingTimeout cap below.
         "SEARAFT",
+        // --- #1789 green-shard sweep: three more genuine <double> training TIMEOUTS (not assertion
+        // failures) surfaced once training became a real tape+Adam step. Each model is correct at a
+        // single forward but blows the 180 s per-test gate under the multi-iteration training/clone
+        // invariants; <float> halves per-step compute + tape/activation footprint while preserving the
+        // paper architecture and the self-relative invariants. Their family bases are already generic
+        // over T (AudioNN / NeuralNetwork), so the floatify rewrite compiles. ---
+        // Chirp3 (Google USM-scale multilingual ASR): a deep Conformer-class encoder over long audio —
+        // same deep-ASR footprint as the Conformer/CTC family already floated above; its Generated A-C
+        // training invariants timed out at <double>.
+        "Chirp3",
+        // DAGMANonlinear (NOTEARS/DAG-GNN-style nonlinear causal discovery via continuous optimization):
+        // a per-node MLP stack trained by an iterative augmented-Lagrangian loop with an acyclicity
+        // constraint — many inner optimization steps per outer iteration, so the <double> Generated D-F
+        // training invariants overran the gate. (DistilWhisper, the other D-F heavy model, is already
+        // floated above.)
+        "DAGMANonlinear",
+        // SALM (NVIDIA Speech-Augmented Language Model): a Conformer/audio encoder + LLM adapter —
+        // foundation-scale audio-LM whose <double> Generated Q-S training invariants timed out. Audio
+        // family, so <float> also picks up the audio-branch smoke-iteration cap.
+        "SALM",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
