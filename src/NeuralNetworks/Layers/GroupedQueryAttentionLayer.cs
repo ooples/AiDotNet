@@ -94,6 +94,15 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     // passed through softcap·tanh(score / softcap) before the softmax. 0 disables it (standard SDPA).
     private readonly double _attnLogitSoftcap;
 
+    // Causal masking: when true, position i attends only to positions <= i (decoder / autoregressive LM).
+    // Without it the attention is bidirectional, which silently corrupts every multi-token forward of a
+    // causal decoder while leaving single-token forwards (one position, no future) correct.
+    private readonly bool _useCausalMask;
+
+    // Shape-keyed cache of the flat causal row-pattern (see GetCausalMask): the [seqQ*seqKV] boolean plane
+    // is computed once per (seqQ, seqKV) and block-replicated across batch*heads on demand.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(int, int), bool[]> _causalPatternCache = new();
+
     // Positional encoding
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
@@ -207,7 +216,8 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         bool deferAllocation = false,
         int? headDimension = null,
         bool useProjectionBias = false,
-        double attnLogitSoftcap = 0.0)
+        double attnLogitSoftcap = 0.0,
+        bool useCausalMask = false)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
@@ -245,6 +255,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
                 nameof(attnLogitSoftcap));
         }
         _attnLogitSoftcap = attnLogitSoftcap;
+        _useCausalMask = useCausalMask;
 
         InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         _weightsDeferred = deferAllocation;
@@ -543,6 +554,22 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     private (Tensor<T> Context, Tensor<T> AttentionWeights) ComputeStandardAttentionWithWeights(
         Tensor<T> queries, Tensor<T> keys, Tensor<T> values)
     {
+        // Causal decoder without a soft-cap: use FlashAttention's causal mask (softcap-free path), the same
+        // mechanism the stateless paged fallback uses. Soft-capped causal attention (Gemma-2) falls through
+        // to the Engine SDPA path below, which applies an additive causal mask so the cap and mask compose.
+        if (_useCausalMask && _attnLogitSoftcap <= 0.0)
+        {
+            var flashConfig = new FlashAttentionConfig { ReturnAttentionWeights = true, UseCausalMask = true };
+            var (flashOutput, flashWeights) = FlashAttention<T>.Forward(
+                queries.Contiguous(), keys.Contiguous(), values.Contiguous(), flashConfig);
+            if (flashWeights is null)
+            {
+                throw new InvalidOperationException(
+                    "FlashAttention returned null attention weights despite ReturnAttentionWeights=true.");
+            }
+            return (flashOutput, flashWeights);
+        }
+
         var context = ComputeStandardAttention(queries, keys, values, out var attentionWeights);
         return (context, attentionWeights);
     }
@@ -557,12 +584,50 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         // and attn·V into one kernel call (and gives a SIMD/GPU dispatch when
         // available).
         int headDim = queries.Shape[3];
+        // Causal decoders pass a boolean mask (true = a query may attend to that key, i.e. key <= query),
+        // so future keys are excluded before the softmax. Non-causal (encoder) attention passes no mask.
+        Tensor<bool>? mask = _useCausalMask
+            ? GetCausalMask(queries.Shape[0], queries.Shape[1], queries.Shape[2], keys.Shape[2])
+            : null;
         return Engine.ScaledDotProductAttention(
             queries, keys, values,
-            mask: null,
+            mask,
             scale: 1.0 / Math.Sqrt(headDim),
             out attentionWeightsOut,
             softcap: _attnLogitSoftcap);
+    }
+
+    // Materializes the [batch, heads, seqQ, seqKV] boolean causal mask the fused SDPA kernel consumes (it
+    // does not broadcast the batch/head dims). The per-(seqQ,seqKV) row plane is computed ONCE with a flat
+    // fill and cached; each forward only block-copies that plane across batch*heads (no scalar indexer, no
+    // O(seq^2) recompute). The masked attention itself stays in the fused Engine kernel (SIMD/GPU).
+    private Tensor<bool> GetCausalMask(int batch, int heads, int seqQ, int seqKV)
+    {
+        var plane = _causalPatternCache.GetOrAdd((seqQ, seqKV), static key =>
+        {
+            var (sq, skv) = key;
+            var p = new bool[sq * skv];
+            // A query at position i (over the last sq keys) attends to keys [0 .. keyOffset + i].
+            int keyOffset = skv - sq;
+            for (int i = 0; i < sq; i++)
+            {
+                int lastAllowed = Math.Min(keyOffset + i, skv - 1);
+                int rowBase = i * skv;
+                for (int j = 0; j <= lastAllowed; j++)
+                {
+                    p[rowBase + j] = true;
+                }
+            }
+            return p;
+        });
+
+        int planeLen = seqQ * seqKV;
+        var data = new bool[batch * heads * planeLen];
+        for (int k = 0; k < batch * heads; k++)
+        {
+            Array.Copy(plane, 0, data, k * planeLen, planeLen);
+        }
+        return new Tensor<bool>(data, new[] { batch, heads, seqQ, seqKV });
     }
 
     /// <summary>

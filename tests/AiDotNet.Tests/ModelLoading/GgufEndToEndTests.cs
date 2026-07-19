@@ -53,6 +53,57 @@ namespace AiDotNet.Tests.ModelLoading
             Assert.Equal("Hello world", tokenizer.Decode(new List<int> { 19556, 905 }, skipSpecialTokens: true));
         }
 
+        /// <summary>
+        /// End-to-end generation parity: load the real SmolLM2 GGUF (decoder + tokenizer), encode a prompt
+        /// with no added special tokens, and assert (a) the token ids match llama.cpp and (b) the greedy
+        /// next token is the one llama.cpp predicts (" Paris", id 7042, for "The capital of France is").
+        /// This is the generation-correctness check the shape-only GGUF tests never had. Gated on the model
+        /// file (set AIDOTNET_SMOLLM2_GGUF).
+        /// </summary>
+        [Fact]
+        public void Gguf_Generation_MatchesLlamaCpp_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return;
+            }
+
+            var (model, tokenizer) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+
+            // Tokenization must match llama.cpp exactly first (isolates tokenizer vs forward).
+            var ids = tokenizer.Encode(
+                "The capital of France is", new EncodingOptions { AddSpecialTokens = false }).TokenIds;
+            Assert.Equal(new[] { 504, 3575, 282, 4649, 314 }, ids.ToArray());
+
+            // Single-token forward is RoPE-independent (position 0 => rotation angle 0), so this isolates the
+            // non-positional path (embedding/attention/FFN/norm/dequant) from RoPE. llama.cpp greedy next
+            // token for "Hello" (id 19556) is '\n' (id 198).
+            Assert.Equal(198, GreedyNext(model, new[] { 19556 }));
+
+            // Full prompt: llama.cpp greedy next is " Paris" (id 7042).
+            Assert.Equal(7042, GreedyNext(model, ids.ToArray()));
+        }
+
+        private static int GreedyNext(NeuralNetworkBase<float> model, int[] tokenIds)
+        {
+            int seq = tokenIds.Length;
+            var input = new Tensor<float>(new[] { 1, seq });
+            for (int i = 0; i < seq; i++) input[0, i] = tokenIds[i];
+
+            var logits = model.Predict(input); // [1, seq, vocab]
+            int vocab = logits.Shape[2];
+            int best = 0;
+            float bestVal = float.NegativeInfinity;
+            for (int v = 0; v < vocab; v++)
+            {
+                float x = Convert.ToSingle(logits[0, seq - 1, v]);
+                if (x > bestVal) { bestVal = x; best = v; }
+            }
+
+            return best;
+        }
+
         [Fact]
         public void Gguf_EndToEnd_Llama_TiedHead_BuildsAndForwards()
         {

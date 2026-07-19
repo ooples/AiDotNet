@@ -56,7 +56,7 @@ public static class Qwen2MoEModelBuilder<T>
         {
             var attention = new GroupedQueryAttentionLayer<T>(
                 sequenceLength: maxPos, embeddingDimension: hidden, numHeads: numHeads, numKVHeads: numKVHeads,
-                headDimension: explicitHeadDim ? headDim : null, useProjectionBias: true); // Qwen2 q/k/v biases
+                headDimension: explicitHeadDim ? headDim : null, useProjectionBias: true, useCausalMask: true); // Qwen2 q/k/v biases
             attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, config.RopeTheta, maxPos);
 
             var moe = new MoEFeedForwardLayer<T>(hidden, routedFfn, numExperts, topK, new SiLUActivation<T>(), sharedFfnDim: sharedFfn);

@@ -66,7 +66,7 @@ public static class DbrxModelBuilder<T>
         {
             var attention = new GroupedQueryAttentionLayer<T>(
                 sequenceLength: maxPos, embeddingDimension: hidden, numHeads: numHeads, numKVHeads: numKVHeads,
-                headDimension: explicitHeadDim ? headDim : null);
+                headDimension: explicitHeadDim ? headDim : null, useCausalMask: true);
             attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, config.RopeTheta, maxPos);
 
             var moe = new MoEFeedForwardLayer<T>(hidden, ffn, numExperts, topK, new SiLUActivation<T>());

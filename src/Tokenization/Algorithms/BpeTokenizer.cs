@@ -65,6 +65,11 @@ namespace AiDotNet.Tokenization.Algorithms
         // the tokenizer has no added tokens.
         private readonly Regex? _specialSplitRegex;
 
+        // Causal-LM special-token policy: GPT/Llama tokenizers optionally prepend a single BOS and never
+        // append EOS or wrap the prompt in BERT [CLS]/[SEP]. Driven by the checkpoint's add_bos_token flag.
+        private readonly bool _addBosToken;
+        private readonly string? _bosToken;
+
         /// <summary>
         /// Creates a new BPE tokenizer with the specified vocabulary and merge rules.
         /// </summary>
@@ -92,7 +97,9 @@ namespace AiDotNet.Tokenization.Algorithms
             SpecialTokens? specialTokens = null,
             string? pattern = null,
             bool byteLevel = false,
-            IEnumerable<string>? specialTokenStrings = null)
+            IEnumerable<string>? specialTokenStrings = null,
+            bool addBosToken = false,
+            string? bosToken = null)
             : base(vocabulary, specialTokens ?? SpecialTokens.Gpt())
         {
             Guard.NotNull(merges);
@@ -100,6 +107,8 @@ namespace AiDotNet.Tokenization.Algorithms
             _cache = new Dictionary<string, List<string>>();
 
             _byteLevel = byteLevel;
+            _addBosToken = addBosToken;
+            _bosToken = bosToken;
 
             // Build the added-token splitter, longest-first so a longer token wins over a prefix of it.
             var specials = specialTokenStrings?.Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
@@ -440,6 +449,26 @@ namespace AiDotNet.Tokenization.Algorithms
             }
 
             return tokens;
+        }
+
+        /// <summary>
+        /// Causal-LM special-token policy: optionally prepend a single BOS, and never append EOS or add
+        /// BERT-style [CLS]/[SEP]. This overrides the base BERT behavior, which would wrap a decoder prompt
+        /// in out-of-vocabulary tokens and corrupt generation.
+        /// </summary>
+        protected override List<string> AddSpecialTokensToSequence(List<string> tokens)
+        {
+            if (_addBosToken && !string.IsNullOrEmpty(_bosToken))
+            {
+                var withBos = new List<string>(tokens.Count + 1) { _bosToken! };
+                withBos.AddRange(tokens);
+                return withBos;
+            }
+
+            // No BOS to add: defer to the base policy, which prepends/appends any configured Cls/Sep tokens.
+            // Decoder tokenizers (e.g. from GGUF) leave those empty, so nothing is added; CLIP and similar
+            // keep their start/end tokens.
+            return base.AddSpecialTokensToSequence(tokens);
         }
 
         /// <summary>
