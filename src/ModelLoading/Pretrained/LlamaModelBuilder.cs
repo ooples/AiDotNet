@@ -225,7 +225,7 @@ public static class LlamaModelBuilder<T>
     }
 
     // Reads an HF [outDim, inDim] row-major matrix and returns it transposed to [inDim, outDim] row-major.
-    private static T[] TransposeOutInToInOut(INamedTensorSource weights, string name, int outDim, int inDim)
+    internal static T[] TransposeOutInToInOut(INamedTensorSource weights, string name, int outDim, int inDim)
     {
         var src = ReadTensor(weights, name, outDim * inDim);
         var dst = new T[inDim * outDim];

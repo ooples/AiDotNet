@@ -53,6 +53,11 @@ public static class PretrainedArchitectures<T>
         DecoderFactory gemma2 = (config, weights) => Gemma2ModelBuilder<T>.Build(config, weights);
         foreach (var name in Gemma2ModelBuilder<T>.SupportedArchitectures)
             Registry[name] = gemma2;
+
+        // Cohere (Command-R): LayerNorm + parallel residual + gated SwiGLU + tied embeddings + logit scale.
+        DecoderFactory cohere = (config, weights) => CohereModelBuilder<T>.Build(config, weights);
+        foreach (var name in CohereModelBuilder<T>.SupportedArchitectures)
+            Registry[name] = cohere;
     }
 
     /// <summary>Registers (or replaces) the factory for an architecture / model-type name.</summary>
