@@ -421,11 +421,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // follow-up issue; not reproducible locally because training times out first). Runs in the
         // nightly heavy lane, matching the other foundation-scale models here.
         "ParaformerLarge",
-        // LSTMDetector (AnomalyDetection.TimeSeries): its Builder/Predictions tests overran the 60 s gate,
-        // but its TimeSeriesModelTestBase alias is NON-GENERIC (double-only), so it can be neither floated
-        // (CS0308) nor iteration-capped (CS0115 — the alias lacks the override members). Deferring to the
-        // nightly heavy lane is the only in-shard lever until that base is made generic over T.
-        "LSTMDetector",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
@@ -747,8 +742,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "ExtremeLearningMachine", "Kokoro", "MCDropoutNeuralNetwork", "MPLUGOwl2",
         "Mamba2", "MedCLIP", "MedFlamingo", "MinMo", "LLaVANeXTVideo", "NaturalSpeech2", "NeuFlowV2",
         "NeuralParametricEQ", "OMGLLaVA",
-        // LSTMDetector omitted from <float>: its TimeSeriesModelTestBase alias is non-generic (double-only),
-        // so it takes the cap-only (double) path below.
+        // LSTMDetector (AnomalyDetection.TimeSeries): Builder/Predictions overran the 60 s gate at
+        // <double>. Now that TimeSeriesModelTestBase is generic over T, <float> halves its per-step cost.
+        "LSTMDetector",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
