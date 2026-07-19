@@ -176,8 +176,12 @@ public sealed class PortfolioAgentTrainingTests
         double meanReturn = PortfolioAgentTrainer.Train(agent, trainEnv, episodes: 2);
         Assert.True(double.IsFinite(meanReturn), $"training return {meanReturn} was not finite");
 
+        // Evaluate on genuinely UNSEEN prices (a different regime/level than the training series), so the smoke
+        // test exercises the agent on data it never trained on — the honest-eval discipline.
+        var evalPrices = new List<double[]> { Ramp(120, 0.8, 40), Ramp(90, 1.2, 40) };
+        agent.ResetEpisode();
         var evalEnv = new PortfolioManagerEnvironment<double>(
-            prices, null, windowSize: 5, initialCapital: 100_000, reward: new DifferentialSharpeReward());
+            evalPrices, null, windowSize: 5, initialCapital: 100_000, reward: new DifferentialSharpeReward());
         var result = PortfolioBacktest.Run(evalEnv, s => agent.SelectAction(s, explore: false));
 
         Assert.True(double.IsFinite(result.FinalValue) && result.FinalValue > 0, $"final value {result.FinalValue}");

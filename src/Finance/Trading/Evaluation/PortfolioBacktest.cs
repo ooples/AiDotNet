@@ -133,8 +133,18 @@ public static class PortfolioBacktest
             }
         }
 
-        // Calmar = annualized return / max drawdown (return per unit of worst-case loss).
-        double annualizedReturn = mean * PeriodsPerYear;
+        // Calmar = annualized return / max drawdown (return per unit of worst-case loss). Annualize the
+        // COMPOUNDED total return over the n observed periods geometrically, not the arithmetic per-step mean.
+        double annualizedReturn;
+        if (n > 0 && (1.0 + totalReturn) > 0.0)
+        {
+            annualizedReturn = Math.Pow(1.0 + totalReturn, PeriodsPerYear / n) - 1.0;
+        }
+        else
+        {
+            annualizedReturn = mean * PeriodsPerYear; // degenerate (total loss / no periods): fall back to linear.
+        }
+
         double calmar = maxDd > 1e-12 ? annualizedReturn / maxDd : 0.0;
 
         double avgTurnover = steps > 0 ? turnoverSum / steps : 0.0;
@@ -258,14 +268,19 @@ public static class BaselinePolicies
                     }
                 }
 
-                double vol = 1e-6;
+                // Exclude any asset without enough valid returns to estimate a volatility — otherwise a
+                // degenerate near-zero vol would hand it a runaway inverse-vol weight. Excluded = zero weight.
                 if (m > 1)
                 {
                     double mu = sr / m;
-                    vol = Math.Sqrt(Math.Max(0.0, (sr2 / m) - (mu * mu))) + 1e-6;
+                    double vol = Math.Sqrt(Math.Max(0.0, (sr2 / m) - (mu * mu))) + 1e-6;
+                    invVol[i] = 1.0 / vol;
+                }
+                else
+                {
+                    invVol[i] = 0.0;
                 }
 
-                invVol[i] = 1.0 / vol;
                 sum += invVol[i];
             }
 

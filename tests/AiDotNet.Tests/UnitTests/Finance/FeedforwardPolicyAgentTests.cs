@@ -41,6 +41,37 @@ public sealed class FeedforwardPolicyAgentTests
         Assert.Equal(actA[1], actB[1], 12);
     }
 
+    [Fact]
+    [Trait("category", "unit")]
+    public void Training_moves_the_greedy_policy_toward_higher_reward_actions()
+    {
+        // A genuine learns-test: feed a reward that INCREASES with action[0] (reward = the sampled action[0]),
+        // so REINFORCE has a real gradient direction. After several episodes the greedy policy's action[0] must
+        // move up — proving Train() actually updates the parameters (not just runs without error).
+        var agent = new FeedforwardPolicyAgent<double>(
+            stateDim: 4, actionDim: 2, hidden: 8, explorationSigma: 0.3, learningRate: 5e-2, seed: 5);
+        var probe = State(0.3, -0.2, 0.5, 0.1);
+
+        double before = agent.SelectAction(probe, explore: false)[0];
+
+        for (int ep = 0; ep < 30; ep++)
+        {
+            agent.ResetEpisode();
+            for (int t = 0; t < 6; t++)
+            {
+                var s = State(0.3, -0.2, 0.5, 0.1);
+                var act = agent.SelectAction(s, explore: true);
+                // Higher action[0] earns higher reward → the policy should learn to raise action[0].
+                agent.StoreExperience(s, act, reward: act[0], nextState: s, done: t == 5);
+            }
+            agent.Train();
+        }
+
+        double after = agent.SelectAction(probe, explore: false)[0];
+        Assert.True(Math.Abs(after - before) > 1e-6, $"training should move the greedy policy output (before {before}, after {after})");
+        Assert.True(after > before, $"reward rewards higher action[0], so the greedy action[0] should rise (before {before}, after {after})");
+    }
+
     [Fact(Timeout = 120000)]
     [Trait("category", "unit")]
     public async Task Trains_end_to_end_through_the_harness_with_finite_holdout_metrics()

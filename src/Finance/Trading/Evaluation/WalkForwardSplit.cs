@@ -43,6 +43,16 @@ public static class WalkForwardSplit
         int splitIndex = (int)(n * trainFraction);
         int holdoutStart = Math.Min(n, splitIndex + embargo);
 
+        // Reject a split that leaves either partition empty (series too short, or trainFraction/embargo too
+        // extreme) rather than returning a zero-row train or holdout that fails downstream.
+        if (splitIndex <= 0 || holdoutStart >= n)
+        {
+            throw new ArgumentException(
+                $"Split leaves an empty partition (length {n}, train rows {splitIndex}, holdout rows {n - holdoutStart}); " +
+                "reduce the embargo or adjust trainFraction / provide a longer series.",
+                nameof(series));
+        }
+
         var train = new List<double[]>(series.Count);
         var holdout = new List<double[]>(series.Count);
         foreach (var col in series)

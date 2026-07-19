@@ -62,6 +62,9 @@ public sealed class PortfolioStudyTests
             new List<(string, IPortfolioReward)> { ("r", new TotalReturnReward()) });
         Assert.Single(grid);
         Assert.Equal(1.0, grid[0].MaxLeverage);
+        // Defaults to the built-in friction configuration, tagged "default" in the experiment name.
+        Assert.Equal(new PortfolioFrictions(), grid[0].Frictions);
+        Assert.Contains("default", grid[0].Name);
     }
 
     [Fact]
@@ -73,15 +76,26 @@ public sealed class PortfolioStudyTests
         var experiments = PortfolioExperimentMatrix.Cross(
             new List<(string, IPortfolioReward)> { ("total", new TotalReturnReward()), ("sharpe", new DifferentialSharpeReward()) });
 
+        // Distinguishable policies (assigned by the factory call order the runner iterates in) make the ranking
+        // non-vacuous: the first experiment gets the PURE riser, the second gets a mostly-riser mix that carries
+        // 20% of the declining asset. Both beat the 50/50 equal-weight baseline (they hold more of the winner),
+        // but the pure riser has the higher risk-adjusted (Sharpe) score, so the ordering is meaningful. A single
+        // shared policy would give both experiments identical holdout metrics and a trivially-satisfied ordering.
+        int call = 0;
         var outcomes = PortfolioStudy.Run<double>(
             prices, null, trainFraction: 0.7, embargo: 3, windowSize: 5, initialCapital: 100_000,
-            experiments, agentFactory: (_, _) => new FixedWeightAgent(new[] { 1.0, 0.0 }), trainEpisodes: 1);
+            experiments,
+            agentFactory: (_, _) => new FixedWeightAgent(call++ == 0 ? new[] { 1.0, 0.0 } : new[] { 0.8, 0.2 }),
+            trainEpisodes: 1);
 
         Assert.Equal(2, outcomes.Count);
-        // Ranked by holdout Sharpe, descending.
-        Assert.True(outcomes[0].Agent.AnnualizedSharpe >= outcomes[1].Agent.AnnualizedSharpe);
-        // The riser-concentrated agent beats equal-weight (which holds the decliner) on the holdout.
-        Assert.All(outcomes, o => Assert.True(o.BeatBaseline));
+        // Ranked by holdout Sharpe (descending): the pure-riser experiment ("total") first, by exact name order.
+        Assert.StartsWith("total", outcomes[0].Name);
+        Assert.StartsWith("sharpe", outcomes[1].Name);
+        Assert.True(outcomes[0].Agent.AnnualizedSharpe > outcomes[1].Agent.AnnualizedSharpe,
+            $"pure-riser Sharpe {outcomes[0].Agent.AnnualizedSharpe} should exceed the mixed policy {outcomes[1].Agent.AnnualizedSharpe}");
+        // Both hold more of the winner than the 50/50 baseline, so both beat it on the holdout.
+        Assert.All(outcomes, o => Assert.True(o.BeatBaseline, $"{o.Name}: agent {o.Agent.AnnualizedSharpe} vs base {o.BaselineEqualWeight.AnnualizedSharpe}"));
         // Holdout has ~30 bars minus embargo minus the window warm-up — a positive, sane step count.
         Assert.All(outcomes, o => Assert.True(o.Agent.Steps > 0 && o.Agent.Steps < 30));
     }

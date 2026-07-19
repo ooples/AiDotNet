@@ -47,21 +47,28 @@ public sealed class RecurrentPolicyAgentTests
 
     [Fact]
     [Trait("category", "unit")]
-    public void Reset_episode_clears_recurrent_state()
+    public void Reset_episode_restores_the_agent_to_a_fresh_state()
     {
         var agent = new RecurrentPolicyAgent<double>(stateDim: 3, actionDim: 2, hidden: 8, seed: 2);
+        // A fresh, identical-weight agent (same seed) that only ever sees the probe — the reference for "clean state".
+        var fresh = new RecurrentPolicyAgent<double>(stateDim: 3, actionDim: 2, hidden: 8, seed: 2);
 
-        // Establish a history, then read the action for a probe observation.
+        // Establish a history on `agent`, then read the action for a probe observation.
         agent.SelectAction(State(1, 1, 1), explore: false);
         agent.SelectAction(State(1, 1, 1), explore: false);
         var afterHistory = agent.SelectAction(State(0.2, 0.2, 0.2), explore: false);
 
-        // Reset, then the SAME probe from a fresh state must differ from the mid-history read.
+        // After reset, the SAME probe from a clean state must (a) differ from the mid-history read, and
+        // (b) EXACTLY match the fresh agent's action for the probe — i.e. reset fully restores the hidden state,
+        // not merely perturbs it.
         agent.ResetEpisode();
         var afterReset = agent.SelectAction(State(0.2, 0.2, 0.2), explore: false);
+        var freshAction = fresh.SelectAction(State(0.2, 0.2, 0.2), explore: false);
 
-        double diff = Math.Abs(afterHistory[0] - afterReset[0]) + Math.Abs(afterHistory[1] - afterReset[1]);
-        Assert.True(diff > 1e-9, "hidden state should reset per episode");
+        double changed = Math.Abs(afterHistory[0] - afterReset[0]) + Math.Abs(afterHistory[1] - afterReset[1]);
+        Assert.True(changed > 1e-9, "hidden state should reset per episode (differs from the mid-history read)");
+        Assert.Equal(freshAction[0], afterReset[0], 12);
+        Assert.Equal(freshAction[1], afterReset[1], 12);
     }
 
     [Fact(Timeout = 120000)]

@@ -287,7 +287,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// The model's level forecasts are differenced against the previous realized value to per-step changes
     /// (<c>predictedChange[i] = predicted[i] - actual[i-1]</c>, <c>realizedChange[i] = actual[i] - actual[i-1]</c>),
     /// so the strategy goes long when the model forecasts a rise above the last realized value. Computed on the
-    /// held-out test partition, so this is an out-of-sample measure. Any metric added via
+    /// held-out test partition when one is available, otherwise on the training partition the direct-training path
+    /// falls back to — so it is out-of-sample only when a held-out split exists. Any metric added via
     /// <c>ConfigureFinancialMetric</c> extends the default set. Failures are swallowed with a trace warning —
     /// the trained model is unaffected and <see cref="AiModelResult{T,TInput,TOutput}.FinancialEvaluation"/>
     /// is left null.

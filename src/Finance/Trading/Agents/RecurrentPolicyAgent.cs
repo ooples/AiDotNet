@@ -65,6 +65,7 @@ public sealed class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
     {
         if (stateDim <= 0) throw new ArgumentOutOfRangeException(nameof(stateDim));
         if (actionDim <= 0) throw new ArgumentOutOfRangeException(nameof(actionDim));
+        if (hidden <= 0) throw new ArgumentOutOfRangeException(nameof(hidden));
 
         _stateDim = stateDim;
         _actionDim = actionDim;
@@ -129,7 +130,7 @@ public sealed class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
         var s = new T[_stateDim];
         for (int i = 0; i < _stateDim && i < state.Length; i++) s[i] = state[i];
 
-        var mean = Forward(s);
+        var mean = Forward(s); // advances the recurrent state (must happen on every act, incl. inference)
         var action = new T[_actionDim];
         for (int a = 0; a < _actionDim; a++)
         {
@@ -138,13 +139,22 @@ public sealed class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
             action[a] = NumOps.FromDouble(Math.Clamp(v, -1.0, 1.0));
         }
 
-        _states.Add(s);
-        _actions.Add(action);
+        // The hidden state advances above (a recurrent policy must), but the rollout is NOT recorded here — so a
+        // greedy backtest that never calls StoreExperience cannot grow or contaminate the training buffers.
         return new Vector<T>(action);
     }
 
     public void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
+        // Record the rollout HERE (owning a copy of the supplied state/action) — the transition the trainer
+        // actually stored — so only true training steps feed the BPTT replay.
+        var s = new T[_stateDim];
+        for (int i = 0; i < _stateDim && i < state.Length; i++) s[i] = state[i];
+        var a = new T[_actionDim];
+        for (int i = 0; i < _actionDim && i < action.Length; i++) a[i] = action[i];
+
+        _states.Add(s);
+        _actions.Add(a);
         _rewards.Add(ToD(reward));
         _episodeDone = done;
     }

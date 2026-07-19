@@ -555,9 +555,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <see cref="ConfiguredMetrics"/> for uniform access.
     /// </para>
     /// <para>
-    /// Computed on the held-out test partition (predicted vs realized), so — unlike cluster validity — this
-    /// is an out-of-sample measure. The model's level forecasts are differenced to per-step changes first,
-    /// so the strategy goes long when the model forecasts a rise above the last realized value.
+    /// Computed on the held-out test partition (predicted vs realized) when one is available — so it is
+    /// out-of-sample in that case; the direct-training path falls back to the training partition when no
+    /// held-out split exists. The model's level forecasts are differenced to per-step changes first, so the
+    /// strategy goes long when the model forecasts a rise above the last realized value.
     /// </para>
     /// </remarks>
     public Finance.Evaluation.FinancialEvaluationResult? FinancialEvaluation { get; private set; }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using AiDotNet.Finance.Trading.Rewards;
 
 namespace AiDotNet.Finance.Trading.Evaluation;
@@ -32,8 +33,10 @@ public static class PortfolioExperimentMatrix
             {
                 foreach (var (fricName, fric) in frics)
                 {
+                    // Round-trip, culture-invariant leverage in the name so it is lossless (no rounding) and
+                    // stable across locales (never a comma decimal separator).
                     experiments.Add(new PortfolioExperiment(
-                        $"{rewardName}|lev{lev:0.##}|{fricName}", reward, lev, fric));
+                        $"{rewardName}|lev{lev.ToString("R", CultureInfo.InvariantCulture)}|{fricName}", reward, lev, fric));
                 }
             }
         }
@@ -63,6 +66,23 @@ public static class PortfolioStudy
         int trainEpisodes)
     {
         ArgumentNullException.ThrowIfNull(assetPrices);
+
+        // Feature columns must align to the price rows (same time length) BEFORE splitting, or the train/holdout
+        // features would not line up with the prices they annotate. (WalkForwardSplit checks equal length within
+        // each set; this checks price-vs-feature alignment across the two.)
+        if (featureColumns is { Count: > 0 } && assetPrices.Count > 0)
+        {
+            int priceLength = assetPrices[0]?.Length ?? 0;
+            foreach (var col in featureColumns)
+            {
+                if (col is null || col.Length != priceLength)
+                {
+                    throw new ArgumentException(
+                        $"Every feature column must be non-null and the same length as the price series ({priceLength}).",
+                        nameof(featureColumns));
+                }
+            }
+        }
 
         var (trainPrices, holdoutPrices) = WalkForwardSplit.Split(assetPrices, trainFraction, embargo);
 

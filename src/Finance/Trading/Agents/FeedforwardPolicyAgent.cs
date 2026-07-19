@@ -51,6 +51,7 @@ public sealed class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
     {
         if (stateDim <= 0) throw new ArgumentOutOfRangeException(nameof(stateDim));
         if (actionDim <= 0) throw new ArgumentOutOfRangeException(nameof(actionDim));
+        if (hidden <= 0) throw new ArgumentOutOfRangeException(nameof(hidden));
 
         _stateDim = stateDim;
         _actionDim = actionDim;
@@ -103,13 +104,22 @@ public sealed class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
             action[a] = NumOps.FromDouble(Math.Clamp(v, -1.0, 1.0));
         }
 
-        _states.Add(s);
-        _actions.Add(action);
+        // Pure inference: no rollout is recorded here, so evaluating the policy (e.g. a greedy backtest that
+        // never calls StoreExperience) cannot grow or contaminate the training buffers.
         return new Vector<T>(action);
     }
 
     public void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
+        // The rollout is recorded HERE (owning a copy of the supplied state/action) — the transition the trainer
+        // actually stored — rather than in SelectAction, so only true training steps populate the buffers.
+        var s = new T[_stateDim];
+        for (int i = 0; i < _stateDim && i < state.Length; i++) s[i] = state[i];
+        var a = new T[_actionDim];
+        for (int i = 0; i < _actionDim && i < action.Length; i++) a[i] = action[i];
+
+        _states.Add(s);
+        _actions.Add(a);
         _rewards.Add(ToD(reward));
         _episodeDone = done;
     }
