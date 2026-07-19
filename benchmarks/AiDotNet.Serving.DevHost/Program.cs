@@ -1,14 +1,33 @@
 using System.Reflection;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Serving.Controllers;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Algorithms;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
+
+static int EnvInt(string name, int fallback) =>
+    int.TryParse(Environment.GetEnvironmentVariable(name), out var v) && v > 0 ? v : fallback;
+
+// Engine selection: DEVHOST_GPU=1 puts every model forward on the auto-detected GPU (OpenCL here);
+// default is the CPU engine. Set process-wide before any model runs.
+if (Environment.GetEnvironmentVariable("DEVHOST_GPU") == "1")
+{
+    bool ok = AiDotNetEngine.AutoDetectAndConfigureGpu();
+    Console.WriteLine(ok && AiDotNetEngine.Current is DirectGpuTensorEngine
+        ? $"[DevHost] GPU engine active: {AiDotNetEngine.Current.GetType().Name}"
+        : "[DevHost] GPU requested but unavailable — falling back to CPU engine.");
+}
+else
+{
+    Console.WriteLine("[DevHost] CPU engine.");
+}
 
 // ---------------------------------------------------------------------------
 // DEV/BENCHMARK host. Wires the REAL OpenAI controller + generation engine +
@@ -79,14 +98,22 @@ if (synthetic)
 }
 else
 {
-    const int embDim = 64, heads = 4;
-    var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+    // Size is env-configurable so the benchmark can run a compute-representative model (a tiny embDim is
+    // dominated by kernel-launch/HTTP overhead and hides where the GPU actually helps). Each block adds
+    // attention + a position-wise FFN (up-project GELU -> down-project) to mirror a real decoder's per-token cost.
+    int embDim = EnvInt("DEVHOST_EMBDIM", 64);
+    int heads = EnvInt("DEVHOST_HEADS", 4);
+    int ffn = EnvInt("DEVHOST_FFN", embDim * 4);
+    int blocks = EnvInt("DEVHOST_LAYERS", 1);
+    var layers = new List<AiDotNet.Interfaces.ILayer<float>> { new EmbeddingLayer<float>(vocab, embDim) };
+    for (int b = 0; b < blocks; b++)
     {
-        new EmbeddingLayer<float>(vocab, embDim),
-        new MultiHeadAttentionLayer<float>(heads, embDim / heads,
-            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
-        new DenseLayer<float>(vocab, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
-    };
+        layers.Add(new MultiHeadAttentionLayer<float>(heads, embDim / heads,
+            activationFunction: new IdentityActivation<float>()));
+        layers.Add(new DenseLayer<float>(ffn, activationFunction: new GELUActivation<float>()));
+        layers.Add(new DenseLayer<float>(embDim, activationFunction: new IdentityActivation<float>()));
+    }
+    layers.Add(new DenseLayer<float>(vocab, activationFunction: new IdentityActivation<float>()));
     var architecture = new NeuralNetworkArchitecture<float>(
         inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.TextGeneration,
         complexity: NetworkComplexity.Simple, inputSize: 1, outputSize: vocab, layers: layers);
@@ -97,8 +124,10 @@ else
     lm.UpdateParameters(new Vector<float>(det));
     model = new ServableModelWrapper<float>(
         ModelName, lm, inputShape: new[] { 1 }, enableSpeculativeDecoding: false, generationForward: lm.Predict);
+    Console.WriteLine($"[DevHost] model embDim={embDim} heads={heads} ffn={ffn} blocks={blocks} vocab={vocab} params={pv.Length}");
 }
 
+Console.WriteLine($"[DevHost] incrementalPaged={model.SupportsIncrementalGeneration} batchedPrefill={model.SupportsBatchedPrefill}");
 repo.LoadModel<float>(ModelName, model);
 tokenizers.Register(ModelName, tokenizer);
 
