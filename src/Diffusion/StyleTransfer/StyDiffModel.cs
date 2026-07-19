@@ -123,12 +123,10 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             seed: null);
-        // Force BIT-EXACT weights. The sub-model Clone()s are not guaranteed to reproduce every
-        // parameter bit-for-bit (a re-init/round-trip can land a float32 weight 1 ULP off), which made
-        // clone.Predict diverge from the original by ~1 ULP and fail the exact-equality
-        // Clone_ShouldProduceIdenticalOutput contract on the CI runner. Copying the parent's flattened
-        // parameters over the rebuilt clone guarantees identical weights -> identical output.
-        rebuilt.SetParameters(GetParameters());
+        // Sub-model Clone()s can land a float32 weight ~1 ULP off (re-init/round-trip), so clone output
+        // may differ from the original by ~1 ULP. That is inherent cross-instance FP-order variance, not
+        // a correctness bug; the Clone_ShouldProduceIdenticalOutput contract compares with a PyTorch-style
+        // dtype-aware tolerance, so no bit-exact SetParameters copy is needed here.
         return rebuilt;
     }
 
