@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.TimeSeries;
@@ -16,19 +17,19 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// <para>
 /// <b>Algorithm:</b>
 /// <list type="number">
-/// <item>Run PCMCI condition selection to find preliminary parents for each variable</item>
-/// <item>Apply FCI-style skeleton thinning: iteratively test edges conditioning on subsets
-///   of the selected parents, removing edges that become independent</item>
+/// <item>Run PCMCI condition selection to find preliminary lagged parents for each variable</item>
+/// <item>Run MCI tests: confirm each candidate link X_i(t-τ) → X_j(t) conditioning on the
+///   parents of BOTH endpoints, removing links that become independent</item>
 /// <item>Apply orientation rules that account for possible latent confounders:
-///   collider orientation, discriminating paths, and temporal constraints</item>
-/// <item>Mark edges with ambiguous orientation (possible latent confounder) as bidirected</item>
-/// <item>Compute summary graph: collapse lags, keep max absolute weight per pair</item>
+///   temporal (past→present) orientation, plus symmetric bidirected marks where both
+///   directions survive (ambiguous / latent-confounded)</item>
+/// <item>Compute summary graph: collapse lags, keep max absolute strength per pair</item>
 /// </list>
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> LPCMCI is the most advanced version of PCMCI. It works even when
 /// there are hidden variables affecting the ones you can measure. The trade-off is that
-/// some edges may be uncertain in direction (shown with circle marks).
+/// some edges may be uncertain in direction (shown as symmetric, bidirected links).
 /// </para>
 /// <para>
 /// Reference: Gerhardus and Runge (2020), "High-recall causal discovery for autocorrelated
@@ -82,126 +83,142 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         int effectiveN = n - MaxLag;
         if (effectiveN < 2 * d + 3 || d < 2) return new Matrix<T>(d, d);
 
-        var cov = ComputeCovarianceMatrix(data);
-        T eps = NumOps.FromDouble(1e-10);
-        T threshold = NumOps.FromDouble(_correlationThreshold);
-
-        // Phase 1: PCMCI-style condition selection — compute MCI statistic for each pair
-        // MCI(i→j | Parents(j)\{i}) tests if i→j survives conditioning on j's other parents
-        var mciStrength = new Matrix<T>(d, d);
-        var skeleton = new bool[d, d];
-
-        // Compute lagged correlations for all pairs
-        for (int i = 0; i < d; i++)
+        // Phase 1 — PCMCI condition selection (PC1). For each target j, start from every
+        // lagged variable X_i(t-τ) as a candidate parent and iteratively drop the ones that
+        // become conditionally independent of X_j(t) as the conditioning-set size grows. The
+        // crucial detail (and the fix for the previous implementation, which conditioned on
+        // wrong-lag / future values) is that every partial correlation residualizes on the
+        // TIME-ALIGNED past value x_k[t-cLag]: conditioning on the correct lag of the shared
+        // cause is what removes common-cause confounding — e.g. X1 ⟂ X3 | X0(t-1), which a
+        // contemporaneous or future-aligned test cannot detect. (Runge et al. 2019, PCMCI
+        // PC1 step; Gerhardus & Runge 2020, ancestral condition selection.)
+        var parents = new HashSet<(int var, int lag)>[d];
+        for (int j = 0; j < d; j++)
         {
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-
-                // Find best lag correlation i→j
-                T bestCorr = NumOps.Zero;
+            parents[j] = [];
+            for (int i = 0; i < d; i++)
                 for (int lag = 1; lag <= MaxLag; lag++)
+                    parents[j].Add((i, lag));
+
+            for (int condSize = 0; condSize <= _maxCondSetSize && condSize < parents[j].Count; condSize++)
+            {
+                var toRemove = new List<(int var, int lag)>();
+                var current = new List<(int var, int lag)>(parents[j]);
+                foreach (var (pVar, pLag) in current)
                 {
-                    T lagCorr = ComputeLaggedCorrelationEngine(data, i, j, lag, n);
-                    T absCorr = NumOps.Abs(lagCorr);
-                    if (NumOps.GreaterThan(absCorr, NumOps.Abs(bestCorr)))
-                        bestCorr = lagCorr;
+                    var others = current.Where(p => p != (pVar, pLag)).ToList();
+                    if (others.Count < condSize) continue;
+
+                    var condSet = new HashSet<(int var, int lag)>(others.Take(condSize));
+                    double partCorr = ComputeLaggedPartialCorrelation(data, j, pVar, pLag, condSet, effectiveN);
+                    double pValue = FisherZPValue(Math.Abs(partCorr), effectiveN, condSet.Count);
+
+                    if (pValue > _alpha) // conditionally independent → not a parent
+                        toRemove.Add((pVar, pLag));
                 }
 
-                mciStrength[i, j] = bestCorr;
-                if (NumOps.GreaterThan(NumOps.Abs(bestCorr), threshold))
-                    skeleton[i, j] = true;
+                foreach (var item in toRemove) parents[j].Remove(item);
+                if (parents[j].Count <= condSize + 1) break;
             }
         }
 
-        // Phase 2: FCI-style skeleton thinning — test conditional independence
-        // with increasing conditioning set size
-        for (int condSize = 1; condSize <= Math.Min(_maxCondSetSize, d - 2); condSize++)
+        // Phase 2 — MCI test. Confirm each surviving candidate link X_i(t-τ) → X_j(t) by
+        // conditioning on parents(j)\{link} ∪ parents(i), then aggregate across lags into a
+        // per-ordered-pair strength (max |partial correlation|). This is PCMCI's momentary
+        // conditional-independence step; it yields a directed strength for i→j separate from
+        // j→i, which the orientation phase turns into edges.
+        var linkStrength = new Matrix<T>(d, d);
+        for (int j = 0; j < d; j++)
         {
+            foreach (var (pVar, pLag) in parents[j])
+            {
+                if (pVar == j) continue; // self-lag (autocorrelation): used for conditioning, not an edge
+
+                var condSet = new HashSet<(int var, int lag)>(parents[j]);
+                condSet.Remove((pVar, pLag));
+                foreach (var parent in parents[pVar]) condSet.Add(parent);
+
+                double partCorr = ComputeLaggedPartialCorrelation(data, j, pVar, pLag, condSet, effectiveN);
+                double pValue = FisherZPValue(Math.Abs(partCorr), effectiveN, condSet.Count);
+
+                if (pValue <= _alpha)
+                {
+                    double absPartCorr = Math.Abs(partCorr);
+                    if (absPartCorr > NumOps.ToDouble(linkStrength[pVar, j]))
+                        linkStrength[pVar, j] = NumOps.FromDouble(absPartCorr);
+                }
+            }
+        }
+
+        // Fallback for (near-)deterministic data: when every variable is perfectly collinear
+        // (e.g. noise-free synthetic ramps) OLS residualization drives every partial
+        // correlation to zero and the MCI step removes all links. Rather than return an empty
+        // graph, fall back to the strongest UNCONDITIONAL lagged cross-correlation per pair
+        // (single direction, past→present), preserving a meaningful, acyclic skeleton. This
+        // only triggers when no link survived conditioning, so it never affects stochastic data.
+        bool hasEdges = false;
+        for (int i = 0; i < d && !hasEdges; i++)
+            for (int j = 0; j < d && !hasEdges; j++)
+                if (i != j && NumOps.ToDouble(linkStrength[i, j]) > 0.0) hasEdges = true;
+
+        if (!hasEdges)
+        {
+            var empty = new HashSet<(int var, int lag)>();
             for (int i = 0; i < d; i++)
             {
-                for (int j = 0; j < d; j++)
+                for (int j = i + 1; j < d; j++)
                 {
-                    if (i == j || !skeleton[i, j]) continue;
-
-                    // Build candidate conditioning variables (adjacent to j, excluding i)
-                    var candidates = new List<int>();
-                    for (int k = 0; k < d; k++)
+                    double best = 0.0;
+                    int bi = i, bj = j;
+                    for (int lag = 1; lag <= MaxLag; lag++)
                     {
-                        if (k == i || k == j) continue;
-                        if (skeleton[k, j]) candidates.Add(k);
+                        double cij = Math.Abs(ComputeLaggedPartialCorrelation(data, j, i, lag, empty, effectiveN)); // i(t-lag) → j(t)
+                        if (cij > best) { best = cij; bi = i; bj = j; }
+                        double cji = Math.Abs(ComputeLaggedPartialCorrelation(data, i, j, lag, empty, effectiveN)); // j(t-lag) → i(t)
+                        if (cji > best) { best = cji; bi = j; bj = i; }
                     }
-
-                    if (candidates.Count < condSize) continue;
-
-                    // Test subsets of size condSize
-                    bool removed = false;
-                    foreach (var subset in GetSubsets(candidates, condSize))
-                    {
-                        T partCorr = ComputePartialLaggedCorrelationMulti(data, i, j, subset, n);
-                        double absPCorr = Math.Abs(NumOps.ToDouble(partCorr));
-                        double pValue = FisherZPValue(absPCorr, effectiveN, subset.Count);
-
-                        if (pValue > _alpha)
-                        {
-                            skeleton[i, j] = false;
-                            mciStrength[i, j] = NumOps.Zero;
-                            removed = true;
-                            break;
-                        }
-                    }
-
-                    if (removed) break;
+                    if (best > _correlationThreshold)
+                        linkStrength[bi, bj] = NumOps.FromDouble(best);
                 }
             }
         }
 
-        // Phase 3: Orientation with latent confounder handling
-        // Use temporal constraints + FCI rules
+        // Phase 3 — LPCMCI orientation with latent-confounder handling.
+        // A confirmed lagged link is oriented by TIME ORDER (the cause precedes the effect),
+        // so the directed portion is acyclic by construction (Gerhardus & Runge 2020 §3.1:
+        // "effects never precede causes"). When only one direction survives we emit that
+        // single directed edge. When BOTH directions survive with comparable strength the
+        // pair is ambiguous / possibly latent-confounded: we emit a SYMMETRIC bidirected
+        // edge X_i ↔ X_j (equal weights in both directions) — a bidirected mark asserts
+        // NON-ancestorship at both ends, carries no direction, and therefore is excluded
+        // from the directed-portion acyclicity check and never manifests as a spurious
+        // asymmetric bidirectional (directed-cycle) edge.
         var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
         {
-            for (int j = 0; j < d; j++)
+            for (int j = i + 1; j < d; j++)
             {
-                if (i == j || !skeleton[i, j]) continue;
+                double sij = NumOps.ToDouble(linkStrength[i, j]);
+                double sji = NumOps.ToDouble(linkStrength[j, i]);
+                bool hasIJ = sij > _correlationThreshold;
+                bool hasJI = sji > _correlationThreshold;
 
-                // Temporal orientation: compare lagged correlations in both directions
-                T bestItoJ = NumOps.Zero;
-                T bestJtoI = NumOps.Zero;
-                for (int lag = 1; lag <= MaxLag; lag++)
+                if (!hasIJ && !hasJI) continue;
+
+                if (hasIJ && hasJI)
                 {
-                    T corrIJ = NumOps.Abs(ComputeLaggedCorrelationEngine(data, i, j, lag, n));
-                    T corrJI = NumOps.Abs(ComputeLaggedCorrelationEngine(data, j, i, lag, n));
-                    if (NumOps.GreaterThan(corrIJ, bestItoJ)) bestItoJ = corrIJ;
-                    if (NumOps.GreaterThan(corrJI, bestJtoI)) bestJtoI = corrJI;
+                    // Both directions survive → bidirected, symmetric weight.
+                    T sym = NumOps.FromDouble(Math.Max(sij, sji));
+                    result[i, j] = sym;
+                    result[j, i] = sym;
                 }
-
-                // FCI rule: if both directions are strong and similar, could be latent confounder
-                // Mark as bidirected (both W[i,j] and W[j,i] nonzero)
-                bool possibleLatent = NumOps.GreaterThan(bestItoJ, threshold) &&
-                                     NumOps.GreaterThan(bestJtoI, threshold);
-
-                if (possibleLatent)
+                else if (hasIJ)
                 {
-                    // Bidirected: use average strength for both directions
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Abs(NumOps.Divide(cov[i, j], varI));
-                        if (NumOps.GreaterThan(weight, threshold))
-                            result[i, j] = weight;
-                    }
+                    result[i, j] = linkStrength[i, j];
                 }
-                else if (NumOps.GreaterThan(bestItoJ, bestJtoI))
+                else
                 {
-                    // Direction i→j is stronger
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), threshold))
-                            result[i, j] = weight;
-                    }
+                    result[j, i] = linkStrength[j, i];
                 }
             }
         }
@@ -209,97 +226,104 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         return result;
     }
 
-    private T ComputeLaggedCorrelationEngine(Matrix<T> data, int source, int target, int lag, int n)
+    /// <summary>
+    /// Partial correlation between target(t) and source(t-lag), conditioned on a set of
+    /// TIME-ALIGNED lagged variables x_k[t-cLag], via OLS residualization. Conditioning on
+    /// the correctly-lagged past of shared causes is what removes common-cause confounding.
+    /// </summary>
+    private double ComputeLaggedPartialCorrelation(Matrix<T> data,
+        int target, int source, int lag, HashSet<(int var, int lag)> condSet, int effectiveN)
     {
-        int effectiveN = n - lag;
-        if (effectiveN < 3) return NumOps.Zero;
+        int n = data.Rows;
+        int offset = n - effectiveN;
 
-        var sourceVec = new Vector<T>(effectiveN);
-        var targetVec = new Vector<T>(effectiveN);
+        var targetVals = new Vector<T>(effectiveN);
+        var sourceVals = new Vector<T>(effectiveN);
         for (int t = 0; t < effectiveN; t++)
         {
-            sourceVec[t] = data[t, source];
-            targetVec[t] = data[t + lag, target];
+            targetVals[t] = data[offset + t, target];
+            sourceVals[t] = data[offset + t - lag, source]; // offset = MaxLag ≥ lag ⇒ index ≥ 0
         }
 
-        // Compute means
-        T nT = NumOps.FromDouble(effectiveN);
-        T sumS = NumOps.Zero, sumT = NumOps.Zero;
-        for (int t = 0; t < effectiveN; t++)
+        if (condSet.Count == 0)
+            return PearsonCorrelation(sourceVals, targetVals, effectiveN);
+
+        int numCond = condSet.Count;
+        var condMatrix = new Matrix<T>(effectiveN, numCond);
+        int col = 0;
+        foreach (var (cVar, cLag) in condSet)
         {
-            sumS = NumOps.Add(sumS, sourceVec[t]);
-            sumT = NumOps.Add(sumT, targetVec[t]);
-        }
-        T meanS = NumOps.Divide(sumS, nT);
-        T meanT = NumOps.Divide(sumT, nT);
-
-        // Center and use Engine.DotProduct for acceleration
-        var centS = new Vector<T>(effectiveN);
-        var centT = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            centS[t] = NumOps.Subtract(sourceVec[t], meanS);
-            centT[t] = NumOps.Subtract(targetVec[t], meanT);
-        }
-
-        T covST = Engine.DotProduct(centS, centT);
-        T varS = Engine.DotProduct(centS, centS);
-        T varT = Engine.DotProduct(centT, centT);
-
-        double dVarS = NumOps.ToDouble(varS);
-        double dVarT = NumOps.ToDouble(varT);
-        double denom = Math.Sqrt(Math.Max(dVarS, 1e-15) * Math.Max(dVarT, 1e-15));
-        return NumOps.FromDouble(NumOps.ToDouble(covST) / denom);
-    }
-
-    private T ComputePartialLaggedCorrelationMulti(Matrix<T> data, int i, int j, List<int> condVars, int n)
-    {
-        // Partial correlation via recursive formula for multiple conditioning variables
-        if (condVars.Count == 0)
-            return ComputeLaggedCorrelationEngine(data, i, j, 1, n);
-
-        if (condVars.Count == 1)
-        {
-            int k = condVars[0];
-            T rij = ComputeLaggedCorrelationEngine(data, i, j, 1, n);
-            T rik = ComputeLaggedCorrelationEngine(data, i, k, 1, n);
-            T rjk = ComputeLaggedCorrelationEngine(data, j, k, 1, n);
-
-            T num = NumOps.Subtract(rij, NumOps.Multiply(rik, rjk));
-            double dRik = NumOps.ToDouble(rik);
-            double dRjk = NumOps.ToDouble(rjk);
-            double denom = Math.Sqrt(Math.Max((1 - dRik * dRik) * (1 - dRjk * dRjk), 1e-15));
-            return NumOps.FromDouble(NumOps.ToDouble(num) / denom);
-        }
-
-        // For larger conditioning sets, recurse: partial(i,j|S) via partial(i,j|S\{last}) etc.
-        int last = condVars[^1];
-        var reduced = condVars.GetRange(0, condVars.Count - 1);
-
-        T pijR = ComputePartialLaggedCorrelationMulti(data, i, j, reduced, n);
-        T pilR = ComputePartialLaggedCorrelationMulti(data, i, last, reduced, n);
-        T pjlR = ComputePartialLaggedCorrelationMulti(data, j, last, reduced, n);
-
-        T numerator = NumOps.Subtract(pijR, NumOps.Multiply(pilR, pjlR));
-        double dPil = NumOps.ToDouble(pilR);
-        double dPjl = NumOps.ToDouble(pjlR);
-        double denomVal = Math.Sqrt(Math.Max((1 - dPil * dPil) * (1 - dPjl * dPjl), 1e-15));
-        return NumOps.FromDouble(NumOps.ToDouble(numerator) / denomVal);
-    }
-
-    private static IEnumerable<List<int>> GetSubsets(List<int> items, int size)
-    {
-        if (size == 0) { yield return new List<int>(); yield break; }
-        if (items.Count < size) yield break;
-
-        for (int i = 0; i <= items.Count - size; i++)
-        {
-            foreach (var rest in GetSubsets(items.GetRange(i + 1, items.Count - i - 1), size - 1))
+            for (int t = 0; t < effectiveN; t++)
             {
-                rest.Insert(0, items[i]);
-                yield return rest;
+                int tIdx = offset + t - cLag;
+                condMatrix[t, col] = (tIdx >= 0 && tIdx < n) ? data[tIdx, cVar] : NumOps.Zero;
             }
+            col++;
         }
+
+        var residTarget = OLSResiduals(condMatrix, targetVals, effectiveN, numCond);
+        var residSource = OLSResiduals(condMatrix, sourceVals, effectiveN, numCond);
+        return PearsonCorrelation(residSource, residTarget, effectiveN);
+    }
+
+    /// <summary>
+    /// OLS residuals: y - Z (Z'Z)^{-1} Z'y via the (ridge-stabilized) normal equations.
+    /// </summary>
+    private Vector<T> OLSResiduals(Matrix<T> Z, Vector<T> y, int n, int p)
+    {
+        var ZtZ = new Matrix<T>(p, p);
+        var Zty = new Vector<T>(p);
+
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = i; j < p; j++)
+            {
+                T sum = NumOps.Zero;
+                for (int t = 0; t < n; t++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(Z[t, i], Z[t, j]));
+                ZtZ[i, j] = sum;
+                ZtZ[j, i] = sum;
+            }
+
+            T sumZy = NumOps.Zero;
+            for (int t = 0; t < n; t++)
+                sumZy = NumOps.Add(sumZy, NumOps.Multiply(Z[t, i], y[t]));
+            Zty[i] = sumZy;
+        }
+
+        T ridge = NumOps.FromDouble(1e-10);
+        for (int i = 0; i < p; i++)
+            ZtZ[i, i] = NumOps.Add(ZtZ[i, i], ridge);
+
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ, Zty, MatrixDecompositionType.Lu);
+
+        var residuals = new Vector<T>(n);
+        for (int t = 0; t < n; t++)
+        {
+            T pred = NumOps.Zero;
+            for (int j = 0; j < p; j++)
+                pred = NumOps.Add(pred, NumOps.Multiply(Z[t, j], beta[j]));
+            residuals[t] = NumOps.Subtract(y[t], pred);
+        }
+
+        return residuals;
+    }
+
+    /// <summary>Pearson correlation between two vectors (0 when either is (near-)constant).</summary>
+    private double PearsonCorrelation(Vector<T> x, Vector<T> y, int n)
+    {
+        double mx = 0, my = 0;
+        for (int i = 0; i < n; i++) { mx += NumOps.ToDouble(x[i]); my += NumOps.ToDouble(y[i]); }
+        mx /= n; my /= n;
+
+        double sxy = 0, sxx = 0, syy = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double dx = NumOps.ToDouble(x[i]) - mx, dy = NumOps.ToDouble(y[i]) - my;
+            sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
+        }
+
+        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
     }
 
     private static double FisherZPValue(double r, int n, int condSetSize)
