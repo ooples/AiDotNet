@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+# commit-msg hook — auto-fix the commit message to Conventional Commits BEFORE the
+# commit is finalized, using the SAME shared fixer the CI uses
+# (.github/scripts/commit-msg-autofix.py). Because the message is corrected at commit
+# time, commits land already-compliant and the server-side commitlint auto-fixer never
+# has to rewrite history / force-push the branch — which was overriding in-flight work
+# and cancelling in-progress CI runs on active PRs.
+#
+# Fully automated (no manual message editing) and non-destructive (no force-push).
+# Merge/revert/bot commits are passed through unchanged by the fixer itself.
+#
+# To enable this hook (once per clone/worktree), run from the repository root:
+#   git config core.hooksPath .githooks
+#
+# If python3 is unavailable the hook no-ops; the commitlint.yml CI check still
+# enforces compliance (it just won't auto-fix), so nothing silently slips through.
+
+set -euo pipefail
+
+msg_file="$1"
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+script="$repo_root/.github/scripts/commit-msg-autofix.py"
+
+if [ -f "$script" ] && command -v python3 >/dev/null 2>&1; then
+    # The fixer reads the raw message on stdin and prints the corrected message.
+    # It leaves already-compliant messages (and Merge/Revert/bot commits) unchanged.
+    if fixed="$(python3 "$script" < "$msg_file" 2>/dev/null)"; then
+        printf '%s\n' "$fixed" > "$msg_file"
+    fi
+fi
+
+exit 0
