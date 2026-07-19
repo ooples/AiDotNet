@@ -140,6 +140,11 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
             AddIfPresent(file, map, hf + "mlp.gate_proj.weight", blk + "ffn_gate.weight");
             AddIfPresent(file, map, hf + "mlp.up_proj.weight", blk + "ffn_up.weight");
             AddIfPresent(file, map, hf + "mlp.down_proj.weight", blk + "ffn_down.weight");
+            // Attention projection biases (Qwen2 biases q/k/v; StarCoder2 all four).
+            AddIfPresent(file, map, hf + "self_attn.q_proj.bias", blk + "attn_q.bias");
+            AddIfPresent(file, map, hf + "self_attn.k_proj.bias", blk + "attn_k.bias");
+            AddIfPresent(file, map, hf + "self_attn.v_proj.bias", blk + "attn_v.bias");
+            AddIfPresent(file, map, hf + "self_attn.o_proj.bias", blk + "attn_output.bias");
             // Fused projections (Phi-3): expose the fused HF names so FusedProjectionSource can split them.
             AddIfPresent(file, map, hf + "self_attn.qkv_proj.weight", blk + "attn_qkv.weight");
             AddIfPresent(file, map, hf + "mlp.gate_up_proj.weight", blk + "ffn_gate_up.weight");

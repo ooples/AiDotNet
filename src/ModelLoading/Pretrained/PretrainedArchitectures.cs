@@ -28,10 +28,15 @@ public static class PretrainedArchitectures<T>
 
     static PretrainedArchitectures()
     {
-        // LLaMA / Mistral / Qwen2: the default gated-SwiGLU decoder.
+        // LLaMA / Mistral: the default bias-free gated-SwiGLU decoder.
         DecoderFactory llama = (config, weights) => LlamaModelBuilder<T>.Build(config, weights);
         foreach (var name in LlamaModelBuilder<T>.SupportedArchitectures)
             Registry[name] = llama;
+
+        // Qwen2: LLaMA-style but with q/k/v attention projection biases.
+        DecoderFactory qwen2 = (config, weights) => LlamaModelBuilder<T>.Build(config, weights, DecoderOptions<T>.Qwen2);
+        Registry["qwen2"] = qwen2;
+        Registry["Qwen2ForCausalLM"] = qwen2;
 
         // Gemma: GeGLU + (1 + weight) RMSNorm + sqrt(hidden) embedding scale.
         DecoderFactory gemma = (config, weights) => LlamaModelBuilder<T>.Build(config, weights, DecoderOptions<T>.Gemma);
@@ -48,6 +53,11 @@ public static class PretrainedArchitectures<T>
         DecoderFactory mixtral = (config, weights) => MoEModelBuilder<T>.Build(config, weights);
         foreach (var name in MoEModelBuilder<T>.SupportedArchitectures)
             Registry[name] = mixtral;
+
+        // Qwen2-MoE: routed experts + an always-on shared expert, with Qwen2 q/k/v attention biases.
+        DecoderFactory qwen2Moe = (config, weights) => Qwen2MoEModelBuilder<T>.Build(config, weights);
+        foreach (var name in Qwen2MoEModelBuilder<T>.SupportedArchitectures)
+            Registry[name] = qwen2Moe;
 
         // Gemma-2: sandwiched dual RMSNorms + GeGLU + (1+w) norm + embed scale + final-logit soft-capping.
         DecoderFactory gemma2 = (config, weights) => Gemma2ModelBuilder<T>.Build(config, weights);
