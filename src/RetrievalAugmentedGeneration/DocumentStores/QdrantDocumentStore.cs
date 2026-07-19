@@ -1,274 +1,484 @@
-
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 {
     /// <summary>
-    /// Qdrant-inspired document store with collection-based organization and payload filtering.
-    /// Provides in-memory simulation of Qdrant features including collection management and efficient filtering.
+    /// Qdrant vector-database document store backed by the real Qdrant REST API.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    /// <remarks>
+    /// <para>
+    /// This store talks to a running Qdrant instance over HTTP. It manages a single collection,
+    /// upserts points (vector + payload), performs filtered vector search, deletes points and
+    /// scrolls the whole collection. Document metadata is stored under a nested <c>metadata</c>
+    /// payload object, while the original string document id and content are stored under the
+    /// reserved payload keys <c>_doc_id</c> and <c>_content</c>.
+    /// </para>
+    /// <para><b>For Beginners:</b> Qdrant is an open-source vector database. This class is a real
+    /// client for it - every method here makes an HTTP call to your Qdrant server. Qdrant requires
+    /// point ids to be unsigned integers or UUIDs, so each document's string id is turned into a
+    /// deterministic UUID; the original string id is kept in the payload so you always get it back.
+    /// </para>
+    /// </remarks>
     [ComponentType(ComponentType.DocumentStore)]
     [PipelineStage(PipelineStage.Indexing)]
     public class QdrantDocumentStore<T> : DocumentStoreBase<T>
     {
-        private readonly Dictionary<string, VectorDocument<T>> _documents;
-        private readonly string _collectionName;
-        private int _vectorDimension;
-        private readonly Dictionary<string, HashSet<string>> _payloadIndex;
+        private const string DocIdKey = "_doc_id";
+        private const string ContentKey = "_content";
 
-        public override int DocumentCount => _documents.Count;
+        private readonly HttpClient _httpClient;
+        private readonly string _collectionName;
+        private readonly string _distance;
+        private int _vectorDimension;
+        private int _documentCount;
+        private bool _collectionReady;
+
+        /// <summary>
+        /// Gets the number of documents (points) currently stored in the collection.
+        /// </summary>
+        public override int DocumentCount => _documentCount;
+
+        /// <summary>
+        /// Gets the dimensionality of vectors stored in this collection.
+        /// </summary>
         public override int VectorDimension => _vectorDimension;
 
-        public string CollectionName { get; private set; }
+        /// <summary>
+        /// Gets the name of the Qdrant collection this store is bound to.
+        /// </summary>
+        public string CollectionName { get; }
 
-        public QdrantDocumentStore(string collectionName, int initialCapacity = 1000)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="QdrantDocumentStore{T}"/> class.
+        /// </summary>
+        /// <param name="collectionName">The Qdrant collection name.</param>
+        /// <param name="url">The base URL of the Qdrant server, e.g. <c>http://localhost:6333</c>.</param>
+        /// <param name="apiKey">Optional Qdrant API key (sent as the <c>api-key</c> header).</param>
+        /// <param name="distanceMetric">The distance metric used when creating the collection.</param>
+        /// <param name="vectorDimension">
+        /// The vector dimension used to create the collection if it does not already exist.
+        /// When 0 the collection must already exist (its dimension is read from the server) or the
+        /// dimension is inferred from the first document added.
+        /// </param>
+        /// <param name="httpClient">
+        /// Optional pre-configured <see cref="HttpClient"/>. Primarily for testing; when supplied its
+        /// <see cref="HttpClient.BaseAddress"/> is used if already set.
+        /// </param>
+        /// <param name="handler">Optional <see cref="HttpMessageHandler"/> used to build the client (for testing).</param>
+        public QdrantDocumentStore(
+            string collectionName,
+            string url,
+            string? apiKey = null,
+            DistanceMetricType distanceMetric = DistanceMetricType.Cosine,
+            int vectorDimension = 0,
+            HttpClient? httpClient = null,
+            HttpMessageHandler? handler = null)
         {
             if (string.IsNullOrWhiteSpace(collectionName))
                 throw new ArgumentException("Collection name cannot be empty", nameof(collectionName));
-            if (initialCapacity <= 0)
-                throw new ArgumentException("Initial capacity must be greater than zero", nameof(initialCapacity));
+            if (vectorDimension < 0)
+                throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension cannot be negative");
 
             _collectionName = collectionName;
             CollectionName = collectionName;
-            _documents = new Dictionary<string, VectorDocument<T>>(initialCapacity);
-            _payloadIndex = new Dictionary<string, HashSet<string>>();
-            _vectorDimension = 0;
-        }
+            _distance = MapDistance(distanceMetric);
+            _vectorDimension = vectorDimension;
+            _documentCount = 0;
 
-        protected override void AddCore(VectorDocument<T> vectorDocument)
-        {
-            if (_documents.Count == 0)
+            _httpClient = httpClient ?? (handler != null ? new HttpClient(handler) : new HttpClient());
+            if (_httpClient.BaseAddress == null)
             {
-                _vectorDimension = vectorDocument.Embedding.Length;
+                if (string.IsNullOrWhiteSpace(url))
+                    throw new ArgumentException("Url cannot be empty", nameof(url));
+                _httpClient.BaseAddress = new Uri(url);
             }
 
-            _documents[vectorDocument.Document.Id] = vectorDocument;
-            IndexPayload(vectorDocument.Document);
+            if (!string.IsNullOrWhiteSpace(apiKey) && !_httpClient.DefaultRequestHeaders.Contains("api-key"))
+                _httpClient.DefaultRequestHeaders.Add("api-key", apiKey);
+
+            InitializeCollection(vectorDimension);
         }
 
+        private static string MapDistance(DistanceMetricType metric)
+        {
+            switch (metric)
+            {
+                case DistanceMetricType.Cosine:
+                    return "Cosine";
+                case DistanceMetricType.Euclidean:
+                    return "Euclid";
+                case DistanceMetricType.Manhattan:
+                    return "Manhattan";
+                default:
+                    throw new NotSupportedException(
+                        $"Distance metric '{metric}' is not supported by Qdrant. Use Cosine, Euclidean or Manhattan.");
+            }
+        }
+
+        private void InitializeCollection(int requestedDimension)
+        {
+            HttpResponseInfo info;
+            try
+            {
+                info = SendAsync(HttpMethod.Get, $"/collections/{_collectionName}", null).GetAwaiter().GetResult();
+            }
+            catch (HttpRequestException)
+            {
+                // Server not reachable at construction time; defer creation to first write.
+                return;
+            }
+
+            if (info.Status == HttpStatusCode.OK)
+            {
+                var root = JObject.Parse(info.Body)["result"];
+                var size = root?["config"]?["params"]?["vectors"]?["size"]?.Value<int>();
+                if (size.HasValue && size.Value > 0)
+                    _vectorDimension = size.Value;
+
+                var count = root?["points_count"]?.Value<int>();
+                if (count.HasValue)
+                    _documentCount = count.Value;
+
+                _collectionReady = true;
+                return;
+            }
+
+            if (info.Status == HttpStatusCode.NotFound && requestedDimension > 0)
+                CreateCollection(requestedDimension);
+        }
+
+        private void CreateCollection(int dimension)
+        {
+            var body = new
+            {
+                vectors = new
+                {
+                    size = dimension,
+                    distance = _distance
+                }
+            };
+
+            var info = SendAsync(HttpMethod.Put, $"/collections/{_collectionName}", body).GetAwaiter().GetResult();
+            EnsureSuccess(info, "create collection");
+            _vectorDimension = dimension;
+            _collectionReady = true;
+        }
+
+        private void EnsureCollectionForDimension(int dimension)
+        {
+            if (_collectionReady)
+                return;
+            CreateCollection(dimension);
+        }
+
+        /// <inheritdoc/>
+        protected override void AddCore(VectorDocument<T> vectorDocument)
+        {
+            EnsureCollectionForDimension(vectorDocument.Embedding.Length);
+            if (_vectorDimension == 0)
+                _vectorDimension = vectorDocument.Embedding.Length;
+
+            var body = new { points = new[] { BuildPoint(vectorDocument) } };
+            var info = SendAsync(HttpMethod.Put, $"/collections/{_collectionName}/points?wait=true", body).GetAwaiter().GetResult();
+            EnsureSuccess(info, "upsert point");
+            _documentCount++;
+        }
+
+        /// <inheritdoc/>
         protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
         {
             if (vectorDocuments.Count == 0)
                 return;
 
-            if (_documents.Count == 0)
-            {
+            EnsureCollectionForDimension(vectorDocuments[0].Embedding.Length);
+            if (_vectorDimension == 0)
                 _vectorDimension = vectorDocuments[0].Embedding.Length;
-            }
 
-            foreach (var vectorDoc in vectorDocuments)
-            {
-                _documents[vectorDoc.Document.Id] = vectorDoc;
-                IndexPayload(vectorDoc.Document);
-            }
+            var points = vectorDocuments.Select(BuildPoint).ToList();
+            var body = new { points };
+            var info = SendAsync(HttpMethod.Put, $"/collections/{_collectionName}/points?wait=true", body).GetAwaiter().GetResult();
+            EnsureSuccess(info, "batch upsert points");
+            _documentCount += vectorDocuments.Count;
         }
 
+        private object BuildPoint(VectorDocument<T> vectorDocument)
+        {
+            var vector = vectorDocument.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
+            var payload = new Dictionary<string, object>
+            {
+                [DocIdKey] = vectorDocument.Document.Id,
+                [ContentKey] = vectorDocument.Document.Content,
+                ["metadata"] = vectorDocument.Document.Metadata ?? new Dictionary<string, object>()
+            };
+
+            return new
+            {
+                id = ToPointId(vectorDocument.Document.Id),
+                vector,
+                payload
+            };
+        }
+
+        /// <inheritdoc/>
         protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
         {
-            var scoredDocuments = new List<(Document<T> Document, T Score)>();
+            var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
 
-            var candidateIds = GetFilteredCandidates(metadataFilters);
-            IEnumerable<VectorDocument<T>> candidates;
-
-            if (candidateIds != null)
+            var body = new Dictionary<string, object>
             {
-                candidates = candidateIds
-                    .Where(id => _documents.ContainsKey(id))
-                    .Select(id => _documents[id]);
-            }
-            else
+                ["vector"] = vector,
+                ["limit"] = topK,
+                ["with_payload"] = true,
+                ["with_vector"] = false
+            };
+
+            var filter = BuildFilter(metadataFilters);
+            if (filter != null)
+                body["filter"] = filter;
+
+            var info = SendAsync(HttpMethod.Post, $"/collections/{_collectionName}/points/search", body).GetAwaiter().GetResult();
+            EnsureSuccess(info, "search");
+
+            var results = new List<Document<T>>();
+            var hits = JObject.Parse(info.Body)["result"] as JArray;
+            if (hits == null)
+                return results;
+
+            foreach (var hit in hits)
             {
-                candidates = _documents.Values;
+                var doc = ParsePayload(hit?["payload"] as JObject);
+                if (doc == null)
+                    continue;
+
+                var score = hit?["score"] != null ? Convert.ToDouble(hit!["score"], CultureInfo.InvariantCulture) : 0.0;
+                doc.RelevanceScore = NumOps.FromDouble(score);
+                doc.HasRelevanceScore = true;
+                results.Add(doc);
             }
-
-            var matchingDocuments = candidates
-                .Where(vectorDoc => MatchesFilters(vectorDoc.Document, metadataFilters));
-
-            foreach (var vectorDoc in matchingDocuments)
-            {
-                var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vectorDoc.Embedding);
-                scoredDocuments.Add((vectorDoc.Document, similarity));
-            }
-
-            var results = scoredDocuments
-                .OrderByDescending(x => x.Score)
-                .Take(topK)
-                .Select(x =>
-                {
-                    x.Document.RelevanceScore = x.Score;
-                    x.Document.HasRelevanceScore = true;
-                    return x.Document;
-                })
-                .ToList();
 
             return results;
         }
 
-        protected override Document<T>? GetByIdCore(string documentId)
-        {
-            return _documents.TryGetValue(documentId, out var vectorDoc) ? vectorDoc.Document : null;
-        }
-
-        protected override bool RemoveCore(string documentId)
-        {
-            if (!_documents.TryGetValue(documentId, out var vectorDoc))
-                return false;
-
-            RemoveFromPayloadIndex(vectorDoc.Document);
-            _documents.Remove(documentId);
-
-            if (_documents.Count == 0)
-            {
-                _vectorDimension = 0;
-            }
-
-            return true;
-        }
-
         /// <summary>
-        /// Core logic for retrieving all documents in the collection.
-        /// </summary>
-        /// <returns>An enumerable of all documents without their vector embeddings.</returns>
-        /// <remarks>
-        /// <para>
-        /// Returns all documents from the Qdrant collection in no particular order.
-        /// Vector embeddings are not included in the results, only document content and metadata.
-        /// </para>
-        /// <para><b>For Beginners:</b> Gets every document in the collection.
-        /// 
-        /// Use cases:
-        /// - Export all documents for backup
-        /// - Migrate to a different collection
-        /// - Bulk processing or analysis
-        /// - Debugging payload indices
-        /// 
-        /// Warning: For large collections (> 10K documents), this can use significant memory.
-        /// In real Qdrant, consider using scroll API with pagination for large collections.
-        /// 
-        /// Example:
-        /// <code>
-        /// // Get all documents
-        /// var allDocs = store.GetAll().ToList();
-        /// // Result is available in the returned value
-        /// 
-        /// // Export to JSON
-        /// var json = JsonConvert.SerializeObject(allDocs);
-        /// File.WriteAllText($"{_collectionName}_export.json", json);
-        /// </code>
-        /// </para>
-        /// </remarks>
-        protected override IEnumerable<Document<T>> GetAllCore()
-        {
-            return _documents.Values.Select(vd => vd.Document).ToList();
-        }
-
-        /// <summary>
-        /// Removes all documents from the collection and clears all indices.
+        /// Translates the metadata filter dictionary into a Qdrant filter object.
         /// </summary>
         /// <remarks>
-        /// <para>
-        /// Clears all documents, payload indices, and resets the vector dimension to 0.
-        /// The collection name remains unchanged and is ready to accept new documents.
-        /// </para>
-        /// <para><b>For Beginners:</b> Completely empties the collection and all its indices.
-        /// 
-        /// After calling Clear():
-        /// - All documents are removed
-        /// - Payload index is cleared
-        /// - Vector dimension resets to 0
-        /// - Collection name stays the same
-        /// - Ready for new documents
-        /// 
-        /// Use with caution - this cannot be undone!
-        /// 
-        /// Example:
-        /// <code>
-        /// store.Clear();
-        /// // Result is available in the returned value // 0
-        /// </code>
-        /// </para>
+        /// Equality (string/bool) becomes a <c>match</c> condition and numeric values become a
+        /// <c>range</c> with <c>gte</c> (mirroring the base-class "field &gt;= value" semantics).
+        /// All scalar conditions are combined under <c>must</c>. Collection values become <c>should</c> (any-of).
         /// </remarks>
-        public override void Clear()
+        private static object? BuildFilter(Dictionary<string, object>? metadataFilters)
         {
-            _documents.Clear();
-            _payloadIndex.Clear();
-            _vectorDimension = 0;
-        }
-
-        private void IndexPayload(Document<T> document)
-        {
-            foreach (var kvp in document.Metadata)
-            {
-                var payloadKey = CreatePayloadKey(kvp.Key, kvp.Value);
-
-                if (!_payloadIndex.ContainsKey(payloadKey))
-                {
-                    _payloadIndex[payloadKey] = new HashSet<string>();
-                }
-
-                _payloadIndex[payloadKey].Add(document.Id);
-            }
-        }
-
-        private void RemoveFromPayloadIndex(Document<T> document)
-        {
-            foreach (var kvp in document.Metadata)
-            {
-                var payloadKey = CreatePayloadKey(kvp.Key, kvp.Value);
-
-                if (_payloadIndex.TryGetValue(payloadKey, out var docIds))
-                {
-                    docIds.Remove(document.Id);
-                    if (docIds.Count == 0)
-                    {
-                        _payloadIndex.Remove(payloadKey);
-                    }
-                }
-            }
-        }
-
-        private HashSet<string>? GetFilteredCandidates(Dictionary<string, object> metadataFilters)
-        {
-            if (metadataFilters.Count == 0)
+            if (metadataFilters == null || metadataFilters.Count == 0)
                 return null;
 
-            HashSet<string>? candidateIds = null;
+            var must = new List<object>();
+            var should = new List<object>();
 
-            foreach (var filter in metadataFilters)
+            foreach (var kvp in metadataFilters)
             {
-                var payloadKey = CreatePayloadKey(filter.Key, filter.Value);
+                var key = "metadata." + kvp.Key;
+                var value = kvp.Value;
 
-                if (_payloadIndex.TryGetValue(payloadKey, out var docIds))
+                if (value == null || value is string || value is bool)
                 {
-                    if (candidateIds == null)
-                    {
-                        candidateIds = new HashSet<string>(docIds);
-                    }
-                    else
-                    {
-                        candidateIds.IntersectWith(docIds);
-                    }
+                    must.Add(new { key, match = new { value } });
+                }
+                else if (IsNumeric(value))
+                {
+                    must.Add(new { key, range = new { gte = Convert.ToDouble(value, CultureInfo.InvariantCulture) } });
+                }
+                else if (value is System.Collections.IEnumerable enumerable)
+                {
+                    foreach (var item in enumerable)
+                        should.Add(new { key, match = new { value = item } });
                 }
                 else
                 {
-                    return new HashSet<string>();
+                    must.Add(new { key, match = new { value = value.ToString() } });
                 }
             }
 
-            return candidateIds;
+            var filter = new Dictionary<string, object>();
+            if (must.Count > 0)
+                filter["must"] = must;
+            if (should.Count > 0)
+                filter["should"] = should;
+
+            return filter.Count > 0 ? filter : null;
         }
 
-        private static string CreatePayloadKey(string fieldName, object fieldValue)
+        /// <inheritdoc/>
+        protected override Document<T>? GetByIdCore(string documentId)
         {
-            var valueStr = fieldValue?.ToString() ?? string.Empty;
-            return $"{fieldName}:{valueStr}";
+            var info = SendAsync(HttpMethod.Get, $"/collections/{_collectionName}/points/{ToPointId(documentId)}", null).GetAwaiter().GetResult();
+            if (info.Status == HttpStatusCode.NotFound)
+                return null;
+            EnsureSuccess(info, "get point");
+
+            var result = JObject.Parse(info.Body)["result"] as JObject;
+            if (result == null)
+                return null;
+
+            return ParsePayload(result["payload"] as JObject);
+        }
+
+        /// <inheritdoc/>
+        protected override bool RemoveCore(string documentId)
+        {
+            var body = new { points = new[] { ToPointId(documentId) } };
+            var info = SendAsync(HttpMethod.Post, $"/collections/{_collectionName}/points/delete?wait=true", body).GetAwaiter().GetResult();
+            if (!IsSuccess(info.Status))
+                return false;
+
+            if (_documentCount > 0)
+                _documentCount--;
+            return true;
+        }
+
+        /// <inheritdoc/>
+        protected override IEnumerable<Document<T>> GetAllCore()
+        {
+            var all = new List<Document<T>>();
+            object? offset = null;
+
+            while (true)
+            {
+                var body = new Dictionary<string, object>
+                {
+                    ["limit"] = 256,
+                    ["with_payload"] = true,
+                    ["with_vector"] = false
+                };
+                if (offset != null)
+                    body["offset"] = offset;
+
+                var info = SendAsync(HttpMethod.Post, $"/collections/{_collectionName}/points/scroll", body).GetAwaiter().GetResult();
+                EnsureSuccess(info, "scroll");
+
+                var result = JObject.Parse(info.Body)["result"] as JObject;
+                var points = result?["points"] as JArray;
+                if (points == null || points.Count == 0)
+                    break;
+
+                foreach (var point in points)
+                {
+                    var doc = ParsePayload(point?["payload"] as JObject);
+                    if (doc != null)
+                        all.Add(doc);
+                }
+
+                var next = result?["next_page_offset"];
+                if (next == null || next.Type == JTokenType.Null)
+                    break;
+                offset = next.ToObject<object>();
+            }
+
+            return all;
+        }
+
+        /// <inheritdoc/>
+        public override void Clear()
+        {
+            var info = SendAsync(HttpMethod.Delete, $"/collections/{_collectionName}", null).GetAwaiter().GetResult();
+            EnsureSuccess(info, "delete collection");
+
+            _documentCount = 0;
+            _collectionReady = false;
+
+            if (_vectorDimension > 0)
+                CreateCollection(_vectorDimension);
+        }
+
+        private Document<T>? ParsePayload(JObject? payload)
+        {
+            if (payload == null)
+                return null;
+
+            var id = payload[DocIdKey]?.ToString();
+            if (string.IsNullOrEmpty(id))
+                return null;
+
+            var content = payload[ContentKey]?.ToString() ?? string.Empty;
+            var metadata = (payload["metadata"] as JObject)?.ToObject<Dictionary<string, object>>()
+                           ?? new Dictionary<string, object>();
+
+            return new Document<T>(id!, content, metadata);
+        }
+
+        private static bool IsNumeric(object value)
+        {
+            return value is sbyte || value is byte || value is short || value is ushort
+                || value is int || value is uint || value is long || value is ulong
+                || value is float || value is double || value is decimal;
+        }
+
+        private static bool IsSuccess(HttpStatusCode status) => (int)status >= 200 && (int)status < 300;
+
+        /// <summary>
+        /// Produces a deterministic UUID string for an arbitrary document id, since Qdrant point
+        /// ids must be unsigned integers or UUIDs. The mapping is stable so lookups/deletes work.
+        /// </summary>
+        private static string ToPointId(string documentId)
+        {
+            using (var md5 = MD5.Create())
+            {
+                var hash = md5.ComputeHash(Encoding.UTF8.GetBytes(documentId));
+                return new Guid(hash).ToString();
+            }
+        }
+
+        private void EnsureSuccess(HttpResponseInfo info, string operation)
+        {
+            if (!IsSuccess(info.Status))
+                throw new HttpRequestException($"Qdrant {operation} failed with status {(int)info.Status}: {info.Body}");
+        }
+
+        private async Task<HttpResponseInfo> SendAsync(HttpMethod method, string path, object? body)
+        {
+            using (var request = new HttpRequestMessage(method, path))
+            {
+                if (body != null)
+                {
+                    var json = JsonConvert.SerializeObject(body);
+                    request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                }
+
+                using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
+                {
+                    var content = response.Content != null
+                        ? await response.Content.ReadAsStringAsync().ConfigureAwait(false)
+                        : string.Empty;
+                    return new HttpResponseInfo(response.StatusCode, content);
+                }
+            }
+        }
+
+        private readonly struct HttpResponseInfo
+        {
+            public HttpResponseInfo(HttpStatusCode status, string body)
+            {
+                Status = status;
+                Body = body;
+            }
+
+            public HttpStatusCode Status { get; }
+            public string Body { get; }
         }
     }
 }
