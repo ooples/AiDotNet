@@ -666,6 +666,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Segmentation foundation models (Swin/ViT encoder + transformer mask decoder) — 250-iter
         // MoreData / 100-iter memorization overrun 120 s on CPU (verified: solo timeout).
         "Mask2Former", "EfficientSAM", "U2Seg",
+        // DepthAnythingV2 (arXiv:2406.09414): DINOv2 ViT encoder + DPT decoder. After the
+        // paper-faithful rewrite (real patch-embed + transformer encoder, tape-aware token
+        // reassemble, sigmoid depth head) every single-forward / gradient / determinism /
+        // training-direction invariant passes at <float>, but the 50+200-iteration MoreData
+        // probe (12-layer ViT forward+backward per step) overran the 120 s gate. It is Video
+        // family, so the audio branch's Fp32 auto-cap does not apply — this universal
+        // smoke-cap trims MoreData while keeping the paper architecture + train-path coverage.
+        "DepthAnythingV2",
         // XDecoder: unified segmentation foundation model whose MoreData passes SOLO (~1m34s) but is
         // heavy enough to flake under a loaded parallel shard (Gen T-Z). Smoke-iteration counts make
         // it fast + deterministic — same paper-scale-preserving trim as the other seg foundations.

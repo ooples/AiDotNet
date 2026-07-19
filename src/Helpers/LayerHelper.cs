@@ -8996,48 +8996,45 @@ public static class LayerHelper<T>
         int numEncoderBlocks = 12)
     {
         int patchSize = 16;
-        int featH = inputHeight / patchSize;
-        int featW = inputWidth / patchSize;
+        int numHeads = System.Math.Max(1, numFeatures / 64); // ViT convention: head dim = 64
+        int ffnDim = numFeatures * 4;
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
 
-        // Patch embedding
-        yield return new ConvolutionalLayer<T>(numFeatures, patchSize, patchSize, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        // Encoder transformer blocks
+        // === DINOv2 ViT encoder (Depth Anything V2 — Yang et al., 2024, arXiv:2406.09414;
+        //     backbone: Oquab et al. 2023 DINOv2 / Dosovitskiy et al. 2021 ViT) ===
+        // Patch-embed the image into (H/P)·(W/P) tokens, then run RESIDUAL transformer
+        // blocks — the exact patch-embed + TransformerEncoderLayer stack the ViT/DINO
+        // models here already share (CreateDefaultViTLayers). The previous factory used
+        // plain ConvolutionalLayers for both the "patch embed" and the "encoder blocks",
+        // which is not a ViT at all (and, combined with the decoder's double-upsampling,
+        // crashed the forward). The model's RunForward reassembles the resulting token
+        // sequence [B, N, numFeatures] back into a 2-D feature map [B, numFeatures, H/P,
+        // W/P] before the DPT decoder below.
+        yield return new PatchEmbeddingLayer<T>(patchSize, numFeatures);
         for (int i = 0; i < numEncoderBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
         }
+        yield return new LayerNormalizationLayer<T>();
 
-        // Decoder blocks with progressive upsampling
-        int h = featH;
-        int w = featW;
-        int currentFeatures = numFeatures;
-
-        // Stage 1 - no upsampling yet
-        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        currentFeatures = numFeatures / 2;
-
-        // Stage 2 - 2x upsample
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        currentFeatures = numFeatures / 4;
-
-        // Stage 3 - 2x upsample
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures / 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        currentFeatures = numFeatures / 8;
-
-        // Stage 4 - 2x upsample
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        // Depth head - 2x upsample to original resolution
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(1, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        // === DPT decoder (Ranftl et al., 2021 — the decoder Depth Anything V2 uses) ===
+        // Once the encoder tokens are reassembled to [B, numFeatures, H/P, W/P], refine +
+        // progressively 2x-upsample back to the input resolution, then a 1-channel sigmoid
+        // head produces the normalized depth map. Four 2x upsamples take the H/16 grid
+        // back to full resolution (16 → 32 → 64 → 128 → 256 at the default 256² input).
+        // Upsampling is done ONLY by these UpsamplingLayers — the model's DecodeDepth no
+        // longer also calls a manual Upsample2x between layers (that double-upsample grew
+        // the tensor inconsistently and threw IndexOutOfRange in CpuEngine.Upsample).
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, relu);   // refine @ H/16
+        yield return new UpsamplingLayer<T>(2);                                    // -> H/8
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                                    // -> H/4
+        yield return new ConvolutionalLayer<T>(numFeatures / 8, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                                    // -> H/2
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                                    // -> H
+        // Depth head: 1 channel, sigmoid to normalize depth to [0, 1].
+        yield return new ConvolutionalLayer<T>(1, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
