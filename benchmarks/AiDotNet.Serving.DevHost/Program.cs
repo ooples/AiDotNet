@@ -1,6 +1,7 @@
 using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.ModelLoading.Pretrained;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Serving.Controllers;
@@ -9,6 +10,7 @@ using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Algorithms;
+using AiDotNet.Tokenization.Interfaces;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
 
@@ -65,6 +67,38 @@ var app = builder.Build();
 // Register a synthetic generative model + an ASCII character tokenizer.
 var repo = app.Services.GetRequiredService<IModelRepository>();
 var tokenizers = app.Services.GetRequiredService<ITokenizerRegistry>();
+
+// DEVHOST_GGUF=<path> serves a REAL llama.cpp GGUF checkpoint: its decoder is rebuilt + weight-loaded
+// through the pretrained facade and its byte-level BPE tokenizer is read from the same file, so the server
+// runs the model at parity with llama.cpp (identical weights + identical tokenization). Everything below
+// (paged continuous batching, prefill/decode kernels) is unchanged.
+string? ggufPath = Environment.GetEnvironmentVariable("DEVHOST_GGUF");
+if (!string.IsNullOrWhiteSpace(ggufPath))
+{
+    if (!File.Exists(ggufPath))
+    {
+        Console.Error.WriteLine($"[DevHost] GGUF file not found: {ggufPath}");
+        return;
+    }
+
+    Console.WriteLine($"[DevHost] loading GGUF checkpoint: {ggufPath}");
+    var (ggufModel, ggufTokenizer) = PretrainedLoader<float>.LoadGgufWithTokenizer(ggufPath);
+    var ggufWrapper = new ServableModelWrapper<float>(
+        ModelName, ggufModel, inputShape: new[] { 1 },
+        enableSpeculativeDecoding: false, generationForward: ggufModel.Predict);
+    Console.WriteLine(
+        $"[DevHost] GGUF model={ggufModel.GetType().Name} vocab={ggufTokenizer.VocabularySize} " +
+        $"incrementalPaged={ggufWrapper.SupportsIncrementalGeneration} batchedPrefill={ggufWrapper.SupportsBatchedPrefill}");
+
+    repo.LoadModel<float>(ModelName, ggufWrapper);
+    tokenizers.Register(ModelName, ggufTokenizer);
+
+    app.MapControllers();
+    app.Logger.LogInformation(
+        "DevHost ready on http://localhost:{Port} | model={Model} (GGUF)", port, ModelName);
+    app.Run();
+    return;
+}
 
 var tokenizer = CharacterTokenizer.CreateAscii();
 int vocab = tokenizer.VocabularySize;

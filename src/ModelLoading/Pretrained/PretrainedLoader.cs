@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.ModelLoading.Pretrained;
 
@@ -91,6 +92,29 @@ public static class PretrainedLoader<T>
         // GGUF is self-describing: its metadata yields the config and its tensors are exposed under Hugging
         // Face names, so the same architecture registry + builder reconstruct and weight-load the decoder.
         using var gguf = GgufModelSource.Open(path);
+        return BuildGgufModel(gguf, source);
+    }
+
+    /// <summary>
+    /// Loads a GGUF checkpoint as both a decoder model and its matching tokenizer from a single file open,
+    /// so a server has everything it needs to run the model at parity with llama.cpp. The weights are read
+    /// once; the tokenizer comes from the same file's <c>tokenizer.ggml.*</c> metadata.
+    /// </summary>
+    /// <param name="path">Path to the <c>.gguf</c> file.</param>
+    /// <param name="source">Optional descriptor (for an architecture override); defaults to a plain GGUF source.</param>
+    /// <returns>The weight-loaded decoder and the tokenizer it was trained with.</returns>
+    public static (NeuralNetworkBase<T> Model, ITokenizer Tokenizer) LoadGgufWithTokenizer(
+        string path, PretrainedSource? source = null)
+    {
+        source ??= PretrainedSource.Gguf(path);
+        using var gguf = GgufModelSource.Open(path);
+        var model = BuildGgufModel(gguf, source);
+        var tokenizer = gguf.BuildTokenizer();
+        return (model, tokenizer);
+    }
+
+    private static NeuralNetworkBase<T> BuildGgufModel(GgufModelSource gguf, PretrainedSource source)
+    {
         if (!PretrainedArchitectures<T>.TryResolve(gguf.Config, source.ArchitectureOverride, out var factory))
             throw new NotSupportedException(
                 $"GGUF architecture '{gguf.Config.ModelType}' is not supported. Registered architectures: " +
