@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using AiDotNet.ModelLoading.Pretrained;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -85,6 +86,167 @@ namespace AiDotNet.Tests.ModelLoading
             finally { File.Delete(path); }
         }
 
+        [Fact]
+        public void Gguf_EndToEnd_Gemma2_SandwichNorms_HeadDim_Softcap()
+        {
+            // Gemma-2 exercises the family-specific pieces the generic llama map cannot: four sandwiched
+            // norms (attn_norm/attn_post_norm/ffn_norm/ffn_post_norm), an explicit head_dim (key_length)
+            // that differs from hidden/heads, and both logit soft-caps read from GGUF metadata.
+            string path = WriteGemma2Gguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("gemma2", src.Config.ModelType);
+                    Assert.Equal(6, src.Config.HeadDim);                 // from gemma2.attention.key_length
+                    Assert.Equal(50.0, src.Config.AttnLogitSoftcapping);
+                    Assert.Equal(30.0, src.Config.FinalLogitSoftcapping);
+                    // The GGUF ffn_norm must map to the PRE-feedforward norm, not post-attention.
+                    Assert.Contains("model.layers.0.pre_feedforward_layernorm.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.post_attention_layernorm.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.post_feedforward_layernorm.weight", src.TensorNames);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                // embed + block + final norm + lm head + final-logit soft-cap = 5.
+                Assert.Equal(5, net.Layers.Count);
+
+                // The attention soft-cap threaded from GGUF metadata into the layer.
+                var attn = Assert.IsType<GroupedQueryAttentionLayer<double>>(
+                    Assert.IsType<Gemma2DecoderBlock<double>>(net.Layers[1]).AttentionLayer);
+                Assert.Equal(50.0, attn.AttnLogitSoftcap);
+                Assert.Equal(6, attn.HeadDimension);
+
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                var logits = net.Predict(tokens);
+                Assert.Equal(new[] { 1, 3, 6 }, logits.Shape.ToArray());
+                for (int s = 0; s < 3; s++)
+                    for (int v = 0; v < 6; v++)
+                        Assert.True(Math.Abs(logits[0, s, v]) < 30.0); // final soft-cap bounds
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Gguf_EndToEnd_StarCoder2_BiasedLayerNorm_NonGatedMlp()
+        {
+            // StarCoder2 exercises biased LayerNorm (weight + bias), a non-gated c_fc/c_proj MLP mapped from
+            // ffn_up/ffn_down, biased attention, and the plain layer_norm_epsilon key (not the rms variant).
+            string path = WriteStarCoder2Gguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("starcoder2", src.Config.ModelType);
+                    Assert.Contains("model.layers.0.input_layernorm.bias", src.TensorNames);
+                    Assert.Contains("model.layers.0.post_attention_layernorm.bias", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.c_fc.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.c_proj.bias", src.TensorNames);
+                    Assert.Contains("model.norm.bias", src.TensorNames);
+                    // Non-gated MLP: the gated gate_proj name must NOT be produced.
+                    Assert.DoesNotContain("model.layers.0.mlp.gate_proj.weight", src.TensorNames);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                Assert.Equal(new[] { 1, 3, 6 }, net.Predict(tokens).Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
+        // ---- family-specific GGUF writers (F32) ----
+
+        private static string WriteGemma2Gguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 1, headDim = 6, ffn = 16, vocab = 6;
+            int qDim = heads * headDim;   // 12
+            int kvDim = kvHeads * headDim; // 6
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.attn_post_norm.weight", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 4)),
+                ("blk.0.ffn_post_norm.weight", new long[] { hidden }, Seq(hidden, 5)),
+                ("blk.0.attn_q.weight", new long[] { hidden, qDim }, Seq(qDim * hidden, 6)),
+                ("blk.0.attn_k.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 7)),
+                ("blk.0.attn_v.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 8)),
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 9)),
+                ("blk.0.ffn_gate.weight", new long[] { hidden, ffn }, Seq(ffn * hidden, 10)),
+                ("blk.0.ffn_up.weight", new long[] { hidden, ffn }, Seq(ffn * hidden, 11)),
+                ("blk.0.ffn_down.weight", new long[] { ffn, hidden }, Seq(hidden * ffn, 12)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 13)),
+            };
+            const string a = "gemma2";
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.attention.key_length", 4u, (uint)headDim),
+                ($"{a}.feed_forward_length", 4u, (uint)ffn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.attention.layer_norm_rms_epsilon", 6u, 1e-5f),
+                ($"{a}.rope.freq_base", 6u, 10000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+                ($"{a}.attn_logit_softcapping", 6u, 50.0f),
+                ($"{a}.final_logit_softcapping", 6u, 30.0f),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
+        private static string WriteStarCoder2Gguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 1, headDim = 4, ffn = 16, vocab = 6;
+            int qDim = heads * headDim;   // 8
+            int kvDim = kvHeads * headDim; // 4
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.attn_norm.bias", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 4)),
+                ("blk.0.ffn_norm.bias", new long[] { hidden }, Seq(hidden, 5)),
+                ("blk.0.attn_q.weight", new long[] { hidden, qDim }, Seq(qDim * hidden, 6)),
+                ("blk.0.attn_q.bias", new long[] { qDim }, Seq(qDim, 7)),
+                ("blk.0.attn_k.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 8)),
+                ("blk.0.attn_k.bias", new long[] { kvDim }, Seq(kvDim, 9)),
+                ("blk.0.attn_v.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 10)),
+                ("blk.0.attn_v.bias", new long[] { kvDim }, Seq(kvDim, 11)),
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 12)),
+                ("blk.0.attn_output.bias", new long[] { hidden }, Seq(hidden, 13)),
+                ("blk.0.ffn_up.weight", new long[] { hidden, ffn }, Seq(ffn * hidden, 14)),   // -> c_fc
+                ("blk.0.ffn_up.bias", new long[] { ffn }, Seq(ffn, 15)),
+                ("blk.0.ffn_down.weight", new long[] { ffn, hidden }, Seq(hidden * ffn, 16)), // -> c_proj
+                ("blk.0.ffn_down.bias", new long[] { hidden }, Seq(hidden, 17)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 18)),
+                ("output_norm.bias", new long[] { hidden }, Seq(hidden, 19)),
+            };
+            const string a = "starcoder2";
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.feed_forward_length", 4u, (uint)ffn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.attention.layer_norm_epsilon", 6u, 1e-5f), // plain LayerNorm eps (not rms)
+                ($"{a}.rope.freq_base", 6u, 10000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
         // ---- minimal GGUF writer (F32) for a tiny GQA llama-family decoder ----
 
         private static string WriteTempGguf(string arch, bool includeOutput)
@@ -128,6 +290,15 @@ namespace AiDotNet.Tests.ModelLoading
                 ($"{arch}.vocab_size", 4u, (uint)vocab),
             };
 
+            return SerializeGguf(tensors, meta);
+        }
+
+        // Serializes a GGUF v3 file (F32 tensors) from tensor + metadata lists. Metadata value types:
+        // 4u = uint32, 6u = float32, 8u = string.
+        private static string SerializeGguf(
+            List<(string name, long[] dims, float[] data)> tensors,
+            List<(string key, uint type, object val)> meta)
+        {
             using var ms = new MemoryStream();
             using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
             {

@@ -91,9 +91,15 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
         int heads = RequireInt(file, $"{arch}.attention.head_count");
         int kvHeads = OptionalInt(file, $"{arch}.attention.head_count_kv") ?? heads;
         int ffn = RequireInt(file, $"{arch}.feed_forward_length");
-        double rmsEps = OptionalDouble(file, $"{arch}.attention.layer_norm_rms_epsilon") ?? 1e-5;
+        // Norm epsilon: Llama-family uses RMSNorm (layer_norm_rms_epsilon); Cohere/StarCoder2 use plain
+        // LayerNorm (layer_norm_epsilon). Read whichever the file carries so the correct eps reaches the builder.
+        double normEps = OptionalDouble(file, $"{arch}.attention.layer_norm_rms_epsilon")
+            ?? OptionalDouble(file, $"{arch}.attention.layer_norm_epsilon") ?? 1e-5;
         double ropeTheta = OptionalDouble(file, $"{arch}.rope.freq_base") ?? 10000.0;
         int maxPos = OptionalInt(file, $"{arch}.context_length") ?? 2048;
+        // Gemma-family checkpoints declare an explicit per-head dimension (key_length) that differs from
+        // hidden/heads (e.g. Gemma head_dim = 256); absent for models where head_dim == hidden/heads.
+        int? headDim = OptionalInt(file, $"{arch}.attention.key_length");
 
         // Vocab: prefer explicit metadata, else the token-embedding table's second (n_vocab) dimension.
         int vocab = OptionalInt(file, $"{arch}.vocab_size")
@@ -113,44 +119,105 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
             ["num_attention_heads"] = heads,
             ["num_key_value_heads"] = kvHeads,
             ["vocab_size"] = vocab,
-            ["rms_norm_eps"] = rmsEps,
+            ["rms_norm_eps"] = normEps,
             ["rope_theta"] = ropeTheta,
             ["max_position_embeddings"] = maxPos,
             ["tie_word_embeddings"] = !hasOutput,
-            ["hidden_act"] = "silu",
+            // hidden_act is informational only — every decoder builder fixes its own gate activation via
+            // DecoderOptions, so it is left at the config default rather than guessed from the GGUF arch.
         };
+        // Family-specific fields the builders actually consume: an explicit head dim (Gemma), the Gemma-2
+        // attention/final logit soft-caps, and the Cohere logit multiplier. Only emit them when present so
+        // HuggingFaceConfig keeps its own defaults (e.g. head_dim = hidden/heads) for models that omit them.
+        if (headDim is { } hd)
+            configJson["head_dim"] = hd;
+        if (OptionalDouble(file, $"{arch}.attn_logit_softcapping") is { } attnCap)
+            configJson["attn_logit_softcapping"] = attnCap;
+        if (OptionalDouble(file, $"{arch}.final_logit_softcapping") is { } finalCap)
+            configJson["final_logit_softcapping"] = finalCap;
+        if (OptionalDouble(file, $"{arch}.logit_scale") is { } logitScale)
+            configJson["logit_scale"] = logitScale;
         var config = HuggingFaceConfig.Parse(configJson.ToString());
 
-        // Map the Hugging Face parameter names the builder requests to GGUF tensor names, adding only entries
-        // whose GGUF tensor is actually present (so the builder's tie/absence checks stay correct).
+        var map = BuildTensorMap(file, arch, layers);
+        return (config, map);
+    }
+
+    // Maps the Hugging Face parameter names each decoder builder requests to GGUF tensor names, adding only
+    // entries whose GGUF tensor is actually present (so the builders' tie/absence/optional checks stay correct).
+    // The normalization-layer and feed-forward names are family-specific: Gemma-2 has four sandwiched norms,
+    // StarCoder2 carries LayerNorm biases and a non-gated c_fc/c_proj MLP, while the LLaMA family (and Cohere's
+    // single parallel norm) share the common names below.
+    private static Dictionary<string, string> BuildTensorMap(GgufFile file, string arch, int layers)
+    {
+        bool gemma2 = string.Equals(arch, "gemma2", StringComparison.OrdinalIgnoreCase);
+        bool starcoder2 = string.Equals(arch, "starcoder2", StringComparison.OrdinalIgnoreCase);
+
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         AddIfPresent(file, map, "model.embed_tokens.weight", "token_embd.weight");
         AddIfPresent(file, map, "model.norm.weight", "output_norm.weight");
+        AddIfPresent(file, map, "model.norm.bias", "output_norm.bias"); // StarCoder2 final LayerNorm bias
         AddIfPresent(file, map, "lm_head.weight", "output.weight");
         for (int i = 0; i < layers; i++)
         {
             string hf = $"model.layers.{i}.";
             string blk = $"blk.{i}.";
-            AddIfPresent(file, map, hf + "input_layernorm.weight", blk + "attn_norm.weight");
-            AddIfPresent(file, map, hf + "post_attention_layernorm.weight", blk + "ffn_norm.weight");
+
+            // ---- normalization layers (family-specific) ----
+            if (gemma2)
+            {
+                // Gemma-2 sandwiches attention and the FFN between two RMSNorms each.
+                AddIfPresent(file, map, hf + "input_layernorm.weight", blk + "attn_norm.weight");
+                AddIfPresent(file, map, hf + "post_attention_layernorm.weight", blk + "attn_post_norm.weight");
+                AddIfPresent(file, map, hf + "pre_feedforward_layernorm.weight", blk + "ffn_norm.weight");
+                AddIfPresent(file, map, hf + "post_feedforward_layernorm.weight", blk + "ffn_post_norm.weight");
+            }
+            else
+            {
+                // LLaMA family: input norm from attn_norm, post-attention norm from ffn_norm. Cohere has only
+                // attn_norm (parallel residual), so the post-attention entry simply stays absent.
+                AddIfPresent(file, map, hf + "input_layernorm.weight", blk + "attn_norm.weight");
+                AddIfPresent(file, map, hf + "post_attention_layernorm.weight", blk + "ffn_norm.weight");
+                if (starcoder2)
+                {
+                    // StarCoder2 uses biased LayerNorm.
+                    AddIfPresent(file, map, hf + "input_layernorm.bias", blk + "attn_norm.bias");
+                    AddIfPresent(file, map, hf + "post_attention_layernorm.bias", blk + "ffn_norm.bias");
+                }
+            }
+
+            // ---- attention projections (weights + optional biases, all families) ----
             AddIfPresent(file, map, hf + "self_attn.q_proj.weight", blk + "attn_q.weight");
             AddIfPresent(file, map, hf + "self_attn.k_proj.weight", blk + "attn_k.weight");
             AddIfPresent(file, map, hf + "self_attn.v_proj.weight", blk + "attn_v.weight");
             AddIfPresent(file, map, hf + "self_attn.o_proj.weight", blk + "attn_output.weight");
-            AddIfPresent(file, map, hf + "mlp.gate_proj.weight", blk + "ffn_gate.weight");
-            AddIfPresent(file, map, hf + "mlp.up_proj.weight", blk + "ffn_up.weight");
-            AddIfPresent(file, map, hf + "mlp.down_proj.weight", blk + "ffn_down.weight");
-            // Attention projection biases (Qwen2 biases q/k/v; StarCoder2 all four).
             AddIfPresent(file, map, hf + "self_attn.q_proj.bias", blk + "attn_q.bias");
             AddIfPresent(file, map, hf + "self_attn.k_proj.bias", blk + "attn_k.bias");
             AddIfPresent(file, map, hf + "self_attn.v_proj.bias", blk + "attn_v.bias");
             AddIfPresent(file, map, hf + "self_attn.o_proj.bias", blk + "attn_output.bias");
-            // Fused projections (Phi-3): expose the fused HF names so FusedProjectionSource can split them.
+            // Fused attention projection (Phi-3): FusedProjectionSource splits the fused HF name on read.
             AddIfPresent(file, map, hf + "self_attn.qkv_proj.weight", blk + "attn_qkv.weight");
-            AddIfPresent(file, map, hf + "mlp.gate_up_proj.weight", blk + "ffn_gate_up.weight");
+
+            // ---- feed-forward (family-specific) ----
+            if (starcoder2)
+            {
+                // Non-gated GELU MLP with biases: c_fc (up) then c_proj (down).
+                AddIfPresent(file, map, hf + "mlp.c_fc.weight", blk + "ffn_up.weight");
+                AddIfPresent(file, map, hf + "mlp.c_fc.bias", blk + "ffn_up.bias");
+                AddIfPresent(file, map, hf + "mlp.c_proj.weight", blk + "ffn_down.weight");
+                AddIfPresent(file, map, hf + "mlp.c_proj.bias", blk + "ffn_down.bias");
+            }
+            else
+            {
+                // Gated SwiGLU/GeGLU MLP (LLaMA/Mistral/Qwen2/Gemma/Cohere), plus Phi-3's fused gate_up.
+                AddIfPresent(file, map, hf + "mlp.gate_proj.weight", blk + "ffn_gate.weight");
+                AddIfPresent(file, map, hf + "mlp.up_proj.weight", blk + "ffn_up.weight");
+                AddIfPresent(file, map, hf + "mlp.down_proj.weight", blk + "ffn_down.weight");
+                AddIfPresent(file, map, hf + "mlp.gate_up_proj.weight", blk + "ffn_gate_up.weight");
+            }
         }
 
-        return (config, map);
+        return map;
     }
 
     private static void AddIfPresent(GgufFile file, Dictionary<string, string> map, string hfName, string ggufName)
