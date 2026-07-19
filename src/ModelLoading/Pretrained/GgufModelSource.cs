@@ -31,13 +31,31 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
     private readonly FileStream _stream;
     private readonly GgufFile _file;
     private readonly Dictionary<string, string> _hfToGguf;
+    private readonly Dictionary<string, ExpertSlice> _expertSlices;
 
-    private GgufModelSource(FileStream stream, GgufFile file, HuggingFaceConfig config, Dictionary<string, string> map)
+    // One per-expert weight: the e-th equal slice of a stacked GGUF expert tensor (ffn_*_exps.weight).
+    private readonly struct ExpertSlice
+    {
+        public ExpertSlice(string ggufName, int index, int count)
+        {
+            GgufName = ggufName;
+            Index = index;
+            Count = count;
+        }
+
+        public string GgufName { get; }
+        public int Index { get; }
+        public int Count { get; }
+    }
+
+    private GgufModelSource(FileStream stream, GgufFile file, HuggingFaceConfig config,
+        Dictionary<string, string> map, Dictionary<string, ExpertSlice> expertSlices)
     {
         _stream = stream;
         _file = file;
         Config = config;
         _hfToGguf = map;
+        _expertSlices = expertSlices;
     }
 
     /// <summary>The architecture read from the GGUF metadata.</summary>
@@ -59,8 +77,8 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
         try
         {
             var file = GgufReader.Read(stream);
-            var (config, map) = BuildConfigAndMap(file);
-            return new GgufModelSource(stream, file, config, map);
+            var (config, map, experts) = BuildConfigAndMap(file);
+            return new GgufModelSource(stream, file, config, map, experts);
         }
         catch
         {
@@ -70,20 +88,46 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
     }
 
     /// <inheritdoc/>
-    public IReadOnlyCollection<string> TensorNames => _hfToGguf.Keys;
+    public IReadOnlyCollection<string> TensorNames
+    {
+        get
+        {
+            var names = new List<string>(_hfToGguf.Count + _expertSlices.Count);
+            names.AddRange(_hfToGguf.Keys);
+            names.AddRange(_expertSlices.Keys);
+            return names;
+        }
+    }
 
     /// <inheritdoc/>
     public double[] ReadAsDouble(string name)
     {
-        if (!_hfToGguf.TryGetValue(name, out var ggufName))
-            throw new ArgumentException($"Tensor '{name}' is not present in this GGUF model.", nameof(name));
-        return _file.ReadAsDouble(ggufName);
+        if (_hfToGguf.TryGetValue(name, out var ggufName))
+            return _file.ReadAsDouble(ggufName);
+        if (_expertSlices.TryGetValue(name, out var slice))
+            return ReadExpertSlice(slice);
+        throw new ArgumentException($"Tensor '{name}' is not present in this GGUF model.", nameof(name));
+    }
+
+    // Reads one expert's weight as the index-th of `count` equal slices of the stacked GGUF expert tensor.
+    // GGUF lays the stack out expert-major (ne = [in, out, n_expert]), so slice e is a contiguous run whose
+    // shape/layout matches a standalone GGUF expert weight — the builder applies its own [out,in] transpose.
+    private double[] ReadExpertSlice(ExpertSlice slice)
+    {
+        double[] all = _file.ReadAsDouble(slice.GgufName);
+        if (all.Length % slice.Count != 0)
+            throw new InvalidDataException(
+                $"Stacked expert tensor '{slice.GgufName}' length {all.Length} is not divisible by expert count {slice.Count}.");
+        int sliceSize = all.Length / slice.Count;
+        var result = new double[sliceSize];
+        Array.Copy(all, slice.Index * sliceSize, result, 0, sliceSize);
+        return result;
     }
 
     /// <inheritdoc/>
     public void Dispose() => _stream.Dispose();
 
-    private static (HuggingFaceConfig, Dictionary<string, string>) BuildConfigAndMap(GgufFile file)
+    private static (HuggingFaceConfig, Dictionary<string, string>, Dictionary<string, ExpertSlice>) BuildConfigAndMap(GgufFile file)
     {
         string arch = RequireString(file, "general.architecture");
         int hidden = RequireInt(file, $"{arch}.embedding_length");
@@ -91,6 +135,10 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
         int heads = RequireInt(file, $"{arch}.attention.head_count");
         int kvHeads = OptionalInt(file, $"{arch}.attention.head_count_kv") ?? heads;
         int ffn = RequireInt(file, $"{arch}.feed_forward_length");
+        // Sparse mixture-of-experts: llama.cpp stores Mixtral under the generic "llama" arch (its stacked
+        // expert tensors distinguish it) and Qwen2-MoE as "qwen2moe"; expert_count > 0 marks a MoE model.
+        int expertCount = OptionalInt(file, $"{arch}.expert_count") ?? 0;
+        string modelType = NormalizeModelType(arch, expertCount);
         // Norm epsilon: Llama-family uses RMSNorm (layer_norm_rms_epsilon); Cohere/StarCoder2 use plain
         // LayerNorm (layer_norm_epsilon). Read whichever the file carries so the correct eps reaches the builder.
         double normEps = OptionalDouble(file, $"{arch}.attention.layer_norm_rms_epsilon")
@@ -112,7 +160,7 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
         var configJson = new JObject
         {
             ["architectures"] = new JArray(),
-            ["model_type"] = arch,
+            ["model_type"] = modelType,
             ["hidden_size"] = hidden,
             ["intermediate_size"] = ffn,
             ["num_hidden_layers"] = layers,
@@ -137,10 +185,32 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
             configJson["final_logit_softcapping"] = finalCap;
         if (OptionalDouble(file, $"{arch}.logit_scale") is { } logitScale)
             configJson["logit_scale"] = logitScale;
+        if (expertCount > 0)
+        {
+            configJson["num_local_experts"] = expertCount;
+            if (OptionalInt(file, $"{arch}.expert_used_count") is { } used)
+                configJson["num_experts_per_tok"] = used;
+            if (OptionalInt(file, $"{arch}.expert_feed_forward_length") is { } expFfn)
+                configJson["moe_intermediate_size"] = expFfn;
+            if (OptionalInt(file, $"{arch}.expert_shared_feed_forward_length") is { } sharedFfn)
+                configJson["shared_expert_intermediate_size"] = sharedFfn;
+        }
         var config = HuggingFaceConfig.Parse(configJson.ToString());
 
-        var map = BuildTensorMap(file, arch, layers);
-        return (config, map);
+        var (map, experts) = BuildTensorMap(file, modelType, layers, expertCount);
+        return (config, map, experts);
+    }
+
+    // GGUF architecture names do not always match the Hugging Face model_type our registry resolves: Mixtral
+    // ships under the generic "llama" arch (distinguished only by its expert tensors) and Qwen2-MoE under
+    // "qwen2moe". All other families already share the name.
+    private static string NormalizeModelType(string arch, int expertCount)
+    {
+        if (string.Equals(arch, "llama", StringComparison.OrdinalIgnoreCase) && expertCount > 0)
+            return "mixtral";
+        if (string.Equals(arch, "qwen2moe", StringComparison.OrdinalIgnoreCase))
+            return "qwen2_moe";
+        return arch;
     }
 
     // Maps the Hugging Face parameter names each decoder builder requests to GGUF tensor names, adding only
@@ -148,12 +218,17 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
     // The normalization-layer and feed-forward names are family-specific: Gemma-2 has four sandwiched norms,
     // StarCoder2 carries LayerNorm biases and a non-gated c_fc/c_proj MLP, while the LLaMA family (and Cohere's
     // single parallel norm) share the common names below.
-    private static Dictionary<string, string> BuildTensorMap(GgufFile file, string arch, int layers)
+    private static (Dictionary<string, string> map, Dictionary<string, ExpertSlice> experts) BuildTensorMap(
+        GgufFile file, string modelType, int layers, int numExperts)
     {
-        bool gemma2 = string.Equals(arch, "gemma2", StringComparison.OrdinalIgnoreCase);
-        bool starcoder2 = string.Equals(arch, "starcoder2", StringComparison.OrdinalIgnoreCase);
+        bool gemma2 = string.Equals(modelType, "gemma2", StringComparison.OrdinalIgnoreCase);
+        bool starcoder2 = string.Equals(modelType, "starcoder2", StringComparison.OrdinalIgnoreCase);
+        bool mixtral = string.Equals(modelType, "mixtral", StringComparison.OrdinalIgnoreCase);
+        bool qwen2Moe = string.Equals(modelType, "qwen2_moe", StringComparison.OrdinalIgnoreCase);
+        bool moe = numExperts > 0 && (mixtral || qwen2Moe);
 
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        var experts = new Dictionary<string, ExpertSlice>(StringComparer.Ordinal);
         AddIfPresent(file, map, "model.embed_tokens.weight", "token_embd.weight");
         AddIfPresent(file, map, "model.norm.weight", "output_norm.weight");
         AddIfPresent(file, map, "model.norm.bias", "output_norm.bias"); // StarCoder2 final LayerNorm bias
@@ -207,6 +282,33 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
                 AddIfPresent(file, map, hf + "mlp.c_proj.weight", blk + "ffn_down.weight");
                 AddIfPresent(file, map, hf + "mlp.c_proj.bias", blk + "ffn_down.bias");
             }
+            else if (moe)
+            {
+                // Sparse MoE FFN. GGUF stacks all experts into one 3D tensor per projection (ffn_*_exps) and
+                // stores the router as ffn_gate_inp; each per-expert HF weight is one slice of the stack. The
+                // HF names differ per family (Mixtral w1/w3/w2 under block_sparse_moe; Qwen2-MoE gate/up/down
+                // under mlp), so dispatch the names but share the slicing.
+                string routerHf = mixtral ? hf + "block_sparse_moe.gate.weight" : hf + "mlp.gate.weight";
+                AddIfPresent(file, map, routerHf, blk + "ffn_gate_inp.weight");
+                string expertsHf = mixtral ? hf + "block_sparse_moe.experts." : hf + "mlp.experts.";
+                string gateName = mixtral ? ".w1.weight" : ".gate_proj.weight";
+                string upName = mixtral ? ".w3.weight" : ".up_proj.weight";
+                string downName = mixtral ? ".w2.weight" : ".down_proj.weight";
+                for (int e = 0; e < numExperts; e++)
+                {
+                    AddExpertSlice(file, experts, expertsHf + e + gateName, blk + "ffn_gate_exps.weight", e, numExperts);
+                    AddExpertSlice(file, experts, expertsHf + e + upName, blk + "ffn_up_exps.weight", e, numExperts);
+                    AddExpertSlice(file, experts, expertsHf + e + downName, blk + "ffn_down_exps.weight", e, numExperts);
+                }
+                if (qwen2Moe)
+                {
+                    // Qwen2-MoE also has an always-on shared expert plus its sigmoid gate.
+                    AddIfPresent(file, map, hf + "mlp.shared_expert.gate_proj.weight", blk + "ffn_gate_shexp.weight");
+                    AddIfPresent(file, map, hf + "mlp.shared_expert.up_proj.weight", blk + "ffn_up_shexp.weight");
+                    AddIfPresent(file, map, hf + "mlp.shared_expert.down_proj.weight", blk + "ffn_down_shexp.weight");
+                    AddIfPresent(file, map, hf + "mlp.shared_expert_gate.weight", blk + "ffn_gate_inp_shexp.weight");
+                }
+            }
             else
             {
                 // Gated SwiGLU/GeGLU MLP (LLaMA/Mistral/Qwen2/Gemma/Cohere), plus Phi-3's fused gate_up.
@@ -217,7 +319,16 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
             }
         }
 
-        return map;
+        return (map, experts);
+    }
+
+    // Registers one per-expert HF weight as slice <paramref name="index"/> of the stacked GGUF expert tensor,
+    // provided the stack is present (so absence-tolerant loading still works if a checkpoint omits it).
+    private static void AddExpertSlice(GgufFile file, Dictionary<string, ExpertSlice> experts,
+        string hfName, string ggufStackedName, int index, int count)
+    {
+        if (TensorExists(file, ggufStackedName))
+            experts[hfName] = new ExpertSlice(ggufStackedName, index, count);
     }
 
     private static void AddIfPresent(GgufFile file, Dictionary<string, string> map, string hfName, string ggufName)
