@@ -4381,46 +4381,70 @@ public static class LayerHelper<T>
         }
 
         int numClasses = architecture.OutputSize;
-        int currentResolution = voxelResolution;
-        int currentFilters = baseFilters;
-        int inputChannels = 1; // Typically single-channel occupancy grid
 
-        // Create Conv3D + MaxPool3D blocks
-        for (int block = 0; block < numConvBlocks; block++)
-        {
-            int outputFilters = currentFilters * (1 << block); // Double filters each block
-            int inChannels = (block == 0) ? inputChannels : (currentFilters * (1 << (block - 1)));
+        // 3D ShapeNets (Wu et al., 2015 — arXiv:1406.5670). The paper stacks
+        // three convolutional layers and — crucially — uses NO pooling at all
+        // ("we do not use any form of pooling in the hidden layers", §3),
+        // because max/avg pooling discards the precise voxel occupancy the
+        // model needs to reconstruct shape. The exact conv specification from
+        // the paper is:
+        //   conv1: 48  filters, 6³ kernel, stride 2
+        //   conv2: 160 filters, 5³ kernel, stride 2
+        //   conv3: 512 filters, 4³ kernel, stride 1
+        // followed by a fully-connected hidden layer (the paper's first FC RBM
+        // has 1200 units) and the output head.
+        //
+        // The paper trains this network as a Convolutional Deep Belief Network
+        // via layer-wise contrastive divergence + discriminative fine-tuning.
+        // We reproduce the same *architecture* but train it with ordinary
+        // supervised backprop, because CDBN pretraining is outside the scope of
+        // the supervised model harness this network runs under. The strided,
+        // pooling-free conv stack is also numerically far more stable than the
+        // previous MaxPool3D+GlobalAvgPool variant, which produced NaNs on the
+        // gradient-flow invariant.
+        //
+        // At the default 32³ input the spatial dimensions flow
+        // 32 → 14 (conv1) → 5 (conv2) → 2 (conv3), i.e. every layer keeps a
+        // strictly positive volume. Conv3DLayer infers its input-channel count
+        // lazily on the first forward pass, so no channel counts are threaded
+        // here. numConvBlocks / baseFilters are retained on the signature for
+        // API and serialization compatibility; the paper architecture is fixed
+        // at three convolutional layers with the filter counts above.
 
-            // Conv3D layer with padding to maintain resolution before pooling
-            yield return new Conv3DLayer<T>(
-                outputChannels: outputFilters,
-                kernelSize: 3,
-                stride: 1,
-                padding: 1,
-                activationFunction: new ReLUActivation<T>());
+        // conv1: 48 filters, 6³ kernel, stride 2, no padding.
+        yield return new Conv3DLayer<T>(
+            outputChannels: 48,
+            kernelSize: 6,
+            stride: 2,
+            padding: 0,
+            activationFunction: new ReLUActivation<T>());
 
-            // MaxPool3D layer to downsample by factor of 2
-            if (currentResolution >= 2)
-            {
-                yield return new MaxPool3DLayer<T>(
-                    poolSize: 2,
-                    stride: 2);
-                currentResolution /= 2;
-            }
-        }
+        // conv2: 160 filters, 5³ kernel, stride 2, no padding.
+        yield return new Conv3DLayer<T>(
+            outputChannels: 160,
+            kernelSize: 5,
+            stride: 2,
+            padding: 0,
+            activationFunction: new ReLUActivation<T>());
 
-        // Final number of filters after all blocks
-        int finalFilters = currentFilters * (1 << (numConvBlocks - 1));
+        // conv3: 512 filters, 4³ kernel, stride 1, no padding.
+        yield return new Conv3DLayer<T>(
+            outputChannels: 512,
+            kernelSize: 4,
+            stride: 1,
+            padding: 0,
+            activationFunction: new ReLUActivation<T>());
 
-        // Global average pooling to aggregate spatial information
-        yield return new GlobalPoolingLayer<T>(
-            poolingType: PoolingType.Average,
-            activationFunction: (IActivationFunction<T>?)null);
-
-        // Flatten [filters, 1, 1, 1] → [filters] for the dense classification head
+        // Flatten the [512, d, h, w] conv volume for the fully-connected head.
         yield return new FlattenLayer<T>();
 
-        // Dense output layer for classification
+        // Fully-connected hidden layer (paper's first FC RBM: 1200 units).
+        yield return new DenseLayer<T>(
+            outputSize: 1200,
+            activationFunction: new ReLUActivation<T>());
+
+        // Output head. The paper's top layer classifies over object categories;
+        // task type selects the matching output activation.
         IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
             ? new SoftmaxActivation<T>()
             : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
