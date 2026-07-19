@@ -87,7 +87,7 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
 
     private static Tensor<T> BuildTensor(IReadOnlyList<double[]> assetPrices, IReadOnlyList<double[]>? featureColumns)
     {
-        ArgumentNullException.ThrowIfNull(assetPrices);
+        if (assetPrices is null) throw new ArgumentNullException(nameof(assetPrices));
         if (assetPrices.Count == 0)
         {
             throw new ArgumentException("At least one tradable asset series is required.", nameof(assetPrices));
@@ -174,7 +174,7 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
                 w = 0.0;
             }
 
-            w = Math.Clamp(w, -1.0, 1.0);
+            w = MathPolyfill.Clamp(w, -1.0, 1.0);
             weights[i] = w;
             gross += Math.Abs(w);
         }
@@ -263,13 +263,13 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
         double financing = (_slippageCoefficient * turnoverNotional)
                            + (_borrowCostPerStep * shortNotional)
                            + (_holdingCostPerStep * grossNotional);
-        if (financing > 0 && double.IsFinite(financing))
+        if (financing > 0 && (!double.IsNaN(financing) && !double.IsInfinity(financing)))
         {
             _cash = FromDouble(ToDouble(_cash) - financing);
         }
 
         double nav = ToDouble(_cash) + positionValue;
-        if (nav > 0 && double.IsFinite(nav))
+        if (nav > 0 && (!double.IsNaN(nav) && !double.IsInfinity(nav)))
         {
             _grossExposure = grossNotional / nav;
             _shortExposure = shortNotional / nav;
@@ -290,7 +290,7 @@ public sealed class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
     {
         double previous = ToDouble(previousValue);
         double current = ToDouble(currentValue);
-        double portfolioReturn = previous > 0 && double.IsFinite(previous) && double.IsFinite(current)
+        double portfolioReturn = previous > 0 && (!double.IsNaN(previous) && !double.IsInfinity(previous)) && (!double.IsNaN(current) && !double.IsInfinity(current))
             ? (current - previous) / previous
             : 0.0;
 

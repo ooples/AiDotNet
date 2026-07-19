@@ -62,12 +62,12 @@ public sealed class TotalReturnReward : IPortfolioReward
 
     public TotalReturnReward(double turnoverPenalty = 0.0, double drawdownPenalty = 0.0)
     {
-        if (!double.IsFinite(turnoverPenalty) || turnoverPenalty < 0.0)
+        if ((double.IsNaN(turnoverPenalty) || double.IsInfinity(turnoverPenalty)) || turnoverPenalty < 0.0)
         {
             throw new ArgumentOutOfRangeException(nameof(turnoverPenalty), "Penalty must be finite and non-negative.");
         }
 
-        if (!double.IsFinite(drawdownPenalty) || drawdownPenalty < 0.0)
+        if ((double.IsNaN(drawdownPenalty) || double.IsInfinity(drawdownPenalty)) || drawdownPenalty < 0.0)
         {
             throw new ArgumentOutOfRangeException(nameof(drawdownPenalty), "Penalty must be finite and non-negative.");
         }
@@ -108,12 +108,12 @@ public sealed class DifferentialSharpeReward : IPortfolioReward
     /// <param name="turnoverPenalty">Optional penalty per unit turnover, subtracted from the differential.</param>
     public DifferentialSharpeReward(double eta = 0.04, double turnoverPenalty = 0.0)
     {
-        if (!double.IsFinite(eta) || eta <= 0.0 || eta >= 1.0)
+        if ((double.IsNaN(eta) || double.IsInfinity(eta)) || eta <= 0.0 || eta >= 1.0)
         {
             throw new ArgumentOutOfRangeException(nameof(eta), "eta must be finite and strictly between 0 and 1.");
         }
 
-        if (!double.IsFinite(turnoverPenalty) || turnoverPenalty < 0.0)
+        if ((double.IsNaN(turnoverPenalty) || double.IsInfinity(turnoverPenalty)) || turnoverPenalty < 0.0)
         {
             throw new ArgumentOutOfRangeException(nameof(turnoverPenalty), "Penalty must be finite and non-negative.");
         }

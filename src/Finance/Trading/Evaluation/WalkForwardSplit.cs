@@ -19,18 +19,24 @@ public static class WalkForwardSplit
     public static (List<double[]> Train, List<double[]> Holdout) Split(
         IReadOnlyList<double[]> series, double trainFraction, int embargo = 0)
     {
-        ArgumentNullException.ThrowIfNull(series);
+        if (series is null) throw new ArgumentNullException(nameof(series));
         if (series.Count == 0)
         {
             throw new ArgumentException("At least one series column is required.", nameof(series));
         }
 
-        if (trainFraction <= 0.0 || trainFraction >= 1.0)
+        // NaN slips through a plain range check (every NaN comparison is false), so test finiteness explicitly.
+        if ((double.IsNaN(trainFraction) || double.IsInfinity(trainFraction)) || trainFraction <= 0.0 || trainFraction >= 1.0)
         {
-            throw new ArgumentOutOfRangeException(nameof(trainFraction), "trainFraction must be in (0, 1).");
+            throw new ArgumentOutOfRangeException(nameof(trainFraction), "trainFraction must be a finite value in (0, 1).");
         }
 
-        embargo = Math.Max(0, embargo);
+        // Reject a negative embargo rather than silently rewriting it to 0 — a negative gap is a caller bug.
+        if (embargo < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(embargo), "embargo must be non-negative.");
+        }
+
         int n = series[0].Length;
         for (int i = 1; i < series.Count; i++)
         {
@@ -55,10 +61,17 @@ public static class WalkForwardSplit
 
         var train = new List<double[]>(series.Count);
         var holdout = new List<double[]>(series.Count);
+        int holdoutLength = n - holdoutStart;
         foreach (var col in series)
         {
-            train.Add(col[..splitIndex]);
-            holdout.Add(col[holdoutStart..]);
+            // Manual slices (net471 has no array-range/GetSubArray support): train = [0, splitIndex),
+            // holdout = [holdoutStart, n).
+            var trainCol = new double[splitIndex];
+            Array.Copy(col, 0, trainCol, 0, splitIndex);
+            var holdoutCol = new double[holdoutLength];
+            Array.Copy(col, holdoutStart, holdoutCol, 0, holdoutLength);
+            train.Add(trainCol);
+            holdout.Add(holdoutCol);
         }
 
         return (train, holdout);

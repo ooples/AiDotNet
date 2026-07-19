@@ -65,7 +65,7 @@ public sealed class PortfolioAgentTrainingTests
         Assert.Equal(75, agent.SelectCalls);
         Assert.Equal(agent.SelectCalls, agent.StoreCalls);     // one transition stored per action
         Assert.Equal(agent.SelectCalls, agent.TrainCalls);     // learned each step
-        Assert.True(double.IsFinite(meanReturn));
+        Assert.True((!double.IsNaN(meanReturn) && !double.IsInfinity(meanReturn)));
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public sealed class PortfolioAgentTrainingTests
         var agent = PortfolioAgent.From(new SACAgent<double>(options));
 
         double meanReturn = PortfolioAgentTrainer.Train(agent, trainEnv, episodes: 2);
-        Assert.True(double.IsFinite(meanReturn), $"training return {meanReturn} was not finite");
+        Assert.True((!double.IsNaN(meanReturn) && !double.IsInfinity(meanReturn)), $"training return {meanReturn} was not finite");
 
         // Evaluate on genuinely UNSEEN prices (a different regime/level than the training series), so the smoke
         // test exercises the agent on data it never trained on — the honest-eval discipline.
@@ -184,7 +184,7 @@ public sealed class PortfolioAgentTrainingTests
             evalPrices, null, windowSize: 5, initialCapital: 100_000, reward: new DifferentialSharpeReward());
         var result = PortfolioBacktest.Run(evalEnv, s => agent.SelectAction(s, explore: false));
 
-        Assert.True(double.IsFinite(result.FinalValue) && result.FinalValue > 0, $"final value {result.FinalValue}");
+        Assert.True((!double.IsNaN(result.FinalValue) && !double.IsInfinity(result.FinalValue)) && result.FinalValue > 0, $"final value {result.FinalValue}");
         Assert.True(result.Steps > 0);
     }
 }

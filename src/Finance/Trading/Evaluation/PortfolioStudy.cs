@@ -17,7 +17,7 @@ public static class PortfolioExperimentMatrix
         IReadOnlyList<double>? leverages = null,
         IReadOnlyList<(string Name, PortfolioFrictions Frictions)>? frictions = null)
     {
-        ArgumentNullException.ThrowIfNull(rewards);
+        if (rewards is null) throw new ArgumentNullException(nameof(rewards));
         if (rewards.Count == 0)
         {
             throw new ArgumentException("At least one reward is required.", nameof(rewards));
@@ -65,7 +65,7 @@ public static class PortfolioStudy
         Func<int, int, IPortfolioAgent<T>> agentFactory,
         int trainEpisodes)
     {
-        ArgumentNullException.ThrowIfNull(assetPrices);
+        if (assetPrices is null) throw new ArgumentNullException(nameof(assetPrices));
 
         // Feature columns must align to the price rows (same time length) BEFORE splitting, or the train/holdout
         // features would not line up with the prices they annotate. (WalkForwardSplit checks equal length within

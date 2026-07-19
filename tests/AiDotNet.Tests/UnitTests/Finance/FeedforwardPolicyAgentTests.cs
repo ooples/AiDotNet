@@ -88,14 +88,27 @@ public sealed class FeedforwardPolicyAgentTests
         var agent = new FeedforwardPolicyAgent<double>(
             trainEnv.ObservationSpaceDimension, trainEnv.ActionSpaceSize, hidden: 16, learningRate: 1e-3, seed: 3);
 
-        double meanReturn = PortfolioAgentTrainer.Train(agent, trainEnv, episodes: 3);
-        Assert.True(double.IsFinite(meanReturn), $"training return {meanReturn} not finite");
+        // Deterministic probe observation; record the greedy action BEFORE training so we can prove training
+        // actually updated the policy (not just ran without error).
+        var probe = new Vector<double>(Enumerable.Range(0, trainEnv.ObservationSpaceDimension)
+            .Select(i => 0.05 * ((i % 7) - 3)).ToArray());
+        double probeBefore = agent.SelectAction(probe, explore: false)[0];
 
+        double meanReturn = PortfolioAgentTrainer.Train(agent, trainEnv, episodes: 3);
+        Assert.True((!double.IsNaN(meanReturn) && !double.IsInfinity(meanReturn)), $"training return {meanReturn} not finite");
+
+        // The greedy action for the fixed probe must change after training — proof the parameters were updated.
+        double probeAfter = agent.SelectAction(probe, explore: false)[0];
+        Assert.True(Math.Abs(probeAfter - probeBefore) > 1e-9,
+            $"training should change the greedy policy output (before {probeBefore}, after {probeAfter})");
+
+        // Reset the agent before the holdout so evaluation starts from a clean state.
+        agent.ResetEpisode();
         var evalEnv = new PortfolioManagerEnvironment<double>(
             prices, null, windowSize: 5, initialCapital: 100_000, reward: new DifferentialSharpeReward());
         var result = PortfolioBacktest.Run(evalEnv, s => agent.SelectAction(s, explore: false));
 
-        Assert.True(double.IsFinite(result.FinalValue) && result.FinalValue > 0, $"final value {result.FinalValue}");
+        Assert.True((!double.IsNaN(result.FinalValue) && !double.IsInfinity(result.FinalValue)) && result.FinalValue > 0, $"final value {result.FinalValue}");
         Assert.True(result.Steps > 0);
     }
 }

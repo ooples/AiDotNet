@@ -199,14 +199,14 @@ public sealed class FinancialEvaluator<T>
     /// <summary>Adds a metric to the default set (does not replace it).</summary>
     public void AddMetric(IFinancialMetric<T> metric)
     {
-        ArgumentNullException.ThrowIfNull(metric);
+        if (metric is null) throw new ArgumentNullException(nameof(metric));
         _metrics.Add(metric);
     }
 
     public FinancialEvaluationResult Evaluate(IReadOnlyList<double> predicted, IReadOnlyList<double> actual)
     {
-        ArgumentNullException.ThrowIfNull(predicted);
-        ArgumentNullException.ThrowIfNull(actual);
+        if (predicted is null) throw new ArgumentNullException(nameof(predicted));
+        if (actual is null) throw new ArgumentNullException(nameof(actual));
 
         var results = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var m in _metrics)

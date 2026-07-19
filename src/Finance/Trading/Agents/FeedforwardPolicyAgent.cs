@@ -101,7 +101,7 @@ public sealed class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
         {
             double m = ToD(mean[a, 0]);
             double v = explore ? m + _sigma * _rng.NextGaussian() : m;
-            action[a] = NumOps.FromDouble(Math.Clamp(v, -1.0, 1.0));
+            action[a] = NumOps.FromDouble(MathPolyfill.Clamp(v, -1.0, 1.0));
         }
 
         // Pure inference: no rollout is recorded here, so evaluating the policy (e.g. a greedy backtest that

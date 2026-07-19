@@ -40,8 +40,8 @@ public static class PortfolioBacktest
         PortfolioManagerEnvironment<T> environment,
         Func<Vector<T>, Vector<T>> policy)
     {
-        ArgumentNullException.ThrowIfNull(environment);
-        ArgumentNullException.ThrowIfNull(policy);
+        if (environment is null) throw new ArgumentNullException(nameof(environment));
+        if (policy is null) throw new ArgumentNullException(nameof(policy));
 
         environment.ResetEpisodeState();
         var state = environment.Reset();

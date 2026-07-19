@@ -53,8 +53,8 @@ public static class PortfolioAgentTrainer
     /// </summary>
     public static double Train<T>(IPortfolioAgent<T> agent, PortfolioManagerEnvironment<T> environment, int episodes)
     {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(environment);
+        if (agent is null) throw new ArgumentNullException(nameof(agent));
+        if (environment is null) throw new ArgumentNullException(nameof(environment));
         if (episodes <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(episodes));
@@ -145,10 +145,10 @@ public static class PortfolioExperimentRunner
         Func<int, int, IPortfolioAgent<T>> agentFactory,
         int trainEpisodes)
     {
-        ArgumentNullException.ThrowIfNull(trainAssetPrices);
-        ArgumentNullException.ThrowIfNull(holdoutAssetPrices);
-        ArgumentNullException.ThrowIfNull(experiments);
-        ArgumentNullException.ThrowIfNull(agentFactory);
+        if (trainAssetPrices is null) throw new ArgumentNullException(nameof(trainAssetPrices));
+        if (holdoutAssetPrices is null) throw new ArgumentNullException(nameof(holdoutAssetPrices));
+        if (experiments is null) throw new ArgumentNullException(nameof(experiments));
+        if (agentFactory is null) throw new ArgumentNullException(nameof(agentFactory));
 
         // Train and holdout must share the same observation schema — same tradable-asset count and the same
         // number of feature columns — or the agent trained on one cannot be evaluated on the other.

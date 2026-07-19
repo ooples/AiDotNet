@@ -65,4 +65,24 @@ public sealed class WalkForwardSplitTests
         Assert.Throws<ArgumentOutOfRangeException>(() => WalkForwardSplit.Split(new List<double[]> { Index(10) }, 1.0));
         Assert.Throws<ArgumentException>(() => WalkForwardSplit.Split(new List<double[]> { Index(10), Index(9) }, 0.5));
     }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Rejects_nonfinite_fraction_negative_embargo_and_empty_partitions()
+    {
+        var series = new List<double[]> { Index(10) };
+
+        // NaN / infinity must not slip through the range check (every NaN comparison is false).
+        Assert.Throws<ArgumentOutOfRangeException>(() => WalkForwardSplit.Split(series, double.NaN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => WalkForwardSplit.Split(series, double.PositiveInfinity));
+
+        // Negative embargo is a caller bug — rejected, not silently rewritten to 0.
+        Assert.Throws<ArgumentOutOfRangeException>(() => WalkForwardSplit.Split(series, 0.7, embargo: -1));
+
+        // Zero-length series → an empty train partition.
+        Assert.Throws<ArgumentException>(() => WalkForwardSplit.Split(new List<double[]> { Array.Empty<double>() }, 0.7));
+
+        // An embargo that consumes the whole tail → an empty holdout (splitIndex 7 + embargo 5 >= length 10).
+        Assert.Throws<ArgumentException>(() => WalkForwardSplit.Split(series, 0.7, embargo: 5));
+    }
 }

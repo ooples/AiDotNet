@@ -136,7 +136,7 @@ public sealed class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
         {
             double m = ToD(mean[a]);
             double v = explore ? m + _sigma * _rng.NextGaussian() : m;
-            action[a] = NumOps.FromDouble(Math.Clamp(v, -1.0, 1.0));
+            action[a] = NumOps.FromDouble(MathPolyfill.Clamp(v, -1.0, 1.0));
         }
 
         // The hidden state advances above (a recurrent policy must), but the rollout is NOT recorded here — so a
