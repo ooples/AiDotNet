@@ -25,7 +25,12 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// budget-safe time. MoreData iterations are trimmed like the other heavy-backbone
 /// segmentation scaffolds (UniVS/SwinUNETR).
 /// </remarks>
-public class InternImageTests : SegmentationTestBase
+// Runs in <float> (not the SegmentationTestBase default <double>): even at reduced spatial
+// scale the 30-block DCNv3 Tiny backbone's multi-iteration training invariants overran the
+// 180 s gate at <double>. <float> halves per-step compute + the tape/activation footprint
+// while keeping the full Tiny architecture and the self-relative invariants intact — the same
+// lever the generated heavy-backbone scaffolds use via Fp32TestClassNames.
+public class InternImageTests : SegmentationTestBase<float>
 {
     private const int NumClasses = 4;
     private const int Height = 32;
@@ -39,9 +44,9 @@ public class InternImageTests : SegmentationTestBase
     protected override int MoreDataShortIterations => 5;
     protected override int MoreDataLongIterations => 15;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var architecture = new NeuralNetworkArchitecture<double>(
+        var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: Height,
@@ -49,7 +54,7 @@ public class InternImageTests : SegmentationTestBase
             inputDepth: Channels,
             outputSize: NumClasses);
 
-        return new InternImage<double>(architecture, numClasses: NumClasses,
+        return new InternImage<float>(architecture, numClasses: NumClasses,
             modelSize: InternImageModelSize.Tiny, dropRate: 0.0);
     }
 }

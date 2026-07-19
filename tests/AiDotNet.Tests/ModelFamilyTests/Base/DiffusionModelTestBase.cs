@@ -209,6 +209,26 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// </summary>
     protected static double ToDouble(TNum v) => Convert.ToDouble(v);
 
+    /// <summary>
+    /// PyTorch <c>torch.testing.assert_close</c> / NumPy <c>allclose</c> tolerance:
+    /// <c>|actual - expected| &lt;= atol + rtol*|expected|</c>, with dtype-aware defaults selected by
+    /// <typeparamref name="TNum"/> (float32: rtol=1.3e-6, atol=1e-5; float64: rtol=1e-7, atol=1e-7).
+    /// Two independently-allocated model instances (e.g. original vs <c>Clone()</c>) can round the same
+    /// result by ~1 ULP due to FP-order/buffer-allocation differences, so exact float equality is the
+    /// wrong contract for cross-instance output comparisons.
+    /// </summary>
+    protected static void AssertClose(double expected, double actual)
+    {
+        // float32 gets the wider float32 tolerances; everything else (double) uses the tight float64 pair.
+        (double rtol, double atol) = typeof(TNum) == typeof(float)
+            ? (1.3e-6, 1e-5)
+            : (1e-7, 1e-7);
+        double allowed = atol + rtol * Math.Abs(expected);
+        double diff = Math.Abs(actual - expected);
+        Assert.True(diff <= allowed,
+            $"values differ beyond tolerance: expected {expected}, actual {actual}, |diff|={diff}, allowed={allowed} (rtol={rtol}, atol={atol})");
+    }
+
     protected virtual int[] InputShape => [1, 4];
     protected virtual int[] OutputShape => [1, 4];
 
@@ -580,7 +600,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
 
         Assert.Equal(original.Length, clonedOutput.Length);
         for (int i = 0; i < original.Length; i++)
-            Assert.Equal(ToDouble(original[i]), ToDouble(clonedOutput[i]));
+            AssertClose(ToDouble(original[i]), ToDouble(clonedOutput[i]));
     }
 
     [Fact(Timeout = 120000)]
