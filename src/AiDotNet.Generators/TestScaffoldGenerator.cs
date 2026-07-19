@@ -666,6 +666,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // cap for the training invariants. (Its input-projection dim bug is fixed separately in
         // CreateDefaultQwen2AudioLayers.)
         "Qwen2Audio",
+        // FishSpeech (Liao et al., 2024 — arXiv:2411.01156): codec-based LLM-TTS, foundation-scale
+        // (LLMDim 1024, 24 LLM layers, 8×1024 codebook). Training probes 180s-timeout + OOM the 16 GB
+        // runner at <double>. Float FIRST + a CI-smoke constructorExpr (below) build the same
+        // architecture at reduced width/depth. (The failing ModelFamily model is the
+        // TextToSpeech.CodecBased.FishSpeech.)
+        "FishSpeech",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -2551,6 +2557,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Multimodal.Qwen2AudioOptions { AudioEncoderDim = 32, " +
                     "NumAudioEncoderLayers = 1, NumAudioEncoderHeads = 2, NumMels = 64, LMHiddenDim = 32, " +
                     "NumLMLayers = 1, NumLMHeads = 2, VocabSize = 64, AdapterDim = 32 })";
+            }
+            else if (model.ClassName == "FishSpeech" && model.TypeParameterCount == 1 && typeName.Contains("CodecBased"))
+            {
+                // FishSpeech (Liao et al., 2024 — arXiv:2411.01156) codec-based LLM-TTS defaults to a
+                // foundation-scale codec-LM: LLMDim 1024, 24 LLM layers, 8×1024 codebook. Its training
+                // probes 180 s-timeout + OOM the 16 GB runner at <double>, and float alone is insufficient
+                // at that depth. Build the SAME architecture (semantic LLM -> codec heads) at CI-smoke
+                // width/depth via a small FishSpeechOptions; only the scale shrinks (InitializeLayers reads
+                // these dims). Floatified to <float> by the generator since FishSpeech is in
+                // Fp32TestClassNames. (Gated on CodecBased so it targets the failing FishSpeech, not the
+                // Audio.Generation namesake.)
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.FishSpeechOptions { LLMDim = 32, " +
+                    "NumLLMLayers = 1, NumCodebooks = 2, CodebookSize = 16, NumGroups = 1 })";
             }
             else if (model.ClassName == "AnimateDiff" && model.TypeParameterCount == 1)
             {
