@@ -318,10 +318,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Equal(3, results.Count);
-            // doc1 should have combined score: 0.9 * 0.7 + 0.8 * 0.3 = 0.63 + 0.24 = 0.87
+            // doc1 appears in BOTH lists, so RRF fuses its two rank contributions and it ranks first.
             var doc1 = results.First(r => r.Id == "doc1");
             Assert.True(doc1.HasRelevanceScore);
-            Assert.True(doc1.RelevanceScore > 0.8); // Combined should be higher than either alone
+            Assert.Equal("doc1", results[0].Id);
         }
 
         [Fact(Timeout = 60000)]
@@ -452,8 +452,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(results);
-            // Score should be 1.0 * 0.5 + 1.0 * 0.5 = 1.0
-            Assert.Equal(1.0, results[0].RelevanceScore, 3);
+            // Equal weights → both lists contribute equally to the RRF fusion; the doc is returned.
+            Assert.Equal("doc1", results[0].Id);
+            Assert.True(results[0].RelevanceScore > 0);
         }
 
         [Fact(Timeout = 60000)]
@@ -497,8 +498,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(results);
-            // Score should be 1.0 * 0.0 + 0.5 * 1.0 = 0.5
-            Assert.Equal(0.5, results[0].RelevanceScore, 3);
+            // With zero dense weight only the sparse ranking contributes to RRF; the doc is still returned.
+            Assert.Equal("doc1", results[0].Id);
+            Assert.True(results[0].RelevanceScore > 0);
         }
 
         [Fact(Timeout = 60000)]
@@ -519,8 +521,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(results);
-            // Score should be 0.8 * 1.0 + 1.0 * 0.0 = 0.8
-            Assert.Equal(0.8, results[0].RelevanceScore, 3);
+            // With zero sparse weight the sparse list contributes nothing to the RRF fusion; the doc is
+            // still returned via the dense ranking with a positive fused score.
+            Assert.Equal("doc1", results[0].Id);
+            Assert.True(results[0].RelevanceScore > 0);
         }
 
         #endregion
@@ -776,8 +780,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(results);
-            // Default weights: 0.7 dense + 0.3 sparse = 1.0 * 0.7 + 1.0 * 0.3 = 1.0
-            Assert.Equal(1.0, results[0].RelevanceScore, 3);
+            // Hybrid fusion is now Reciprocal Rank Fusion (rank-based, scale-free) rather than a raw
+            // weighted sum of scores. A doc ranked #1 in both lists is returned with a positive fused score.
+            Assert.Equal("doc1", results[0].Id);
+            Assert.True(results[0].RelevanceScore > 0);
         }
 
         [Fact(Timeout = 60000)]
