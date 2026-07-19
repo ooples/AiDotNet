@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Speaker;
@@ -252,7 +253,26 @@ public class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+
+        // Predict means inference: flip to eval mode so stateful layers behave deterministically. The
+        // default PyAnnote stack (CreateDefaultPyAnnoteLayers) includes Dropout, and IsTrainingMode is
+        // true on construction, so without this two Predict calls on the same input return different
+        // embeddings (SameInput_SameEmbedding). The base PredictCore applies this guard, but this
+        // override replaces it, so it must repeat it. Restore the prior mode so a Predict mid-training
+        // does not permanently flip the network out of training mode. Mirrors PyTorch nn.Module.eval().
+        using var _noGrad = new NoGradScope<T>();
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
