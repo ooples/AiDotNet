@@ -51,8 +51,12 @@ public static class DbrxModelBuilder<T>
         int ffn = config.MoeIntermediateSize > 0 ? config.MoeIntermediateSize : config.IntermediateSize;
         double normEps = config.RmsNormEps; // DBRX norm epsilon lands in this slot
 
-        // Rename/unstack DBRX tensors to HF names, then split the fused Wqkv.
-        var weights = new FusedProjectionSource(new DbrxTensorSource(rawWeights, config), config);
+        // Rename/unstack DBRX tensors to HF names, then split the fused Wqkv. A raw DBRX safetensors source
+        // names blocks transformer.blocks.* and needs DbrxTensorSource; a GGUF source already presents the
+        // Hugging Face names (and slices its own stacked experts), so only the fused-qkv split is applied there.
+        bool rawDbrx = LlamaModelBuilder<T>.HasTensor(rawWeights, "transformer.wte.weight");
+        INamedTensorSource translated = rawDbrx ? new DbrxTensorSource(rawWeights, config) : rawWeights;
+        var weights = new FusedProjectionSource(translated, config);
 
         var embedding = new EmbeddingLayer<T>(vocab, hidden);
         var layers = new List<ILayer<T>> { embedding };

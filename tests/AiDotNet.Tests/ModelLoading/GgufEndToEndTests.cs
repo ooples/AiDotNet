@@ -220,6 +220,35 @@ namespace AiDotNet.Tests.ModelLoading
             finally { File.Delete(path); }
         }
 
+        [Fact]
+        public void Gguf_EndToEnd_Dbrx_FusedQkv_StackedExperts_LayerNorm()
+        {
+            // DBRX uses its own nested config schema, a fused Wqkv, LayerNorm norms, and stacked experts. The
+            // loader must emit the DBRX-shaped config, present standard HF names (so DbrxModelBuilder skips its
+            // safetensors DbrxTensorSource translation), split the fused qkv, and slice each expert.
+            string path = WriteDbrxGguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("dbrx", src.Config.ModelType);
+                    Assert.Equal(4, src.Config.NumLocalExperts);
+                    Assert.Equal(2, src.Config.NumExpertsPerTok);
+                    Assert.Contains("model.layers.0.self_attn.qkv_proj.weight", src.TensorNames); // fused Wqkv
+                    Assert.Contains("model.layers.0.mlp.gate.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.experts.0.gate_proj.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.input_layernorm.weight", src.TensorNames);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                Assert.Equal(new[] { 1, 3, 6 }, net.Predict(tokens).Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
         // ---- family-specific GGUF writers (F32) ----
 
         private static string WriteGemma2Gguf()
@@ -399,6 +428,45 @@ namespace AiDotNet.Tests.ModelLoading
                 ($"{a}.expert_used_count", 4u, 2u),
                 ($"{a}.expert_feed_forward_length", 4u, (uint)routedFfn),
                 ($"{a}.expert_shared_feed_forward_length", 4u, (uint)sharedFfn),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
+        private static string WriteDbrxGguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 2, headDim = 4, ffn = 16, nExp = 4, vocab = 6;
+            int qDim = heads * headDim;      // 8
+            int kvDim = kvHeads * headDim;   // 8
+            int qkvRows = qDim + 2 * kvDim;  // 24 (fused Q;K;V)
+            int expElems = ffn * hidden;     // 128
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.attn_qkv.weight", new long[] { hidden, qkvRows }, Seq(qkvRows * hidden, 4)), // fused Wqkv
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 5)),
+                ("blk.0.ffn_gate_inp.weight", new long[] { hidden, nExp }, Seq(nExp * hidden, 6)),
+                ("blk.0.ffn_gate_exps.weight", new long[] { hidden, ffn, nExp }, Seq(expElems * nExp, 7)),
+                ("blk.0.ffn_up_exps.weight", new long[] { hidden, ffn, nExp }, Seq(expElems * nExp, 8)),
+                ("blk.0.ffn_down_exps.weight", new long[] { ffn, hidden, nExp }, Seq(expElems * nExp, 9)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 10)),
+            };
+            const string a = "dbrx";
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.feed_forward_length", 4u, (uint)ffn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.rope.freq_base", 6u, 500000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+                ($"{a}.expert_count", 4u, (uint)nExp),
+                ($"{a}.expert_used_count", 4u, 2u),
             };
             return SerializeGguf(tensors, meta);
         }
