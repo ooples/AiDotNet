@@ -37,6 +37,14 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>
     private readonly int _numExperts;
     private readonly int _topK;
 
+    // Optional always-on shared expert (Qwen2-MoE): its SwiGLU output, gated by sigmoid(sharedGate(x)), is
+    // added to the routed output for every token. Null when the model has no shared expert (Mixtral).
+    private readonly DenseLayer<T>? _sharedGate;          // hidden -> sharedFfn (activation)
+    private readonly DenseLayer<T>? _sharedUp;            // hidden -> sharedFfn (identity)
+    private readonly DenseLayer<T>? _sharedDown;          // sharedFfn -> hidden (identity)
+    private readonly DenseLayer<T>? _sharedGateLogit;     // hidden -> 1 (sigmoid gate)
+    private readonly int _sharedFfnDim;
+
     public override bool SupportsTraining => false;
 
     /// <summary>The router (gating) linear projection, hidden -&gt; numExperts (bias-free).</summary>
@@ -57,24 +65,44 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>
     /// <summary>The down projection of expert <paramref name="e"/>.</summary>
     public DenseLayer<T> ExpertDown(int e) => _down[e];
 
+    /// <summary>Whether this layer has an always-on shared expert (Qwen2-MoE).</summary>
+    public bool HasSharedExpert => _sharedGate is not null;
+
+    /// <summary>The shared expert's gate projection (null when absent).</summary>
+    public DenseLayer<T>? SharedGate => _sharedGate;
+
+    /// <summary>The shared expert's up projection (null when absent).</summary>
+    public DenseLayer<T>? SharedUp => _sharedUp;
+
+    /// <summary>The shared expert's down projection (null when absent).</summary>
+    public DenseLayer<T>? SharedDown => _sharedDown;
+
+    /// <summary>The shared expert's sigmoid gate (hidden -&gt; 1; null when absent).</summary>
+    public DenseLayer<T>? SharedGateLogit => _sharedGateLogit;
+
     /// <summary>Creates a sparse MoE feed-forward layer.</summary>
     /// <param name="hiddenSize">Model (residual stream) dimension.</param>
     /// <param name="ffnDim">Each expert's inner (intermediate) dimension.</param>
     /// <param name="numExperts">Total expert count E.</param>
     /// <param name="topK">Experts activated per token k (1 ≤ k ≤ E).</param>
     /// <param name="activation">Gate activation (SiLU for Mixtral).</param>
-    public MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, IActivationFunction<T>? activation = null)
+    /// <param name="sharedFfnDim">If &gt; 0, adds an always-on shared expert of this inner dimension
+    /// (Qwen2-MoE); its gated output, weighted by <c>sigmoid(sharedGate(x))</c>, is added for every token.</param>
+    public MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, IActivationFunction<T>? activation = null,
+        int sharedFfnDim = 0)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
         if (hiddenSize <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenSize));
         if (ffnDim <= 0) throw new ArgumentOutOfRangeException(nameof(ffnDim));
         if (numExperts <= 0) throw new ArgumentOutOfRangeException(nameof(numExperts));
         if (topK <= 0 || topK > numExperts) throw new ArgumentOutOfRangeException(nameof(topK));
+        if (sharedFfnDim < 0) throw new ArgumentOutOfRangeException(nameof(sharedFfnDim));
 
         _hidden = hiddenSize;
         _ffnDim = ffnDim;
         _numExperts = numExperts;
         _topK = topK;
+        _sharedFfnDim = sharedFfnDim;
         var act = activation ?? new SiLUActivation<T>();
 
         _router = new DenseLayer<T>(numExperts, activationFunction: new IdentityActivation<T>());
@@ -90,6 +118,18 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>
             RegisterSubLayer(_gate[e]);
             RegisterSubLayer(_up[e]);
             RegisterSubLayer(_down[e]);
+        }
+
+        if (sharedFfnDim > 0)
+        {
+            _sharedGate = new DenseLayer<T>(sharedFfnDim, activationFunction: act);
+            _sharedUp = new DenseLayer<T>(sharedFfnDim, activationFunction: new IdentityActivation<T>());
+            _sharedDown = new DenseLayer<T>(hiddenSize, activationFunction: new IdentityActivation<T>());
+            _sharedGateLogit = new DenseLayer<T>(1, activationFunction: new IdentityActivation<T>());
+            RegisterSubLayer(_sharedGate);
+            RegisterSubLayer(_sharedUp);
+            RegisterSubLayer(_sharedDown);
+            RegisterSubLayer(_sharedGateLogit);
         }
     }
 
@@ -111,6 +151,15 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>
             _gate[e].Forward(dummyHidden);
             _up[e].Forward(dummyHidden);
             _down[e].Forward(dummyFfn);
+        }
+        if (_sharedGate is not null && _sharedUp is not null && _sharedDown is not null && _sharedGateLogit is not null)
+        {
+            var dummyShared = new Tensor<T>(new[] { 1, _sharedFfnDim });
+            dummyShared.Fill(Ops.Zero);
+            _sharedGate.Forward(dummyHidden);
+            _sharedUp.Forward(dummyHidden);
+            _sharedDown.Forward(dummyShared);
+            _sharedGateLogit.Forward(dummyHidden);
         }
     }
 
@@ -163,6 +212,22 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>
             }
         }
 
+        // Always-on shared expert (Qwen2-MoE): output += sigmoid(sharedGate(x)) * sharedSwiGLU(x) for all tokens.
+        if (_sharedGate is not null && _sharedUp is not null && _sharedDown is not null && _sharedGateLogit is not null)
+        {
+            var sg = _sharedGate.Forward(flat);
+            var su = _sharedUp.Forward(flat);
+            var sh = _sharedDown.Forward(Engine.TensorMultiply(sg, su)); // [n, hidden]
+            var gateLogit = _sharedGateLogit.Forward(flat);             // [n, 1]
+            for (int tok = 0; tok < n; tok++)
+            {
+                double sig = 1.0 / (1.0 + Math.Exp(-Convert.ToDouble(gateLogit[tok, 0])));
+                var sigT = Ops.FromDouble(sig);
+                for (int j = 0; j < _hidden; j++)
+                    output[tok, j] = Ops.Add(output[tok, j], Ops.Multiply(sigT, sh[tok, j]));
+            }
+        }
+
         return Engine.Reshape(output, input._shape);
     }
 
@@ -209,6 +274,13 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>
     {
         yield return _router;
         for (int e = 0; e < _numExperts; e++) { yield return _gate[e]; yield return _up[e]; yield return _down[e]; }
+        if (_sharedGate is not null && _sharedUp is not null && _sharedDown is not null && _sharedGateLogit is not null)
+        {
+            yield return _sharedGate;
+            yield return _sharedUp;
+            yield return _sharedDown;
+            yield return _sharedGateLogit;
+        }
     }
 
     /// <inheritdoc/>

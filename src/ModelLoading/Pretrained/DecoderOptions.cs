@@ -27,8 +27,17 @@ public sealed class DecoderOptions<T>
     /// </summary>
     public bool ScaleEmbeddingBySqrtHidden { get; init; }
 
-    /// <summary>The LLaMA/Mistral/Qwen2 defaults (SiLU gate, plain RMSNorm, no embedding scaling).</summary>
+    /// <summary>
+    /// When true, the attention q/k/v projections carry biases (Qwen2); the output projection's bias is
+    /// loaded when present and left zero otherwise.
+    /// </summary>
+    public bool UseAttentionQkvBias { get; init; }
+
+    /// <summary>The LLaMA/Mistral defaults (SiLU gate, plain RMSNorm, no embedding scaling, no attn bias).</summary>
     public static DecoderOptions<T> Llama { get; } = new();
+
+    /// <summary>Qwen2 options: LLaMA-style but with q/k/v attention projection biases.</summary>
+    public static DecoderOptions<T> Qwen2 { get; } = new() { UseAttentionQkvBias = true };
 
     /// <summary>The Gemma decoder options: GeGLU (tanh GELU), <c>(1 + weight)</c> RMSNorm, √hidden embedding scale.</summary>
     public static DecoderOptions<T> Gemma { get; } = new()

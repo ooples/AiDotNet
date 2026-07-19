@@ -32,8 +32,8 @@ public static class LlamaModelBuilder<T>
     /// <c>architectures[0]</c> / <c>model_type</c>, case-insensitively).</summary>
     public static IReadOnlyList<string> SupportedArchitectures { get; } = new[]
     {
-        "LlamaForCausalLM", "MistralForCausalLM", "Qwen2ForCausalLM",
-        "llama", "mistral", "qwen2",
+        "LlamaForCausalLM", "MistralForCausalLM",
+        "llama", "mistral",
     };
 
     /// <summary>
@@ -79,7 +79,7 @@ public static class LlamaModelBuilder<T>
         {
             var attention = new GroupedQueryAttentionLayer<T>(
                 sequenceLength: maxPos, embeddingDimension: hidden, numHeads: numHeads, numKVHeads: numKVHeads,
-                headDimension: explicitHeadDim ? headDim : null);
+                headDimension: explicitHeadDim ? headDim : null, useProjectionBias: opt.UseAttentionQkvBias);
             attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, config.RopeTheta, maxPos);
 
             // Gated FFN (bias-free): SiLU gate for LLaMA/Mistral/Qwen2/Phi-3, GELU (GeGLU) for Gemma.
@@ -137,7 +137,10 @@ public static class LlamaModelBuilder<T>
             LoadGamma(block.Norm1, weights, p + "input_layernorm.weight", hidden, opt.RmsNormAddsOne);
             LoadGamma(block.Norm2, weights, p + "post_attention_layernorm.weight", hidden, opt.RmsNormAddsOne);
 
-            LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
+            if (opt.UseAttentionQkvBias)
+                LoadAttentionBiased((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
+            else
+                LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
 
             // Gated SwiGLU FFN: gate/up are [intermediate, hidden] → [hidden, intermediate]; down is
             // [hidden, intermediate] → [intermediate, hidden]. Each DenseLayer stores [in, out] + zero bias.
@@ -184,6 +187,10 @@ public static class LlamaModelBuilder<T>
         dense.SetParameters(new Vector<T>(full));
     }
 
+    // Reads a bias tensor if present, otherwise returns a zero vector of the given length.
+    internal static T[] OptionalBias(INamedTensorSource weights, string name, int length)
+        => HasTensor(weights, name) ? ReadTensor(weights, name, length) : new T[length];
+
     // Loads a DenseLayer's weights ([in, out]) and its real bias ([out]) — for biased models (StarCoder2).
     internal static void LoadDenseBiased(DenseLayer<T> dense, INamedTensorSource weights, string weightName, string biasName, int outDim, int inDim)
     {
@@ -202,10 +209,12 @@ public static class LlamaModelBuilder<T>
         var kT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.k_proj.weight", outDim: kvDim, inDim: hidden);
         var vT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.v_proj.weight", outDim: kvDim, inDim: hidden);
         var oT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.o_proj.weight", outDim: hidden, inDim: qDim);
-        var qB = ReadTensor(weights, layerPrefix + "self_attn.q_proj.bias", qDim);
-        var kB = ReadTensor(weights, layerPrefix + "self_attn.k_proj.bias", kvDim);
-        var vB = ReadTensor(weights, layerPrefix + "self_attn.v_proj.bias", kvDim);
-        var oB = ReadTensor(weights, layerPrefix + "self_attn.o_proj.bias", hidden);
+        // All projection biases are loaded when present and left zero otherwise (Qwen2 biases q/k/v but not o;
+        // StarCoder2 biases all four).
+        var qB = OptionalBias(weights, layerPrefix + "self_attn.q_proj.bias", qDim);
+        var kB = OptionalBias(weights, layerPrefix + "self_attn.k_proj.bias", kvDim);
+        var vB = OptionalBias(weights, layerPrefix + "self_attn.v_proj.bias", kvDim);
+        var oB = OptionalBias(weights, layerPrefix + "self_attn.o_proj.bias", hidden);
         attn.SetParameters(new Vector<T>(Concat(qT, kT, vT, oT, qB, kB, vB, oB)));
     }
 

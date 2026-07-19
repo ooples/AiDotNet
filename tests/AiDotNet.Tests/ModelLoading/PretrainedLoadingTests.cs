@@ -569,6 +569,99 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         [Fact]
+        public void Builder_Qwen2_LoadsQkvBiases()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""Qwen2ForCausalLM""],
+                ""model_type"": ""qwen2"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""tie_word_embeddings"": false }");
+
+            int h = 8, ffn = 16, vocab = 6, heads = 2, kvHeads = 2, headDim = 4;
+            int qDim = heads * headDim, kvDim = kvHeads * headDim;
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 103),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 104),
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 105),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(qDim * h, 106),
+                ["model.layers.0.self_attn.q_proj.bias"] = Fill(qDim, 107),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(kvDim * h, 108),
+                ["model.layers.0.self_attn.k_proj.bias"] = Fill(kvDim, 109),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(kvDim * h, 110),
+                ["model.layers.0.self_attn.v_proj.bias"] = Fill(kvDim, 111),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * qDim, 112), // no o bias (Qwen2)
+                ["model.layers.0.mlp.gate_proj.weight"] = Fill(ffn * h, 113),
+                ["model.layers.0.mlp.up_proj.weight"] = Fill(ffn * h, 114),
+                ["model.layers.0.mlp.down_proj.weight"] = Fill(h * ffn, 115),
+                ["model.norm.weight"] = Fill(h, 116),
+                ["lm_head.weight"] = Fill(vocab * h, 117),
+            };
+
+            Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out var factory));
+            var net = factory(config, new InMemorySource(t));
+            var block = Assert.IsType<PreLNTransformerBlock<double>>(net.Layers[1]);
+            // Biased attention: param count includes q/k/v biases (+ output bias 8) = weights(256) + 24 + 8 = 288.
+            Assert.Equal(288, block.AttentionLayer.ParameterCount);
+
+            var tokens = new Tensor<double>(new[] { 1, 2 });
+            tokens[0, 0] = 1; tokens[0, 1] = 3;
+            Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape);
+        }
+
+        [Fact]
+        public void Builder_Qwen2Moe_SharedExpert_BuildsAndForwards()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""Qwen2MoeForCausalLM""],
+                ""model_type"": ""qwen2_moe"", ""hidden_size"": 8, ""intermediate_size"": 32,
+                ""moe_intermediate_size"": 16, ""shared_expert_intermediate_size"": 20,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""num_experts"": 4, ""num_experts_per_tok"": 2, ""tie_word_embeddings"": false }");
+            Assert.Equal(4, config.NumLocalExperts);
+            Assert.Equal(16, config.MoeIntermediateSize);
+            Assert.Equal(20, config.SharedExpertIntermediateSize);
+
+            int h = 8, routed = 16, shared = 20, vocab = 6, heads = 2, kvHeads = 2, headDim = 4, E = 4;
+            int qDim = heads * headDim, kvDim = kvHeads * headDim;
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 120),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 121),
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 122),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(qDim * h, 123),
+                ["model.layers.0.self_attn.q_proj.bias"] = Fill(qDim, 124),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(kvDim * h, 125),
+                ["model.layers.0.self_attn.k_proj.bias"] = Fill(kvDim, 126),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(kvDim * h, 127),
+                ["model.layers.0.self_attn.v_proj.bias"] = Fill(kvDim, 128),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * qDim, 129),
+                ["model.layers.0.mlp.gate.weight"] = Fill(E * h, 130), // router
+                ["model.layers.0.mlp.shared_expert.gate_proj.weight"] = Fill(shared * h, 131),
+                ["model.layers.0.mlp.shared_expert.up_proj.weight"] = Fill(shared * h, 132),
+                ["model.layers.0.mlp.shared_expert.down_proj.weight"] = Fill(h * shared, 133),
+                ["model.layers.0.mlp.shared_expert_gate.weight"] = Fill(1 * h, 134),
+                ["model.norm.weight"] = Fill(h, 150),
+                ["lm_head.weight"] = Fill(vocab * h, 151),
+            };
+            for (int e = 0; e < E; e++)
+            {
+                string ep = $"model.layers.0.mlp.experts.{e}.";
+                t[ep + "gate_proj.weight"] = Fill(routed * h, 135 + e);
+                t[ep + "up_proj.weight"] = Fill(routed * h, 140 + e);
+                t[ep + "down_proj.weight"] = Fill(h * routed, 145 + e);
+            }
+
+            var net = Qwen2MoEModelBuilder<double>.Build(config, new InMemorySource(t));
+            var block = Assert.IsType<MoEDecoderBlock<double>>(net.Layers[1]);
+            Assert.True(block.Moe.HasSharedExpert);
+
+            var tokens = new Tensor<double>(new[] { 1, 3 });
+            tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+
+            Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
+        }
+
+        [Fact]
         public void Architectures_ResolvesGemmaAndPhi3()
         {
             var gemma = HuggingFaceConfig.Parse(@"{ ""architectures"": [""GemmaForCausalLM""], ""model_type"": ""gemma"",

@@ -71,11 +71,18 @@ public sealed class HuggingFaceConfig
     /// <summary>Logit multiplier (Cohere <c>logit_scale</c>); null when absent.</summary>
     public double? LogitScale { get; private init; }
 
-    /// <summary>Number of MoE experts (<c>num_local_experts</c>); 0 for a dense (non-MoE) decoder.</summary>
+    /// <summary>Number of MoE experts (<c>num_local_experts</c> or <c>num_experts</c>); 0 for a dense decoder.</summary>
     public int NumLocalExperts { get; private init; }
 
     /// <summary>Experts activated per token (<c>num_experts_per_tok</c>); 0 for a dense decoder.</summary>
     public int NumExpertsPerTok { get; private init; }
+
+    /// <summary>Routed-expert inner dimension (<c>moe_intermediate_size</c>); 0 when not an MoE decoder that
+    /// distinguishes it from <see cref="IntermediateSize"/>.</summary>
+    public int MoeIntermediateSize { get; private init; }
+
+    /// <summary>Shared-expert inner dimension (Qwen2-MoE <c>shared_expert_intermediate_size</c>); 0 when absent.</summary>
+    public int SharedExpertIntermediateSize { get; private init; }
 
     /// <summary>Beginning-of-sequence token id, when declared.</summary>
     public int? BosTokenId { get; private init; }
@@ -142,8 +149,10 @@ public sealed class HuggingFaceConfig
             TorchDtype = (string?)root["torch_dtype"] ?? string.Empty,
             FinalLogitSoftcapping = OptionalDouble(root, "final_logit_softcapping"),
             LogitScale = OptionalDouble(root, "logit_scale"),
-            NumLocalExperts = OptionalInt(root, "num_local_experts") ?? 0,
+            NumLocalExperts = OptionalInt(root, "num_local_experts") ?? OptionalInt(root, "num_experts") ?? 0,
             NumExpertsPerTok = OptionalInt(root, "num_experts_per_tok") ?? 0,
+            MoeIntermediateSize = OptionalInt(root, "moe_intermediate_size") ?? 0,
+            SharedExpertIntermediateSize = OptionalInt(root, "shared_expert_intermediate_size") ?? 0,
             BosTokenId = OptionalInt(root, "bos_token_id"),
             EosTokenId = OptionalInt(root, "eos_token_id"),
         };
