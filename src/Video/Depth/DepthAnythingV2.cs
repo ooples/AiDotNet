@@ -506,32 +506,6 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         return decoded;
     }
 
-
-    private Tensor<T> ApplyGELUGradient(Tensor<T> gradient, Tensor<T> input)
-    {
-        return gradient.Transform((g, idx) =>
-        {
-            double x = Convert.ToDouble(input.Data.Span[idx]);
-            double c = Math.Sqrt(2.0 / Math.PI);
-            double inner = c * (x + 0.044715 * x * x * x);
-            double tanh_inner = Math.Tanh(inner);
-            double sech2 = 1.0 - tanh_inner * tanh_inner;
-            double d_inner = c * (1.0 + 3.0 * 0.044715 * x * x);
-            double grad = 0.5 * (1.0 + tanh_inner) + 0.5 * x * sech2 * d_inner;
-            return NumOps.Multiply(g, NumOps.FromDouble(grad));
-        });
-    }
-
-    private Tensor<T> ApplySigmoidGradient(Tensor<T> gradient, Tensor<T> output)
-    {
-        return gradient.Transform((g, idx) =>
-        {
-            double s = Convert.ToDouble(output.Data.Span[idx]);
-            double grad = s * (1.0 - s);
-            return NumOps.Multiply(g, NumOps.FromDouble(grad));
-        });
-    }
-
     // Tape-aware batch add/remove. These MUST go through Engine.Reshape (not a raw
     // new Tensor + Data.CopyTo, which severs the autodiff tape): RemoveBatchDimension is
     // the LAST op of the training forward, so a severed tape there would stop the loss
@@ -577,6 +551,53 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
                 _width,
                 _numFeatures,
                 _numEncoderBlocks));
+        }
+
+        // EncodeImage / DecodeDepth split Layers positionally as
+        //   [0] = patch embed, [1 .. _numEncoderBlocks] = ViT encoder blocks,
+        //   [_numEncoderBlocks + 1] = encoder LayerNorm, [_numEncoderBlocks + 2 ..] = DPT decoder.
+        // InitializeLayers also accepts a caller-supplied Architecture.Layers, which never has to
+        // honor that contract. Validate it here so a reordered / custom layer list fails loudly
+        // instead of silently routing the wrong layers through the encoder/decoder split.
+        ValidateLayerContract();
+    }
+
+    /// <summary>
+    /// Verifies that <see cref="Layers"/> matches the positional contract the
+    /// <c>EncodeImage</c> / <c>DecodeDepth</c> split depends on. Throws if the count is too small or
+    /// the layer types at the encoder indices are wrong (e.g. a custom <c>Architecture.Layers</c>).
+    /// </summary>
+    private void ValidateLayerContract()
+    {
+        int encoderLnIdx = _numEncoderBlocks + 1;
+        int minLayers = encoderLnIdx + 2; // patch embed + encoder blocks + LayerNorm + >= 1 decoder layer
+        if (Layers.Count < minLayers)
+        {
+            throw new InvalidOperationException(
+                $"DepthAnythingV2 requires at least {minLayers} layers in the order " +
+                $"[patch embed, {_numEncoderBlocks} encoder blocks, LayerNorm, decoder...], but got " +
+                $"{Layers.Count}. The Encode/Decode split relies on this ordering.");
+        }
+        if (Layers[0] is not AiDotNet.NeuralNetworks.Layers.PatchEmbeddingLayer<T>)
+        {
+            throw new InvalidOperationException(
+                $"DepthAnythingV2 layer[0] must be a PatchEmbeddingLayer<T> (the ViT patch embedding), " +
+                $"but was {Layers[0].GetType().Name}.");
+        }
+        for (int i = 1; i <= _numEncoderBlocks; i++)
+        {
+            if (Layers[i] is not AiDotNet.NeuralNetworks.Layers.TransformerEncoderLayer<T>)
+            {
+                throw new InvalidOperationException(
+                    $"DepthAnythingV2 layer[{i}] must be a TransformerEncoderLayer<T> (ViT encoder block), " +
+                    $"but was {Layers[i].GetType().Name}.");
+            }
+        }
+        if (Layers[encoderLnIdx] is not AiDotNet.NeuralNetworks.Layers.LayerNormalizationLayer<T>)
+        {
+            throw new InvalidOperationException(
+                $"DepthAnythingV2 layer[{encoderLnIdx}] must be a LayerNormalizationLayer<T> " +
+                $"(the encoder output norm), but was {Layers[encoderLnIdx].GetType().Name}.");
         }
     }
 

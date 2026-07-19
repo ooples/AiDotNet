@@ -278,9 +278,11 @@
          0.114.3 = 0.114.2 + those additive internal-only perf changes (strict superset). Native packages
          are left at 0.114.0 (unchanged binaries; only the managed Tensors package carries the fix).
 
-         Bumped Tensors 0.114.5 -> 0.116.0 and Native 0.114.0 -> 0.116.0 (latest published, coreleased in
+         Bumped Tensors 0.114.3 -> 0.116.0 and Native 0.114.0 -> 0.116.0 (latest published, coreleased in
          lockstep): picks up AiDotNet.Tensors #808 from the Tensors side. 0.116.0 is a strict superset of
-         0.114.x/0.115.x and is the newest version published for all four packages on NuGet. -->
+         0.114.x/0.115.x and is the newest version published for all four packages on NuGet. (This entry
+         continues from the last documented managed version, 0.114.3 above; there was no separately
+         documented 0.114.4/0.114.5 pin.) -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.116.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.116.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.116.0" />
