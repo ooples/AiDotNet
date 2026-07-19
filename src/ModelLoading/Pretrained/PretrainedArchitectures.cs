@@ -73,6 +73,11 @@ public static class PretrainedArchitectures<T>
         DecoderFactory starcoder2 = (config, weights) => StarCoder2ModelBuilder<T>.Build(config, weights);
         foreach (var name in StarCoder2ModelBuilder<T>.SupportedArchitectures)
             Registry[name] = starcoder2;
+
+        // DBRX: LayerNorm sparse-MoE with fused Wqkv + stacked experts (unstacked by DbrxTensorSource).
+        DecoderFactory dbrx = (config, weights) => DbrxModelBuilder<T>.Build(config, weights);
+        foreach (var name in DbrxModelBuilder<T>.SupportedArchitectures)
+            Registry[name] = dbrx;
     }
 
     /// <summary>Registers (or replaces) the factory for an architecture / model-type name.</summary>

@@ -662,6 +662,91 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         [Fact]
+        public void Config_ParsesDbrxSchema()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""DbrxForCausalLM""], ""model_type"": ""dbrx"",
+                ""d_model"": 8, ""n_heads"": 2, ""n_layers"": 3, ""vocab_size"": 6, ""max_seq_len"": 64,
+                ""attn_config"": { ""kv_n_heads"": 1, ""rope_theta"": 500000 },
+                ""ffn_config"": { ""ffn_hidden_size"": 16, ""moe_num_experts"": 4, ""moe_top_k"": 2 } }");
+            Assert.Equal(8, config.HiddenSize);
+            Assert.Equal(2, config.NumAttentionHeads);
+            Assert.Equal(1, config.NumKeyValueHeads);
+            Assert.Equal(3, config.NumHiddenLayers);
+            Assert.Equal(16, config.IntermediateSize);
+            Assert.Equal(4, config.NumLocalExperts);
+            Assert.Equal(2, config.NumExpertsPerTok);
+            Assert.Equal(500000.0, config.RopeTheta);
+            Assert.Equal(64, config.MaxPositionEmbeddings);
+        }
+
+        [Fact]
+        public void DbrxTensorSource_UnstacksExperts_AndTransposesDown()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""model_type"": ""dbrx"", ""d_model"": 8, ""n_heads"": 2,
+                ""n_layers"": 1, ""vocab_size"": 6, ""attn_config"": { ""kv_n_heads"": 2 },
+                ""ffn_config"": { ""ffn_hidden_size"": 4, ""moe_num_experts"": 2, ""moe_top_k"": 2 } }");
+            int hidden = 8, ffn = 4, experts = 2;
+            var w1 = Fill(experts * ffn * hidden, 1); // stacked gate [experts*ffn, hidden]
+            var w2 = Fill(experts * ffn * hidden, 2); // stacked down [experts*ffn, hidden] per expert [ffn,hidden]
+            var raw = new Dictionary<string, double[]>
+            {
+                ["transformer.wte.weight"] = Fill(6 * hidden, 3),
+                ["transformer.blocks.0.ffn.experts.mlp.w1"] = w1,
+                ["transformer.blocks.0.ffn.experts.mlp.v1"] = Fill(experts * ffn * hidden, 4),
+                ["transformer.blocks.0.ffn.experts.mlp.w2"] = w2,
+            };
+            var src = new DbrxTensorSource(new InMemorySource(raw), config);
+
+            // Expert 1 gate = second [ffn*hidden] block of w1, verbatim.
+            var g1 = src.ReadAsDouble("model.layers.0.mlp.experts.1.gate_proj.weight");
+            Assert.Equal(ffn * hidden, g1.Length);
+            for (int i = 0; i < g1.Length; i++) Assert.Equal(w1[ffn * hidden + i], g1[i]);
+
+            // Expert 0 down = transpose of first [ffn, hidden] block of w2 -> [hidden, ffn].
+            var d0 = src.ReadAsDouble("model.layers.0.mlp.experts.0.down_proj.weight");
+            Assert.Equal(hidden * ffn, d0.Length);
+            for (int h = 0; h < hidden; h++)
+                for (int f = 0; f < ffn; f++)
+                    Assert.Equal(w2[f * hidden + h], d0[h * ffn + f]);
+        }
+
+        [Fact]
+        public void Builder_Dbrx_LayerNormMoE_FusedWqkv_StackedExperts_BuildsAndForwards()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""DbrxForCausalLM""], ""model_type"": ""dbrx"",
+                ""d_model"": 8, ""n_heads"": 2, ""n_layers"": 1, ""vocab_size"": 6, ""max_seq_len"": 64,
+                ""attn_config"": { ""kv_n_heads"": 2, ""rope_theta"": 500000 },
+                ""ffn_config"": { ""ffn_hidden_size"": 16, ""moe_num_experts"": 4, ""moe_top_k"": 2 } }");
+
+            int hidden = 8, ffn = 16, vocab = 6, heads = 2, kvHeads = 2, headDim = 4, E = 4;
+            int qkvRows = (heads + 2 * kvHeads) * headDim; // 24
+            var raw = new Dictionary<string, double[]>
+            {
+                ["transformer.wte.weight"] = Fill(vocab * hidden, 10),
+                ["transformer.norm_f.weight"] = Fill(hidden, 11),
+                ["lm_head.weight"] = Fill(vocab * hidden, 12),
+                ["transformer.blocks.0.norm_attn_norm.norm_1.weight"] = Fill(hidden, 13),
+                ["transformer.blocks.0.norm_attn_norm.norm_2.weight"] = Fill(hidden, 14),
+                ["transformer.blocks.0.norm_attn_norm.attn.Wqkv.weight"] = Fill(qkvRows * hidden, 15),
+                ["transformer.blocks.0.norm_attn_norm.attn.out_proj.weight"] = Fill(hidden * heads * headDim, 16),
+                ["transformer.blocks.0.ffn.router.layer.weight"] = Fill(E * hidden, 17),
+                ["transformer.blocks.0.ffn.experts.mlp.w1"] = Fill(E * ffn * hidden, 18),
+                ["transformer.blocks.0.ffn.experts.mlp.v1"] = Fill(E * ffn * hidden, 19),
+                ["transformer.blocks.0.ffn.experts.mlp.w2"] = Fill(E * ffn * hidden, 20),
+            };
+
+            var net = DbrxModelBuilder<double>.Build(config, new InMemorySource(raw));
+            var block = Assert.IsType<DbrxDecoderBlock<double>>(net.Layers[1]);
+            Assert.Equal(E, block.Moe.NumExperts);
+
+            var tokens = new Tensor<double>(new[] { 1, 3 });
+            tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+            Assert.Equal(new[] { 1, 3, vocab }, net.Predict(tokens).Shape);
+
+            Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
+        }
+
+        [Fact]
         public void Architectures_ResolvesGemmaAndPhi3()
         {
             var gemma = HuggingFaceConfig.Parse(@"{ ""architectures"": [""GemmaForCausalLM""], ""model_type"": ""gemma"",

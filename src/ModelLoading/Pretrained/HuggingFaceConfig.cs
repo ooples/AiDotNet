@@ -121,6 +121,12 @@ public sealed class HuggingFaceConfig
             }
         }
 
+        // DBRX uses a different config schema (d_model / n_heads / n_layers, with nested attn_config +
+        // ffn_config); translate it to the common shape.
+        string modelType = (string?)root["model_type"] ?? string.Empty;
+        if (string.Equals(modelType, "dbrx", StringComparison.OrdinalIgnoreCase))
+            return ParseDbrx(root, architectures);
+
         int hiddenSize = RequirePositive(root, "hidden_size");
         int numHeads = RequirePositive(root, "num_attention_heads");
         int numKvHeads = OptionalInt(root, "num_key_value_heads") ?? numHeads;
@@ -153,6 +159,49 @@ public sealed class HuggingFaceConfig
             NumExpertsPerTok = OptionalInt(root, "num_experts_per_tok") ?? 0,
             MoeIntermediateSize = OptionalInt(root, "moe_intermediate_size") ?? 0,
             SharedExpertIntermediateSize = OptionalInt(root, "shared_expert_intermediate_size") ?? 0,
+            BosTokenId = OptionalInt(root, "bos_token_id"),
+            EosTokenId = OptionalInt(root, "eos_token_id"),
+        };
+    }
+
+    // Translates DBRX's schema (d_model / n_heads / n_layers + nested attn_config/ffn_config) to the common shape.
+    private static HuggingFaceConfig ParseDbrx(JObject root, List<string> architectures)
+    {
+        int hidden = RequirePositive(root, "d_model");
+        int numHeads = RequirePositive(root, "n_heads");
+        var attn = root["attn_config"] as JObject;
+        var ffn = root["ffn_config"] as JObject;
+        int numKvHeads = (attn is not null ? OptionalInt(attn, "kv_n_heads") : null) ?? numHeads;
+        int headDim = hidden / numHeads;
+        if (numKvHeads <= 0 || numHeads % numKvHeads != 0)
+            throw new InvalidDataException(
+                $"DBRX kv_n_heads ({numKvHeads}) must be a positive divisor of n_heads ({numHeads}).");
+
+        int experts = (ffn is not null ? OptionalInt(ffn, "moe_num_experts") : null) ?? 0;
+        int topK = (ffn is not null ? OptionalInt(ffn, "moe_top_k") : null) ?? 0;
+        int ffnHidden = (ffn is not null ? OptionalInt(ffn, "ffn_hidden_size") : null)
+            ?? throw new InvalidDataException("DBRX ffn_config.ffn_hidden_size is required.");
+
+        return new HuggingFaceConfig
+        {
+            Architectures = architectures,
+            ModelType = "dbrx",
+            HiddenSize = hidden,
+            IntermediateSize = ffnHidden,
+            NumHiddenLayers = RequirePositive(root, "n_layers"),
+            NumAttentionHeads = numHeads,
+            NumKeyValueHeads = numKvHeads,
+            VocabSize = RequirePositive(root, "vocab_size"),
+            HeadDim = headDim,
+            RmsNormEps = 1e-5, // DBRX uses LayerNorm; this slot carries the norm epsilon
+            RopeTheta = (attn is not null ? OptionalDouble(attn, "rope_theta") : null) ?? 500000.0,
+            MaxPositionEmbeddings = OptionalInt(root, "max_seq_len") ?? 2048,
+            TieWordEmbeddings = (bool?)root["tie_word_embeddings"] ?? false,
+            HiddenActivation = "silu",
+            TorchDtype = (string?)root["torch_dtype"] ?? string.Empty,
+            NumLocalExperts = experts,
+            NumExpertsPerTok = topK,
+            MoeIntermediateSize = ffnHidden,
             BosTokenId = OptionalInt(root, "bos_token_id"),
             EosTokenId = OptionalInt(root, "eos_token_id"),
         };
