@@ -158,6 +158,68 @@ namespace AiDotNet.Tests.ModelLoading
             finally { File.Delete(path); }
         }
 
+        [Fact]
+        public void Gguf_EndToEnd_Mixtral_StackedExperts_SlicedPerExpert()
+        {
+            // Mixtral ships under the generic "llama" arch with expert_count > 0; the loader must normalize
+            // model_type to mixtral, expose the router (ffn_gate_inp) and slice each expert out of the stacked
+            // ffn_*_exps tensors under the Mixtral block_sparse_moe.experts.{e}.w1/w3/w2 names.
+            string path = WriteMixtralGguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("mixtral", src.Config.ModelType);
+                    Assert.Equal(4, src.Config.NumLocalExperts);
+                    Assert.Equal(2, src.Config.NumExpertsPerTok);
+                    Assert.Contains("model.layers.0.block_sparse_moe.gate.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.block_sparse_moe.experts.0.w1.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.block_sparse_moe.experts.3.w2.weight", src.TensorNames);
+                    // Each expert slice is a distinct quarter of the stacked tensor.
+                    var e0 = src.ReadAsDouble("model.layers.0.block_sparse_moe.experts.0.w1.weight");
+                    var e1 = src.ReadAsDouble("model.layers.0.block_sparse_moe.experts.1.w1.weight");
+                    Assert.Equal(16 * 8, e0.Length); // ffn(16) * hidden(8)
+                    Assert.NotEqual(e0, e1);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                Assert.Equal(new[] { 1, 3, 6 }, net.Predict(tokens).Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Gguf_EndToEnd_Qwen2Moe_SharedExpert_BiasedAttention()
+        {
+            // Qwen2-MoE (GGUF arch "qwen2moe") normalizes to qwen2_moe, shares the stacked-expert slicing under
+            // the mlp.experts.{e}.gate_proj/up_proj/down_proj names, and adds an always-on shared expert plus
+            // q/k/v attention biases.
+            string path = WriteQwen2MoeGguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("qwen2_moe", src.Config.ModelType);
+                    Assert.Equal(4, src.Config.NumLocalExperts);
+                    Assert.Contains("model.layers.0.mlp.gate.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.experts.0.gate_proj.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.shared_expert.gate_proj.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.shared_expert_gate.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.self_attn.q_proj.bias", src.TensorNames);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                Assert.Equal(new[] { 1, 3, 6 }, net.Predict(tokens).Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
         // ---- family-specific GGUF writers (F32) ----
 
         private static string WriteGemma2Gguf()
@@ -243,6 +305,100 @@ namespace AiDotNet.Tests.ModelLoading
                 ($"{a}.attention.layer_norm_epsilon", 6u, 1e-5f), // plain LayerNorm eps (not rms)
                 ($"{a}.rope.freq_base", 6u, 10000.0f),
                 ($"{a}.vocab_size", 4u, (uint)vocab),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
+        private static string WriteMixtralGguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 2, headDim = 4, ffn = 16, nExp = 4, vocab = 6;
+            int qDim = heads * headDim;      // 8
+            int kvDim = kvHeads * headDim;   // 8
+            int expElems = ffn * hidden;     // 128 per expert (each of gate/up/down)
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.attn_q.weight", new long[] { hidden, qDim }, Seq(qDim * hidden, 4)),
+                ("blk.0.attn_k.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 5)),
+                ("blk.0.attn_v.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 6)),
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 7)),
+                // Router [n_expert, hidden] and the three stacked expert tensors ne = [in, out, n_expert].
+                ("blk.0.ffn_gate_inp.weight", new long[] { hidden, nExp }, Seq(nExp * hidden, 8)),
+                ("blk.0.ffn_gate_exps.weight", new long[] { hidden, ffn, nExp }, Seq(expElems * nExp, 9)),
+                ("blk.0.ffn_up_exps.weight", new long[] { hidden, ffn, nExp }, Seq(expElems * nExp, 10)),
+                ("blk.0.ffn_down_exps.weight", new long[] { ffn, hidden, nExp }, Seq(expElems * nExp, 11)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 12)),
+            };
+            const string a = "llama"; // GGUF ships Mixtral under the generic llama arch
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.feed_forward_length", 4u, (uint)ffn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.attention.layer_norm_rms_epsilon", 6u, 1e-5f),
+                ($"{a}.rope.freq_base", 6u, 10000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+                ($"{a}.expert_count", 4u, (uint)nExp),
+                ($"{a}.expert_used_count", 4u, 2u),
+                ($"{a}.expert_feed_forward_length", 4u, (uint)ffn),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
+        private static string WriteQwen2MoeGguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 2, headDim = 4, routedFfn = 16, sharedFfn = 16, nExp = 4, vocab = 6;
+            int qDim = heads * headDim;      // 8
+            int kvDim = kvHeads * headDim;   // 8
+            int expElems = routedFfn * hidden; // 128
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.attn_q.weight", new long[] { hidden, qDim }, Seq(qDim * hidden, 4)),
+                ("blk.0.attn_q.bias", new long[] { qDim }, Seq(qDim, 5)),        // Qwen2 biases q/k/v
+                ("blk.0.attn_k.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 6)),
+                ("blk.0.attn_k.bias", new long[] { kvDim }, Seq(kvDim, 7)),
+                ("blk.0.attn_v.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 8)),
+                ("blk.0.attn_v.bias", new long[] { kvDim }, Seq(kvDim, 9)),
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 10)),
+                ("blk.0.ffn_gate_inp.weight", new long[] { hidden, nExp }, Seq(nExp * hidden, 11)),
+                ("blk.0.ffn_gate_exps.weight", new long[] { hidden, routedFfn, nExp }, Seq(expElems * nExp, 12)),
+                ("blk.0.ffn_up_exps.weight", new long[] { hidden, routedFfn, nExp }, Seq(expElems * nExp, 13)),
+                ("blk.0.ffn_down_exps.weight", new long[] { routedFfn, hidden, nExp }, Seq(expElems * nExp, 14)),
+                // Always-on shared expert + its sigmoid gate logit ([1, hidden]).
+                ("blk.0.ffn_gate_shexp.weight", new long[] { hidden, sharedFfn }, Seq(sharedFfn * hidden, 15)),
+                ("blk.0.ffn_up_shexp.weight", new long[] { hidden, sharedFfn }, Seq(sharedFfn * hidden, 16)),
+                ("blk.0.ffn_down_shexp.weight", new long[] { sharedFfn, hidden }, Seq(hidden * sharedFfn, 17)),
+                ("blk.0.ffn_gate_inp_shexp.weight", new long[] { hidden, 1 }, Seq(hidden, 18)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 19)),
+            };
+            const string a = "qwen2moe";
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.feed_forward_length", 4u, (uint)routedFfn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.attention.layer_norm_rms_epsilon", 6u, 1e-5f),
+                ($"{a}.rope.freq_base", 6u, 10000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+                ($"{a}.expert_count", 4u, (uint)nExp),
+                ($"{a}.expert_used_count", 4u, 2u),
+                ($"{a}.expert_feed_forward_length", 4u, (uint)routedFfn),
+                ($"{a}.expert_shared_feed_forward_length", 4u, (uint)sharedFfn),
             };
             return SerializeGguf(tensors, meta);
         }
