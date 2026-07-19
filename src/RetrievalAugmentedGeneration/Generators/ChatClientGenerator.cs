@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 
@@ -87,6 +88,20 @@ public class ChatClientGenerator<T> : GeneratorBase<T>, IStreamingGenerator<T>
         var response = _chatClient
             .GetResponseAsync(BuildMessages(prompt), _options, CancellationToken.None)
             .ConfigureAwait(false).GetAwaiter().GetResult();
+
+        return response.Text ?? string.Empty;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// True async path: awaits the chat client directly with no sync-over-async blocking, and flows the
+    /// caller's <paramref name="cancellationToken"/> to the provider so an in-flight request can be cancelled.
+    /// </remarks>
+    protected override async Task<string> GenerateCoreAsync(string prompt, CancellationToken cancellationToken)
+    {
+        var response = await _chatClient
+            .GetResponseAsync(BuildMessages(prompt), _options, cancellationToken)
+            .ConfigureAwait(false);
 
         return response.Text ?? string.Empty;
     }

@@ -1,4 +1,6 @@
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -134,6 +136,147 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     public IEnumerable<Document<T>> GetAll()
     {
         return GetAllCore();
+    }
+
+    // ------------------------------------------------------------------
+    // Asynchronous, cancellation-aware API. The default implementations
+    // validate identically to the synchronous methods and delegate to the
+    // *CoreAsync members, which by default wrap the synchronous cores.
+    // I/O-bound stores override the *CoreAsync members for true async.
+    // ------------------------------------------------------------------
+
+    /// <inheritdoc/>
+    public virtual async Task AddAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken = default)
+    {
+        ValidateVectorDocument(vectorDocument);
+        cancellationToken.ThrowIfCancellationRequested();
+        await AddCoreAsync(vectorDocument, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task AddBatchAsync(IEnumerable<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken = default)
+    {
+        if (vectorDocuments == null)
+            throw new ArgumentNullException(nameof(vectorDocuments));
+
+        var documentList = vectorDocuments.ToList();
+        if (documentList.Count == 0)
+            throw new ArgumentException("Vector document collection cannot be empty", nameof(vectorDocuments));
+
+        foreach (var vectorDocument in documentList)
+        {
+            ValidateVectorDocument(vectorDocument);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await AddBatchCoreAsync(documentList, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual Task<IEnumerable<Document<T>>> GetSimilarAsync(Vector<T> queryVector, int topK, CancellationToken cancellationToken = default)
+    {
+        return GetSimilarWithFiltersAsync(queryVector, topK, new Dictionary<string, object>(), cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IEnumerable<Document<T>>> GetSimilarWithFiltersAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken = default)
+    {
+        ValidateQueryVector(queryVector);
+        ValidateTopK(topK);
+        ValidateMetadataFilters(metadataFilters);
+        cancellationToken.ThrowIfCancellationRequested();
+        return await GetSimilarCoreAsync(queryVector, topK, metadataFilters, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<Document<T>?> GetByIdAsync(string documentId, CancellationToken cancellationToken = default)
+    {
+        ValidateDocumentId(documentId);
+        cancellationToken.ThrowIfCancellationRequested();
+        return await GetByIdCoreAsync(documentId, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> RemoveAsync(string documentId, CancellationToken cancellationToken = default)
+    {
+        ValidateDocumentId(documentId);
+        cancellationToken.ThrowIfCancellationRequested();
+        return await RemoveCoreAsync(documentId, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Clear();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IEnumerable<Document<T>>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return await GetAllCoreAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Core asynchronous logic for adding a single vector document. Default wraps <see cref="AddCore"/>.
+    /// Override in I/O-bound stores for true async.
+    /// </summary>
+    protected virtual Task AddCoreAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        AddCore(vectorDocument);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Core asynchronous logic for adding a batch of vector documents. Default awaits <see cref="AddCoreAsync"/>
+    /// per document; override for efficient bulk insertion.
+    /// </summary>
+    protected virtual async Task AddBatchCoreAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
+    {
+        foreach (var vectorDocument in vectorDocuments)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await AddCoreAsync(vectorDocument, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Core asynchronous similarity search. Default wraps <see cref="GetSimilarCore"/>. Override for true async.
+    /// </summary>
+    protected virtual Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetSimilarCore(queryVector, topK, metadataFilters));
+    }
+
+    /// <summary>
+    /// Core asynchronous lookup by ID. Default wraps <see cref="GetByIdCore"/>. Override for true async.
+    /// </summary>
+    protected virtual Task<Document<T>?> GetByIdCoreAsync(string documentId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetByIdCore(documentId));
+    }
+
+    /// <summary>
+    /// Core asynchronous removal by ID. Default wraps <see cref="RemoveCore"/>. Override for true async.
+    /// </summary>
+    protected virtual Task<bool> RemoveCoreAsync(string documentId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(RemoveCore(documentId));
+    }
+
+    /// <summary>
+    /// Core asynchronous retrieval of all documents. Default wraps <see cref="GetAllCore"/>. Override for true async.
+    /// </summary>
+    protected virtual Task<IEnumerable<Document<T>>> GetAllCoreAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetAllCore());
     }
 
     /// <summary>

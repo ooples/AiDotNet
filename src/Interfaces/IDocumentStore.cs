@@ -1,3 +1,5 @@
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -208,5 +210,52 @@ public interface IDocumentStore<T>
     /// </para>
     /// </remarks>
     IEnumerable<Document<T>> GetAll();
+
+    // ------------------------------------------------------------------
+    // Asynchronous, cancellation-aware counterparts. I/O-bound stores
+    // (remote vector databases) implement these as genuinely non-blocking
+    // operations; in-memory stores complete synchronously.
+    // ------------------------------------------------------------------
+
+    /// <summary>Asynchronously adds a single vectorized document to the store.</summary>
+    /// <param name="vectorDocument">The vector document to add.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    Task AddAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken = default);
+
+    /// <summary>Asynchronously adds multiple vectorized documents to the store in a batch.</summary>
+    /// <param name="vectorDocuments">The vector documents to add.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    Task AddBatchAsync(IEnumerable<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken = default);
+
+    /// <summary>Asynchronously retrieves the top-k most similar documents to a query vector.</summary>
+    /// <param name="queryVector">The vector to search for similar documents.</param>
+    /// <param name="topK">The number of most similar documents to return.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    Task<IEnumerable<Document<T>>> GetSimilarAsync(Vector<T> queryVector, int topK, CancellationToken cancellationToken = default);
+
+    /// <summary>Asynchronously retrieves similar documents with additional metadata filtering.</summary>
+    /// <param name="queryVector">The vector to search for similar documents.</param>
+    /// <param name="topK">The number of most similar documents to return.</param>
+    /// <param name="metadataFilters">Metadata filters to apply before similarity search.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    Task<IEnumerable<Document<T>>> GetSimilarWithFiltersAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken = default);
+
+    /// <summary>Asynchronously retrieves a document by its unique identifier.</summary>
+    /// <param name="documentId">The unique identifier of the document to retrieve.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    Task<Document<T>?> GetByIdAsync(string documentId, CancellationToken cancellationToken = default);
+
+    /// <summary>Asynchronously removes a document from the store by its identifier.</summary>
+    /// <param name="documentId">The unique identifier of the document to remove.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    Task<bool> RemoveAsync(string documentId, CancellationToken cancellationToken = default);
+
+    /// <summary>Asynchronously removes all documents from the store.</summary>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    Task ClearAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Asynchronously gets all documents currently stored in the document store.</summary>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    Task<IEnumerable<Document<T>>> GetAllAsync(CancellationToken cancellationToken = default);
 }
 

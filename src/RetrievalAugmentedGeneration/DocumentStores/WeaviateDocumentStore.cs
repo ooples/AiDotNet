@@ -8,6 +8,7 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -183,19 +184,33 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override void AddCore(VectorDocument<T> vectorDocument)
+            => AddCoreImplAsync(vectorDocument, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddCoreAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+            => AddCoreImplAsync(vectorDocument, cancellationToken);
+
+        private async Task AddCoreImplAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
         {
             EnsureClass();
             if (_vectorDimension == 0)
                 _vectorDimension = vectorDocument.Embedding.Length;
 
             var body = BuildObject(vectorDocument);
-            var info = SendAsync(HttpMethod.Post, "/v1/objects", body).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Post, "/v1/objects", body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "create object");
             _documentCount++;
         }
 
         /// <inheritdoc/>
         protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+            => AddBatchCoreImplAsync(vectorDocuments, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddBatchCoreAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
+            => AddBatchCoreImplAsync(vectorDocuments, cancellationToken);
+
+        private async Task AddBatchCoreImplAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
         {
             if (vectorDocuments.Count == 0)
                 return;
@@ -206,7 +221,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
             var objects = vectorDocuments.Select(BuildObject).ToList();
             var body = new { objects };
-            var info = SendAsync(HttpMethod.Post, "/v1/batch/objects", body).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Post, "/v1/batch/objects", body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "batch create objects");
             _documentCount += vectorDocuments.Count;
         }
@@ -237,6 +252,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
         {
             var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
             var vectorJson = "[" + string.Join(",", vector.Select(v => v.ToString("R", CultureInfo.InvariantCulture))) + "]";
@@ -250,7 +272,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 "{ " + DocIdProp + " " + ContentProp + " " + MetadataProp +
                 " _additional { certainty distance } } } }";
 
-            var info = SendAsync(HttpMethod.Post, "/v1/graphql", new { query }).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Post, "/v1/graphql", new { query }, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "search");
 
             var results = new List<Document<T>>();
@@ -350,8 +372,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override Document<T>? GetByIdCore(string documentId)
+            => GetByIdCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<Document<T>?> GetByIdCoreAsync(string documentId, CancellationToken cancellationToken)
+            => GetByIdCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<Document<T>?> GetByIdCoreImplAsync(string documentId, CancellationToken cancellationToken)
         {
-            var info = SendAsync(HttpMethod.Get, $"/v1/objects/{_className}/{ToObjectId(documentId)}", null).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Get, $"/v1/objects/{_className}/{ToObjectId(documentId)}", null, cancellationToken).ConfigureAwait(false);
             if (info.Status == HttpStatusCode.NotFound)
                 return null;
             EnsureSuccess(info, "get object");
@@ -361,8 +390,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override bool RemoveCore(string documentId)
+            => RemoveCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<bool> RemoveCoreAsync(string documentId, CancellationToken cancellationToken)
+            => RemoveCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<bool> RemoveCoreImplAsync(string documentId, CancellationToken cancellationToken)
         {
-            var info = SendAsync(HttpMethod.Delete, $"/v1/objects/{_className}/{ToObjectId(documentId)}", null).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Delete, $"/v1/objects/{_className}/{ToObjectId(documentId)}", null, cancellationToken).ConfigureAwait(false);
             if (info.Status == HttpStatusCode.NotFound)
                 return false;
             if (!IsSuccess(info.Status))
@@ -375,6 +411,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override IEnumerable<Document<T>> GetAllCore()
+            => GetAllCoreImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetAllCoreAsync(CancellationToken cancellationToken)
+            => GetAllCoreImplAsync(cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> GetAllCoreImplAsync(CancellationToken cancellationToken)
         {
             var all = new List<Document<T>>();
             string? after = null;
@@ -386,7 +429,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 if (after != null)
                     path += "&after=" + after;
 
-                var info = SendAsync(HttpMethod.Get, path, null).GetAwaiter().GetResult();
+                var info = await SendAsync(HttpMethod.Get, path, null, cancellationToken).ConfigureAwait(false);
                 EnsureSuccess(info, "list objects");
 
                 var objects = JObject.Parse(info.Body)["objects"] as JArray;
@@ -410,8 +453,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         public override void Clear()
+            => ClearImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        public override Task ClearAsync(CancellationToken cancellationToken = default)
+            => ClearImplAsync(cancellationToken);
+
+        private async Task ClearImplAsync(CancellationToken cancellationToken)
         {
-            var info = SendAsync(HttpMethod.Delete, $"/v1/schema/{_className}", null).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Delete, $"/v1/schema/{_className}", null, cancellationToken).ConfigureAwait(false);
             if (!IsSuccess(info.Status) && info.Status != HttpStatusCode.NotFound)
                 EnsureSuccess(info, "delete class");
 
@@ -478,7 +528,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 throw new HttpRequestException($"Weaviate {operation} failed with status {(int)info.Status}: {info.Body}");
         }
 
-        private async Task<HttpResponseInfo> SendAsync(HttpMethod method, string path, object? body)
+        private async Task<HttpResponseInfo> SendAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken = default)
         {
             using (var request = new HttpRequestMessage(method, path))
             {
@@ -488,7 +538,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                     request.Content = new StringContent(json, Encoding.UTF8, "application/json");
                 }
 
-                using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
+                using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
                 {
                     var content = response.Content != null
                         ? await response.Content.ReadAsStringAsync().ConfigureAwait(false)

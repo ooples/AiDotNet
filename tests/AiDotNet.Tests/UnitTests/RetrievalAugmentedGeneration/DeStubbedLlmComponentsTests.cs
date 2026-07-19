@@ -33,6 +33,8 @@ public class DeStubbedLlmComponentsTests
 
     private sealed class RecordingRetriever : IRetriever<double>
     {
+
+        public System.Threading.Tasks.Task<IEnumerable<Document<double>>> RetrieveAsync(string query, int topK, Dictionary<string, object>? metadataFilters = null, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(metadataFilters == null ? Retrieve(query, topK) : Retrieve(query, topK, metadataFilters)); }
         public List<string> Queries { get; } = new();
         public int DefaultTopK => 5;
         public IEnumerable<Document<double>> Retrieve(string query) => Retrieve(query, 5, new Dictionary<string, object>());

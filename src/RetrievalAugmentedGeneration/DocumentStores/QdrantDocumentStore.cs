@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -188,19 +189,33 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override void AddCore(VectorDocument<T> vectorDocument)
+            => AddCoreImplAsync(vectorDocument, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddCoreAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+            => AddCoreImplAsync(vectorDocument, cancellationToken);
+
+        private async Task AddCoreImplAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
         {
             EnsureCollectionForDimension(vectorDocument.Embedding.Length);
             if (_vectorDimension == 0)
                 _vectorDimension = vectorDocument.Embedding.Length;
 
             var body = new { points = new[] { BuildPoint(vectorDocument) } };
-            var info = SendAsync(HttpMethod.Put, $"/collections/{_collectionName}/points?wait=true", body).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Put, $"/collections/{_collectionName}/points?wait=true", body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "upsert point");
             _documentCount++;
         }
 
         /// <inheritdoc/>
         protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+            => AddBatchCoreImplAsync(vectorDocuments, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddBatchCoreAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
+            => AddBatchCoreImplAsync(vectorDocuments, cancellationToken);
+
+        private async Task AddBatchCoreImplAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
         {
             if (vectorDocuments.Count == 0)
                 return;
@@ -211,7 +226,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
             var points = vectorDocuments.Select(BuildPoint).ToList();
             var body = new { points };
-            var info = SendAsync(HttpMethod.Put, $"/collections/{_collectionName}/points?wait=true", body).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Put, $"/collections/{_collectionName}/points?wait=true", body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "batch upsert points");
             _documentCount += vectorDocuments.Count;
         }
@@ -236,6 +251,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
         {
             var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
 
@@ -251,7 +273,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             if (filter != null)
                 body["filter"] = filter;
 
-            var info = SendAsync(HttpMethod.Post, $"/collections/{_collectionName}/points/search", body).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Post, $"/collections/{_collectionName}/points/search", body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "search");
 
             var results = new List<Document<T>>();
@@ -325,8 +347,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override Document<T>? GetByIdCore(string documentId)
+            => GetByIdCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<Document<T>?> GetByIdCoreAsync(string documentId, CancellationToken cancellationToken)
+            => GetByIdCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<Document<T>?> GetByIdCoreImplAsync(string documentId, CancellationToken cancellationToken)
         {
-            var info = SendAsync(HttpMethod.Get, $"/collections/{_collectionName}/points/{ToPointId(documentId)}", null).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Get, $"/collections/{_collectionName}/points/{ToPointId(documentId)}", null, cancellationToken).ConfigureAwait(false);
             if (info.Status == HttpStatusCode.NotFound)
                 return null;
             EnsureSuccess(info, "get point");
@@ -340,9 +369,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override bool RemoveCore(string documentId)
+            => RemoveCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<bool> RemoveCoreAsync(string documentId, CancellationToken cancellationToken)
+            => RemoveCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<bool> RemoveCoreImplAsync(string documentId, CancellationToken cancellationToken)
         {
             var body = new { points = new[] { ToPointId(documentId) } };
-            var info = SendAsync(HttpMethod.Post, $"/collections/{_collectionName}/points/delete?wait=true", body).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Post, $"/collections/{_collectionName}/points/delete?wait=true", body, cancellationToken).ConfigureAwait(false);
             if (!IsSuccess(info.Status))
                 return false;
 
@@ -353,6 +389,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override IEnumerable<Document<T>> GetAllCore()
+            => GetAllCoreImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetAllCoreAsync(CancellationToken cancellationToken)
+            => GetAllCoreImplAsync(cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> GetAllCoreImplAsync(CancellationToken cancellationToken)
         {
             var all = new List<Document<T>>();
             object? offset = null;
@@ -368,7 +411,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 if (offset != null)
                     body["offset"] = offset;
 
-                var info = SendAsync(HttpMethod.Post, $"/collections/{_collectionName}/points/scroll", body).GetAwaiter().GetResult();
+                var info = await SendAsync(HttpMethod.Post, $"/collections/{_collectionName}/points/scroll", body, cancellationToken).ConfigureAwait(false);
                 EnsureSuccess(info, "scroll");
 
                 var result = JObject.Parse(info.Body)["result"] as JObject;
@@ -394,8 +437,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         public override void Clear()
+            => ClearImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        public override Task ClearAsync(CancellationToken cancellationToken = default)
+            => ClearImplAsync(cancellationToken);
+
+        private async Task ClearImplAsync(CancellationToken cancellationToken)
         {
-            var info = SendAsync(HttpMethod.Delete, $"/collections/{_collectionName}", null).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Delete, $"/collections/{_collectionName}", null, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "delete collection");
 
             _documentCount = 0;
@@ -449,7 +499,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 throw new HttpRequestException($"Qdrant {operation} failed with status {(int)info.Status}: {info.Body}");
         }
 
-        private async Task<HttpResponseInfo> SendAsync(HttpMethod method, string path, object? body)
+        private async Task<HttpResponseInfo> SendAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken = default)
         {
             using (var request = new HttpRequestMessage(method, path))
             {
@@ -459,7 +509,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                     request.Content = new StringContent(json, Encoding.UTF8, "application/json");
                 }
 
-                using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
+                using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
                 {
                     var content = response.Content != null
                         ? await response.Content.ReadAsStringAsync().ConfigureAwait(false)

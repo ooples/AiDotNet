@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -131,6 +133,65 @@ internal sealed class VectorIndexDocumentStore<T> : IDocumentStore<T>
 
     /// <inheritdoc />
     public IEnumerable<Document<T>> GetAll() => _documents.Values.Select(vd => vd.Document);
+
+    /// <inheritdoc />
+    public Task AddAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Add(vectorDocument);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task AddBatchAsync(IEnumerable<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        AddBatch(vectorDocuments);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<IEnumerable<Document<T>>> GetSimilarAsync(Vector<T> queryVector, int topK, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetSimilar(queryVector, topK));
+    }
+
+    /// <inheritdoc />
+    public Task<IEnumerable<Document<T>>> GetSimilarWithFiltersAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetSimilarWithFilters(queryVector, topK, metadataFilters));
+    }
+
+    /// <inheritdoc />
+    public Task<Document<T>?> GetByIdAsync(string documentId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetById(documentId));
+    }
+
+    /// <inheritdoc />
+    public Task<bool> RemoveAsync(string documentId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Remove(documentId));
+    }
+
+    /// <inheritdoc />
+    public Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Clear();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<IEnumerable<Document<T>>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetAll());
+    }
 
     private static bool MatchesFilters(Document<T> document, Dictionary<string, object> filters)
     {

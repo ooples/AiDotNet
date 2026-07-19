@@ -38,5 +38,23 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var queryEmbedding = _embeddingModel.Embed(query);
             return _documentStore.GetSimilarWithFilters(queryEmbedding, topK, metadataFilters);
         }
+
+        /// <summary>
+        /// Truly-async core retrieval: awaits the (possibly network-backed) embedding model and document
+        /// store instead of blocking, and flows the cancellation token end to end.
+        /// </summary>
+        protected override async System.Threading.Tasks.Task<IEnumerable<Document<T>>> RetrieveCoreAsync(
+            string query,
+            int topK,
+            Dictionary<string, object> metadataFilters,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var queryEmbedding = await _embeddingModel.EmbedAsync(query).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return await _documentStore
+                .GetSimilarWithFiltersAsync(queryEmbedding, topK, metadataFilters, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 }

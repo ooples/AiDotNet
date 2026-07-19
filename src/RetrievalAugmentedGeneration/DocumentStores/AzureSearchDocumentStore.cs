@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -238,17 +239,31 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override void AddCore(VectorDocument<T> vectorDocument)
+            => AddCoreImplAsync(vectorDocument, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddCoreAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+            => AddCoreImplAsync(vectorDocument, cancellationToken);
+
+        private async Task AddCoreImplAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
         {
             EnsureIndexForDimension(vectorDocument.Embedding.Length);
             if (_vectorDimension == 0)
                 _vectorDimension = vectorDocument.Embedding.Length;
 
-            UploadActions(new[] { BuildAction(vectorDocument, "mergeOrUpload") }, "upload document");
+            await UploadActionsAsync(new[] { BuildAction(vectorDocument, "mergeOrUpload") }, "upload document", cancellationToken).ConfigureAwait(false);
             _documentCount++;
         }
 
         /// <inheritdoc/>
         protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+            => AddBatchCoreImplAsync(vectorDocuments, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddBatchCoreAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
+            => AddBatchCoreImplAsync(vectorDocuments, cancellationToken);
+
+        private async Task AddBatchCoreImplAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
         {
             if (vectorDocuments.Count == 0)
                 return;
@@ -258,14 +273,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 _vectorDimension = vectorDocuments[0].Embedding.Length;
 
             var actions = vectorDocuments.Select(d => BuildAction(d, "mergeOrUpload")).ToList();
-            UploadActions(actions, "batch upload documents");
+            await UploadActionsAsync(actions, "batch upload documents", cancellationToken).ConfigureAwait(false);
             _documentCount += vectorDocuments.Count;
         }
 
-        private void UploadActions(IEnumerable<Dictionary<string, object?>> actions, string operation)
+        private async Task UploadActionsAsync(IEnumerable<Dictionary<string, object?>> actions, string operation, CancellationToken cancellationToken)
         {
             var body = new { value = actions };
-            var info = SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/index"), body).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/index"), body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, operation);
         }
 
@@ -291,6 +306,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
         {
             var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
 
@@ -308,7 +330,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             if (filter != null)
                 body["filter"] = filter;
 
-            var info = SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/search"), body).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/search"), body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "search");
 
             var results = new List<Document<T>>();
@@ -401,9 +423,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override Document<T>? GetByIdCore(string documentId)
+            => GetByIdCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<Document<T>?> GetByIdCoreAsync(string documentId, CancellationToken cancellationToken)
+            => GetByIdCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<Document<T>?> GetByIdCoreImplAsync(string documentId, CancellationToken cancellationToken)
         {
             var encoded = Uri.EscapeDataString(documentId);
-            var info = SendAsync(HttpMethod.Get, WithApiVersion($"/indexes/{_indexName}/docs/{encoded}"), null).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Get, WithApiVersion($"/indexes/{_indexName}/docs/{encoded}"), null, cancellationToken).ConfigureAwait(false);
             if (info.Status == HttpStatusCode.NotFound)
                 return null;
             EnsureSuccess(info, "get document");
@@ -413,6 +442,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override bool RemoveCore(string documentId)
+            => RemoveCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<bool> RemoveCoreAsync(string documentId, CancellationToken cancellationToken)
+            => RemoveCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<bool> RemoveCoreImplAsync(string documentId, CancellationToken cancellationToken)
         {
             var action = new Dictionary<string, object?>
             {
@@ -421,7 +457,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             };
 
             var body = new { value = new[] { action } };
-            var info = SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/index"), body).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/index"), body, cancellationToken).ConfigureAwait(false);
             if (!IsSuccess(info.Status))
                 return false;
 
@@ -432,6 +468,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override IEnumerable<Document<T>> GetAllCore()
+            => GetAllCoreImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetAllCoreAsync(CancellationToken cancellationToken)
+            => GetAllCoreImplAsync(cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> GetAllCoreImplAsync(CancellationToken cancellationToken)
         {
             var all = new List<Document<T>>();
             const int pageSize = 1000;
@@ -447,7 +490,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                     ["skip"] = skip
                 };
 
-                var info = SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/search"), body).GetAwaiter().GetResult();
+                var info = await SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/search"), body, cancellationToken).ConfigureAwait(false);
                 EnsureSuccess(info, "list documents");
 
                 var rows = JObject.Parse(info.Body)["value"] as JArray;
@@ -471,8 +514,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         public override void Clear()
+            => ClearImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        public override Task ClearAsync(CancellationToken cancellationToken = default)
+            => ClearImplAsync(cancellationToken);
+
+        private async Task ClearImplAsync(CancellationToken cancellationToken)
         {
-            var info = SendAsync(HttpMethod.Delete, WithApiVersion($"/indexes/{_indexName}"), null).GetAwaiter().GetResult();
+            var info = await SendAsync(HttpMethod.Delete, WithApiVersion($"/indexes/{_indexName}"), null, cancellationToken).ConfigureAwait(false);
             if (!IsSuccess(info.Status) && info.Status != HttpStatusCode.NotFound)
                 EnsureSuccess(info, "delete index");
 
@@ -521,7 +571,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 throw new HttpRequestException($"Azure AI Search {operation} failed with status {(int)info.Status}: {info.Body}");
         }
 
-        private async Task<HttpResponseInfo> SendAsync(HttpMethod method, string path, object? body)
+        private async Task<HttpResponseInfo> SendAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken = default)
         {
             using (var request = new HttpRequestMessage(method, path))
             {
@@ -531,7 +581,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                     request.Content = new StringContent(json, Encoding.UTF8, "application/json");
                 }
 
-                using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
+                using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
                 {
                     var content = response.Content != null
                         ? await response.Content.ReadAsStringAsync().ConfigureAwait(false)

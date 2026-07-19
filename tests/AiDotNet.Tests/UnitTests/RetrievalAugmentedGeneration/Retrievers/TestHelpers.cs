@@ -141,6 +141,15 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             ).ToList();
         }
 
+        public System.Threading.Tasks.Task AddAsync(VectorDocument<T> vectorDocument, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); Add(vectorDocument); return System.Threading.Tasks.Task.CompletedTask; }
+        public System.Threading.Tasks.Task AddBatchAsync(IEnumerable<VectorDocument<T>> vectorDocuments, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); AddBatch(vectorDocuments); return System.Threading.Tasks.Task.CompletedTask; }
+        public System.Threading.Tasks.Task<IEnumerable<Document<T>>> GetSimilarAsync(Vector<T> queryVector, int topK, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilar(queryVector, topK)); }
+        public System.Threading.Tasks.Task<IEnumerable<Document<T>>> GetSimilarWithFiltersAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilarWithFilters(queryVector, topK, metadataFilters)); }
+        public System.Threading.Tasks.Task<Document<T>?> GetByIdAsync(string documentId, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetById(documentId)); }
+        public System.Threading.Tasks.Task<bool> RemoveAsync(string documentId, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(Remove(documentId)); }
+        public System.Threading.Tasks.Task ClearAsync(System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); Clear(); return System.Threading.Tasks.Task.CompletedTask; }
+        public System.Threading.Tasks.Task<IEnumerable<Document<T>>> GetAllAsync(System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetAll()); }
+
         private bool MatchesFilters(VectorDocument<T> document, Dictionary<string, object> filters)
         {
             if (filters == null || filters.Count == 0)

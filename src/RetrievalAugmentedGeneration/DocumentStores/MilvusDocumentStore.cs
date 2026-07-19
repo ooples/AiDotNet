@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -199,19 +200,33 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override void AddCore(VectorDocument<T> vectorDocument)
+            => AddCoreImplAsync(vectorDocument, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddCoreAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+            => AddCoreImplAsync(vectorDocument, cancellationToken);
+
+        private async Task AddCoreImplAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
         {
             EnsureCollectionForDimension(vectorDocument.Embedding.Length);
             if (_vectorDimension == 0)
                 _vectorDimension = vectorDocument.Embedding.Length;
 
             var body = new { collectionName = _collectionName, data = new[] { BuildEntity(vectorDocument) } };
-            var info = SendAsync("/v2/vectordb/entities/upsert", body).GetAwaiter().GetResult();
+            var info = await SendAsync("/v2/vectordb/entities/upsert", body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "upsert entity");
             _documentCount++;
         }
 
         /// <inheritdoc/>
         protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+            => AddBatchCoreImplAsync(vectorDocuments, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddBatchCoreAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
+            => AddBatchCoreImplAsync(vectorDocuments, cancellationToken);
+
+        private async Task AddBatchCoreImplAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
         {
             if (vectorDocuments.Count == 0)
                 return;
@@ -222,7 +237,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
             var data = vectorDocuments.Select(BuildEntity).ToList();
             var body = new { collectionName = _collectionName, data };
-            var info = SendAsync("/v2/vectordb/entities/upsert", body).GetAwaiter().GetResult();
+            var info = await SendAsync("/v2/vectordb/entities/upsert", body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "batch upsert entities");
             _documentCount += vectorDocuments.Count;
         }
@@ -248,6 +263,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
         {
             var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
 
@@ -264,7 +286,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             if (filter != null)
                 body["filter"] = filter;
 
-            var info = SendAsync("/v2/vectordb/entities/search", body).GetAwaiter().GetResult();
+            var info = await SendAsync("/v2/vectordb/entities/search", body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "search");
 
             var results = new List<Document<T>>();
@@ -355,6 +377,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override Document<T>? GetByIdCore(string documentId)
+            => GetByIdCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<Document<T>?> GetByIdCoreAsync(string documentId, CancellationToken cancellationToken)
+            => GetByIdCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<Document<T>?> GetByIdCoreImplAsync(string documentId, CancellationToken cancellationToken)
         {
             var body = new
             {
@@ -364,7 +393,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 limit = 1
             };
 
-            var info = SendAsync("/v2/vectordb/entities/query", body).GetAwaiter().GetResult();
+            var info = await SendAsync("/v2/vectordb/entities/query", body, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "query by id");
 
             var rows = JObject.Parse(info.Body)["data"] as JArray;
@@ -376,6 +405,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override bool RemoveCore(string documentId)
+            => RemoveCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<bool> RemoveCoreAsync(string documentId, CancellationToken cancellationToken)
+            => RemoveCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<bool> RemoveCoreImplAsync(string documentId, CancellationToken cancellationToken)
         {
             var body = new
             {
@@ -383,7 +419,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 filter = $"{IdField} == {Quote(documentId)}"
             };
 
-            var info = SendAsync("/v2/vectordb/entities/delete", body).GetAwaiter().GetResult();
+            var info = await SendAsync("/v2/vectordb/entities/delete", body, cancellationToken).ConfigureAwait(false);
             if (!IsSuccess(info.Status))
                 return false;
 
@@ -398,6 +434,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         protected override IEnumerable<Document<T>> GetAllCore()
+            => GetAllCoreImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetAllCoreAsync(CancellationToken cancellationToken)
+            => GetAllCoreImplAsync(cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> GetAllCoreImplAsync(CancellationToken cancellationToken)
         {
             var all = new List<Document<T>>();
             const int pageSize = 1000;
@@ -414,7 +457,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                     ["offset"] = offset
                 };
 
-                var info = SendAsync("/v2/vectordb/entities/query", body).GetAwaiter().GetResult();
+                var info = await SendAsync("/v2/vectordb/entities/query", body, cancellationToken).ConfigureAwait(false);
                 EnsureSuccess(info, "query all");
 
                 var rows = JObject.Parse(info.Body)["data"] as JArray;
@@ -438,9 +481,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
         /// <inheritdoc/>
         public override void Clear()
+            => ClearImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        public override Task ClearAsync(CancellationToken cancellationToken = default)
+            => ClearImplAsync(cancellationToken);
+
+        private async Task ClearImplAsync(CancellationToken cancellationToken)
         {
-            var info = SendAsync("/v2/vectordb/collections/drop",
-                new { collectionName = _collectionName }).GetAwaiter().GetResult();
+            var info = await SendAsync("/v2/vectordb/collections/drop",
+                new { collectionName = _collectionName }, cancellationToken).ConfigureAwait(false);
             EnsureSuccess(info, "drop collection");
 
             _documentCount = 0;
@@ -492,14 +542,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 throw new HttpRequestException($"Milvus {operation} failed with code {code}: {info.Body}");
         }
 
-        private async Task<HttpResponseInfo> SendAsync(string path, object body)
+        private async Task<HttpResponseInfo> SendAsync(string path, object body, CancellationToken cancellationToken = default)
         {
             using (var request = new HttpRequestMessage(HttpMethod.Post, path))
             {
                 var json = JsonConvert.SerializeObject(body);
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
+                using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
                 {
                     var content = response.Content != null
                         ? await response.Content.ReadAsStringAsync().ConfigureAwait(false)

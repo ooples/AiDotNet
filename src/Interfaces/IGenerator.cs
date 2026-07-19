@@ -1,3 +1,5 @@
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.Interfaces;
@@ -72,6 +74,34 @@ public interface IGenerator<T> : ITextGenerator
     /// </para>
     /// </remarks>
     GroundedAnswer<T> GenerateGrounded(string query, IEnumerable<Document<T>> context);
+
+    /// <summary>
+    /// Asynchronously generates a text response for a prompt, honoring cancellation.
+    /// </summary>
+    /// <param name="prompt">The input prompt (typically already augmented with retrieved context).</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the generated text response.</returns>
+    /// <remarks>
+    /// <para>
+    /// Asynchronous counterpart to <see cref="ITextGenerator.Generate(string)"/>. Generators backed by a
+    /// remote chat model perform genuine non-blocking work here; local generators complete synchronously.
+    /// </para>
+    /// </remarks>
+    Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asynchronously generates a grounded answer using provided context documents, honoring cancellation.
+    /// </summary>
+    /// <param name="query">The user's original query or question.</param>
+    /// <param name="context">The retrieved documents providing context for the answer.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing a grounded answer with the generated text, source documents, and extracted citations.</returns>
+    /// <remarks>
+    /// <para>
+    /// Asynchronous counterpart to <see cref="GenerateGrounded(string, IEnumerable{Document{T}})"/>.
+    /// </para>
+    /// </remarks>
+    Task<GroundedAnswer<T>> GenerateGroundedAsync(string query, IEnumerable<Document<T>> context, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the maximum number of tokens this generator can process in a single request.

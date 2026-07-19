@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -298,6 +300,20 @@ public class NeuralGenerator<T> : IGenerator<T>
             Citations = citations,
             ConfidenceScore = confidenceScore
         };
+    }
+
+    /// <inheritdoc/>
+    public Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Generate(prompt));
+    }
+
+    /// <inheritdoc/>
+    public Task<GroundedAnswer<T>> GenerateGroundedAsync(string query, IEnumerable<Document<T>> context, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GenerateGrounded(query, context));
     }
 
     private List<int> TokenizeText(string text)

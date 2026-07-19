@@ -1,5 +1,7 @@
 
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -69,6 +71,41 @@ public abstract class RerankerBase<T> : IReranker<T>
     }
 
     /// <summary>
+    /// Asynchronously reranks a collection of documents based on their relevance to a query.
+    /// </summary>
+    public virtual async Task<IEnumerable<Document<T>>> RerankAsync(
+        string query,
+        IEnumerable<Document<T>> documents,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateQuery(query);
+        ValidateDocuments(documents);
+
+        var documentList = documents.ToList();
+        if (documentList.Count == 0)
+            return documentList;
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return await RerankCoreAsync(query, documentList, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Asynchronously reranks documents and returns only the top-k highest scoring results.
+    /// </summary>
+    public virtual async Task<IEnumerable<Document<T>>> RerankAsync(
+        string query,
+        IEnumerable<Document<T>> documents,
+        int topK,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTopK(topK);
+
+        var reranked = await RerankAsync(query, documents, cancellationToken).ConfigureAwait(false);
+        return reranked.Take(topK).ToList();
+    }
+
+    /// <summary>
     /// Core reranking logic to be implemented by derived classes.
     /// </summary>
     /// <param name="query">The validated query text.</param>
@@ -88,6 +125,24 @@ public abstract class RerankerBase<T> : IReranker<T>
     /// </para>
     /// </remarks>
     protected abstract IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents);
+
+    /// <summary>
+    /// Core asynchronous reranking logic. The default implementation wraps the synchronous
+    /// <see cref="RerankCore"/>, which is appropriate for CPU-bound rerankers. LLM- or cross-encoder-backed
+    /// rerankers should override this to perform genuine non-blocking work.
+    /// </summary>
+    /// <param name="query">The validated query text.</param>
+    /// <param name="documents">The validated and materialized list of documents.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the documents reordered by relevance with updated scores.</returns>
+    protected virtual Task<IEnumerable<Document<T>>> RerankCoreAsync(
+        string query,
+        IList<Document<T>> documents,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(RerankCore(query, documents));
+    }
 
     /// <summary>
     /// Validates the query string.

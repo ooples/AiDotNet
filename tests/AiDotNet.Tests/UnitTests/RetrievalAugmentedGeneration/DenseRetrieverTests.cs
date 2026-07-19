@@ -71,6 +71,15 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         /// </summary>
         private class MockDocumentStore : IDocumentStore<double>
         {
+
+            public System.Threading.Tasks.Task AddAsync(VectorDocument<double> vectorDocument, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); Add(vectorDocument); return System.Threading.Tasks.Task.CompletedTask; }
+            public System.Threading.Tasks.Task AddBatchAsync(IEnumerable<VectorDocument<double>> vectorDocuments, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); AddBatch(vectorDocuments); return System.Threading.Tasks.Task.CompletedTask; }
+            public System.Threading.Tasks.Task<IEnumerable<Document<double>>> GetSimilarAsync(Vector<double> queryVector, int topK, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilar(queryVector, topK)); }
+            public System.Threading.Tasks.Task<IEnumerable<Document<double>>> GetSimilarWithFiltersAsync(Vector<double> queryVector, int topK, Dictionary<string, object> metadataFilters, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilarWithFilters(queryVector, topK, metadataFilters)); }
+            public System.Threading.Tasks.Task<Document<double>?> GetByIdAsync(string documentId, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetById(documentId)); }
+            public System.Threading.Tasks.Task<bool> RemoveAsync(string documentId, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(Remove(documentId)); }
+            public System.Threading.Tasks.Task ClearAsync(System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); Clear(); return System.Threading.Tasks.Task.CompletedTask; }
+            public System.Threading.Tasks.Task<IEnumerable<Document<double>>> GetAllAsync(System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetAll()); }
             private readonly List<Document<double>> _documents = new();
             private readonly MockEmbeddingModel _embeddingModel = new();
 

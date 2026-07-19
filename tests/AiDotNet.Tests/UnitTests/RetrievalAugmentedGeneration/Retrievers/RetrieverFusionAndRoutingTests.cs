@@ -16,6 +16,8 @@ public class RetrieverFusionAndRoutingTests
 {
     private sealed class FakeRetriever : IRetriever<double>
     {
+
+        public System.Threading.Tasks.Task<IEnumerable<Document<double>>> RetrieveAsync(string query, int topK, Dictionary<string, object>? metadataFilters = null, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(metadataFilters == null ? Retrieve(query, topK) : Retrieve(query, topK, metadataFilters)); }
         private readonly List<Document<double>> _docs;
         public string? LastQuery { get; private set; }
         public Dictionary<string, object>? LastFilters { get; private set; }
