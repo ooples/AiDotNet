@@ -421,6 +421,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // follow-up issue; not reproducible locally because training times out first). Runs in the
         // nightly heavy lane, matching the other foundation-scale models here.
         "ParaformerLarge",
+        // LSTMDetector (AnomalyDetection.TimeSeries): its Builder/Predictions tests overran the 60 s gate,
+        // but its TimeSeriesModelTestBase alias is NON-GENERIC (double-only), so it can be neither floated
+        // (CS0308) nor iteration-capped (CS0115 — the alias lacks the override members). Deferring to the
+        // nightly heavy lane is the only in-shard lever until that base is made generic over T.
+        "LSTMDetector",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
@@ -729,6 +734,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // adapter — every training invariant (Training_ShouldReduceLoss, TrainingError, MoreData,
         // LossStrictlyDecreases) overran the gate at <double>. Segmentation family, base is generic over T.
         "ViTAdapter",
+        // --- #1789 green-shard sweep (NN A-F, Gen J-M/N-P): genuine <double> training TIMEOUTS (and one
+        // OOM) — each model is correct at a single forward but its multi-iteration training/clone
+        // invariants (Training / MoreData / LossStrictlyDecreases / DifferentInputs) overran the 120/180 s
+        // gate or OOM-ed the 16 GB runner at <double>. <float> FIRST halves per-step compute + tape/
+        // activation footprint (LLaVANeXTVideo's GradientFlow OOM); paired with the HeavyTrainingTimeout
+        // iteration cap below for the multi-iter probes. Self-relative invariants + paper architecture
+        // preserved; family bases (NeuralNetwork / AudioNN / VisionLanguage / EmbeddingModel) are generic
+        // over T so the floatify rewrite compiles. ---
+        "ACEStep", "AudioVisualEventLocalizationNetwork", "BASIC", "ConvolutionalNeuralNetwork",
+        "DCGAN", "Data2VecASR", "DeepBeliefNetwork", "DenseNetNetwork", "Donut", "EmotiVoice", "Emu",
+        "ExtremeLearningMachine", "Kokoro", "MCDropoutNeuralNetwork", "MPLUGOwl2",
+        "Mamba2", "MedCLIP", "MedFlamingo", "MinMo", "LLaVANeXTVideo", "NaturalSpeech2", "NeuFlowV2",
+        "NeuralParametricEQ", "OMGLLaVA",
+        // LSTMDetector omitted from <float>: its TimeSeriesModelTestBase alias is non-generic (double-only),
+        // so it takes the cap-only (double) path below.
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -837,6 +857,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // NOTE: PANNs / PANNsModel / MPSENet are NOT listed here — they are in Fp32TestClassNames, and
         // the audio-family branch already emits the smoke-iteration overrides for every Fp32 member.
         // Listing them here as well would double-define TrainingIterations / MemorizationTaskIterations.
+        // --- #1789 green-shard sweep (NN A-F, NN G-L, Gen J-M/N-P): plain-NeuralNetwork-family timeout
+        // models whose family branch does NOT auto-emit smoke iters, so they need the explicit cap to trim
+        // the multi-iteration training probes (Training / MoreData / LossStrictlyDecreases) that overran
+        // the 120/180 s gate. Paired with <float> in Fp32TestClassNames above. (Audio/VL-family members
+        // are auto-capped via Fp32 and intentionally omitted here to avoid the double-define.) ---
+        "BASIC", "CapsuleNetwork", "ConvolutionalNeuralNetwork", "DCGAN", "DeepBeliefNetwork",
+        "DenseNetNetwork", "Donut", "Emu", "ExtremeLearningMachine", "FastText",
+        "MCDropoutNeuralNetwork", "GPT4Point", "InternImage", "Janus",
     };
 
     // Attribute metadata names
