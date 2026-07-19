@@ -659,6 +659,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Same heavy iterative-flow profile as RAFT (already floated above); its <double> per-step
         // cost overran the 120 s gate (DifferentInputs / ScaledInput timeout).
         "DPFlow",
+        // Qwen2Audio (Chu et al., 2024 — arXiv:2407.10759): Whisper-style audio encoder (32 layers,
+        // 1280-dim) + LM adapter — a genuine foundation-scale audio LLM. Even a single forward runs
+        // ~24 s at <double> (verified: 2 single-forward tests took 47 s), so the full class + training
+        // probes blow the gate. Audio family, so <float> also picks up the audio-branch smoke-iteration
+        // cap for the training invariants. (Its input-projection dim bug is fixed separately in
+        // CreateDefaultQwen2AudioLayers.)
+        "Qwen2Audio",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -2524,6 +2531,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASROptions { EncoderDim = 32, " +
                     "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 64, VocabSize = 64 })";
+            }
+            else if (model.ClassName == "Qwen2Audio" && model.TypeParameterCount == 1)
+            {
+                // Qwen2-Audio (Chu et al., 2024 — arXiv:2407.10759) defaults to a foundation-scale stack:
+                // AudioEncoderDim 1280, 32 Whisper-style encoder layers, LMHiddenDim 3584. Float FIRST was
+                // tried (Fp32TestClassNames) and MEASURED insufficient: even a SINGLE training step exceeds
+                // the 120 s gate at <float> (a 32-layer 1280-dim attention forward+backward — GradientFlow /
+                // Training / MoreData all timed out). So (float +) a CI-smoke scaffold is required: build the
+                // SAME architecture (input projection -> Whisper-style audio encoder -> LM adapter -> output
+                // head) at reduced width/depth via a small Qwen2AudioOptions; only the scale shrinks
+                // (InitializeLayers reads these dims — the single size control). numHeads (2) divides
+                // AudioEncoderDim (32); NumMels (64) matches the [1,64,32] AudioNN InputShape height.
+                // Floatified to <float> by the generator since Qwen2Audio is in Fp32TestClassNames.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Multimodal.Qwen2AudioOptions { AudioEncoderDim = 32, " +
+                    "NumAudioEncoderLayers = 1, NumAudioEncoderHeads = 2, NumMels = 64, LMHiddenDim = 32, " +
+                    "NumLMLayers = 1, NumLMHeads = 2, VocabSize = 64, AdapterDim = 32 })";
             }
             else if (model.ClassName == "AnimateDiff" && model.TypeParameterCount == 1)
             {
