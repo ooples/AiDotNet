@@ -2249,6 +2249,15 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureClusterMetric(Clustering.Evaluation.IClusterMetric<T> metric);
 
     /// <summary>
+    /// Configures an extra financial metric to score a forecasting/financial model on (money-side analogue of
+    /// <see cref="ConfigureClusterMetric"/>), added on top of the default financial-metric set that runs
+    /// automatically for any financial or time-series forecasting model.
+    /// </summary>
+    /// <param name="metric">The financial metric implementation to add.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureFinancialMetric(Finance.Evaluation.IFinancialMetric<T> metric);
+
+    /// <summary>
     /// Configures an external cluster metric for evaluating clustering quality against ground truth labels.
     /// </summary>
     /// <param name="metric">The external cluster metric implementation to use.</param>
