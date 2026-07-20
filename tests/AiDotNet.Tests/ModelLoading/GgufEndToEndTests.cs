@@ -139,6 +139,77 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         /// <summary>
+        /// Phase-2 transparent-fusion feasibility: run the WHOLE decoder forward inside a deferred scope
+        /// (BeginDeferredScope), which records the eager op stream into an execution graph, optimizes it, and
+        /// replays the fused graph on Execute() — the torch.compile-class lever. Confirms the deferred/fusion
+        /// path produces llama.cpp's greedy token (7042) for a real decoder, i.e. that transparent fusion is
+        /// viable before wiring it into Predict. Falls back to eager when the backend has no deferred support.
+        /// Gated on the real SmolLM2 GGUF + a GPU.
+        /// </summary>
+        /// <remarks>
+        /// KNOWN GAP (Phase 2 WIP): today the deferred/graph path returns token 0 (all-zero logits) for the
+        /// decoder — the captured graph does not materialize the correct output. Transparent fusion needs the
+        /// graph capture/replay (output binding + the decoder op set: RoPE/GQA-SDPA/RMSNorm) debugged before it
+        /// can wrap Predict. Skipped until that lands; this test is the acceptance check for it.
+        /// </remarks>
+        [Fact(Skip = "Phase-2 WIP: DeferredScope graph capture/replay returns token 0 for the decoder (output " +
+                     "not materialized); transparent fusion needs the graph path fixed for the decoder op set.")]
+        public void Gguf_DeferredScopeFusion_Runs7042_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+
+            bool gpuOk;
+            using (var probe = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine()) gpuOk = probe.IsGpuAvailable;
+            if (!gpuOk) return;
+
+            var gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+            try
+            {
+                var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+                var net = (NeuralNetworkBase<float>)model;
+                var ids = new[] { 504, 3575, 282, 4649, 314 };
+                var input = new Tensor<float>(new[] { 1, ids.Length });
+                for (int i = 0; i < ids.Length; i++) input[0, i] = ids[i];
+
+                int next;
+                var scope = gpuEngine.BeginDeferredScope();
+                if (scope is null)
+                {
+                    next = ArgmaxLast(net.Predict(input)); // deferred not supported: eager
+                }
+                else
+                {
+                    using (scope)
+                    {
+                        var logits = net.Predict(input); // ops record into the execution graph
+                        scope.Execute();                 // optimize + replay the fused graph
+                        next = ArgmaxLast(logits);
+                    }
+                }
+                Assert.Equal(7042, next);
+            }
+            finally
+            {
+                AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                gpuEngine.Dispose();
+            }
+        }
+
+        private static int ArgmaxLast(Tensor<float> logits) // [1, seq, vocab] -> argmax over the last position
+        {
+            int seq = logits.Shape[1], vocab = logits.Shape[2], best = 0;
+            float bestVal = float.NegativeInfinity;
+            for (int v = 0; v < vocab; v++)
+            {
+                float x = Convert.ToSingle(logits[0, seq - 1, v]);
+                if (x > bestVal) { bestVal = x; best = v; }
+            }
+            return best;
+        }
+
+        /// <summary>
         /// Per-layer OpenCL-vs-CPU decoder guard: runs the whole forward on the GPU engine and on the CPU
         /// engine and reports each layer's max abs diff. Asserts (a) no layer diverges at CORRUPTION scale —
         /// the stale-persistent-weight bug (a model built while a DirectGpuTensorEngine is Current, fixed by
