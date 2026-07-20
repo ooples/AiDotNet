@@ -333,6 +333,46 @@ public class InferenceOptimizerTests
     }
 
     /// <summary>
+    /// The non-paged inference path routes the decoder's GQA to CachedGroupedQueryAttention, whose forward now
+    /// applies RoPE and grouped-query attention through the device-agnostic engine ops (ApplyRoPEInterleaved +
+    /// ScaledDotProductAttentionGqa — dropping managed RoPE + ExpandKVHeads and making the forward GPU-graph
+    /// recordable). The optimized model's forward must still match the original managed GQA decoder within fp
+    /// tolerance, proving the rewrite onto the recordable ops is numerically faithful.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_CachedGroupedQueryAttention_RewrittenForward_MatchesOriginal()
+    {
+        var model = CreateTinyGqaDecoder();
+        Assert.Contains(PagedAttentionHosts(model), l => l is GroupedQueryAttentionLayer<float>);
+
+        var input = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 1, 32 });
+        for (int i = 0; i < input.Length; i++) input[i] = ((i % 13) - 6) / 6.0f;
+
+        var baseline = model.Predict(input);
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = true,
+            EnablePagedKVCache = false, // non-paged -> CachedGroupedQueryAttention (the rewritten layer)
+            EnableFlashAttention = false,
+            AttentionMasking = AttentionMaskingMode.Auto
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
+
+        Assert.True(anyApplied);
+        Assert.Contains(PagedAttentionHosts(optimized), l => l is CachedGroupedQueryAttention<float>);
+        Assert.DoesNotContain(PagedAttentionHosts(optimized), l => l is GroupedQueryAttentionLayer<float>);
+
+        var y = optimized.Predict(input);
+        Assert.Equal(baseline.Shape.ToArray(), y.Shape.ToArray());
+        for (int i = 0; i < y.Length; i++)
+            Assert.True(Math.Abs(baseline[i] - y[i]) < 1e-3f,
+                $"Rewritten CachedGQA diverged from the original at {i}: {baseline[i]} vs {y[i]}");
+    }
+
+    /// <summary>
     /// Cloning a model goes through serialize → deserialize, so a GroupedQueryAttentionLayer must round-trip
     /// every shape/behaviour argument. This pins the fix for a clone silently dropping RoPE and the causal mask
     /// (they are not restored from metadata) — which diverged the cloned model and, downstream, broke the
