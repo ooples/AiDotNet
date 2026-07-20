@@ -791,6 +791,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         // SequenceLength + EmbeddingDimension here, the deser path would fall
         // back to inputShape[0]/[1] (correct for rank-2 [seq, dim] payloads)
         // or to hardcoded 16/64 if the shape is degenerate — issue #1239.
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
         metadata["SequenceLength"] = InputShape[0].ToString();
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
         metadata["NumHeads"] = _numHeads.ToString();
@@ -798,6 +799,15 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         metadata["HeadsPerGroup"] = _headsPerGroup.ToString();
         metadata["Variant"] = Variant.ToString();
         metadata["PositionalEncoding"] = PositionalEncoding.ToString();
+        // Persist the remaining shape/behaviour-affecting ctor arguments so a deserialized (cloned) layer is
+        // functionally identical. Without these a clone silently lost its causal mask, custom head dimension
+        // (Gemma), Q/K/V projection bias (Qwen2), attention logit soft-cap (Gemma-2), and RoPE — producing
+        // wrong outputs on the cloned model (e.g. the paged incremental-serving clone of a GGUF decoder).
+        metadata["HeadDimension"] = _headDimension.ToString(ci);
+        metadata["UseCausalMask"] = _useCausalMask.ToString();
+        metadata["UseProjectionBias"] = _useProjectionBias.ToString();
+        metadata["AttnLogitSoftcap"] = _attnLogitSoftcap.ToString(ci);
+        metadata["RoPETheta"] = RoPETheta.ToString(ci);
         return metadata;
     }
 

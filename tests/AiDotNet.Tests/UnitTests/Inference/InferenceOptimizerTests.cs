@@ -331,6 +331,82 @@ public class InferenceOptimizerTests
         }
     }
 
+    /// <summary>
+    /// Cloning a model goes through serialize → deserialize, so a GroupedQueryAttentionLayer must round-trip
+    /// every shape/behaviour argument. This pins the fix for a clone silently dropping RoPE and the causal mask
+    /// (they are not restored from metadata) — which diverged the cloned model and, downstream, broke the
+    /// incremental-serving clone of a GGUF decoder. A convention/loss bug shows up as a large divergence here.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task GroupedQueryAttention_RoundTripsThroughClone_PreservingRoPEAndCausalMask()
+    {
+        var model = CreateTinyGqaAttentionModel();
+
+        var input = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 1, 32 });
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = ((i % 11) - 5) / 5.0f;
+        }
+
+        var baseline = model.Predict(input);
+        var clone = model.Clone();
+        var y = clone.Predict(input);
+
+        Assert.Equal(baseline.Shape.ToArray(), y.Shape.ToArray());
+        for (int i = 0; i < y.Length; i++)
+        {
+            Assert.True(Math.Abs(baseline[i] - y[i]) < 1e-4f,
+                $"Cloned GQA diverged from the original at {i}: {baseline[i]} vs {y[i]}");
+        }
+    }
+
+    private static NeuralNetworkBase<float> CreateTinyGqaAttentionModel()
+    {
+        const int seqLen = 4;
+        const int embDim = 8;
+        const int numHeads = 4;
+        const int numKVHeads = 2;
+        const int flatSize = seqLen * embDim;
+
+        var gqa = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: seqLen,
+            embeddingDimension: embDim,
+            numHeads: numHeads,
+            numKVHeads: numKVHeads,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>(),
+            useCausalMask: true);
+        gqa.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta: 10000.0, maxSequenceLength: seqLen);
+
+        var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new InputLayer<float>(flatSize),
+            new ReshapeLayer<float>(new[] { seqLen, embDim }),
+            gqa,
+            new FlattenLayer<float>(),
+            new DenseLayer<float>(flatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.TextGeneration,
+            complexity: NetworkComplexity.Simple,
+            inputSize: flatSize,
+            outputSize: flatSize,
+            layers: layers);
+
+        var model = new NeuralNetwork<float>(architecture);
+
+        var p = model.GetParameters();
+        var deterministic = new float[p.Length];
+        for (int i = 0; i < deterministic.Length; i++)
+        {
+            deterministic[i] = ((i % 17) - 8) / 16.0f;
+        }
+        model.UpdateParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<float>(deterministic));
+
+        return model;
+    }
+
     private static NeuralNetworkBase<float> CreateTinyGqaDecoder()
     {
         const int seqLen = 4;
