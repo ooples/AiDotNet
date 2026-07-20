@@ -621,6 +621,51 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Configures a dependency-free native ANN index (Flat / IVF / PQ / IVFPQ) implemented on the AiDotNet
+    /// Tensors fused-kernel stack, adapts it into a document store, and builds a dense retriever over it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the self-contained replacement for the external FaissNet-backed store: it takes no FAISS / MKL
+    /// native dependency and, when <paramref name="useGpu"/> is set, dispatches distance / assignment / PQ scans
+    /// to the fused ANN GPU kernels (<c>IAnnBackend</c>) across every supported backend, falling back to the
+    /// managed CPU reference otherwise. The underlying index trains IVF/PQ codebooks and (re)builds automatically.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this to get FAISS-style IVF/PQ/HNSW-scale search entirely on AiDotNet's
+    /// own stack — no external native library to install and nothing that can fail to load at runtime.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureNativeAnnIndex(
+        RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorIndexType indexType = RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorIndexType.Flat,
+        int vectorDimension = 0,
+        RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorMetric metric = RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorMetric.Cosine,
+        int nlist = 64,
+        int nprobe = 8,
+        int m = 8,
+        int ksub = 256,
+        bool useGpu = false,
+        int defaultTopK = 5)
+    {
+        var index = new RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorIndex<T>(
+            indexType, vectorDimension, metric, nlist, nprobe, m, ksub);
+
+        if (useGpu)
+        {
+            // Best-effort: attach the best available GPU backend so ANN ops use the fused kernels. A missing or
+            // failing backend leaves the index on its managed CPU path (AnnVectorIndex tolerates a null backend).
+            try { index.AttachGpu(AiDotNet.Tensors.Engines.DirectGpu.DirectGpuBackendFactory.Create()); }
+            catch { /* CPU path */ }
+        }
+
+        var store = new VectorIndexDocumentStore<T>(index, vectorDimension);
+        _ragDocumentStore = store;
+
+        var embeddingModel = _configuredEmbeddingModel ?? BuildDefaultEmbeddingModel(vectorDimension);
+        _ragRetriever = new RetrievalAugmentedGeneration.Retrievers.VectorRetriever<T>(store, embeddingModel, defaultTopK);
+        return this;
+    }
+
+    /// <summary>
     /// Constructs the selected in-memory vector index using the supplied similarity metric.
     /// </summary>
     private static RetrievalAugmentedGeneration.VectorSearch.Indexes.IVectorIndex<T> BuildVectorIndex(

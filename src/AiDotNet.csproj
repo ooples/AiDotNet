@@ -189,13 +189,6 @@
 	  <None Remove="AiDotNet.Storage.Elasticsearch\**\*" />
 	</ItemGroup>
 
-	<!-- Exclude the opt-in AiDotNet.Storage.Faiss metapackage (native FAISS ANN backend). -->
-	<ItemGroup>
-	  <Compile Remove="AiDotNet.Storage.Faiss\**\*.cs" />
-	  <EmbeddedResource Remove="AiDotNet.Storage.Faiss\**\*" />
-	  <None Remove="AiDotNet.Storage.Faiss\**\*" />
-	</ItemGroup>
-
 	<!-- Exclude the opt-in AiDotNet.Storage.Postgres / AiDotNet.Storage.Redis metapackages (graph checkpointers). -->
 	<ItemGroup>
 	  <Compile Remove="AiDotNet.Storage.Postgres\**\*.cs" />
