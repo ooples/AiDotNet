@@ -293,6 +293,19 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureModel(AiDotNet.ModelLoading.Pretrained.PretrainedSource source);
 
     /// <summary>
+    /// Configures the model from a pretrained checkpoint and places it on the given device — the common
+    /// "load this model straight onto my GPU" case. Equivalent to
+    /// <c>ConfigureModel(source)</c> followed by moving the model with
+    /// <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.To(AiDotNet.Tensors.DeviceInfo)"/>.
+    /// </summary>
+    /// <param name="source">The pretrained-source descriptor.</param>
+    /// <param name="device">The target device, e.g. <c>DeviceInfo.Cuda(0)</c> or <c>DeviceInfo.OpenCL()</c>.
+    /// Type-safe (enum-based) — no device strings.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModel(
+        AiDotNet.ModelLoading.Pretrained.PretrainedSource source, AiDotNet.Tensors.DeviceInfo device);
+
+    /// <summary>
     /// Configures the optimization algorithm for the model.
     /// </summary>
     /// <remarks>
