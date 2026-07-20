@@ -321,13 +321,15 @@ public class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         }
         else
         {
+            // LongVILA / VILA (Xue et al. 2024, arXiv:2408.10188) = image-video joint encoding with a
+            // plain LINEAR projector to the LLM (no dedicated temporal transformer; long-context is a
+            // training/systems feature, not an architectural block). Residual ViT + LLM blocks (the old
+            // shared builder's non-residual stack collapsed to an input-independent output after training).
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers(
-                    _options.VisionDim,
+                LayerHelper<T>.CreateDefaultVideoLinearProjectorVLMLayers(
                     _options.VisionDim,
                     _options.DecoderDim,
                     _options.NumVisionLayers,
-                    2,
                     _options.NumDecoderLayers,
                     _options.NumHeads,
                     _options.DropoutRate,
@@ -343,8 +345,11 @@ public class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2 * lpb + 2;
+        // CreateDefaultVideoLinearProjectorVLMLayers layout: PatchEmbedding(1) + LayerNorm(1) +
+        // numVisionLayers·(TransformerEncoderLayer(1) + optional Dropout) before the projection +
+        // LLM decoder. The vision-encoder segment ends after the vision blocks.
+        int perBlock = _options.DropoutRate > 0 ? 2 : 1;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock;
     }
 
     private Tensor<T> TokenizeText(string text)
