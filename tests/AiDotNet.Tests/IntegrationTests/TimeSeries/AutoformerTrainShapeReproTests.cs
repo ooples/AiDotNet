@@ -26,6 +26,7 @@ namespace AiDotNet.Tests.IntegrationTests.TimeSeries;
 /// [32, 8] vs [8, 32] and runs in seconds instead of minutes. It asserts only that training
 /// COMPLETES — a shape-crossed gradient throws, so completion is the signal.
 /// </summary>
+[Collection("EngineCurrentGlobalState")]
 public class AutoformerTrainShapeReproTests
 {
     private static (Matrix<double> X, Vector<double> Y) SyntheticSeries(int n, int features, int seed = 11)

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -589,22 +590,9 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
     // rolled by those delays (out[t] = Σ_i softmax(R)_i · v[(t+lag_i) mod L]). The top-k SELECTION is
     // data-dependent (non-differentiable, exactly as in the official implementation), but the gradient
     // still flows through the softmax weights (gathered R values → q, k) and through the rolled v.
-    /// <summary>
-    /// Batched correlation spectrum: R[b, lag] = mean over (t &lt; corrLen-lag, dim) of q[b,t,:]·k[b,t+lag,:],
-    /// for q/k shaped [B, S, D]. Returns [B, corrLen].
-    /// </summary>
-    /// <remarks>
-    /// This is the op-count hot spot. The per-sample path issues corrLen x ~5 ops PER SAMPLE, so a batch of
-    /// B costs B*corrLen*5 dispatches; four call sites per forward (encoder self x N, decoder self, decoder
-    /// cross) multiply that again. Computing the spectrum for the whole batch at once collapses the B factor:
-    /// the SAME ops run on tensors one rank wider, so each sample's arithmetic and its summation ORDER are
-    /// unchanged and results stay bit-identical to the per-sample path — only the dispatch count drops.
-    /// The top-k SELECTION is deliberately NOT batched: it is data-dependent per sample (each window picks
-    /// delays from its own spectrum), which is Autoformer's defining mechanism.
-    /// </remarks>
-    // Cache for the constant diagonal-sum operator used by the matmul spectrum, keyed by (lq, lk, d).
+    // Cache for the constant diagonal-sum operator used by the matmul spectrum, keyed by (lq, lk, corrLen, d).
     // Shape [corrLen, lq*lk]; ~110 KB at the default 24x24x512, and it never changes for a given model.
-    private readonly Dictionary<(int Lq, int Lk, int D), Tensor<T>> _diagOperatorCache = new();
+    private readonly ConcurrentDictionary<(int Lq, int Lk, int CorrLen, int D), Tensor<T>> _diagOperatorCache = new();
 
     /// <summary>
     /// Builds the constant operator A with A[lag, t*lk + (t+lag)] = 1/((corrLen-lag)*d) for t &lt; corrLen-lag,
@@ -612,20 +600,19 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
     /// </summary>
     private Tensor<T> DiagonalMeanOperator(int lq, int lk, int corrLen, int d)
     {
-        if (_diagOperatorCache.TryGetValue((lq, lk, d), out var cached)) return cached;
-
-        var data = new Vector<T>(corrLen * lq * lk);
-        for (int lag = 0; lag < corrLen; lag++)
+        return _diagOperatorCache.GetOrAdd((lq, lk, corrLen, d), _ =>
         {
-            int valid = corrLen - lag;
-            T w = _numOps.FromDouble(1.0 / (valid * d));
-            for (int t = 0; t < valid; t++)
-                data[lag * (lq * lk) + t * lk + (t + lag)] = w;
-        }
+            var data = new Vector<T>(corrLen * lq * lk);
+            for (int lag = 0; lag < corrLen; lag++)
+            {
+                int valid = corrLen - lag;
+                T w = _numOps.FromDouble(1.0 / (valid * d));
+                for (int t = 0; t < valid; t++)
+                    data[lag * (lq * lk) + t * lk + (t + lag)] = w;
+            }
 
-        var op = new Tensor<T>(new[] { corrLen, lq * lk }, data);
-        _diagOperatorCache[(lq, lk, d)] = op;
-        return op;
+            return new Tensor<T>(new[] { corrLen, lq * lk }, data);
+        });
     }
 
     /// <summary>
@@ -655,6 +642,19 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         return Engine.Reshape(spectrum, new[] { corrLen });
     }
 
+    /// <summary>
+    /// Batched correlation spectrum: R[b, lag] = mean over (t &lt; corrLen-lag, dim) of q[b,t,:]·k[b,t+lag,:],
+    /// for q/k shaped [B, S, D]. Returns [B, corrLen].
+    /// </summary>
+    /// <remarks>
+    /// This is the op-count hot spot. The per-sample path issues corrLen x ~5 ops PER SAMPLE, so a batch of
+    /// B costs B*corrLen*5 dispatches; four call sites per forward (encoder self x N, decoder self, decoder
+    /// cross) multiply that again. Computing the spectrum for the whole batch at once collapses the B factor:
+    /// the SAME ops run on tensors one rank wider, so each sample's arithmetic and its summation ORDER are
+    /// unchanged and results stay bit-identical to the per-sample path — only the dispatch count drops.
+    /// The top-k SELECTION is deliberately NOT batched: it is data-dependent per sample (each window picks
+    /// delays from its own spectrum), which is Autoformer's defining mechanism.
+    /// </remarks>
     internal Tensor<T> CorrelationSpectrumBatched(Tensor<T> q, Tensor<T> k, int corrLen, int d)
     {
         var parts = new Tensor<T>[corrLen];

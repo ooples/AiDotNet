@@ -125,6 +125,22 @@ public class AutoformerBatchedEquivalenceTests
         }
     }
 
+    [Fact]
+    public void Matmul_spectrum_cache_distinguishes_correlation_length()
+    {
+        const int seq = 12;
+        const int dim = 8;
+        var model = Model(dim);
+        var q = Rand([seq, dim], seed: 13);
+        var k = Rand([seq, dim], seed: 17);
+
+        var shortSpectrum = model.CorrelationSpectrumMatmul(q, k, corrLen: 6, d: dim);
+        var fullSpectrum = model.CorrelationSpectrumMatmul(q, k, corrLen: seq, d: dim);
+
+        Assert.Equal(6, shortSpectrum.Shape[0]);
+        Assert.Equal(seq, fullSpectrum.Shape[0]);
+    }
+
     /// <summary>
     /// The batched moving average must equal the per-sample one, and specifically must NOT let one window's
     /// replication padding bleed into its neighbour. Flattening [B, S, D] to [B*S, D] and padding there would

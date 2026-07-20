@@ -699,10 +699,14 @@ public class DirectGpuTests
                 {
                     _output.WriteLine($"{name}: FAIL ({errorCount} elements with error > {tolerance}, max error: {maxError:E3})");
                 }
+
+                Assert.True(errorCount == 0,
+                    $"{name}: {errorCount} elements exceeded tolerance {tolerance} (max error: {maxError:E3})");
             }
             catch (Exception ex)
             {
                 _output.WriteLine($"{name}: ERROR - {ex.Message}");
+                throw;
             }
         }
 

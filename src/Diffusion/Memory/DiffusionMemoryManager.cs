@@ -286,9 +286,10 @@ public class DiffusionMemoryManager<T>
             // saved activation per segment boundary. Inlined from the deleted AiDotNet.Autodiff helper (the
             // arithmetic is sound and independent of that broken class): A*(s + ceil(n/s)), minimised at
             // s = sqrt(n) to the familiar 2*A*sqrt(n).
-            int segmentSize = Config.CheckpointEveryNLayers;
+            int segmentSize = Math.Max(1, Config.CheckpointEveryNLayers);
             int numSegments = (numLayers + segmentSize - 1) / segmentSize;
-            estimate.WithCheckpointing = (segmentSize * activationSizeBytes) + (numSegments * activationSizeBytes);
+            int peakSegmentLength = Math.Min(segmentSize, numLayers);
+            estimate.WithCheckpointing = ((long)peakSegmentLength + numSegments) * activationSizeBytes;
         }
         else
         {
