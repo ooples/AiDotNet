@@ -473,6 +473,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // <double>. <float> halves per-step cost. (DocumentNNModelTestBase was made generic over T so this
         // float entry compiles as DocumentNNModelTestBase<float>.)
         "UDOP",
+        // --- Video-LLaVA family (paper rebuild, #1789): every one is a foundation-scale video VLM
+        // (per-frame ViT + temporal aggregation + LLM decoder, VisionDim 1024 / 24+32 layers under
+        // paper defaults) that OOMs the 16 GB runner at <double>. <float> halves the activation +
+        // weight footprint; each also gets a CI-smoke constructorExpr (below) that shrinks the test
+        // instance to a memory-feasible scale while keeping the paper architecture + defaults intact.
+        // The dedicated per-paper builders (residual ViT/LLM + the model's own temporal mechanism)
+        // replace the shared non-residual builder that collapsed to input-independent output.
+        "VideoLLaVA", "LongVILA", "PLLaVA", "LLaVANeXTVideo", "LLaVAVideo",
+        "SlowFastLLaVA", "VideoChat2", "VideoLLaMA2", "VideoLLaMA3",
         // SVTR (Du 2022) — scene-text recognizer: conv patch-embed (2x stride-2) -> token-sequence
         // mixing transformer (8 blocks, embed 192) -> CTC head. Now that training is a real tape +
         // Adam step (was a no-op manual SGD) with a tape-aware conv-backward, one <double> CPU step on
@@ -2827,7 +2836,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
                     "tokenizer: null, numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 32, " +
                     "numEncoderLayers: 2, numDecoderLayers: 2, numHeads: 4, vocabSize: 64)";
             }
@@ -3012,6 +3021,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "imageSize: 112, channels: 3, patchSize: 14, vocabularySize: 32, " +
                     "maxSequenceLength: 16, embeddingDimension: 32, visionHiddenDim: 32, " +
                     "numVisionLayers: 2, numLmLayers: 2, numHeads: 4)";
+            }
+            else if (model.ClassName == "VideoLLaVA" && model.TypeParameterCount == 1)
+            {
+                // Video-LLaVA (Lin et al. 2024, arXiv:2311.10122): LanguageBind per-frame residual ViT ->
+                // shared LINEAR projection -> residual LLM (no separate temporal transformer).
+                // Foundation-scale defaults (VisionDim 1024 / 24+32 layers) OOM; build the SAME
+                // architecture at CI-smoke width/depth. Temporal-video InputShape is [4,3,32,32]
+                // (4 frames), so the FourDimensional architecture's InputHeight=32 sets ImageSize=32
+                // (patchSize 16 -> 2x2 patches/frame). Real defaults stay paper-scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.VideoLanguage.VideoLLaVAOptions { VisionDim = 32, " +
+                    "DecoderDim = 32, NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, " +
+                    "VocabSize = 32, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "LongVILA" && model.TypeParameterCount == 1)
+            {
+                // LongVILA / VILA (Xue et al. 2024, arXiv:2408.10188): image-video joint residual ViT ->
+                // LINEAR projector -> residual LLM. Same CI-smoke shrink + [4,3,32,32] video input.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.VideoLanguage.LongVILAOptions { VisionDim = 32, " +
+                    "DecoderDim = 32, NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, " +
+                    "VocabSize = 32, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "JambaLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -3305,7 +3342,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
                     "numFeatures: 32, memorySize: 8)";
             }
             else if (model.ClassName == "VideoMAE" && model.TypeParameterCount == 1)
@@ -3441,7 +3478,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
                     "new AiDotNet.VisionLanguage.InstructionTuned.InternVL25Options { VisionDim = 32, " +
                     "DecoderDim = 32, ProjectionDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
                     "NumHeads = 2, ImageSize = 32, MaxVisualTokens = 4 })";
@@ -3460,7 +3497,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
                     "new AiDotNet.VisionLanguage.Encoders.CLIPAOptions { ImageSize = 32, PatchSize = 8, " +
                     "VisionEmbeddingDim = 32, NumVisionLayers = 1, NumVisionHeads = 2, " +
                     "TextEmbeddingDim = 32, NumTextLayers = 1, ProjectionDim = 32 })";
