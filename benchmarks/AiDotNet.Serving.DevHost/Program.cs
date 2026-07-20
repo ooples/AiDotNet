@@ -35,6 +35,32 @@ else
     Console.WriteLine($"[DevHost] CPU engine ({AiDotNetEngine.Current.GetType().Name}).");
 }
 
+// Profiling mode: DEVHOST_PROFILE=<gguf-path> runs a steady-state forward loop (NO web server) so a sampler
+// (dotnet-trace / PerfView) can capture the real GGUF decoder's CPU hot paths + allocations. The engine is
+// whatever was selected above (DEVHOST_GPU). Loops the 128-token prefill forward (constant shape = clean
+// steady state; it is the per-forward hot path both prefill and the stateless decode share). Runs until killed.
+string? profileGguf = Environment.GetEnvironmentVariable("DEVHOST_PROFILE");
+if (!string.IsNullOrWhiteSpace(profileGguf))
+{
+    if (!File.Exists(profileGguf)) { Console.Error.WriteLine($"[Profile] GGUF not found: {profileGguf}"); return; }
+    int profLen = int.TryParse(Environment.GetEnvironmentVariable("DEVHOST_PROFILE_LEN"), out var pl) && pl > 0 ? pl : 128;
+    Console.WriteLine($"[Profile] loading {profileGguf} (prefill len={profLen}, engine={AiDotNetEngine.Current.GetType().Name})");
+    var (profModel, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(profileGguf);
+    var profInput = new Tensor<float>(new[] { 1, profLen });
+    for (int i = 0; i < profLen; i++) profInput[0, i] = (i % 100) + 5;
+    Console.WriteLine("[Profile] warmup (compile kernels / JIT)...");
+    for (int w = 0; w < 3; w++) _ = profModel.Predict(profInput).Contiguous().AsSpan()[0];
+    Console.WriteLine("[Profile] steady-state loop — attach dotnet-trace to this PID, then kill to stop.");
+    long profIter = 0;
+    var profSw = System.Diagnostics.Stopwatch.StartNew();
+    while (true)
+    {
+        _ = profModel.Predict(profInput).Contiguous().AsSpan()[0];
+        if (++profIter % 20 == 0)
+            Console.WriteLine($"[Profile] {profIter} forwards, {profIter * profLen / profSw.Elapsed.TotalSeconds:F0} tok/s");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // DEV/BENCHMARK host. Wires the REAL OpenAI controller + generation engine +
 // tokenizer registry, with NO auth/DB, plus a SYNTHETIC generative model, so

@@ -114,6 +114,20 @@ public sealed class GgufModelSource : INamedTensorSource, IDisposable
         throw new ArgumentException($"Tensor '{name}' is not present in this GGUF model.", nameof(name));
     }
 
+    /// <summary>
+    /// Reads a directly-mapped tensor's native Q8_0 blocks (int8 payload + one fp32 scale per 32-value
+    /// block) WITHOUT dequantizing, resolving the Hugging-Face <paramref name="hfName"/> to its GGUF name.
+    /// Returns <c>false</c> for non-Q8_0 tensors and for stacked expert slices (which are not directly
+    /// mapped). Lets the builder keep frozen linear weights quantized for a block-Q8_0 GEMM.
+    /// </summary>
+    public bool TryReadQ8_0(string hfName, out sbyte[] qs, out float[] scales)
+    {
+        qs = System.Array.Empty<sbyte>();
+        scales = System.Array.Empty<float>();
+        if (hfName is null) return false;
+        return _hfToGguf.TryGetValue(hfName, out var ggufName) && _file.TryReadQ8_0Raw(ggufName, out qs, out scales);
+    }
+
     // Reads one expert's weight as the index-th of `count` equal slices of the stacked GGUF expert tensor.
     // GGUF lays the stack out expert-major (ne = [in, out, n_expert]), so slice e is a contiguous run whose
     // shape/layout matches a standalone GGUF expert weight — the builder applies its own [out,in] transpose.

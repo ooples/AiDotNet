@@ -441,38 +441,73 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             Engine.Reshape(V_flat, new[] { batchSize, seqLen, _numKVHeads, _headDimension }),
             new[] { 0, 2, 1, 3 });
 
-        // Apply RoPE to Q and K (before KV head expansion)
-        if (_ropeLayer != null)
+        Tensor<T> context;
+        if (!cacheBwd && _alibiLayer == null)
         {
-            (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
+            // ── Inference fast path ──────────────────────────────────────────────
+            // Fused interleaved RoPE + GQA-aware scaled-dot-product attention, both
+            // dispatched to the device engine (float-specialized CPU / GPU kernels).
+            // This eliminates the two dominant CPU self-time costs on the decoder
+            // forward: the managed RoPE rotate loop (RotateTensor) and the scalar
+            // ExpandKVHeads copy. The SDPA kernel broadcasts the shared KV heads
+            // internally, so no expanded [batch, numHeads, seq, headDim] K/V is ever
+            // materialized. Numerically identical to the training path below:
+            //   - ApplyRoPEInterleaved matches RotateTensor exactly (GPT-J/GGML 2i,2i+1)
+            //   - ScaledDotProductAttentionGqa uses scale = 1/sqrt(headDim), the same
+            //     causal offset (key j visible to query i iff j <= i + (seqK - seqQ)),
+            //     and the same attn-logit soft-cap.
+            // Only taken outside training (no backward caches / no tape) and without
+            // ALiBi (which needs the additive-bias FlashAttention path).
+            if (_ropeLayer != null)
+            {
+                var (cosCache, sinCache) = _ropeLayer.GetInterleavedCaches(seqLen);
+                queries = Engine.ApplyRoPEInterleaved(queries, cosCache, sinCache, startPosition: 0);
+                keys = Engine.ApplyRoPEInterleaved(keys, cosCache, sinCache, startPosition: 0);
+            }
+
+            context = Engine.ScaledDotProductAttentionGqa(
+                queries, keys, values,
+                scale: 1.0 / Math.Sqrt(_headDimension),
+                isCausal: _useCausalMask,
+                softcap: _attnLogitSoftcap);
         }
-
-        _lastProjectedQueries = cacheBwd ? queries : null;
-        _lastProjectedKeys = cacheBwd ? keys : null;
-        _lastProjectedValues = cacheBwd ? values : null;
-
-        // Expand K/V heads to match Q heads via repeat
-        var expandedKeys = ExpandKVHeads(keys, batchSize, seqLen);
-        var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
-
-        _lastExpandedKeys = cacheBwd ? expandedKeys : null;
-        _lastExpandedValues = cacheBwd ? expandedValues : null;
-
-        // Compute attention with weights caching: [batch, numHeads, seqQ, seqKV]
-        // The attention-logit soft-cap flows only through the standard fused SDPA path; the ALiBi
-        // FlashAttention path has no soft-cap parameter, so reject the (never-faithful) combination
-        // rather than silently dropping the cap.
-        if (_alibiLayer != null && _attnLogitSoftcap > 0.0)
+        else
         {
-            throw new InvalidOperationException(
-                "attnLogitSoftcap is not supported together with ALiBi positional bias; " +
-                "the soft-cap applies only to the standard scaled dot-product attention path.");
-        }
-        var (context, attentionWeights) = _alibiLayer != null
-            ? ComputeALiBiAttention(queries, expandedKeys, expandedValues, seqLen, batchSize)
-            : ComputeStandardAttentionWithWeights(queries, expandedKeys, expandedValues);
+            // ── Training / ALiBi path (tape-recorded, manual-backward caches) ─────
+            // Apply RoPE to Q and K (before KV head expansion)
+            if (_ropeLayer != null)
+            {
+                (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
+            }
 
-        _lastAttentionWeights = cacheBwd ? attentionWeights : null;
+            _lastProjectedQueries = cacheBwd ? queries : null;
+            _lastProjectedKeys = cacheBwd ? keys : null;
+            _lastProjectedValues = cacheBwd ? values : null;
+
+            // Expand K/V heads to match Q heads via repeat
+            var expandedKeys = ExpandKVHeads(keys, batchSize, seqLen);
+            var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
+
+            _lastExpandedKeys = cacheBwd ? expandedKeys : null;
+            _lastExpandedValues = cacheBwd ? expandedValues : null;
+
+            // Compute attention with weights caching: [batch, numHeads, seqQ, seqKV]
+            // The attention-logit soft-cap flows only through the standard fused SDPA path; the ALiBi
+            // FlashAttention path has no soft-cap parameter, so reject the (never-faithful) combination
+            // rather than silently dropping the cap.
+            if (_alibiLayer != null && _attnLogitSoftcap > 0.0)
+            {
+                throw new InvalidOperationException(
+                    "attnLogitSoftcap is not supported together with ALiBi positional bias; " +
+                    "the soft-cap applies only to the standard scaled dot-product attention path.");
+            }
+            var (ctx, attentionWeights) = _alibiLayer != null
+                ? ComputeALiBiAttention(queries, expandedKeys, expandedValues, seqLen, batchSize)
+                : ComputeStandardAttentionWithWeights(queries, expandedKeys, expandedValues);
+
+            _lastAttentionWeights = cacheBwd ? attentionWeights : null;
+            context = ctx;
+        }
 
         // Reshape back: [batch, numHeads, seq, headDim] -> [batch, seq, embDim]
         var contextPermuted = Engine.TensorPermute(context, new[] { 0, 2, 1, 3 });

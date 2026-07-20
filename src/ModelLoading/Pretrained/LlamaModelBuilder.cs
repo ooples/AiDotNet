@@ -186,6 +186,22 @@ public static class LlamaModelBuilder<T>
         var wInOut = TransposeOutInToInOut(weights, name, outDim, inDim);
         var full = Concat(wInOut, new T[outDim]); // trailing zeros = bias
         dense.SetParameters(new Vector<T>(full));
+        InstallQ8IfAvailable(dense, weights, name, outDim, inDim);
+    }
+
+    // If the source is a GGUF file whose weight is stored Q8_0 and this is a float model, install the native
+    // Q8_0 blocks on the layer so inference runs the block-Q8_0 GEMM directly on int8 (no fp32 expansion).
+    // GGUF's native Q8_0 linear layout is [out, in] with 32-value blocks contiguous along `in` — exactly the
+    // block-Q8_0 kernel's expected [N, K] layout, so no transpose is applied. The fp32 weights loaded above
+    // stay as the training/serialization source of truth.
+    private static void InstallQ8IfAvailable(DenseLayer<T> dense, INamedTensorSource weights, string name, int outDim, int inDim)
+    {
+        if (typeof(T) != typeof(float)) return;
+        if ((inDim % 32) != 0) return;
+        if (weights is not GgufModelSource gguf) return;
+        if (!gguf.TryReadQ8_0(name, out var qs, out var scales)) return;
+        if (qs.Length != (long)outDim * inDim || scales.Length != (long)outDim * (inDim / 32)) return;
+        dense.SetQuantizedWeightsQ8_0(qs, scales, inDim, outDim);
     }
 
     // Reads a bias tensor if present, otherwise returns a zero vector of the given length.

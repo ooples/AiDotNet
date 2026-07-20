@@ -264,6 +264,38 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T>? _fusedLinearScratch;
 
+    // Q8_0 quantized weight (llama.cpp / ggml native layout: weight kept int8 [out,in] with one fp32
+    // scale per 32-element block along the contraction dim). Populated for frozen GGUF inference weights
+    // via SetQuantizedWeightsQ8_0; when present (and running float inference off the tape) Forward runs the
+    // block-Q8_0 GEMM instead of expanding to fp32 — ~3.76× less weight memory + int8 dot throughput.
+    private sbyte[]? _weightsQ8;
+    private float[]? _weightScalesQ8;
+    private int _q8In;
+    private int _q8Out;
+
+    /// <summary>
+    /// Installs a frozen Q8_0 quantized weight for inference. <paramref name="qs"/> is the native ggml
+    /// Q8_0 int8 payload for a weight logically shaped [outFeatures, inFeatures] (blocks of 32 contiguous
+    /// along inFeatures); <paramref name="scales"/> holds one fp32 scale per block. inFeatures must be a
+    /// multiple of 32. The fp32 <c>_weights</c> stay as the training/serialization source of truth; the
+    /// quantized copy is used only on the float inference forward path.
+    /// </summary>
+    public void SetQuantizedWeightsQ8_0(sbyte[] qs, float[] scales, int inFeatures, int outFeatures)
+    {
+        if (qs is null) throw new ArgumentNullException(nameof(qs));
+        if (scales is null) throw new ArgumentNullException(nameof(scales));
+        if (inFeatures <= 0 || (inFeatures % 32) != 0)
+            throw new ArgumentException($"inFeatures ({inFeatures}) must be a positive multiple of 32 for Q8_0.", nameof(inFeatures));
+        if (qs.Length != (long)inFeatures * outFeatures)
+            throw new ArgumentException($"qs length {qs.Length} != inFeatures*outFeatures {(long)inFeatures * outFeatures}.");
+        if (scales.Length != (long)outFeatures * (inFeatures / 32))
+            throw new ArgumentException($"scales length {scales.Length} != outFeatures*(inFeatures/32) {(long)outFeatures * (inFeatures / 32)}.");
+        _weightsQ8 = qs;
+        _weightScalesQ8 = scales;
+        _q8In = inFeatures;
+        _q8Out = outFeatures;
+    }
+
     // GPU-resident cached tensors for GPU training pipeline
     private Tensor<T>? _lastInputGpu;
     private Tensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
@@ -1045,7 +1077,32 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> result;
 
-        if (fusedActivation != FusedActivationType.None && !IsTrainingMode && !DeterministicForward)
+        // Q8_0 quantized-weight inference fast path: run the block-Q8_0 GEMM directly on the int8 weight
+        // (llama.cpp / ggml_vec_dot_q8_0_q8_0), never expanding it to fp32. Float inference only, off the
+        // gradient tape — training/serialization still use the fp32 _weights.
+        // The naive block-Q8_0 kernel is memory-bandwidth-bound: it beats fp32 BLAS at small M (decode /
+        // small batch, where each weight byte is read once) but loses at large M (prefill, where the weight
+        // is reused across many rows and the fp32 GEMM is compute-bound + register-tiled). Gate on M so the
+        // quantized path is only taken where it is faster; large-M prefill stays on fp32 until the int8 GEMM
+        // is register-tiled.
+        const int q8MaxRowsForNaiveKernel = 16;
+        if (_weightsQ8 is not null && _weightScalesQ8 is not null
+            && !IsTrainingMode && !DeterministicForward
+            && typeof(T) == typeof(float)
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+            && _q8In == inputSize
+            && batchDim <= q8MaxRowsForNaiveKernel)
+        {
+            int mM = batchDim, kK = _q8In, nN = _q8Out;
+            var inF = (float[])(object)flattenedInput.ToArray();
+            var outArr = new float[mM * nN];
+            AiDotNet.Tensors.Engines.Simd.Q8BlockGemm.MatMul(inF, _weightsQ8, _weightScalesQ8, outArr, mM, kK, nN);
+            var linear = (Tensor<T>)(object)new Tensor<float>(outArr, [mM, nN]);
+            // Bias + activation epilogue (matches the unfused training path's math).
+            var biased = Engine.TensorBroadcastAdd(linear, Engine.Reshape(_biases, [1, nN]));
+            result = ApplyActivation(biased);
+        }
+        else if (fusedActivation != FusedActivationType.None && !IsTrainingMode && !DeterministicForward)
         {
             // Inference: use fused activation for maximum performance (no tape needed). This whole
             // fast block is gated above on !DeterministicForward, so when DeterministicForward is set
