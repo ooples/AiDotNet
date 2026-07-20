@@ -863,9 +863,40 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         }
     }
 
+    // Decode projection: output[outDim] = mat[outDim, inDim] · vec[inDim]. This runs 7× per layer per token
+    // (q/k/v/o + FFN) on the critical decode path, so the inner dot is vectorized with AVX2 FMA (8 lanes)
+    // instead of a scalar loop — the scalar version was the dominant decode cost. net471 uses the scalar tail.
+#if NET5_0_OR_GREATER
     private static void MatVecMul(ReadOnlySpan<float> vec, ReadOnlySpan<float> mat, Span<float> output, int inDim, int outDim)
     {
-        output.Clear();
+        int w = System.Numerics.Vector<float>.Count;
+        if (inDim < w)
+        {
+            MatVecMulScalar(vec, mat, output, inDim, outDim);
+            return;
+        }
+        for (int i = 0; i < outDim; i++)
+        {
+            var row = mat.Slice(i * inDim, inDim);
+            var acc = System.Numerics.Vector<float>.Zero;
+            int j = 0;
+            for (; j <= inDim - w; j += w)
+            {
+                acc += new System.Numerics.Vector<float>(vec.Slice(j, w))
+                     * new System.Numerics.Vector<float>(row.Slice(j, w));
+            }
+            float sum = System.Numerics.Vector.Dot(acc, System.Numerics.Vector<float>.One);
+            for (; j < inDim; j++) sum += vec[j] * row[j];
+            output[i] = sum;
+        }
+    }
+#else
+    private static void MatVecMul(ReadOnlySpan<float> vec, ReadOnlySpan<float> mat, Span<float> output, int inDim, int outDim)
+        => MatVecMulScalar(vec, mat, output, inDim, outDim);
+#endif
+
+    private static void MatVecMulScalar(ReadOnlySpan<float> vec, ReadOnlySpan<float> mat, Span<float> output, int inDim, int outDim)
+    {
         for (int i = 0; i < outDim; i++)
         {
             float sum = 0;
