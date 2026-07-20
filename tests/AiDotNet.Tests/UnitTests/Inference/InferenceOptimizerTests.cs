@@ -302,7 +302,6 @@ public class InferenceOptimizerTests
             input[i] = ((i % 13) - 6) / 6.0f;
         }
 
-        // Capture the reference output BEFORE optimization so an in-place rewrite still yields a valid baseline.
         var baseline = model.Predict(input);
 
         var config = new InferenceOptimizationConfig
@@ -314,7 +313,9 @@ public class InferenceOptimizerTests
         };
 
         var optimizer = new InferenceOptimizer<float>(config);
-        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+        // cloneModel: true is the serving path (ServableModelWrapper.BuildIncrementalModel clones), which
+        // requires PreLNTransformerBlock + its nested GQA to round-trip through serialize/deserialize.
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
 
         // The GQA was rewritten onto the paged path, and the paged KV cache is live (incremental-generation ready).
         Assert.True(anyApplied);

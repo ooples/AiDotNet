@@ -2116,6 +2116,47 @@ public static class DeserializationHelper
                 cfgMethod?.Invoke(instance, new object[] { peG, ropeThetaG, seqLen });
             }
         }
+        else if (genericDef.Name == "PreLNTransformerBlock`1")
+        {
+            // (int hiddenSize, int ffnDim, LayerBase<T> attention, IActivationFunction<T>? ffnActivation, bool gated).
+            // The ctor rebuilds the RMSNorms + FFN from hiddenSize/ffnDim/gated/ffnActivation; only the injected
+            // (polymorphic) attention sublayer must round-trip, so PreLNTransformerBlock.GetMetadata persists it
+            // as an "Attn."-prefixed sub-blob (type + its own metadata + shapes) which we rebuild recursively.
+            int hsPln = TryGetInt(additionalParams, "HiddenSize")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'HiddenSize' metadata.");
+            int ffPln = TryGetInt(additionalParams, "FfnDim")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
+            bool gatedPln = TryGetBool(additionalParams, "Gated") ?? false;
+            var activationFuncTypePln = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? ffnActivationPln = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncTypePln);
+
+            string? attnTypePlnRaw = additionalParams != null && additionalParams.TryGetValue("Attn.LayerType", out var atObj)
+                ? atObj?.ToString() : null;
+            if (attnTypePlnRaw is null || attnTypePlnRaw.Length == 0)
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'Attn.LayerType' metadata to rebuild its attention sublayer.");
+            string attnTypePln = attnTypePlnRaw;
+            int[] attnInPln = TryGetIntArray(additionalParams, "Attn.InputShape") ?? inputShape;
+            int[] attnOutPln = TryGetIntArray(additionalParams, "Attn.OutputShape") ?? outputShape;
+            var attnParamsPln = new Dictionary<string, object>();
+            if (additionalParams != null)
+            {
+                foreach (var kv in additionalParams)
+                {
+                    if (kv.Key.Length > 5 && kv.Key.StartsWith("Attn.", StringComparison.Ordinal)
+                        && kv.Key != "Attn.LayerType" && kv.Key != "Attn.InputShape" && kv.Key != "Attn.OutputShape")
+                    {
+                        attnParamsPln[kv.Key.Substring(5)] = kv.Value;
+                    }
+                }
+            }
+            var attnLayerPln = CreateLayerFromType<T>(attnTypePln, attnInPln, attnOutPln, attnParamsPln) as LayerBase<T>
+                ?? throw new InvalidOperationException(
+                    $"{genericDef.Name}: rebuilt attention '{attnTypePln}' is not a LayerBase<T>.");
+
+            instance = new NeuralNetworks.Layers.PreLNTransformerBlock<T>(
+                hsPln, ffPln, attnLayerPln, (IActivationFunction<T>?)ffnActivationPln, gatedPln);
+        }
         else if (genericDef.Name == "MesaNetLayer`1")
         {
             // (sequenceLength, modelDimension, numHeads, regularization, IActivation, IInitStrategy)
