@@ -1011,6 +1011,10 @@ internal class InferenceOptimizer<T>
                 yield return decoderBlock.SelfAttentionLayer;
                 yield return decoderBlock.CrossAttentionLayer;
             }
+            // LLaMA / GGUF decoders host their (grouped-query) attention inside PreLNTransformerBlock, so every
+            // KV-cache / detection / quantization scan must reach it too — not just the top-level layer.
+            else if (layer is PreLNTransformerBlock<T> preLnBlock)
+                yield return preLnBlock.AttentionLayer;
         }
     }
 
