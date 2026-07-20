@@ -94,6 +94,72 @@ public class IncrementalGenerationEndToEndTests
         Assert.Equal(new[] { 1, 2, 3 }, resp.AllTokens[..3]);
     }
 
+    /// <summary>
+    /// A grouped-query (numHeads &gt; numKVHeads) PreLN decoder served through ServableModelWrapper must build
+    /// the paged KV-cached incremental path — the end-to-end proof that the paged-GQA support (GQA-aware kernel
+    /// + narrow-K/V paged layer + optimizer rewrite + PreLNTransformerBlock/GQA cloning) actually engages in
+    /// serving. Before it, BuildIncrementalModel's clone threw and the wrapper silently fell back to the
+    /// stateless path (SupportsIncrementalGeneration was false for every LLaMA/GGUF-style decoder).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ServedGqaDecoder_BuildsIncrementalPagedPath_AndGenerates()
+    {
+        await Task.Yield();
+        var model = BuildGqaLm();
+        var wrapper = new ServableModelWrapper<float>(
+            "gqa", model, inputShape: new[] { 1 }, generationForward: model.Predict);
+        var repo = new OneModelRepo("gqa", wrapper);
+        var service = new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance);
+
+        Assert.True(wrapper.SupportsIncrementalGeneration,
+            "wrapper should build the paged KV-cached incremental path for a grouped-query PreLN decoder");
+
+        var resp = service.Generate("gqa", NumericType.Float, Req(new[] { 1, 2, 3 }));
+
+        Assert.Null(resp.Error);
+        Assert.Equal(5, resp.NumGenerated);
+        Assert.All(resp.GeneratedTokens, t => Assert.InRange(t, 0, Vocab - 1));
+    }
+
+    private static NeuralNetwork<float> BuildGqaLm()
+    {
+        const int numHeads = 4;
+        const int numKVHeads = 2;
+        const int ffnDim = 16;
+
+        var gqa = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: 1,
+            embeddingDimension: EmbDim,
+            numHeads: numHeads,
+            numKVHeads: numKVHeads,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>(),
+            useCausalMask: true);
+        gqa.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta: 10000.0, maxSequenceLength: 512);
+
+        var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new EmbeddingLayer<float>(Vocab, EmbDim),
+            new PreLNTransformerBlock<float>(hiddenSize: EmbDim, ffnDim: ffnDim, attention: gqa, gated: true),
+            new RMSNormalizationLayer<float>(),
+            new DenseLayer<float>(Vocab, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.TextGeneration,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1,
+            outputSize: Vocab,
+            layers: layers);
+
+        var model = new NeuralNetwork<float>(architecture);
+        var p = model.GetParameters();
+        var det = new float[p.Length];
+        for (int i = 0; i < det.Length; i++) det[i] = ((i % 17) - 8) / 16.0f;
+        model.UpdateParameters(new Vector<float>(det));
+        return model;
+    }
+
     [Fact(Timeout = 120000)]
     public async Task StructuredConstraint_IsHonored_OnIncrementalPagedPath()
     {
