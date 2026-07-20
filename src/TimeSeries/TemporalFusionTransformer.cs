@@ -60,6 +60,9 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
     // Sinusoidal positional encoding [maxLen, hiddenSize] (replaces the LSTM scan).
     private Tensor<T> _positionalEncoding;
+    // Host-side copy of the (constant) positional encoding. The forward assembles the per-batch PE from it
+    // every step; indexing the tensor per element syncs the GPU batch*seq*dim times per forward.
+    private T[]? _positionalEncodingHost;
 
     // Variable selection (softmax-weighted feature combination).
     private GatedResidualNetwork<T> _vsnFeatureGrn; // processes embedded features
@@ -133,6 +136,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
         // Positional encoding for the full lookback window.
         _positionalEncoding = CreateSinusoidalPositionalEncoding(Math.Max(1, _options.LookbackWindow), d);
+        _positionalEncodingHost = _positionalEncoding.GetCpuData();
 
         // Variable selection GRNs.
         _vsnFeatureGrn = new GatedResidualNetwork<T>(d, d, d, seed: _random.Next());
@@ -348,10 +352,11 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         var emb = Engine.TensorMatMul(flatIn, _inputEmbeddingWeight); // [B*L, d]
         emb = Engine.TensorBroadcastAdd(emb, Engine.Reshape(_inputEmbeddingBias, [1, d]));
         var posData = new Vector<T>(batch * seq * d);
+        var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
         for (int bi = 0; bi < batch; bi++)
             for (int t = 0; t < seq; t++)
                 for (int j = 0; j < d; j++)
-                    posData[(bi * seq + t) * d + j] = _positionalEncoding[t * d + j];
+                    posData[(bi * seq + t) * d + j] = peHost[t * d + j];
         emb = Engine.TensorAdd(emb, new Tensor<T>([batch * seq, d], posData));
 
         // 2. Variable selection: softmax-gated combination of processed features.
