@@ -2423,6 +2423,33 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         int defaultTopK = 5);
 
     /// <summary>
+    /// Configures a dependency-free native ANN index (Flat / IVF / PQ / IVFPQ) implemented on the AiDotNet
+    /// Tensors fused-kernel stack, adapts it into a document store, and builds a dense retriever over it. This
+    /// is the self-contained replacement for the external FaissNet backend — no FAISS / MKL native dependency —
+    /// and dispatches to the GPU ANN kernels across all supported backends when <paramref name="useGpu"/> is set.
+    /// </summary>
+    /// <param name="indexType">Which native ANN structure to build (default exact Flat).</param>
+    /// <param name="vectorDimension">The embedding dimension (0 = inferred on first add).</param>
+    /// <param name="metric">Distance metric (default cosine).</param>
+    /// <param name="nlist">IVF coarse lists (IVF/IVFPQ only).</param>
+    /// <param name="nprobe">IVF lists probed per query (IVF/IVFPQ only).</param>
+    /// <param name="m">PQ subspaces (PQ/IVFPQ only; must divide the dimension).</param>
+    /// <param name="ksub">PQ sub-centroids per subspace (PQ/IVFPQ only).</param>
+    /// <param name="useGpu">When true, attaches the best available GPU backend so ANN ops use the fused kernels.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureNativeAnnIndex(
+        RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorIndexType indexType = RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorIndexType.Flat,
+        int vectorDimension = 0,
+        RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorMetric metric = RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorMetric.Cosine,
+        int nlist = 64,
+        int nprobe = 8,
+        int m = 8,
+        int ksub = 256,
+        bool useGpu = false,
+        int defaultTopK = 5);
+
+    /// <summary>
     /// Materializes a declarative RAG configuration into the builder's RAG components (chunking, embedding,
     /// document store + retriever, reranking, context compression).
     /// </summary>
