@@ -67,6 +67,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public List<ILayer<T>> Layers => _layers;
 
     /// <summary>
+    /// Moves the whole model — every layer's parameters and buffers — to the given device, the model-level
+    /// equivalent of PyTorch's <c>model.to(device)</c>. After <c>model.To(DeviceInfo.OpenCL())</c> the weights are
+    /// device-resident, so <see cref="Predict"/>/forward compute stays on that device (ops dispatch by where their
+    /// operand tensors live) with no per-call engine swap. Returns this model for fluent chaining.
+    /// </summary>
+    /// <param name="device">The target device (e.g. <c>DeviceInfo.Cuda(0)</c>, <c>DeviceInfo.OpenCL()</c>, <c>DeviceInfo.CPU</c>).</param>
+    public virtual NeuralNetworkBase<T> To(AiDotNet.Tensors.DeviceInfo device)
+    {
+        for (int i = 0; i < _layers.Count; i++)
+            (_layers[i] as Layers.LayerBase<T>)?.To(device);
+        return this;
+    }
+
+    /// <summary>
     /// Gets the collection of layers that make up this neural network (internal read-only access).
     /// </summary>
     /// <remarks>
