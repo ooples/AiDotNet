@@ -20765,33 +20765,48 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
 
-        // Mel spectrogram projection
+        // Log-mel spectrogram projection -> encoder hidden width. MT3 (Gardner et al., 2022)
+        // uses the T5.1.1 recipe (Raffel et al., 2020): there is no convolutional stem, the
+        // log-mel frames are linearly projected into the model dimension d_model before the
+        // transformer stack.
         yield return new DenseLayer<T>(encoderDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // T5-style encoder layers
+        // T5 encoder: a stack of RESIDUAL transformer blocks. Each TransformerEncoderLayer wraps
+        // self-attention and the position-wise feed-forward network in residual connections with
+        // LayerNorm (Vaswani et al., 2017, §3.1; Raffel et al., 2020). The residual paths are the
+        // load-bearing structural feature: an 8+8-layer stack WITHOUT residual connections washes
+        // the input out layer-by-layer, so gradient descent collapses the network to a uniform,
+        // input-independent output (the #1208/#1221 degenerate-solution failure mode). T5's FFN
+        // inner dimension is d_ff; the standard 4x expansion is used here.
+        int encoderFfnDim = encoderDim * 4;
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderDim * 4, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, encoderFfnDim, encoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Cross-attention decoder layers
-        for (int i = 0; i < numDecoderLayers; i++)
+        // Bridge encoder -> decoder width when the two differ. T5 keeps d_model equal across the
+        // encoder and decoder (so this is a no-op at the defaults), but the projection keeps the
+        // model fully customizable when a caller sets a distinct decoder width.
+        if (decoderDim != encoderDim)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (decoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(decoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
+        }
+
+        // T5 decoder stack: residual transformer blocks over the decoder hidden width. As in the
+        // encoder, residual connections preserve the propagated representation so the deep stack
+        // stays sensitive to its input after training.
+        int decoderFfnDim = decoderDim * 4;
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, decoderFfnDim, decoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Token prediction head
+        // Token prediction head: project the decoder hidden states to the MIDI-like event-token
+        // vocabulary logits.
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 
