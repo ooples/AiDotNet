@@ -140,6 +140,12 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     public int NumKVHeads => _numKVHeads;
 
     /// <summary>
+    /// Gets whether this layer adds separate learned biases to the Q/K/V projections (e.g. Qwen2-style).
+    /// Standard LLaMA-family models leave this off.
+    /// </summary>
+    public bool UsesProjectionBias => _useProjectionBias;
+
+    /// <summary>
     /// Gets the dimension of each attention head.
     /// </summary>
     public int HeadDimension => _headDimension;
