@@ -82,6 +82,10 @@ namespace AiDotNet.Rag.Benchmarks
             int ivfClusters = Math.Max(4, (int)Math.Sqrt(n));
             int ivfProbes = Math.Max(2, ivfClusters / 8);
 
+            // PQ needs dim % m == 0; dim=128 => m=8 (dsub=16). ksub is clamped to N internally.
+            const int pqM = 8;
+            int pqKsub = Math.Min(256, Math.Max(16, n / 4));
+
             var configs = new (string Name, Func<IVectorIndex<double>> Factory)[]
             {
                 ("Flat (exact)", () => new FlatIndex<double>(new CosineSimilarityMetric<double>())),
@@ -91,6 +95,20 @@ namespace AiDotNet.Rag.Benchmarks
                     () => new HNSWIndex<double>(new CosineSimilarityMetric<double>(), 16, 200, 50)),
                 ("LSH (tables=10, bits=12)",
                     () => new LSHIndex<double>(new CosineSimilarityMetric<double>(), 10, 12)),
+
+                // Native ANN stack (AnnVectorIndex over the AiDotNet.Tensors fused ANN kernels).
+                // These are the dependency-free replacement for FAISS; PQ/IVFPQ are only available here.
+                ("NativeAnn Flat (exact)",
+                    () => new AnnVectorIndex<double>(AnnVectorIndexType.Flat, Dim, AnnVectorMetric.Cosine)),
+                ($"NativeAnn IVF (nlist={ivfClusters}, nprobe={ivfProbes})",
+                    () => new AnnVectorIndex<double>(AnnVectorIndexType.Ivf, Dim, AnnVectorMetric.Cosine,
+                        nlist: ivfClusters, nprobe: ivfProbes)),
+                ($"NativeAnn PQ (m={pqM}, ksub={pqKsub})",
+                    () => new AnnVectorIndex<double>(AnnVectorIndexType.Pq, Dim, AnnVectorMetric.Cosine,
+                        m: pqM, ksub: pqKsub)),
+                ($"NativeAnn IVFPQ (nlist={ivfClusters}, nprobe={ivfProbes}, m={pqM}, ksub={pqKsub})",
+                    () => new AnnVectorIndex<double>(AnnVectorIndexType.IvfPq, Dim, AnnVectorMetric.Cosine,
+                        nlist: ivfClusters, nprobe: ivfProbes, m: pqM, ksub: pqKsub)),
             };
 
             foreach (var (name, factory) in configs)
