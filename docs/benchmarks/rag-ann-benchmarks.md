@@ -11,21 +11,22 @@ fast and runnable in CI or on a laptop.
 
 ## Scope note (what is actually measured)
 
-The original task referenced a native `AnnVectorIndex<T>` (Flat / IVF / PQ / IVFPQ)
-and a `VectorIndexDocumentStore`. **Those types do not exist in this worktree** at the
-benchmarked commit — the RAG vector-search surface present under
-`src/RetrievalAugmentedGeneration/VectorSearch/Indexes/` is:
+Two index families are measured on the same data:
 
-- `FlatIndex<T>` — exact brute-force search (used here as the recall ground truth)
-- `IVFIndex<T>` — inverted-file / coarse-quantization ANN (random-seed centroids)
-- `HNSWIndex<T>` — hierarchical navigable small-world graph ANN
-- `LSHIndex<T>` — random-projection locality-sensitive hashing ANN
+- The managed in-memory indexes under `src/RetrievalAugmentedGeneration/VectorSearch/Indexes/`:
+  `FlatIndex<T>` (exact — the recall ground truth), `IVFIndex<T>`, `HNSWIndex<T>`, `LSHIndex<T>`.
+- The **native `AnnVectorIndex<T>`** (Flat / IVF / PQ / IVFPQ) built on the dependency-free
+  `AiDotNet.Tensors` fused ANN kernels — the FaissNet replacement. **PQ / IVFPQ are only
+  available here** (the managed set has none).
 
-There is **no Product-Quantization (PQ) or IVFPQ** index in the codebase, so those
-columns are omitted rather than fabricated. Per the task constraints, no `src/` code
-was modified; the benchmark exercises the indexes exactly as shipped. The end-to-end
-retrieval suite runs through `InMemoryDocumentStore<T>` (which is HNSW-backed
-internally) since that is the concrete native/in-memory store available.
+The end-to-end retrieval suite runs through `InMemoryDocumentStore<T>` (HNSW-backed).
+
+> **Headline:** `NativeAnn IVF` reaches **recall@10 = 1.000** at **~54 µs p50 / 16.5k q/s**
+> (1k) — beating managed IVF (0.925) on both recall and latency, and `NativeAnn Flat` is
+> exact and faster than managed Flat. **However, `NativeAnn PQ`/`IVFPQ` recall is currently
+> poor (0.04–0.45)** — a real defect under the cosine (inner-product) metric, tracked for a
+> fix (see Interpretation). So the native stack already *exceeds* the managed indexes on the
+> Flat/IVF path, but the compressed PQ path is **not yet** competitive with FAISS PQ.
 
 ## Methodology
 
@@ -83,19 +84,27 @@ dim-128 dot products run on the managed CPU engine regardless).
 
 | Index | Recall@10 | Build+train (ms) | p50 (µs) | p95 (µs) | Throughput (q/s) |
 |-------|-----------|------------------|----------|----------|------------------|
-| Flat (exact) | 1.000 | 0.6 | 458.0 | 850.0 | 1,970 |
-| IVF (nlist=31, nprobe=3) | 0.925 | 58.5 | 100.3 | 163.4 | 8,999 |
-| HNSW (M=16, efC=200, efS=50) | 0.980 | 1434.1 | 120.7 | 206.7 | 7,739 |
-| LSH (tables=10, bits=12) | 0.802 | 25.1 | 31.4 | 41.9 | 30,419 |
+| Flat (exact) | 1.000 | 1.2 | 670.7 | 1749.5 | 1,169 |
+| IVF (nlist=31, nprobe=3) | 0.925 | 82.0 | 156.7 | 263.8 | 2,670 |
+| HNSW (M=16, efC=200, efS=50) | 0.980 | 2037.6 | 137.8 | 341.6 | 6,098 |
+| LSH (tables=10, bits=12) | 0.802 | 24.0 | 32.8 | 44.9 | 25,587 |
+| **NativeAnn Flat (exact)** | **1.000** | 22.9 | 399.4 | 592.9 | 947 |
+| **NativeAnn IVF (nlist=31, nprobe=3)** | **1.000** | 53.2 | **54.5** | 83.0 | **16,568** |
+| NativeAnn PQ (m=8, ksub=250) | 0.454 | 291.7 | 119.1 | 132.8 | 8,354 |
+| NativeAnn IVFPQ (nlist=31, nprobe=3, m=8, ksub=250) | 0.085 | 400.3 | 136.6 | 189.9 | 7,010 |
 
 ### N = 10,000 vectors, dim = 128
 
 | Index | Recall@10 | Build+train (ms) | p50 (µs) | p95 (µs) | Throughput (q/s) |
 |-------|-----------|------------------|----------|----------|------------------|
-| Flat (exact) | 1.000 | 14.4 | 6055.7 | 45357.5 | 75 |
-| IVF (nlist=100, nprobe=12) | 0.990 | 1464.7 | 1039.5 | 1801.5 | 627 |
-| HNSW (M=16, efC=200, efS=50) | 0.700 | 27842.4 | 323.8 | 383.9 | 2,329 |
-| LSH (tables=10, bits=12) | 0.817 | 263.9 | 171.6 | 374.4 | 2,013 |
+| Flat (exact) | 1.000 | 13.7 | 9901.8 | 15353.1 | 98 |
+| IVF (nlist=100, nprobe=12) | 0.990 | 856.1 | 1298.5 | 2899.6 | 670 |
+| HNSW (M=16, efC=200, efS=50) | 0.700 | 17176.7 | 254.1 | 552.7 | 3,294 |
+| LSH (tables=10, bits=12) | 0.817 | 90.4 | 155.0 | 269.1 | 5,795 |
+| **NativeAnn Flat (exact)** | **1.000** | 42.4 | 6137.4 | 11406.7 | 145 |
+| **NativeAnn IVF (nlist=100, nprobe=12)** | **1.000** | 1546.2 | **621.8** | 1110.3 | **1,217** |
+| NativeAnn PQ (m=8, ksub=256) | 0.143 | 3162.5 | 1007.5 | 1126.7 | 979 |
+| NativeAnn IVFPQ (nlist=100, nprobe=12, m=8, ksub=256) | 0.041 | 4684.6 | 504.1 | 579.8 | 1,968 |
 
 Ground truth is `FlatIndex` (recall 1.000 by definition). Recall figures are exactly
 reproducible; build/latency are single-run and noisy (see caveats).
@@ -107,7 +116,7 @@ docs, 5 labeled queries.
 
 | Recall@5 | Recall@10 | MRR | nDCG@10 | p50 (µs) | p95 (µs) |
 |----------|-----------|-----|---------|----------|----------|
-| 0.600 | 0.750 | 1.000 | 0.742 | 46.5 | 112.1 |
+| 0.600 | 0.750 | 1.000 | 0.742 | 19.6 | 42.2 |
 
 MRR = 1.000 means the single most-relevant document for every query ranked #1.
 Recall@10 = 0.750 reflects that with only 20 docs and topK=10, some of a topic's 4
@@ -117,10 +126,26 @@ not an index defect.
 
 ## Interpretation
 
+- **The native `AnnVectorIndex` Flat/IVF path leads the field measured here.**
+  `NativeAnn Flat` is exact (recall 1.000) and lower-latency than managed Flat
+  (399 vs 671 µs p50 @1k; 6.1 vs 9.9 ms @10k). `NativeAnn IVF` is the standout:
+  **recall 1.000 at 54 µs p50 / 16.5k q/s (1k)** and **1.000 at 622 µs / 1.2k q/s (10k)** —
+  higher recall *and* lower latency than the managed `IVFIndex` (0.925 / 0.990). This is the
+  dependency-free FaissNet replacement beating the prior in-house indexes.
+- **`NativeAnn PQ` / `IVFPQ` recall is currently a defect (0.04–0.45), not just lossy
+  compression.** Under the cosine (inner-product) metric the PQ codebooks are trained with
+  Lloyd's k-means whose assignment uses the metric but whose centroid update is the
+  Euclidean mean — consistent for L2, **inconsistent for inner product** — so on
+  L2-normalized vectors the sub-quantizers partition poorly and ADC ranking collapses
+  (IVFPQ at 10k ≈ 0.04, near-random). FAISS PQ reaches ~0.7–0.95 on comparable data, so
+  **this path does not yet meet — let alone exceed — the standard.** Fix direction: train PQ
+  codebooks under L2 even when the user selects cosine (for unit vectors L2-nearest ≡
+  cosine-nearest, making Lloyd's consistent), or use spherical k-means for the IP metric.
+  Tracked as a follow-up in `AiDotNet.Tensors` (`AnnIndex.TrainPq`).
 - **Recall / speed trade-off holds as expected.** Flat is exact but its per-query cost
-  grows linearly (throughput 1,970 → 75 q/s from 1k → 10k). LSH is the fastest per
-  query and cheapest to build, at the lowest recall (~0.80). IVF gives a strong
-  recall/latency balance (0.925–0.990) with moderate build cost.
+  grows linearly. LSH is the fastest per query and cheapest to build, at the lowest recall
+  (~0.80). Managed IVF gives a strong recall/latency balance (0.925–0.990) with moderate
+  build cost.
 - **HNSW recall regresses at 10k with default parameters** (0.980 at 1k → **0.700** at
   10k). With `efSearch=50` (the `InMemoryDocumentStore` default) the graph beam search
   does not recover enough of the true top-10 as the graph grows, and HNSW build is by

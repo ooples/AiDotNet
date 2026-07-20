@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -8,6 +9,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Ann;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -63,6 +65,23 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// simple incremental <see cref="IVectorIndex{T}"/> contract (Add / Remove / Search) correct over an index
     /// that is fundamentally train-then-populate.
     /// </para>
+    /// <para>
+    /// <b>Scale hardening — incremental add.</b> Discarding and retraining the whole ANN index on every mutation
+    /// is O(n) per query after any change. When the index is already built and either <see cref="AnnVectorIndexType.Flat"/>
+    /// or a trained IVF/PQ/IVFPQ index, and only <em>additions</em> (no removals, overwrites, GPU re-attach, or
+    /// dimension changes) have happened since the last build, the newly-added vectors are appended to the live
+    /// <see cref="AnnIndex"/> via <see cref="AnnIndex.Add(long, float[])"/> incrementally rather than rebuilt from
+    /// scratch — the trained quantizer / codebooks are reused. A removal (or the first build, or a not-yet-trained
+    /// index) forces a full rebuild. Ordinals stay contiguous and in insertion order, so the ordinal-to-id map and
+    /// the search results are equivalent to the original full-rebuild path.
+    /// </para>
+    /// <para>
+    /// <b>Scale hardening — persistence.</b> <see cref="Save(string)"/> / <see cref="Load(string)"/> serialize the
+    /// configuration plus the live vectors (id -&gt; float[]) and insertion order to JSON (Newtonsoft). Because
+    /// <see cref="AnnIndex"/> is not itself serializable, <see cref="Load(string)"/> reconstructs the adapter from
+    /// the persisted vectors and parameters; the deterministic seeded k-means makes the rebuilt index reproducible,
+    /// so a loaded index returns the same search results as the saved one.
+    /// </para>
     /// <para><b>For Beginners:</b> You just add and remove vectors by id and search — the training and rebuilding
     /// that IVF/PQ need happen automatically behind the scenes the first time you query after a change.</para>
     /// </remarks>
@@ -71,6 +90,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     [PipelineStage(PipelineStage.Retrieval)]
     public sealed class AnnVectorIndex<T> : IVectorIndex<T>
     {
+        private const int PersistenceVersion = 1;
+
         private readonly AnnVectorIndexType _type;
         private readonly AnnVectorMetric _metric;
         private readonly int _annMetric;      // AnnPrimitives.Metric* code
@@ -91,7 +112,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         private AnnIndex? _index;
         private List<string>? _ordinalToId;
         private bool _dirty = true;
+        // True when the next EnsureBuilt must discard and rebuild the AnnIndex from scratch (first build, a removal,
+        // a same-id overwrite, a GPU re-attach, or a dimension change). When false and the index is already built,
+        // pure additions are appended incrementally instead.
+        private bool _needsRebuild = true;
         private IDirectGpuBackend? _gpu;
+
+        /// <summary>Number of full (re)builds of the underlying <see cref="AnnIndex"/> performed so far. Test/telemetry hook.</summary>
+        internal int RebuildCount { get; private set; }
+
+        /// <summary>Number of vectors appended incrementally (without a full rebuild) so far. Test/telemetry hook.</summary>
+        internal int IncrementalAddCount { get; private set; }
 
         /// <inheritdoc/>
         public int Count => _vectors.Count;
@@ -146,12 +177,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// <summary>
         /// Attaches a GPU backend so search/training dispatch to the fused ANN kernels when available. Pass a
         /// backend from <c>DirectGpuBackendFactory.Create()</c>, or <c>null</c> to force the managed CPU path.
-        /// Takes effect on the next (re)build.
+        /// Takes effect on the next (re)build (forces a full rebuild).
         /// </summary>
         public void AttachGpu(IDirectGpuBackend? backend)
         {
             _gpu = backend;
             _dirty = true;
+            _needsRebuild = true;
         }
 
         /// <inheritdoc/>
@@ -163,7 +195,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             if (vector.Length != _dim)
                 throw new ArgumentException($"Vector dimension mismatch. Expected {_dim}, got {vector.Length}.", nameof(vector));
 
-            if (!_vectors.ContainsKey(id)) _order.Add(id);
+            if (_vectors.ContainsKey(id))
+            {
+                // Overwriting an existing (possibly already-indexed) vector: AnnIndex cannot update in place,
+                // so this must force a full rebuild to stay correct.
+                _needsRebuild = true;
+            }
+            else
+            {
+                _order.Add(id);
+            }
+
             _vectors[id] = ToFloat(vector);
             _dirty = true;
         }
@@ -182,6 +224,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             if (id == null || !_vectors.Remove(id)) return false;
             _order.Remove(id);
             _dirty = true;
+            _needsRebuild = true; // deletion is unsupported by AnnIndex; force a full rebuild.
             return true;
         }
 
@@ -193,6 +236,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             _index = null;
             _ordinalToId = null;
             _dirty = true;
+            _needsRebuild = true;
         }
 
         /// <inheritdoc/>
@@ -217,10 +261,31 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             return results;
         }
 
-        /// <summary>Lazily (re)builds the underlying <see cref="AnnIndex"/> from the live vectors after any mutation.</summary>
+        /// <summary>
+        /// Lazily (re)builds — or incrementally extends — the underlying <see cref="AnnIndex"/> from the live
+        /// vectors after any mutation.
+        /// </summary>
         private void EnsureBuilt()
         {
             if (_index != null && !_dirty) return;
+
+            // Fast path: the index is already built and trained and only additions happened since the last build.
+            // Append the new tail of the insertion order to the live AnnIndex, reusing the trained quantizer /
+            // codebooks instead of discarding and rebuilding from scratch. Because no removals have occurred, the
+            // already-indexed prefix of _order matches _ordinalToId one-to-one, so the new vectors take contiguous
+            // ordinals continuing from _ordinalToId.Count — exactly the ordinals a full rebuild would assign.
+            if (_index != null && _ordinalToId != null && !_needsRebuild)
+            {
+                for (int i = _ordinalToId.Count; i < _order.Count; i++)
+                {
+                    var id = _order[i];
+                    _index.Add(i, _vectors[id]);
+                    _ordinalToId.Add(id);
+                    IncrementalAddCount++;
+                }
+                _dirty = false;
+                return;
+            }
 
             var live = _order.Where(_vectors.ContainsKey).ToList();
             if (live.Count == 0 || _dim == 0)
@@ -228,6 +293,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 _index = null;
                 _ordinalToId = null;
                 _dirty = false;
+                _needsRebuild = true;
                 return;
             }
 
@@ -252,6 +318,84 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             _index = idx;
             _ordinalToId = ordinalToId;
             _dirty = false;
+            _needsRebuild = false;
+            RebuildCount++;
+        }
+
+        /// <summary>
+        /// Persists the index configuration, the live vectors (id -&gt; stored float[]) and their insertion order to
+        /// <paramref name="path"/> as JSON. The underlying <see cref="AnnIndex"/> is not serialized — it is
+        /// reconstructed deterministically by <see cref="Load(string)"/> from the persisted vectors and parameters.
+        /// </summary>
+        /// <param name="path">Destination file path.</param>
+        public void Save(string path)
+        {
+            if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path must be non-empty.", nameof(path));
+
+            // Canonicalize to a full-rebuild state so the persisted index and any freshly-loaded index share the
+            // exact same (fully retrained) ANN structure — guaranteeing Save/Load search-result equivalence even
+            // when the live index currently reflects an incremental-add history.
+            _needsRebuild = true;
+            _dirty = true;
+            EnsureBuilt();
+
+            var state = new PersistedState
+            {
+                Version = PersistenceVersion,
+                IndexType = (int)_type,
+                Metric = (int)_metric,
+                Dimension = _dim,
+                Nlist = _nlist,
+                Nprobe = _nprobe,
+                M = _m,
+                Ksub = _ksub,
+                Seed = _seed,
+                Order = new List<string>(_order),
+                Vectors = _order.Where(_vectors.ContainsKey).ToDictionary(id => id, id => _vectors[id])
+            };
+
+            var json = JsonConvert.SerializeObject(state, Formatting.Indented);
+            File.WriteAllText(path, json);
+        }
+
+        /// <summary>
+        /// Reconstructs an <see cref="AnnVectorIndex{T}"/> previously written by <see cref="Save(string)"/>. The
+        /// live vectors and configuration are restored and the underlying <see cref="AnnIndex"/> is rebuilt
+        /// deterministically on the first query, so the loaded index returns the same search results as the saved one.
+        /// </summary>
+        /// <param name="path">Source file path.</param>
+        public static AnnVectorIndex<T> Load(string path)
+        {
+            if (string.IsNullOrEmpty(path)) throw new ArgumentException("Path must be non-empty.", nameof(path));
+
+            var json = File.ReadAllText(path);
+            var state = JsonConvert.DeserializeObject<PersistedState>(json);
+            if (state == null) throw new InvalidOperationException($"Failed to deserialize AnnVectorIndex from '{path}'.");
+
+            var index = new AnnVectorIndex<T>(
+                (AnnVectorIndexType)state.IndexType,
+                state.Dimension,
+                (AnnVectorMetric)state.Metric,
+                state.Nlist,
+                state.Nprobe,
+                state.M,
+                state.Ksub,
+                state.Seed);
+
+            // Restore the live vectors directly (they are the already-processed stored float[], so do NOT re-run
+            // ToFloat/normalization) and the insertion order, then mark for a deterministic first-query rebuild.
+            var order = state.Order ?? new List<string>();
+            var vectors = state.Vectors ?? new Dictionary<string, float[]>();
+            foreach (var id in order)
+            {
+                if (!vectors.TryGetValue(id, out var vec) || vec == null) continue;
+                if (!index._vectors.ContainsKey(id)) index._order.Add(id);
+                index._vectors[id] = vec;
+            }
+
+            index._dirty = true;
+            index._needsRebuild = true;
+            return index;
         }
 
         private float[] ToFloat(Vector<T> vector)
@@ -279,5 +423,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         private T ToScore(float distance) => _annMetric == AnnPrimitives.MetricL2
             ? _numOps.FromDouble(1.0 / (1.0 + distance))
             : _numOps.FromDouble(distance);
+
+        /// <summary>JSON DTO for <see cref="Save(string)"/> / <see cref="Load(string)"/>.</summary>
+        private sealed class PersistedState
+        {
+            public int Version { get; set; }
+            public int IndexType { get; set; }
+            public int Metric { get; set; }
+            public int Dimension { get; set; }
+            public int Nlist { get; set; }
+            public int Nprobe { get; set; }
+            public int M { get; set; }
+            public int Ksub { get; set; }
+            public int Seed { get; set; }
+            public List<string>? Order { get; set; }
+            public Dictionary<string, float[]>? Vectors { get; set; }
+        }
     }
 }
