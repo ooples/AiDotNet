@@ -2976,6 +2976,43 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "{ SampleRate = 16000, NumMels = 64, EncoderDim = 32, NumEncoderLayers = 3, " +
                     "VocabSize = 4, DropoutRate = 0.0, SqueezeExcitationRatio = 8 })";
             }
+            else if (model.ClassName == "MT3" && model.TypeParameterCount == 1)
+            {
+                // MT3 (Gardner et al. 2022, arXiv:2111.03017) is a T5.1.1 "small" encoder-decoder
+                // (d_model=512, 8 encoder + 8 decoder residual transformer blocks, d_ff=2048,
+                // vocab 6000). A single paper-scale forward is multi-second, so the many-iteration
+                // MoreData probe (50+200 training steps over the 16-block stack) overruns the 120s
+                // gate. Build the SAME architecture (mel Dense projection -> residual
+                // TransformerEncoderLayer encoder + decoder -> vocab head) at CI-smoke width/depth/
+                // vocab; real-world defaults stay paper-scale (512 / 8+8 / vocab 6000) and fully
+                // options-driven. Raw-mel InputShape [1,32,32] is emitted by the isAudio branch.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "new AiDotNet.Audio.MusicAnalysis.MT3Options " +
+                    "{ SampleRate = 16000, NumMels = 32, EncoderDim = 32, NumEncoderLayers = 2, " +
+                    "DecoderDim = 32, NumDecoderLayers = 2, NumAttentionHeads = 2, VocabSize = 64, " +
+                    "DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "LLaVANeuralNetwork" && model.TypeParameterCount == 1)
+            {
+                // LLaVA (Liu et al. 2023, arXiv:2304.08485): CLIP ViT-L/14 vision encoder -> 2-layer
+                // GELU MLP projection -> LLM decoder. The generic fallback ctor builds it at paper
+                // scale (imageSize 336, 24 vision layers @1024-d, 32 LLM layers @4096-d, vocab 32000)
+                // ~= 7B params, which OOMs at fp64 for every generated invariant. Build the SAME
+                // architecture (patch-embed -> ViT encoder -> MLP projection -> token embedding ->
+                // transformer decoder -> LM + grounding heads) at CI-smoke width/depth/vocab via the
+                // fully-parameterized native ctor; real-world defaults stay paper-scale. imageSize 112
+                // is divisible by patchSize 14, matching GetVisionSpatialSize's [3,112,112] InputShape.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4), " +
+                    "imageSize: 112, channels: 3, patchSize: 14, vocabularySize: 32, " +
+                    "maxSequenceLength: 16, embeddingDimension: 32, visionHiddenDim: 32, " +
+                    "numVisionLayers: 2, numLmLayers: 2, numHeads: 4)";
+            }
             else if (model.ClassName == "JambaLanguageModel" && model.TypeParameterCount == 1)
             {
                 // Jamba's production default is a high-vocab hybrid LM head.

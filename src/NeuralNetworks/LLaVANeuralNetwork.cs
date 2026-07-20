@@ -1205,6 +1205,68 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     }
 
     /// <summary>
+    /// Exposes named intermediate activations along LLaVA's ACTUAL inference forward path
+    /// (CLIP-ViT vision encoder -> visual projection), mirroring <see cref="PredictCore"/> and
+    /// <see cref="ForwardForTraining"/>.
+    /// </summary>
+    /// <remarks>
+    /// The base implementation walks <c>Layers</c> strictly in order. For LLaVA that list is
+    /// [patch-embedding, vision encoder..., visual projection..., text-token-embedding,
+    /// language-model..., output-projection, grounding-head], so the sequential walk would feed the
+    /// dense projected visual features into the text <see cref="Layers.EmbeddingLayer{T}"/> (which
+    /// expects integer token ids, not a [seq, hidden] float tensor) — throwing — and would also force
+    /// lazy-allocation of the entire language-model decoder + vocab head, which this inference path
+    /// never touches (at paper scale that is a multi-billion-parameter stack that OOMs). We therefore
+    /// walk only the vision encoder -> projection path, exactly the tensors <see cref="PredictCore"/>
+    /// produces, so the reported activations stay consistent with Predict and remain non-empty.
+    /// We deliberately do NOT call the network-level <c>SetTrainingMode</c> here: on a foundation-scale
+    /// configuration that triggers the weight-streaming schedule to resolve every lazy layer (including
+    /// the unused LLM decoder), which OOMs. This method only reads activations, so leaving the layers'
+    /// mode untouched is safe.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        if (!_useNativeMode)
+        {
+            // ONNX mode has an empty native layer list; surface the vision-encoder and projected
+            // features so callers still receive non-empty, meaningful named activations.
+            var onnxFeatures = ExtractVisualFeatures(input);
+            activations["VisionEncoderOutput"] = onnxFeatures.Clone();
+            activations["ProjectedFeatures"] = ProjectToLanguageSpace(onnxFeatures).Clone();
+            return activations;
+        }
+
+        if (_patchEmbedding is null)
+            throw new InvalidOperationException("Patch embedding layer not initialized.");
+
+        var current = _patchEmbedding.Forward(input);
+        activations["PatchEmbedding"] = current.Clone();
+
+        if (_visionClsToken is not null)
+            current = PrependClsToken(current, _visionClsToken);
+        if (_visionPositionalEmbeddings is not null)
+            current = AddPositionalEmbeddings(current, _visionPositionalEmbeddings);
+        activations["VisionEmbeddings"] = current.Clone();
+
+        for (int i = 0; i < _visionEncoderLayers.Count; i++)
+        {
+            current = _visionEncoderLayers[i].Forward(current);
+            activations[$"VisionEncoderLayer_{i}_{_visionEncoderLayers[i].GetType().Name}"] = current.Clone();
+        }
+
+        for (int i = 0; i < _projectionLayers.Count; i++)
+        {
+            current = _projectionLayers[i].Forward(current);
+            activations[$"Projection_{i}_{_projectionLayers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <summary>
     /// Surfaces the CLS token and vision positional embeddings as trainable tensors that live OUTSIDE
     /// <c>Layers</c>, so the base tape training path watches and updates them alongside the layer weights.
     /// They are used directly (uncopied) in <see cref="PrependClsToken"/> / <see cref="AddPositionalEmbeddings"/>,
@@ -1393,6 +1455,107 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         writer.Write((int)_languageModelBackbone);
         writer.Write(_visionEncoderType);
         writer.Write(_useNativeMode);
+
+        // Persist the TRAINABLE state that lives OUTSIDE Layers: the CLS token and the vision/text
+        // positional tables. Clone() (all three paths — COW fallback, large layer-by-layer copy, and
+        // the serialize round-trip) transfers this model-level state ONLY through these hooks; the
+        // per-layer parameter copy does not cover it. Without persisting them the clone re-initialises
+        // these tensors from the fixed seed in InitializeWeights and diverges from the trained original
+        // (Clone_AfterTraining). The vision CLS + vision positional tables are also surfaced via
+        // GetExtraTrainableTensors, so the tape optimiser updates them during training — meaning their
+        // post-training values genuinely differ from the seed init and MUST be carried across a clone.
+        WriteTensor(writer, _visionClsToken);
+        WriteTensor(writer, _visionPositionalEmbeddings);
+        WriteMatrix(writer, _textPositionalEmbeddings);
+    }
+
+    private void WriteTensor(BinaryWriter writer, Tensor<T>? tensor)
+    {
+        if (tensor is null)
+        {
+            writer.Write(false);
+            return;
+        }
+
+        writer.Write(true);
+        var shape = tensor.Shape;
+        writer.Write(shape.Length);
+        for (int i = 0; i < shape.Length; i++)
+        {
+            writer.Write(shape[i]);
+        }
+
+        int length = tensor.Length;
+        writer.Write(length);
+        for (int i = 0; i < length; i++)
+        {
+            writer.Write(NumOps.ToDouble(tensor[i]));
+        }
+    }
+
+    private Tensor<T>? ReadTensor(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean())
+        {
+            return null;
+        }
+
+        int rank = reader.ReadInt32();
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++)
+        {
+            shape[i] = reader.ReadInt32();
+        }
+
+        int length = reader.ReadInt32();
+        var tensor = new Tensor<T>(shape);
+        for (int i = 0; i < length; i++)
+        {
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        return tensor;
+    }
+
+    private void WriteMatrix(BinaryWriter writer, Matrix<T>? matrix)
+    {
+        if (matrix is null)
+        {
+            writer.Write(false);
+            return;
+        }
+
+        writer.Write(true);
+        writer.Write(matrix.Rows);
+        writer.Write(matrix.Columns);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                writer.Write(NumOps.ToDouble(matrix[i, j]));
+            }
+        }
+    }
+
+    private Matrix<T>? ReadMatrix(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean())
+        {
+            return null;
+        }
+
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+        var matrix = new Matrix<T>(rows, columns);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                matrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+
+        return matrix;
     }
 
     /// <inheritdoc/>
@@ -1412,6 +1575,74 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         _ = reader.ReadInt32(); // languageModelBackbone (enum as int)
         _ = reader.ReadString(); // visionEncoderType
         _ = reader.ReadBoolean(); // useNativeMode
+
+        // Re-wire the role sub-lists (_patchEmbedding, _visionEncoderLayers, _projectionLayers, ...) to
+        // the freshly DESERIALIZED layer objects now sitting in Layers. Deserialization runs
+        // ClearLayers() and rebuilds Layers with NEW layer instances (carrying the trained weights),
+        // but the sub-list fields still reference the seed-initialised layers that CreateNewInstance()
+        // wired up. LLaVA's forward path (ExtractVisualFeaturesNative / ProjectToLanguageSpace / ...)
+        // reads those sub-lists directly, so without re-deriving them the clone would run the
+        // random-initialised layers while the trained weights sit unused in Layers — producing output
+        // uncorrelated with the trained original (Clone_AfterTraining). This mirrors the same
+        // distribution InitializeNativeLayers performs at construction.
+        RewireNativeSubLayersFromLayers();
+
+        // Restore the trained out-of-Layers state (CLS token + positional tables) written above,
+        // overwriting the seed-initialised tensors that CreateNewInstance() produced. This is what
+        // makes a clone (and a save/load round-trip) reproduce the trained model's predictions.
+        _visionClsToken = ReadTensor(reader);
+        _visionPositionalEmbeddings = ReadTensor(reader);
+        _textPositionalEmbeddings = ReadMatrix(reader);
+    }
+
+    /// <summary>
+    /// Re-derives the native-mode role sub-lists from the current <c>Layers</c> collection using the
+    /// exact ordering <see cref="InitializeNativeLayers"/> established at construction. Called after
+    /// deserialization (which replaces every layer instance in <c>Layers</c>) so the forward path runs
+    /// the trained/deserialized layers rather than the stale ones captured at construction time.
+    /// </summary>
+    private void RewireNativeSubLayersFromLayers()
+    {
+        if (!_useNativeMode || Layers.Count == 0)
+        {
+            return;
+        }
+
+        int expected = 1 /* patch embedding */
+            + _numVisionLayers
+            + 2 /* projection MLP */
+            + 1 /* text token embedding */
+            + _numLmLayers
+            + 1 /* output projection */
+            + 1 /* grounding head */;
+
+        // If the structure does not match (e.g. custom architecture supplied via Architecture.Layers),
+        // leave the sub-lists as they are rather than mis-assigning by index.
+        if (Layers.Count != expected)
+        {
+            return;
+        }
+
+        _visionEncoderLayers.Clear();
+        _projectionLayers.Clear();
+        _languageModelLayers.Clear();
+
+        int idx = 0;
+        _patchEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numVisionLayers; i++)
+            _visionEncoderLayers.Add(Layers[idx++]);
+
+        _projectionLayers.Add(Layers[idx++]); // GELU projection
+        _projectionLayers.Add(Layers[idx++]); // Linear projection
+
+        _textTokenEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numLmLayers; i++)
+            _languageModelLayers.Add(Layers[idx++]);
+
+        _outputProjection = Layers[idx++];
+        _groundingHead = Layers[idx++];
     }
 
     /// <inheritdoc/>
