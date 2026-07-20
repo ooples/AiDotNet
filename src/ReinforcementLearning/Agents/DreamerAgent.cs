@@ -87,8 +87,18 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
+    /// <remarks>
+    /// The zero-argument default builds a small, self-consistent continuous-control toy
+    /// agent: a 4-dimensional observation and a 4-dimensional continuous action. Four is the
+    /// canonical low-dimensional control state (e.g. CartPole's [cart position, cart velocity,
+    /// pole angle, pole angular velocity]) and keeps <see cref="ObservationSize"/> and
+    /// <see cref="DreamerOptions{T}.ActionSize"/> aligned so that a plain
+    /// <c>(state, target)</c> transition of that width is accepted by
+    /// <see cref="StoreExperience"/> without any environment-specific configuration.
+    /// Real tasks should pass a fully-specified <see cref="DreamerOptions{T}"/>.
+    /// </remarks>
     public DreamerAgent()
-        : this(new DreamerOptions<T> { ActionSize = 2 })
+        : this(new DreamerOptions<T> { ObservationSize = 4, ActionSize = 4 })
     {
     }
 
@@ -407,9 +417,24 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
+            Name = "Dreamer",
+            Description = "Dreamer model-based RL agent: learns a latent world model (representation, " +
+                "dynamics, reward and continue heads) and an actor-critic trained in latent imagination " +
+                "(Hafner et al. 2020, 'Dream to Control').",
+            FeatureCount = _options.ObservationSize,
+            Complexity = ParameterCount,
         };
+
+        metadata.SetProperty("ObservationSize", _options.ObservationSize);
+        metadata.SetProperty("ActionSize", _options.ActionSize);
+        metadata.SetProperty("LatentSize", _options.LatentSize);
+        metadata.SetProperty("HiddenSize", _options.HiddenSize);
+        metadata.SetProperty("ImaginationHorizon", _options.ImaginationHorizon);
+        metadata.SetProperty("UpdateCount", _updateCount);
+
+        return metadata;
     }
 
     public override int FeatureCount => _options.ObservationSize;

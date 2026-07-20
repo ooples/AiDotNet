@@ -279,7 +279,8 @@ public class OnlineLearningExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SGDRegressor_HuberLoss_GradientHandCalculated()
     {
-        // Huber loss gradient: 2*residual if |residual| <= epsilon, else 2*epsilon*sign(residual)
+        // Huber loss gradient (scikit-learn convention, NO factor of 2):
+        // residual if |residual| <= epsilon, else epsilon*sign(residual)
         var regressor = new OnlineSGDRegressor<double>(
             learningRate: 0.01,
             l2Penalty: 0.0,
@@ -293,14 +294,14 @@ public class OnlineLearningExtendedIntegrationTests
 
         // Feed y=0.5 (small residual, within epsilon)
         // residual = prediction - y = 0 - 0.5 = -0.5
-        // gradient = 2 * (-0.5) = -1.0 (within epsilon=1)
-        // weight update: w -= lr * gradient * x = 0 - 0.01 * (-1.0) * 1.0 = 0.01
+        // gradient = residual = -0.5 (within epsilon=1, quadratic region)
+        // weight update: w -= lr * gradient * x = 0 - 0.01 * (-0.5) * 1.0 = 0.005
         var x = new Vector<double>(new[] { 1.0 });
         regressor.PartialFit(x, 0.5);
 
         var weights = regressor.GetWeights();
         Assert.NotNull(weights);
-        Assert.Equal(0.01, weights[0], 1e-4);
+        Assert.Equal(0.005, weights[0], 1e-4);
 
         // Reset and test large residual
         regressor.Reset();
@@ -309,13 +310,13 @@ public class OnlineLearningExtendedIntegrationTests
 
         // Feed y=5.0 (large residual, outside epsilon)
         // residual = 0 - 5 = -5, |residual|=5 > epsilon=1
-        // gradient = 2*1*sign(-5) = -2
-        // weight update: w -= lr * gradient * x = 0 - 0.01 * (-2) * 1 = 0.02
+        // gradient = 1*sign(-5) = -1 (linear region, epsilon*sign)
+        // weight update: w -= lr * gradient * x = 0 - 0.01 * (-1) * 1 = 0.01
         regressor.PartialFit(x, 5.0);
 
         weights = regressor.GetWeights();
         Assert.NotNull(weights);
-        Assert.Equal(0.02, weights[0], 1e-4);
+        Assert.Equal(0.01, weights[0], 1e-4);
     }
 
     [Fact(Timeout = 120000)]
