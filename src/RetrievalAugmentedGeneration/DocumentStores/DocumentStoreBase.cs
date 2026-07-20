@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
@@ -100,6 +101,100 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
         ValidateMetadataFilters(metadataFilters);
 
         return GetSimilarCore(queryVector, topK, metadataFilters);
+    }
+
+    /// <summary>
+    /// Over-fetch multiplier used by the default in-memory filter evaluator: the base implementation
+    /// requests <c>topK * FilterOverFetchFactor</c> nearest neighbours (bounded by the store size)
+    /// before applying the <see cref="MetadataFilter"/>, so enough candidates survive filtering.
+    /// </summary>
+    protected virtual int FilterOverFetchFactor => 10;
+
+    /// <inheritdoc/>
+    public IEnumerable<Document<T>> GetSimilarWithFilter(Vector<T> queryVector, MetadataFilter filter, int topK)
+    {
+        ValidateQueryVector(queryVector);
+        ValidateTopK(topK);
+
+        if (filter == null)
+            return GetSimilar(queryVector, topK);
+
+        return GetSimilarWithFilterCore(queryVector, filter, topK);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IEnumerable<Document<T>>> GetSimilarWithFilterAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken = default)
+    {
+        ValidateQueryVector(queryVector);
+        ValidateTopK(topK);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (filter == null)
+            return await GetSimilarAsync(queryVector, topK, cancellationToken).ConfigureAwait(false);
+
+        return await GetSimilarWithFilterCoreAsync(queryVector, filter, topK, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Core rich-filter search. The default implementation over-fetches nearest neighbours (ignoring
+    /// metadata at the storage layer) and evaluates the <see cref="MetadataFilter"/> in memory via
+    /// <see cref="MetadataFilter.Matches(IReadOnlyDictionary{string, object})"/>. Stores with a native
+    /// filter language override this to push the translated filter down to the backend.
+    /// </summary>
+    /// <param name="queryVector">The validated query vector.</param>
+    /// <param name="filter">The non-null metadata filter expression.</param>
+    /// <param name="topK">The validated number of documents to return.</param>
+    /// <returns>Top-k similar documents that satisfy <paramref name="filter"/>.</returns>
+    protected virtual IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+    {
+        var candidateK = ComputeCandidateFetchCount(topK);
+        var candidates = GetSimilarCore(queryVector, candidateK, new Dictionary<string, object>());
+        return ApplyFilter(candidates, filter, topK);
+    }
+
+    /// <summary>
+    /// Core asynchronous rich-filter search. The default over-fetches via <see cref="GetSimilarCoreAsync"/>
+    /// and evaluates the filter in memory. Override for true server-side rich filtering.
+    /// </summary>
+    protected virtual async Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+    {
+        var candidateK = ComputeCandidateFetchCount(topK);
+        var candidates = await GetSimilarCoreAsync(queryVector, candidateK, new Dictionary<string, object>(), cancellationToken).ConfigureAwait(false);
+        return ApplyFilter(candidates, filter, topK);
+    }
+
+    /// <summary>
+    /// Computes the over-fetch candidate count for the default in-memory evaluator, bounded by the
+    /// number of documents in the store when that count is known (positive).
+    /// </summary>
+    protected int ComputeCandidateFetchCount(int topK)
+    {
+        var factor = FilterOverFetchFactor < 1 ? 1 : FilterOverFetchFactor;
+        long desired = (long)topK * factor;
+        var docCount = DocumentCount;
+        if (docCount > 0 && desired > docCount)
+            desired = docCount;
+        if (desired > int.MaxValue)
+            desired = int.MaxValue;
+        if (desired < topK)
+            desired = topK;
+        return (int)desired;
+    }
+
+    private static IEnumerable<Document<T>> ApplyFilter(IEnumerable<Document<T>> candidates, MetadataFilter filter, int topK)
+    {
+        var results = new List<Document<T>>();
+        foreach (var document in candidates)
+        {
+            if (filter.Matches(document.Metadata))
+            {
+                results.Add(document);
+                if (results.Count >= topK)
+                    break;
+            }
+        }
+
+        return results;
     }
 
     /// <summary>

@@ -4,6 +4,8 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
+
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
 /// <summary>
@@ -63,6 +65,127 @@ public static class RedisVectorQueryBuilder
         }
 
         return clauses.Count > 0 ? "(" + string.Join(" ", clauses) + ")" : "*";
+    }
+
+    /// <summary>
+    /// Builds a RediSearch pre-filter expression from a rich boolean <see cref="MetadataFilter"/> tree.
+    /// The whole expression is pushed down only when every referenced field is declared and every
+    /// operator is supported by RediSearch (TAG equality/membership, NUMERIC comparisons/ranges, and
+    /// <c>AND</c>/<c>OR</c>/<c>NOT</c> composition). Otherwise <c>*</c> is returned with
+    /// <paramref name="fullyPushed"/> set to <c>false</c>, signalling the caller to evaluate the entire
+    /// filter in memory over an over-fetched candidate set.
+    /// </summary>
+    public static string BuildFilterExpression(
+        MetadataFilter? filter,
+        IReadOnlyDictionary<string, RedisVectorFieldType> declaredFields,
+        out bool fullyPushed)
+    {
+        if (filter == null)
+        {
+            fullyPushed = true;
+            return "*";
+        }
+
+        if (TryBuildExpression(filter, declaredFields, out var expr))
+        {
+            fullyPushed = true;
+            return expr;
+        }
+
+        fullyPushed = false;
+        return "*";
+    }
+
+    private static bool TryBuildExpression(
+        MetadataFilter filter,
+        IReadOnlyDictionary<string, RedisVectorFieldType> declaredFields,
+        out string expr)
+    {
+        expr = string.Empty;
+        switch (filter)
+        {
+            case ComparisonFilter comparison:
+                return declaredFields.TryGetValue(comparison.Key, out var compType)
+                    && TryBuildComparison(comparison, compType, out expr);
+            case InFilter inFilter:
+                return declaredFields.TryGetValue(inFilter.Key, out var inType)
+                    && TryBuildIn(inFilter, inType, out expr);
+            case ExistsFilter:
+                // RediSearch has no portable "field exists" predicate for HASH indexes.
+                return false;
+            case NotFilter notFilter:
+                if (!TryBuildExpression(notFilter.Operand, declaredFields, out var inner))
+                    return false;
+                expr = "-(" + inner + ")";
+                return true;
+            case LogicalFilter logical:
+                var parts = new List<string>();
+                foreach (var operand in logical.Operands)
+                {
+                    if (!TryBuildExpression(operand, declaredFields, out var part))
+                        return false;
+                    parts.Add(part);
+                }
+                var separator = logical.Operator == MetadataFilterOperator.And ? " " : " | ";
+                expr = "(" + string.Join(separator, parts) + ")";
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryBuildComparison(ComparisonFilter comparison, RedisVectorFieldType fieldType, out string expr)
+    {
+        expr = string.Empty;
+        if (fieldType == RedisVectorFieldType.Numeric)
+        {
+            if (!MetadataFilter.TryToDouble(comparison.Value, out var d))
+                return false;
+            var v = d.ToString("R", CultureInfo.InvariantCulture);
+            switch (comparison.Operator)
+            {
+                case MetadataFilterOperator.Eq: expr = $"@{comparison.Key}:[{v} {v}]"; return true;
+                case MetadataFilterOperator.Ne: expr = $"-@{comparison.Key}:[{v} {v}]"; return true;
+                case MetadataFilterOperator.Gt: expr = $"@{comparison.Key}:[({v} +inf]"; return true;
+                case MetadataFilterOperator.Gte: expr = $"@{comparison.Key}:[{v} +inf]"; return true;
+                case MetadataFilterOperator.Lt: expr = $"@{comparison.Key}:[-inf ({v}]"; return true;
+                case MetadataFilterOperator.Lte: expr = $"@{comparison.Key}:[-inf {v}]"; return true;
+                default: return false;
+            }
+        }
+
+        // TAG field: only exact equality / inequality are expressible.
+        switch (comparison.Operator)
+        {
+            case MetadataFilterOperator.Eq: expr = $"@{comparison.Key}:{{{FormatTagValue(comparison.Value)}}}"; return true;
+            case MetadataFilterOperator.Ne: expr = $"-@{comparison.Key}:{{{FormatTagValue(comparison.Value)}}}"; return true;
+            default: return false;
+        }
+    }
+
+    private static bool TryBuildIn(InFilter inFilter, RedisVectorFieldType fieldType, out string expr)
+    {
+        expr = string.Empty;
+        if (inFilter.Values.Count == 0)
+            return false;
+
+        if (fieldType == RedisVectorFieldType.Numeric)
+        {
+            var ranges = new List<string>();
+            foreach (var value in inFilter.Values)
+            {
+                if (!MetadataFilter.TryToDouble(value, out var d))
+                    return false;
+                var v = d.ToString("R", CultureInfo.InvariantCulture);
+                ranges.Add($"@{inFilter.Key}:[{v} {v}]");
+            }
+            expr = "(" + string.Join(" | ", ranges) + ")";
+            return true;
+        }
+
+        var items = inFilter.Values.Select(FormatTagValue);
+        expr = $"@{inFilter.Key}:{{{string.Join("|", items)}}}";
+        return true;
     }
 
     private static string FormatTagValue(object? value)

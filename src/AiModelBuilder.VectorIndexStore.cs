@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes;
 
@@ -110,6 +111,40 @@ internal sealed class VectorIndexDocumentStore<T> : IDocumentStore<T>
         }
 
         return results;
+    }
+
+    /// <inheritdoc />
+    public IEnumerable<Document<T>> GetSimilarWithFilter(Vector<T> queryVector, MetadataFilter filter, int topK)
+    {
+        if (queryVector == null) throw new ArgumentNullException(nameof(queryVector));
+        if (topK <= 0) return Enumerable.Empty<Document<T>>();
+        if (filter == null) return GetSimilar(queryVector, topK);
+
+        int searchK = Math.Min(_documents.Count, Math.Max(topK * 10, topK));
+        if (searchK <= 0) return Enumerable.Empty<Document<T>>();
+
+        var hits = _index.Search(queryVector, searchK);
+        var results = new List<Document<T>>(topK);
+
+        foreach (var (id, score) in hits)
+        {
+            if (!_documents.TryGetValue(id, out var vd)) continue;
+            if (!filter.Matches(vd.Document.Metadata)) continue;
+
+            var doc = vd.Document;
+            doc.RelevanceScore = score;
+            results.Add(doc);
+            if (results.Count >= topK) break;
+        }
+
+        return results;
+    }
+
+    /// <inheritdoc />
+    public Task<IEnumerable<Document<T>>> GetSimilarWithFilterAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetSimilarWithFilter(queryVector, filter, topK));
     }
 
     /// <inheritdoc />

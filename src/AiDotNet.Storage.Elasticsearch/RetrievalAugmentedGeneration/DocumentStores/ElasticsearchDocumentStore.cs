@@ -10,6 +10,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using Newtonsoft.Json.Linq;
 
@@ -236,12 +237,19 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
         => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
 
-    private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
-    {
-        var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
+    private Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+        => SearchImplAsync(queryVector, topK, BuildDictQueryClause(metadataFilters), cancellationToken);
 
-        // Build the query with metadata filters
-        object queryClause;
+    /// <inheritdoc/>
+    protected override IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+        => SearchImplAsync(queryVector, topK, ElasticsearchVectorFilterBuilder.Build(filter), CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+        => SearchImplAsync(queryVector, topK, ElasticsearchVectorFilterBuilder.Build(filter), cancellationToken);
+
+    private static object BuildDictQueryClause(Dictionary<string, object> metadataFilters)
+    {
         if (metadataFilters != null && metadataFilters.Any())
         {
             var mustClauses = new List<object>();
@@ -255,7 +263,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
                     }
                 });
             }
-            queryClause = new
+            return new
             {
                 @bool = new
                 {
@@ -263,10 +271,13 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
                 }
             };
         }
-        else
-        {
-            queryClause = new { match_all = new { } };
-        }
+
+        return new { match_all = new { } };
+    }
+
+    private async Task<IEnumerable<Document<T>>> SearchImplAsync(Vector<T> queryVector, int topK, object queryClause, CancellationToken cancellationToken)
+    {
+        var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
 
         var query = new
         {

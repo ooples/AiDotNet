@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -257,7 +258,18 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
             => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
 
-        private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+        private Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, BuildFilter(metadataFilters), cancellationToken);
+
+        /// <inheritdoc/>
+        protected override IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+            => SearchImplAsync(queryVector, topK, TranslateFilter(filter), CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, TranslateFilter(filter), cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> SearchImplAsync(Vector<T> queryVector, int topK, object? filter, CancellationToken cancellationToken)
         {
             var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
 
@@ -269,7 +281,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 ["with_vector"] = false
             };
 
-            var filter = BuildFilter(metadataFilters);
             if (filter != null)
                 body["filter"] = filter;
 
@@ -295,6 +306,125 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
             return results;
         }
+
+        // ------------------------------------------------------------------
+        // MetadataFilter AST -> Qdrant filter translation.
+        // Leaf conditions map to field conditions (match / range); logical
+        // nodes map to nested bool filters (must / should / must_not).
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Translates a <see cref="MetadataFilter"/> expression tree into a Qdrant filter object.
+        /// </summary>
+        internal static object TranslateFilter(MetadataFilter filter)
+        {
+            if (filter == null)
+                throw new ArgumentNullException(nameof(filter));
+
+            // A bare leaf condition must be wrapped in a "must" so the top-level value is a valid filter.
+            if (filter is ComparisonFilter c && c.Operator == MetadataFilterOperator.Eq
+                || filter is ComparisonFilter cg && (cg.Operator == MetadataFilterOperator.Gt || cg.Operator == MetadataFilterOperator.Gte
+                    || cg.Operator == MetadataFilterOperator.Lt || cg.Operator == MetadataFilterOperator.Lte)
+                || filter is InFilter)
+            {
+                return new Dictionary<string, object> { ["must"] = new[] { TranslateClause(filter) } };
+            }
+
+            return TranslateClause(filter);
+        }
+
+        private static object TranslateClause(MetadataFilter filter)
+        {
+            switch (filter)
+            {
+                case ComparisonFilter comparison:
+                    return TranslateComparison(comparison);
+                case InFilter inFilter:
+                    return new Dictionary<string, object>
+                    {
+                        ["key"] = FieldKey(inFilter.Key),
+                        ["match"] = new Dictionary<string, object> { ["any"] = inFilter.Values.ToArray() }
+                    };
+                case ExistsFilter existsFilter:
+                    return new Dictionary<string, object>
+                    {
+                        ["must_not"] = new object[]
+                        {
+                            new Dictionary<string, object>
+                            {
+                                ["is_empty"] = new Dictionary<string, object> { ["key"] = FieldKey(existsFilter.Key) }
+                            }
+                        }
+                    };
+                case NotFilter notFilter:
+                    return new Dictionary<string, object>
+                    {
+                        ["must_not"] = new[] { TranslateClause(notFilter.Operand) }
+                    };
+                case LogicalFilter logical when logical.Operator == MetadataFilterOperator.And:
+                    return new Dictionary<string, object>
+                    {
+                        ["must"] = logical.Operands.Select(TranslateClause).ToArray()
+                    };
+                case LogicalFilter logical:
+                    return new Dictionary<string, object>
+                    {
+                        ["should"] = logical.Operands.Select(TranslateClause).ToArray()
+                    };
+                default:
+                    throw new NotSupportedException($"Unsupported metadata filter node: {filter.GetType().Name}");
+            }
+        }
+
+        private static object TranslateComparison(ComparisonFilter comparison)
+        {
+            var key = FieldKey(comparison.Key);
+            switch (comparison.Operator)
+            {
+                case MetadataFilterOperator.Eq:
+                    return new Dictionary<string, object>
+                    {
+                        ["key"] = key,
+                        ["match"] = new Dictionary<string, object> { ["value"] = comparison.Value }
+                    };
+                case MetadataFilterOperator.Ne:
+                    return new Dictionary<string, object>
+                    {
+                        ["must_not"] = new object[]
+                        {
+                            new Dictionary<string, object>
+                            {
+                                ["key"] = key,
+                                ["match"] = new Dictionary<string, object> { ["value"] = comparison.Value }
+                            }
+                        }
+                    };
+                case MetadataFilterOperator.Gt:
+                    return RangeCondition(key, "gt", comparison.Value);
+                case MetadataFilterOperator.Gte:
+                    return RangeCondition(key, "gte", comparison.Value);
+                case MetadataFilterOperator.Lt:
+                    return RangeCondition(key, "lt", comparison.Value);
+                case MetadataFilterOperator.Lte:
+                    return RangeCondition(key, "lte", comparison.Value);
+                default:
+                    throw new NotSupportedException($"Unsupported comparison operator: {comparison.Operator}");
+            }
+        }
+
+        private static object RangeCondition(string key, string op, object value)
+        {
+            object bound = MetadataFilter.IsNumeric(value)
+                ? Convert.ToDouble(value, CultureInfo.InvariantCulture)
+                : value;
+            return new Dictionary<string, object>
+            {
+                ["key"] = key,
+                ["range"] = new Dictionary<string, object> { [op] = bound }
+            };
+        }
+
+        private static string FieldKey(string key) => "metadata." + key;
 
         /// <summary>
         /// Translates the metadata filter dictionary into a Qdrant filter object.

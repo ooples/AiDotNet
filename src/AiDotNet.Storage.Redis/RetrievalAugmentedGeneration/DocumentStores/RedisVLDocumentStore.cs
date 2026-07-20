@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -302,6 +305,42 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         var expr = RedisVectorQueryBuilder.BuildFilterExpression(metadataFilters, _fieldTypes, out var unpushedKeys);
         var knnK = unpushedKeys.Count > 0 ? topK * CandidateMultiplier : topK;
 
+        IEnumerable<(Document<T> Doc, double Distance)> candidates = ExecuteKnn(queryVector, expr, knnK);
+        if (unpushedKeys.Count > 0)
+        {
+            var postFilters = unpushedKeys
+                .Where(metadataFilters.ContainsKey)
+                .ToDictionary(k => k, k => metadataFilters[k]);
+            candidates = candidates.Where(c => MatchesFilters(c.Doc, postFilters));
+        }
+
+        return TakeTop(candidates, topK);
+    }
+
+    /// <inheritdoc/>
+    protected override IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+    {
+        // Push the whole expression to RediSearch when every referenced field is declared and every
+        // operator is supported; otherwise over-fetch and evaluate the full AST in memory.
+        var expr = RedisVectorQueryBuilder.BuildFilterExpression(filter, _fieldTypes, out var fullyPushed);
+        var knnK = fullyPushed ? topK : topK * CandidateMultiplier;
+
+        IEnumerable<(Document<T> Doc, double Distance)> candidates = ExecuteKnn(queryVector, expr, knnK);
+        if (!fullyPushed)
+            candidates = candidates.Where(c => filter.Matches(c.Doc.Metadata));
+
+        return TakeTop(candidates, topK);
+    }
+
+    /// <inheritdoc/>
+    protected override Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetSimilarWithFilterCore(queryVector, filter, topK));
+    }
+
+    private List<(Document<T> Doc, double Distance)> ExecuteKnn(Vector<T> queryVector, string expr, int knnK)
+    {
         var query = $"{expr}=>[KNN {knnK.ToString(CultureInfo.InvariantCulture)} @{EmbeddingField} $BLOB AS {ScoreField}]";
         var args = new List<object>
         {
@@ -313,17 +352,11 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             "LIMIT", "0", knnK.ToString(CultureInfo.InvariantCulture),
         };
 
-        var parsed = ParseSearch(Db.Execute("FT.SEARCH", args), includeScore: true);
+        return ParseSearch(Db.Execute("FT.SEARCH", args), includeScore: true);
+    }
 
-        IEnumerable<(Document<T> Doc, double Distance)> candidates = parsed;
-        if (unpushedKeys.Count > 0)
-        {
-            var postFilters = unpushedKeys
-                .Where(metadataFilters.ContainsKey)
-                .ToDictionary(k => k, k => metadataFilters[k]);
-            candidates = candidates.Where(c => MatchesFilters(c.Doc, postFilters));
-        }
-
+    private List<Document<T>> TakeTop(IEnumerable<(Document<T> Doc, double Distance)> candidates, int topK)
+    {
         var results = new List<Document<T>>();
         foreach (var candidate in candidates.Take(topK))
         {

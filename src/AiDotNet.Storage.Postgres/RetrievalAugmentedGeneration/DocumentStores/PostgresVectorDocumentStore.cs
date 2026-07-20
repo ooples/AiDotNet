@@ -9,6 +9,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -216,7 +217,26 @@ public class PostgresVectorDocumentStore<T> : DocumentStoreBase<T>
     {
         var parameters = new Dictionary<string, object>();
         var whereClause = PostgresVectorFilterBuilder.Build(metadataFilters, parameters);
+        return ExecuteSearch(queryVector, topK, whereClause, parameters);
+    }
 
+    /// <inheritdoc/>
+    protected override IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+    {
+        var parameters = new Dictionary<string, object>();
+        var whereClause = PostgresVectorFilterBuilder.Build(filter, parameters);
+        return ExecuteSearch(queryVector, topK, whereClause, parameters);
+    }
+
+    /// <inheritdoc/>
+    protected override System.Threading.Tasks.Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return System.Threading.Tasks.Task.FromResult(GetSimilarWithFilterCore(queryVector, filter, topK));
+    }
+
+    private IEnumerable<Document<T>> ExecuteSearch(Vector<T> queryVector, int topK, string whereClause, Dictionary<string, object> parameters)
+    {
         using var connection = Open();
         using var command = connection.CreateCommand();
         command.CommandText =

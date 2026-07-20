@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -240,7 +241,18 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
             => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
 
-        private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+        private Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, BuildFilter(metadataFilters), cancellationToken);
+
+        /// <inheritdoc/>
+        protected override IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+            => SearchImplAsync(queryVector, topK, TranslateFilter(filter), CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, TranslateFilter(filter), cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> SearchImplAsync(Vector<T> queryVector, int topK, object? filter, CancellationToken cancellationToken)
         {
             var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
 
@@ -252,7 +264,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 ["includeValues"] = false
             };
 
-            var filter = BuildFilter(metadataFilters);
             if (filter != null)
                 body["filter"] = filter;
 
@@ -325,6 +336,96 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             }
 
             return filter;
+        }
+
+        // ------------------------------------------------------------------
+        // MetadataFilter AST -> Pinecone filter translation. Pinecone has no
+        // "$not" operator, so negation is pushed down (De Morgan for logical
+        // nodes; operator inversion / $nin / $exists:false for leaves).
+        // ------------------------------------------------------------------
+
+        /// <summary>Translates a <see cref="MetadataFilter"/> expression tree into a Pinecone filter object.</summary>
+        internal static object TranslateFilter(MetadataFilter filter)
+        {
+            if (filter == null)
+                throw new ArgumentNullException(nameof(filter));
+
+            switch (filter)
+            {
+                case ComparisonFilter comparison:
+                    return Leaf(comparison.Key, ComparisonOp(comparison.Operator), comparison.Value);
+                case InFilter inFilter:
+                    return Leaf(inFilter.Key, "$in", inFilter.Values.ToArray());
+                case ExistsFilter existsFilter:
+                    return Leaf(existsFilter.Key, "$exists", true);
+                case NotFilter notFilter:
+                    return TranslateNegated(notFilter.Operand);
+                case LogicalFilter logical when logical.Operator == MetadataFilterOperator.And:
+                    return new Dictionary<string, object> { ["$and"] = logical.Operands.Select(TranslateFilter).ToArray() };
+                case LogicalFilter logical:
+                    return new Dictionary<string, object> { ["$or"] = logical.Operands.Select(TranslateFilter).ToArray() };
+                default:
+                    throw new NotSupportedException($"Unsupported metadata filter node: {filter.GetType().Name}");
+            }
+        }
+
+        private static object TranslateNegated(MetadataFilter filter)
+        {
+            switch (filter)
+            {
+                case ComparisonFilter comparison:
+                    return Leaf(comparison.Key, NegatedComparisonOp(comparison.Operator), comparison.Value);
+                case InFilter inFilter:
+                    return Leaf(inFilter.Key, "$nin", inFilter.Values.ToArray());
+                case ExistsFilter existsFilter:
+                    return Leaf(existsFilter.Key, "$exists", false);
+                case NotFilter notFilter:
+                    return TranslateFilter(notFilter.Operand);
+                case LogicalFilter logical when logical.Operator == MetadataFilterOperator.And:
+                    // NOT(a AND b) => (NOT a) OR (NOT b)
+                    return new Dictionary<string, object> { ["$or"] = logical.Operands.Select(TranslateNegated).ToArray() };
+                case LogicalFilter logical:
+                    // NOT(a OR b) => (NOT a) AND (NOT b)
+                    return new Dictionary<string, object> { ["$and"] = logical.Operands.Select(TranslateNegated).ToArray() };
+                default:
+                    throw new NotSupportedException($"Unsupported metadata filter node: {filter.GetType().Name}");
+            }
+        }
+
+        private static object Leaf(string key, string op, object value)
+        {
+            object bound = op == "$gt" || op == "$gte" || op == "$lt" || op == "$lte"
+                ? (MetadataFilter.IsNumeric(value) ? Convert.ToDouble(value, CultureInfo.InvariantCulture) : value)
+                : value;
+            return new Dictionary<string, object> { [key] = new Dictionary<string, object> { [op] = bound } };
+        }
+
+        private static string ComparisonOp(MetadataFilterOperator op)
+        {
+            switch (op)
+            {
+                case MetadataFilterOperator.Eq: return "$eq";
+                case MetadataFilterOperator.Ne: return "$ne";
+                case MetadataFilterOperator.Gt: return "$gt";
+                case MetadataFilterOperator.Gte: return "$gte";
+                case MetadataFilterOperator.Lt: return "$lt";
+                case MetadataFilterOperator.Lte: return "$lte";
+                default: throw new NotSupportedException($"Unsupported comparison operator: {op}");
+            }
+        }
+
+        private static string NegatedComparisonOp(MetadataFilterOperator op)
+        {
+            switch (op)
+            {
+                case MetadataFilterOperator.Eq: return "$ne";
+                case MetadataFilterOperator.Ne: return "$eq";
+                case MetadataFilterOperator.Gt: return "$lte";
+                case MetadataFilterOperator.Gte: return "$lt";
+                case MetadataFilterOperator.Lt: return "$gte";
+                case MetadataFilterOperator.Lte: return "$gt";
+                default: throw new NotSupportedException($"Unsupported comparison operator: {op}");
+            }
         }
 
         /// <inheritdoc/>

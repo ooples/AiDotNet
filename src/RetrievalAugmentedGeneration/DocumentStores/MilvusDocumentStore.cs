@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -269,7 +270,18 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
             => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
 
-        private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+        private Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, BuildFilterExpression(metadataFilters), cancellationToken);
+
+        /// <inheritdoc/>
+        protected override IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+            => SearchImplAsync(queryVector, topK, TranslateFilter(filter), CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, TranslateFilter(filter), cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> SearchImplAsync(Vector<T> queryVector, int topK, string? filter, CancellationToken cancellationToken)
         {
             var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
 
@@ -282,7 +294,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 ["outputFields"] = new[] { IdField, ContentField, MetadataField }
             };
 
-            var filter = BuildFilterExpression(metadataFilters);
             if (filter != null)
                 body["filter"] = filter;
 
@@ -374,6 +385,65 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         }
 
         private static string Quote(string value) => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+        // ------------------------------------------------------------------
+        // MetadataFilter AST -> Milvus boolean filter expression translation.
+        // Filterable fields are stored flattened under the "m_" prefix.
+        // ------------------------------------------------------------------
+
+        /// <summary>Translates a <see cref="MetadataFilter"/> expression tree into a Milvus boolean expression.</summary>
+        internal static string TranslateFilter(MetadataFilter filter)
+        {
+            if (filter == null)
+                throw new ArgumentNullException(nameof(filter));
+            return BuildExpression(filter);
+        }
+
+        private static string BuildExpression(MetadataFilter filter)
+        {
+            switch (filter)
+            {
+                case ComparisonFilter comparison:
+                    return MetaPrefix + comparison.Key + " " + MilvusOperator(comparison.Operator) + " " + FormatValue(comparison.Value);
+                case InFilter inFilter:
+                    return MetaPrefix + inFilter.Key + " in [" + string.Join(", ", inFilter.Values.Select(FormatValue)) + "]";
+                case ExistsFilter existsFilter:
+                    return "exists " + MetaPrefix + existsFilter.Key;
+                case NotFilter notFilter:
+                    return "not (" + BuildExpression(notFilter.Operand) + ")";
+                case LogicalFilter logical when logical.Operator == MetadataFilterOperator.And:
+                    return "(" + string.Join(" and ", logical.Operands.Select(BuildExpression)) + ")";
+                case LogicalFilter logical:
+                    return "(" + string.Join(" or ", logical.Operands.Select(BuildExpression)) + ")";
+                default:
+                    throw new NotSupportedException($"Unsupported metadata filter node: {filter.GetType().Name}");
+            }
+        }
+
+        private static string FormatValue(object value)
+        {
+            if (value == null)
+                return "null";
+            if (value is bool b)
+                return b ? "true" : "false";
+            if (MetadataFilter.IsNumeric(value))
+                return Convert.ToDouble(value, CultureInfo.InvariantCulture).ToString("R", CultureInfo.InvariantCulture);
+            return Quote(value.ToString() ?? string.Empty);
+        }
+
+        private static string MilvusOperator(MetadataFilterOperator op)
+        {
+            switch (op)
+            {
+                case MetadataFilterOperator.Eq: return "==";
+                case MetadataFilterOperator.Ne: return "!=";
+                case MetadataFilterOperator.Gt: return ">";
+                case MetadataFilterOperator.Gte: return ">=";
+                case MetadataFilterOperator.Lt: return "<";
+                case MetadataFilterOperator.Lte: return "<=";
+                default: throw new NotSupportedException($"Unsupported comparison operator: {op}");
+            }
+        }
 
         /// <inheritdoc/>
         protected override Document<T>? GetByIdCore(string documentId)

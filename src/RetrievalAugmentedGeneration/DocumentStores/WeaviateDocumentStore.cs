@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -258,12 +259,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
             => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
 
-        private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+        private Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, BuildWhere(metadataFilters), cancellationToken);
+
+        /// <inheritdoc/>
+        protected override IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+            => SearchImplAsync(queryVector, topK, TranslateWhere(filter), CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, TranslateWhere(filter), cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> SearchImplAsync(Vector<T> queryVector, int topK, string? whereClause, CancellationToken cancellationToken)
         {
             var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
             var vectorJson = "[" + string.Join(",", vector.Select(v => v.ToString("R", CultureInfo.InvariantCulture))) + "]";
 
-            var whereClause = BuildWhere(metadataFilters);
             var whereArg = whereClause != null ? ", where: " + whereClause : string.Empty;
 
             var query =
@@ -368,6 +379,128 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 return operands[0];
 
             return "{operator: And, operands: [" + string.Join(", ", operands) + "]}";
+        }
+
+        // ------------------------------------------------------------------
+        // MetadataFilter AST -> Weaviate GraphQL "where" translation.
+        // Weaviate has no Not operator, so negation is pushed down (NotEqual /
+        // inverted comparisons / IsNull:true; De Morgan for logical nodes).
+        // Filterable properties are stored flattened under the "m_" prefix.
+        // ------------------------------------------------------------------
+
+        /// <summary>Translates a <see cref="MetadataFilter"/> expression tree into a Weaviate GraphQL <c>where</c> clause.</summary>
+        internal static string TranslateWhere(MetadataFilter filter)
+        {
+            if (filter == null)
+                throw new ArgumentNullException(nameof(filter));
+            return BuildClause(filter);
+        }
+
+        private static string BuildClause(MetadataFilter filter)
+        {
+            switch (filter)
+            {
+                case ComparisonFilter comparison:
+                    return ComparisonClause(comparison.Key, comparison.Operator, comparison.Value);
+                case InFilter inFilter:
+                    return ContainsAnyClause(inFilter.Key, inFilter.Values);
+                case ExistsFilter existsFilter:
+                    return "{path: [\"" + MetaPrefix + existsFilter.Key + "\"], operator: IsNull, valueBoolean: false}";
+                case NotFilter notFilter:
+                    return NegateClause(notFilter.Operand);
+                case LogicalFilter logical when logical.Operator == MetadataFilterOperator.And:
+                    return "{operator: And, operands: [" + string.Join(", ", logical.Operands.Select(BuildClause)) + "]}";
+                case LogicalFilter logical:
+                    return "{operator: Or, operands: [" + string.Join(", ", logical.Operands.Select(BuildClause)) + "]}";
+                default:
+                    throw new NotSupportedException($"Unsupported metadata filter node: {filter.GetType().Name}");
+            }
+        }
+
+        private static string NegateClause(MetadataFilter filter)
+        {
+            switch (filter)
+            {
+                case ComparisonFilter comparison:
+                    return ComparisonClause(comparison.Key, NegateOperator(comparison.Operator), comparison.Value);
+                case InFilter inFilter:
+                    // NOT(x in [a,b]) => (x != a) AND (x != b)
+                    var notEquals = inFilter.Values.Select(v => ComparisonClause(inFilter.Key, MetadataFilterOperator.Ne, v)).ToList();
+                    if (notEquals.Count == 1)
+                        return notEquals[0];
+                    return "{operator: And, operands: [" + string.Join(", ", notEquals) + "]}";
+                case ExistsFilter existsFilter:
+                    return "{path: [\"" + MetaPrefix + existsFilter.Key + "\"], operator: IsNull, valueBoolean: true}";
+                case NotFilter notFilter:
+                    return BuildClause(notFilter.Operand);
+                case LogicalFilter logical when logical.Operator == MetadataFilterOperator.And:
+                    return "{operator: Or, operands: [" + string.Join(", ", logical.Operands.Select(NegateClause)) + "]}";
+                case LogicalFilter logical:
+                    return "{operator: And, operands: [" + string.Join(", ", logical.Operands.Select(NegateClause)) + "]}";
+                default:
+                    throw new NotSupportedException($"Unsupported metadata filter node: {filter.GetType().Name}");
+            }
+        }
+
+        private static string ComparisonClause(string key, MetadataFilterOperator op, object value)
+        {
+            var path = "[\"" + MetaPrefix + key + "\"]";
+            var opName = WeaviateOperator(op);
+            var valueArg = ValueArg(value);
+            return "{path: " + path + ", operator: " + opName + ", " + valueArg + "}";
+        }
+
+        private static string ContainsAnyClause(string key, IReadOnlyList<object> values)
+        {
+            var path = "[\"" + MetaPrefix + key + "\"]";
+            var allNumeric = values.Count > 0 && values.All(MetadataFilter.IsNumeric);
+            if (allNumeric)
+            {
+                var nums = values.Select(v => Convert.ToDouble(v, CultureInfo.InvariantCulture).ToString("R", CultureInfo.InvariantCulture));
+                return "{path: " + path + ", operator: ContainsAny, valueNumber: [" + string.Join(", ", nums) + "]}";
+            }
+
+            var texts = values.Select(v => JsonConvert.ToString(v?.ToString() ?? string.Empty));
+            return "{path: " + path + ", operator: ContainsAny, valueText: [" + string.Join(", ", texts) + "]}";
+        }
+
+        private static string ValueArg(object value)
+        {
+            if (value == null)
+                return "valueText: " + JsonConvert.ToString(string.Empty);
+            if (value is bool b)
+                return "valueBoolean: " + (b ? "true" : "false");
+            if (MetadataFilter.IsNumeric(value))
+                return "valueNumber: " + Convert.ToDouble(value, CultureInfo.InvariantCulture).ToString("R", CultureInfo.InvariantCulture);
+            return "valueText: " + JsonConvert.ToString(value.ToString() ?? string.Empty);
+        }
+
+        private static string WeaviateOperator(MetadataFilterOperator op)
+        {
+            switch (op)
+            {
+                case MetadataFilterOperator.Eq: return "Equal";
+                case MetadataFilterOperator.Ne: return "NotEqual";
+                case MetadataFilterOperator.Gt: return "GreaterThan";
+                case MetadataFilterOperator.Gte: return "GreaterThanEqual";
+                case MetadataFilterOperator.Lt: return "LessThan";
+                case MetadataFilterOperator.Lte: return "LessThanEqual";
+                default: throw new NotSupportedException($"Unsupported comparison operator: {op}");
+            }
+        }
+
+        private static MetadataFilterOperator NegateOperator(MetadataFilterOperator op)
+        {
+            switch (op)
+            {
+                case MetadataFilterOperator.Eq: return MetadataFilterOperator.Ne;
+                case MetadataFilterOperator.Ne: return MetadataFilterOperator.Eq;
+                case MetadataFilterOperator.Gt: return MetadataFilterOperator.Lte;
+                case MetadataFilterOperator.Gte: return MetadataFilterOperator.Lt;
+                case MetadataFilterOperator.Lt: return MetadataFilterOperator.Gte;
+                case MetadataFilterOperator.Lte: return MetadataFilterOperator.Gt;
+                default: throw new NotSupportedException($"Unsupported comparison operator: {op}");
+            }
         }
 
         /// <inheritdoc/>
