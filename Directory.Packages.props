@@ -255,8 +255,18 @@
          implemented across the CPU backend and all six GPU backend kernels. Activates the Gemma-2
          attn_logit_softcapping path: GroupedQueryAttentionLayer now forwards its soft-cap into the
          fused SDPA primitive, and Gemma2ModelBuilder wires config.attn_logit_softcapping into it.
-         Default 0 leaves every other SDPA caller byte-identical. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.117.0" />
+         Default 0 leaves every other SDPA caller byte-identical.
+
+         Bumped 0.117.0 -> 0.117.2: brings AiDotNet.Tensors #821 — the persistent GPU weight-buffer
+         version gate. RegisterPersistentTensor uploads a weight to a persistent GPU buffer at
+         construction (random init) keyed by the host backing array; SetParameters then loads the real
+         weights IN PLACE (same array, so same key) and bumps the tensor Version. The persistent-buffer
+         read is now version-gated (re-uploads on a stamp mismatch), so a model built while a
+         DirectGpuTensorEngine is Current no longer runs its forward against the stale construction-time
+         weights. Fixes real GGUF-decoder-under-GPU serving (greedy first token 7042 " Paris" was 32084);
+         pairs with this branch's LlamaModelBuilder.WriteGamma routing gamma through SetParameters so its
+         persistent buffer refreshes too. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.117.2" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.114.0" />
