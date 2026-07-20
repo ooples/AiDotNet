@@ -105,6 +105,40 @@ namespace AiDotNet.Tests.ModelLoading
         }
 
         /// <summary>
+        /// Device-model placement: instead of relying on the "GPU engine uploads everything" path, explicitly
+        /// place the whole model on the GPU with <c>model.To(DeviceInfo.OpenCL())</c> and confirm the forward
+        /// still produces llama.cpp's greedy token (7042 " Paris"). Proves the PyTorch-style placement API
+        /// drives correct GPU execution. Gated on the real SmolLM2 GGUF + a GPU being present.
+        /// </summary>
+        [Fact]
+        public void Gguf_ModelToOpenCL_Placement_Runs7042_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+
+            // Use the production wiring: AutoDetectAndConfigureGpu sets BOTH the dispatcher (Current) AND the
+            // global backend registry that Tensor.To(device) uses, so placement and execution share one backend.
+            // (A manually-constructed engine wires Current only, and To() then can't find a backend.) Skip when
+            // no GPU is wired in this environment.
+            if (!AiDotNet.Tensors.Engines.AiDotNetEngine.AutoDetectAndConfigureGpu()) return;
+            try
+            {
+                var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+                var net = (NeuralNetworkBase<float>)model;
+
+                // The device-model UX: move the whole model (weights + buffers) onto the GPU explicitly.
+                net.To(AiDotNet.Tensors.DeviceInfo.OpenCL());
+
+                int next = GreedyNext(net, new[] { 504, 3575, 282, 4649, 314 });
+                Assert.Equal(7042, next);
+            }
+            finally
+            {
+                AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            }
+        }
+
+        /// <summary>
         /// Per-layer OpenCL-vs-CPU decoder guard: runs the whole forward on the GPU engine and on the CPU
         /// engine and reports each layer's max abs diff. Asserts (a) no layer diverges at CORRUPTION scale —
         /// the stale-persistent-weight bug (a model built while a DirectGpuTensorEngine is Current, fixed by
