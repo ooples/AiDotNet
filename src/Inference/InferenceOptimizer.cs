@@ -718,53 +718,77 @@ internal class InferenceOptimizer<T>
                 anyRewritten = true;
             }
 
-            // Handle Grouped-Query Attention -> CachedGroupedQueryAttention
-            // GQA rewrite: use CachedGroupedQueryAttention for regular KV cache.
-            // Paged KV cache does not yet support GQA, so fall back to regular cache.
+            // Handle Grouped-Query Attention -> CachedGroupedQueryAttention (regular KV cache; paged KV does
+            // not yet support GQA, so it falls back to the regular cache).
             if (layer is GroupedQueryAttentionLayer<T> gqa && enableKVCache)
             {
-                var inputShape = gqa.GetInputShape();
-                if (inputShape.Length < 2)
-                    continue;
-
-                int seqLen = inputShape[0];
-                int embDim = inputShape[1];
-                var activation = gqa.ScalarActivation;
-
-                var cachedGqa = new CachedGroupedQueryAttention<T>(
-                    sequenceLength: seqLen,
-                    embeddingDimension: embDim,
-                    numHeads: gqa.NumHeads,
-                    numKVHeads: gqa.NumKVHeads,
-                    useFlashAttention: enableFlashAttention,
-                    layerIndex: 0,
-                    useCausalMask: useCausalMask,
-                    activationFunction: activation);
-                cachedGqa.SetParameters(gqa.GetParameters());
-
-                // Preserve positional encoding
-                if (gqa.PositionalEncoding != PositionalEncodingType.None)
+                var cachedGqa = BuildCachedGqaReplacement(gqa, enableFlashAttention, useCausalMask);
+                if (cachedGqa is not null)
                 {
-                    cachedGqa.ConfigurePositionalEncoding(
-                        gqa.PositionalEncoding,
-                        ropeTheta: gqa.RoPETheta,
-                        maxSequenceLength: seqLen);
+                    model.Layers[i] = cachedGqa;
+                    anyRewritten = true;
                 }
-                else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
-                         _config.PositionalEncoding == PositionalEncodingType.ALiBi)
-                {
-                    cachedGqa.ConfigurePositionalEncoding(
-                        _config.PositionalEncoding,
-                        ropeTheta: _config.RoPETheta,
-                        maxSequenceLength: seqLen);
-                }
+                continue;
+            }
 
-                model.Layers[i] = cachedGqa;
-                anyRewritten = true;
+            // Decoder blocks (LLaMA / GGUF) host their GQA INSIDE a PreLNTransformerBlock, so the top-level scan
+            // above never reaches it (the shard-05-class "no applicable layers" gap, GQA edition). Recurse into
+            // the block and swap its attention to the KV-cached variant in place via ReplaceAttention.
+            if (layer is PreLNTransformerBlock<T> preLnBlock && enableKVCache
+                && preLnBlock.AttentionLayer is GroupedQueryAttentionLayer<T> blockGqa)
+            {
+                var cachedGqa = BuildCachedGqaReplacement(blockGqa, enableFlashAttention, useCausalMask);
+                if (cachedGqa is not null)
+                {
+                    preLnBlock.ReplaceAttention(cachedGqa);
+                    anyRewritten = true;
+                }
+                continue;
             }
         }
 
         return anyRewritten;
+    }
+
+    /// <summary>
+    /// Builds the KV-cached replacement for a <see cref="GroupedQueryAttentionLayer{T}"/> — copying its
+    /// parameters and RoPE/ALiBi positional configuration — or <see langword="null"/> when the layer's input
+    /// shape is not yet resolvable. Shared by the top-level GQA rewrite and the PreLNTransformerBlock recursion.
+    /// </summary>
+    private CachedGroupedQueryAttention<T>? BuildCachedGqaReplacement(
+        GroupedQueryAttentionLayer<T> gqa, bool enableFlashAttention, bool useCausalMask)
+    {
+        var inputShape = gqa.GetInputShape();
+        if (inputShape.Length < 2)
+            return null;
+
+        int seqLen = inputShape[0];
+        int embDim = inputShape[1];
+
+        var cachedGqa = new CachedGroupedQueryAttention<T>(
+            sequenceLength: seqLen,
+            embeddingDimension: embDim,
+            numHeads: gqa.NumHeads,
+            numKVHeads: gqa.NumKVHeads,
+            useFlashAttention: enableFlashAttention,
+            layerIndex: 0,
+            useCausalMask: useCausalMask,
+            activationFunction: gqa.ScalarActivation);
+        cachedGqa.SetParameters(gqa.GetParameters());
+
+        if (gqa.PositionalEncoding != PositionalEncodingType.None)
+        {
+            cachedGqa.ConfigurePositionalEncoding(
+                gqa.PositionalEncoding, ropeTheta: gqa.RoPETheta, maxSequenceLength: seqLen);
+        }
+        else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                 _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+        {
+            cachedGqa.ConfigurePositionalEncoding(
+                _config.PositionalEncoding, ropeTheta: _config.RoPETheta, maxSequenceLength: seqLen);
+        }
+
+        return cachedGqa;
     }
 
     private bool ApplyWeightOnlyQuantization(NeuralNetworkBase<T> model)

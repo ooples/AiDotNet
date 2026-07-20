@@ -33,7 +33,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public partial class PreLNTransformerBlock<T> : LayerBase<T>
 {
     private readonly RMSNormalizationLayer<T> _norm1;
-    private readonly LayerBase<T> _attention;
+    // Non-readonly so the inference optimizer can swap the attention sublayer in place (e.g.
+    // GroupedQueryAttentionLayer -> CachedGroupedQueryAttention for KV-cached decode) via ReplaceAttention,
+    // the same contract TransformerEncoderBlock uses.
+    private LayerBase<T> _attention;
     private readonly RMSNormalizationLayer<T> _norm2;
     private readonly DenseLayer<T>? _ffnGate;
     private readonly DenseLayer<T> _ffnUp;
@@ -53,6 +56,20 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
 
     /// <summary>The self-attention sublayer (exposed for tensor-parallel serving partitioning).</summary>
     public LayerBase<T> AttentionLayer => _attention;
+
+    /// <summary>
+    /// Swaps the attention sublayer in place (e.g. the inference optimizer replacing
+    /// <see cref="GroupedQueryAttentionLayer{T}"/> with a KV-cached
+    /// <see cref="AiDotNet.Inference.PagedAttention.CachedGroupedQueryAttention{T}"/> for incremental decode).
+    /// Keeps the registered-sublayer set consistent so parameter enumeration still discovers the block's weights.
+    /// </summary>
+    public void ReplaceAttention(LayerBase<T> replacement)
+    {
+        if (replacement is null) throw new ArgumentNullException(nameof(replacement));
+        UnregisterSubLayer(_attention);
+        _attention = replacement;
+        RegisterSubLayer(_attention);
+    }
 
     /// <summary>
     /// The FFN gate-projection DenseLayer (hidden -&gt; ffnDim, activation), present only in
