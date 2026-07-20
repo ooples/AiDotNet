@@ -269,6 +269,79 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             }
         }
 
+        /// <summary>
+        /// Scores an explicit set of candidate node ids against the query, using a single batched
+        /// GPU matrix multiply when a device is available and the candidate set is large enough,
+        /// and falling back to the exact CPU metric otherwise.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This supports a coarse-to-fine retrieval pipeline: HNSW graph traversal proposes a
+        /// (possibly large) candidate set cheaply, then those candidates are re-scored exactly in one
+        /// GPU batch — the same pattern GPU vector databases use to combine ANN proposal with exact
+        /// re-ranking. Results are returned ordered best-first according to the metric.
+        /// </para>
+        /// <para>
+        /// The GPU path is used only when the GPU is available (and not disabled via
+        /// <c>AIDOTNET_DISABLE_GPU</c>), the candidate count is at or above
+        /// <paramref name="gpuThreshold"/>, and the metric has a GPU closed form; otherwise the exact
+        /// CPU metric is used. Unknown or missing candidate ids are skipped.
+        /// </para>
+        /// </remarks>
+        /// <param name="query">The query vector.</param>
+        /// <param name="candidateIds">The candidate node ids to score.</param>
+        /// <param name="gpuThreshold">
+        /// Minimum candidate count before the GPU path is attempted. Defaults to
+        /// <see cref="GpuVectorScorer.DefaultGpuThreshold"/>.
+        /// </param>
+        /// <returns>A list of (id, score) tuples ordered best-first according to the metric.</returns>
+        public List<(string Id, T Score)> ScoreCandidatesGpu(
+            Vector<T> query,
+            IReadOnlyList<string> candidateIds,
+            int gpuThreshold = GpuVectorScorer.DefaultGpuThreshold)
+        {
+            if (query == null)
+                throw new ArgumentNullException(nameof(query));
+            if (candidateIds == null)
+                throw new ArgumentNullException(nameof(candidateIds));
+
+            lock (_graphLock)
+            {
+                // Resolve candidate ids to vectors (skip ids no longer present), preserving order.
+                var ids = new List<string>(candidateIds.Count);
+                var vecs = new List<Vector<T>>(candidateIds.Count);
+                foreach (var id in candidateIds)
+                {
+                    if (id != null && _vectors.TryGetValue(id, out var vec))
+                    {
+                        ids.Add(id);
+                        vecs.Add(vec);
+                    }
+                }
+
+                int n = ids.Count;
+                var scored = new List<(string Id, T Score)>(n);
+
+                if (GpuVectorScorer.TryScoreBatch(_metric, query, vecs, gpuThreshold, out var gpuScores)
+                    && gpuScores.Length == n)
+                {
+                    for (int i = 0; i < n; i++)
+                        scored.Add((ids[i], gpuScores[i]));
+                }
+                else
+                {
+                    for (int i = 0; i < n; i++)
+                        scored.Add((ids[i], _metric.Calculate(query, vecs[i])));
+                }
+
+                var sorted = _metric.HigherIsBetter
+                    ? scored.OrderByDescending(x => x.Score)
+                    : scored.OrderBy(x => x.Score);
+
+                return sorted.ToList();
+            }
+        }
+
         /// <inheritdoc/>
         public bool Remove(string id)
         {
