@@ -737,7 +737,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // iteration cap below for the multi-iter probes. Self-relative invariants + paper architecture
         // preserved; family bases (NeuralNetwork / AudioNN / VisionLanguage / EmbeddingModel) are generic
         // over T so the floatify rewrite compiles. ---
-        "CLIPA", "ACEStep", "AudioVisualEventLocalizationNetwork", "BASIC", "ConvolutionalNeuralNetwork",
+        "CLIPA", "InternVL25", "ACEStep", "AudioVisualEventLocalizationNetwork", "BASIC", "ConvolutionalNeuralNetwork",
         "DCGAN", "Data2VecASR", "DeepBeliefNetwork", "DenseNetNetwork", "Donut", "EmotiVoice", "Emu",
         "ExtremeLearningMachine", "Kokoro", "MCDropoutNeuralNetwork", "MPLUGOwl2",
         "Mamba2", "MedCLIP", "MedFlamingo", "MinMo", "LLaVANeXTVideo", "NaturalSpeech2", "NeuFlowV2",
@@ -3354,6 +3354,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 128, outputSize: 4), " +
                     $"new {vlmOptionsType} {{ VisionDim = 128, DecoderDim = 128, " +
                     "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "InternVL25"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // InternVL25 (InternVL 2.5, Chen et al. 2024) is a foundation-scale VLM — VisionDim 3200,
+                // DecoderDim 4096, 48 vision + 32 decoder layers, 448px (InternVL-2.5-78B class). At
+                // <double> its training OOM-crashed the 16 GB Gen G-I runner. The InstructionTuned family
+                // handlers key on "InternVL" (exact match), so "InternVL25" fell through to full scale.
+                // ComputeVisualPatchSize derives the patch size from ImageSize/MaxVisualTokens, so a small
+                // ImageSize=32 / MaxVisualTokens=4 is valid (2x2 patch grid). Build the SAME VLM
+                // architecture at CI-smoke width/depth via the real option names; float via
+                // Fp32TestClassNames. (The model's paper defaults are unchanged — only this test-scaffold
+                // instance shrinks.)
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.InternVL25Options { VisionDim = 32, " +
+                    "DecoderDim = 32, ProjectionDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 2, ImageSize = 32, MaxVisualTokens = 4 })";
             }
             else if (model.ClassName == "CLIPA"
                      && typeName.StartsWith("AiDotNet.VisionLanguage.Encoders.", System.StringComparison.Ordinal))
