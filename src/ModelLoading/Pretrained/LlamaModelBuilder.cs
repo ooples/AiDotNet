@@ -232,16 +232,18 @@ public static class LlamaModelBuilder<T>
         WriteGamma(norm, gamma);
     }
 
-    // Writes a [featureSize] gamma vector into an RMSNorm layer's live gamma tensor.
+    // Writes a [featureSize] gamma vector into an RMSNorm layer's gamma parameter. Routes through the
+    // layer's SetParameters (an in-place copy that ALSO calls Engine.InvalidatePersistentTensor) instead of
+    // writing the raw AsWritableSpan directly: the raw span is a documented escape hatch that does NOT bump
+    // the tensor Version, so a gamma loaded under a live GPU engine would leave the persistent GPU buffer at
+    // its construction-time value (gamma = 1) and every RMSNorm forward would run against the wrong scale.
     private static void WriteGamma(RMSNormalizationLayer<T> norm, T[] gamma)
     {
-        var live = norm.GetGammaTensor();
-        if (live.Length != gamma.Length)
+        long expected = norm.ParameterCount;
+        if (expected != gamma.Length)
             throw new InvalidDataException(
-                $"RMSNorm gamma length {live.Length} does not match loaded weight length {gamma.Length}.");
-        var span = live.AsWritableSpan();
-        for (int i = 0; i < gamma.Length; i++)
-            span[i] = gamma[i];
+                $"RMSNorm gamma length {expected} does not match loaded weight length {gamma.Length}.");
+        norm.SetParameters(new Vector<T>(gamma));
     }
 
     // Reads a named tensor's values (row-major) as T, verifying the element count.
