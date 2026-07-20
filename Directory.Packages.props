@@ -249,7 +249,7 @@
          (the fused-primitive centralization in #1847/#1848 wires every consumer through them) and now
          run against the fixed engine. 0.113.0 is PUBLISHED to NuGet and is a superset of 0.112.0 (also
          carries #765 compiled-ReduceMax axis fill), so all rationale above is retained. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.114.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.118.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.114.0" />
