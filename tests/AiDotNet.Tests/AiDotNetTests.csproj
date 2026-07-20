@@ -64,6 +64,10 @@
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Redis\AiDotNet.Storage.Redis.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Neo4j\AiDotNet.Storage.Neo4j.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Elasticsearch\AiDotNet.Storage.Elasticsearch.csproj" />
+    <!-- Native FAISS backend (net10-only; win-x64 native). Test code that references it is
+         guarded with #if NET10_0_OR_GREATER; integration tests self-skip if the native lib
+         cannot load. See Storage/FaissDocumentStoreTests.cs. -->
+    <ProjectReference Include="..\..\src\AiDotNet.Storage.Faiss\AiDotNet.Storage.Faiss.csproj" />
   </ItemGroup>
 
   <ItemGroup>

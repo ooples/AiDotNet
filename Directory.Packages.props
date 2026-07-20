@@ -308,6 +308,9 @@
     <!-- Infrastructure -->
     <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.4.2" />
     <PackageVersion Include="Neo4j.Driver" Version="5.28.4" />
+    <!-- Managed FAISS wrapper (native ANN: Flat/IVF/HNSW/PQ). Consumed only by the opt-in
+         AiDotNet.Storage.Faiss metapackage; ships a net6.0 lib + win-x64 native runtime. -->
+    <PackageVersion Include="FaissNet" Version="1.1.0" />
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
     <PackageVersion Include="Stripe.net" Version="52.1.0" />
