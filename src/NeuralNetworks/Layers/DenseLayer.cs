@@ -273,6 +273,17 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private int _q8In;
     private int _q8Out;
 
+    // The quantized forward is only faster than the fp32 BLAS when the CPU can do the int8 dot in one VNNI
+    // instruction (vpdpbusd). Detected once at startup; false on AVX2-only CPUs and on net471 (no intrinsics),
+    // where the fp32 path is used instead.
+#if NET5_0_OR_GREATER
+    private static readonly bool Q8SpeedFavorable =
+        System.Runtime.Intrinsics.X86.AvxVnni.IsSupported
+        || System.Runtime.Intrinsics.X86.Avx512BW.IsSupported;
+#else
+    private const bool Q8SpeedFavorable = false;
+#endif
+
     /// <summary>
     /// Installs a frozen Q8_0 quantized weight for inference. <paramref name="qs"/> is the native ggml
     /// Q8_0 int8 payload for a weight logically shaped [outFeatures, inFeatures] (blocks of 32 contiguous
@@ -1080,13 +1091,14 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Q8_0 quantized-weight inference fast path: run the block-Q8_0 GEMM directly on the int8 weight
         // (llama.cpp / ggml_vec_dot_q8_0_q8_0), never expanding it to fp32. Float inference only, off the
         // gradient tape — training/serialization still use the fp32 _weights.
-        // The naive block-Q8_0 kernel is memory-bandwidth-bound: it beats fp32 BLAS at small M (decode /
-        // small batch, where each weight byte is read once) but loses at large M (prefill, where the weight
-        // is reused across many rows and the fp32 GEMM is compute-bound + register-tiled). Gate on M so the
-        // quantized path is only taken where it is faster; large-M prefill stays on fp32 until the int8 GEMM
-        // is register-tiled.
+        // The block-Q8_0 kernel's int8 dot needs a 1-instruction VNNI multiply-accumulate (vpdpbusd) to beat
+        // the mature fp32 BLAS: on AVX-VNNI / AVX-512-VNNI hardware it wins on both compute AND weight
+        // bandwidth; on AVX2-only CPUs the 3-instruction int8 dot is no faster than fp32 FMA, so the fp32 BLAS
+        // wins and the quantized path is skipped (no regression). Also gated to small M — even on VNNI the
+        // large-M prefill path favors the fp32 BLAS's 2D register tiling until the int8 GEMM is 2D-tiled.
         const int q8MaxRowsForNaiveKernel = 16;
         if (_weightsQ8 is not null && _weightScalesQ8 is not null
+            && Q8SpeedFavorable
             && !IsTrainingMode && !DeterministicForward
             && typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
