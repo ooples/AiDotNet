@@ -68,7 +68,9 @@ internal class PagedAttentionKernel<T>
         float scale,
         bool causalMask = true)
     {
-        int numHeads = _config.NumHeads;
+        int numKVHeads = _config.NumHeads;
+        int numQueryHeads = _config.NumQueryHeads > 0 ? _config.NumQueryHeads : numKVHeads;
+        int group = numQueryHeads / numKVHeads; // GQA repeat factor; 1 for standard multi-head attention
         int headDim = _config.HeadDimension;
         int seqLen = _kvCache.GetSequenceLength(sequenceId);
 
@@ -84,15 +86,17 @@ internal class PagedAttentionKernel<T>
         // below, so the softmax is normalized over the window only. 0 => full causal attention.
         int windowStart = _config.WindowSize > 0 ? Math.Max(0, seqLen - _config.WindowSize) : 0;
 
-        // Allocate working memory
+        // Allocate working memory. K/V buffers hold the (possibly fewer) KV heads the cache stores; the query
+        // and output are laid out over the full query-head count.
         var scores = new float[seqLen];
-        var keyBuffer = new T[numHeads * headDim];
-        var valueBuffer = new T[numHeads * headDim];
+        var keyBuffer = new T[numKVHeads * headDim];
+        var valueBuffer = new T[numKVHeads * headDim];
 
-        // Process each head
-        for (int head = 0; head < numHeads; head++)
+        // Process each query head; under GQA it reads the KV head it shares (kvHead = head / group).
+        for (int head = 0; head < numQueryHeads; head++)
         {
             int queryOffset = head * headDim;
+            int kvOffset = (head / group) * headDim;
 
             // Compute attention scores for all positions
             float maxScore = float.NegativeInfinity;
@@ -104,10 +108,9 @@ internal class PagedAttentionKernel<T>
 
                 // Compute Q @ K^T for this head
                 float score = 0;
-                int keyOffset = head * headDim;
                 for (int d = 0; d < headDim; d++)
                 {
-                    score += query[queryOffset + d] * ToFloat(keyBuffer[keyOffset + d]);
+                    score += query[queryOffset + d] * ToFloat(keyBuffer[kvOffset + d]);
                 }
                 score *= scale;
 
@@ -146,10 +149,9 @@ internal class PagedAttentionKernel<T>
 
                 _kvCache.ReadValue(sequenceId, pos, layer, valueBuffer.AsSpan());
 
-                int valueOffset = head * headDim;
                 for (int d = 0; d < headDim; d++)
                 {
-                    headOutput[d] += scores[pos] * ToFloat(valueBuffer[valueOffset + d]);
+                    headOutput[d] += scores[pos] * ToFloat(valueBuffer[kvOffset + d]);
                 }
             }
 
@@ -178,7 +180,10 @@ internal class PagedAttentionKernel<T>
         float scale)
     {
         int batchSize = sequenceIds.Length;
-        int headSize = _config.NumHeads * _config.HeadDimension;
+        // Query/output are laid out over the full query-head count (GQA-aware); the cache still stores fewer
+        // KV heads internally.
+        int numQueryHeads = _config.NumQueryHeads > 0 ? _config.NumQueryHeads : _config.NumHeads;
+        int headSize = numQueryHeads * _config.HeadDimension;
 
         // Process each batch item (could be parallelized)
         for (int b = 0; b < batchSize; b++)
@@ -205,7 +210,9 @@ internal class PagedAttentionKernel<T>
         float[]? alibiSlopes = null,
         int queryPosition = -1)
     {
-        int numHeads = _config.NumHeads;
+        int numKVHeads = _config.NumHeads;
+        int numQueryHeads = _config.NumQueryHeads > 0 ? _config.NumQueryHeads : numKVHeads;
+        int group = numQueryHeads / numKVHeads; // GQA repeat factor; 1 for standard multi-head attention
         int headDim = _config.HeadDimension;
         int blockSize = _config.BlockSize;
         int seqLen = _kvCache.GetSequenceLength(sequenceId);
@@ -226,22 +233,23 @@ internal class PagedAttentionKernel<T>
 
         int numBlocks = blockTable.Length;
 
-        // Per-head online-softmax scratch. Pooled: this method runs once per decode token, per layer, per
-        // sequence, so a fresh new[] here was the top compute-path allocation site (dotnet-trace). The
-        // pooled arrays may be longer than requested; only [0, numHeads*headDim) is used, so the tail is
-        // ignored. accumulators is zero-initialized for the used region below; keyBuffer/valueBuffer are
-        // fully overwritten by ReadKey/ReadValue before each read.
+        // Per-QUERY-head online-softmax scratch (softmax is independent per query head, even when several share
+        // a KV head under GQA). Pooled: this method runs once per decode token, per layer, per sequence, so a
+        // fresh new[] here was the top compute-path allocation site (dotnet-trace). The pooled arrays may be
+        // longer than requested; only the used prefix is touched. accumulators is zero-initialized for the used
+        // region below; keyBuffer/valueBuffer (sized to the KV heads the cache stores) are fully overwritten by
+        // ReadKey/ReadValue before each read.
         var floatPool = ArrayPool<float>.Shared;
         var tPool = ArrayPool<T>.Shared;
-        var maxScores = floatPool.Rent(numHeads);
-        var sumExps = floatPool.Rent(numHeads);
-        var accumulators = floatPool.Rent(numHeads * headDim);
-        var keyBuffer = tPool.Rent(numHeads * headDim);
-        var valueBuffer = tPool.Rent(numHeads * headDim);
+        var maxScores = floatPool.Rent(numQueryHeads);
+        var sumExps = floatPool.Rent(numQueryHeads);
+        var accumulators = floatPool.Rent(numQueryHeads * headDim);
+        var keyBuffer = tPool.Rent(numKVHeads * headDim);
+        var valueBuffer = tPool.Rent(numKVHeads * headDim);
         try
         {
-        Array.Clear(accumulators, 0, numHeads * headDim);
-        for (int head = 0; head < numHeads; head++)
+        Array.Clear(accumulators, 0, numQueryHeads * headDim);
+        for (int head = 0; head < numQueryHeads; head++)
         {
             maxScores[head] = float.NegativeInfinity;
             sumExps[head] = 0f;
@@ -269,16 +277,17 @@ internal class PagedAttentionKernel<T>
                 _kvCache.ReadKey(sequenceId, pos, layer, keyBuffer.AsSpan());
                 _kvCache.ReadValue(sequenceId, pos, layer, valueBuffer.AsSpan());
 
-                // Update each head
-                for (int head = 0; head < numHeads; head++)
+                // Update each query head; under GQA it reads the KV head it shares (kvHead = head / group).
+                for (int head = 0; head < numQueryHeads; head++)
                 {
-                    int offset = head * headDim;
+                    int offset = head * headDim;            // query / accumulator / output (per query head)
+                    int kvOffset = (head / group) * headDim; // key / value (per shared KV head)
 
                     // Compute score = Q dot K * scale
                     float score = 0;
                     for (int d = 0; d < headDim; d++)
                     {
-                        score += query[offset + d] * ToFloat(keyBuffer[offset + d]);
+                        score += query[offset + d] * ToFloat(keyBuffer[kvOffset + d]);
                     }
                     score *= scale;
 
@@ -298,7 +307,7 @@ internal class PagedAttentionKernel<T>
                     // Update accumulator
                     for (int d = 0; d < headDim; d++)
                     {
-                        accumulators[offset + d] = accumulators[offset + d] * expOld + expNew * ToFloat(valueBuffer[offset + d]);
+                        accumulators[offset + d] = accumulators[offset + d] * expOld + expNew * ToFloat(valueBuffer[kvOffset + d]);
                     }
 
                     // Update sum and max
@@ -308,8 +317,8 @@ internal class PagedAttentionKernel<T>
             }
         }
 
-        // Normalize and write output
-        for (int head = 0; head < numHeads; head++)
+        // Normalize and write output (one entry per query head)
+        for (int head = 0; head < numQueryHeads; head++)
         {
             int offset = head * headDim;
             float invSum = sumExps[head] > 0 ? 1.0f / sumExps[head] : 0;
@@ -355,11 +364,11 @@ internal class PagedAttentionKernel<T>
     /// cache-agnostic (the caller persists KV separately for the decode continuation) and does NOT support
     /// sliding-window eviction — callers must keep the per-token paged path when a window is configured.
     /// </remarks>
-    /// <param name="queries">Query buffer [rowLen, numHeads*headDim], RoPE-applied if the model uses RoPE.</param>
-    /// <param name="keys">Key buffer [rowLen, numHeads*headDim], RoPE-applied if the model uses RoPE.</param>
-    /// <param name="values">Value buffer [rowLen, numHeads*headDim].</param>
+    /// <param name="queries">Query buffer [rowLen, numQueryHeads*headDim], RoPE-applied if the model uses RoPE.</param>
+    /// <param name="keys">Key buffer [rowLen, numKVHeads*headDim] (numKVHeads &lt; numQueryHeads under GQA), RoPE-applied if the model uses RoPE.</param>
+    /// <param name="values">Value buffer [rowLen, numKVHeads*headDim].</param>
     /// <param name="rowLen">Number of query/key positions in this prefill block.</param>
-    /// <param name="output">Output buffer [rowLen, numHeads*headDim].</param>
+    /// <param name="output">Output buffer [rowLen, numQueryHeads*headDim].</param>
     /// <param name="scale">Attention scale factor (typically 1/sqrt(head_dim)).</param>
     /// <param name="alibiSlopes">Optional per-head ALiBi slopes; null for RoPE/no positional bias.</param>
     public void ComputeContiguousCausalPrefill(
@@ -371,23 +380,26 @@ internal class PagedAttentionKernel<T>
         float scale,
         float[]? alibiSlopes = null)
     {
-        int numHeads = _config.NumHeads;
+        int numKVHeads = _config.NumHeads;
+        int numQueryHeads = _config.NumQueryHeads > 0 ? _config.NumQueryHeads : numKVHeads;
+        int group = numQueryHeads / numKVHeads; // GQA repeat factor; 1 for standard multi-head attention
         int headDim = _config.HeadDimension;
-        int projDim = numHeads * headDim;
+        int qProjDim = numQueryHeads * headDim;  // query/output row stride
+        int kvProjDim = numKVHeads * headDim;    // key/value row stride (fewer heads under GQA)
 
         var pool = ArrayPool<float>.Shared;
-        var accumulators = pool.Rent(numHeads * headDim);
-        var maxScores = pool.Rent(numHeads);
-        var sumExps = pool.Rent(numHeads);
+        var accumulators = pool.Rent(numQueryHeads * headDim);
+        var maxScores = pool.Rent(numQueryHeads);
+        var sumExps = pool.Rent(numQueryHeads);
         try
         {
             for (int q = 0; q < rowLen; q++)
             {
-                int qBase = q * projDim;
+                int qBase = q * qProjDim;
 
                 // Reset per-query online-softmax accumulators.
-                Array.Clear(accumulators, 0, numHeads * headDim);
-                for (int head = 0; head < numHeads; head++)
+                Array.Clear(accumulators, 0, numQueryHeads * headDim);
+                for (int head = 0; head < numQueryHeads; head++)
                 {
                     maxScores[head] = float.NegativeInfinity;
                     sumExps[head] = 0f;
@@ -396,15 +408,16 @@ internal class PagedAttentionKernel<T>
                 // Causal: query position q attends only to key positions [0..q].
                 for (int pos = 0; pos <= q; pos++)
                 {
-                    int kBase = pos * projDim;
-                    for (int head = 0; head < numHeads; head++)
+                    int kBase = pos * kvProjDim;
+                    for (int head = 0; head < numQueryHeads; head++)
                     {
-                        int offset = head * headDim;
+                        int offset = head * headDim;             // query / accumulator / output
+                        int kvOffset = (head / group) * headDim; // shared KV head
 
                         float score = 0;
                         for (int d = 0; d < headDim; d++)
                         {
-                            score += queries[qBase + offset + d] * keys[kBase + offset + d];
+                            score += queries[qBase + offset + d] * keys[kBase + kvOffset + d];
                         }
                         score *= scale;
 
@@ -423,7 +436,7 @@ internal class PagedAttentionKernel<T>
                         for (int d = 0; d < headDim; d++)
                         {
                             accumulators[offset + d] =
-                                accumulators[offset + d] * expOld + expNew * values[kBase + offset + d];
+                                accumulators[offset + d] * expOld + expNew * values[kBase + kvOffset + d];
                         }
 
                         sumExps[head] = sumExps[head] * expOld + expNew;
@@ -432,7 +445,7 @@ internal class PagedAttentionKernel<T>
                 }
 
                 // Normalize and write this query's output.
-                for (int head = 0; head < numHeads; head++)
+                for (int head = 0; head < numQueryHeads; head++)
                 {
                     int offset = head * headDim;
                     float invSum = sumExps[head] > 0 ? 1.0f / sumExps[head] : 0;
@@ -491,10 +504,10 @@ internal class PagedAttentionKernel<T>
     /// Performs a full forward pass: projects QKV, updates cache, computes attention.
     /// </summary>
     /// <param name="hiddenStates">Input hidden states [hidden_dim].</param>
-    /// <param name="wQ">Query weight matrix [hidden_dim, num_heads * head_dim].</param>
-    /// <param name="wK">Key weight matrix [hidden_dim, num_heads * head_dim].</param>
-    /// <param name="wV">Value weight matrix [hidden_dim, num_heads * head_dim].</param>
-    /// <param name="wO">Output weight matrix [num_heads * head_dim, hidden_dim].</param>
+    /// <param name="wQ">Query weight matrix [hidden_dim, numQueryHeads * head_dim].</param>
+    /// <param name="wK">Key weight matrix [hidden_dim, numKVHeads * head_dim] (numKVHeads &lt; numQueryHeads under GQA).</param>
+    /// <param name="wV">Value weight matrix [hidden_dim, numKVHeads * head_dim].</param>
+    /// <param name="wO">Output weight matrix [numQueryHeads * head_dim, hidden_dim].</param>
     /// <param name="sequenceId">Sequence ID.</param>
     /// <param name="position">Current token position.</param>
     /// <param name="layer">Layer index.</param>
@@ -511,39 +524,43 @@ internal class PagedAttentionKernel<T>
         Span<float> output)
     {
         int hiddenDim = hiddenStates.Length;
-        int numHeads = _config.NumHeads;
+        int numKVHeads = _config.NumHeads;
+        int numQueryHeads = _config.NumQueryHeads > 0 ? _config.NumQueryHeads : numKVHeads;
         int headDim = _config.HeadDimension;
-        int projDim = numHeads * headDim;
+        // Q and O are laid out over the query heads; K/V over the (possibly fewer) KV heads the cache stores.
+        // Under standard multi-head attention the two counts are equal. Mirrors HF q_proj vs k_proj/v_proj.
+        int qProjDim = numQueryHeads * headDim;
+        int kvProjDim = numKVHeads * headDim;
         float scale = 1.0f / MathF.Sqrt(headDim);
 
         var pool = ArrayPool<float>.Shared;
-        var queryBuf = pool.Rent(projDim);
-        var keyBuf = pool.Rent(projDim);
-        var valueBuf = pool.Rent(projDim);
-        var attnBuf = pool.Rent(projDim);
+        var queryBuf = pool.Rent(qProjDim);
+        var keyBuf = pool.Rent(kvProjDim);
+        var valueBuf = pool.Rent(kvProjDim);
+        var attnBuf = pool.Rent(qProjDim);
 
         try
         {
-            var query = queryBuf.AsSpan(0, projDim);
-            var key = keyBuf.AsSpan(0, projDim);
-            var value = valueBuf.AsSpan(0, projDim);
-            var attnOutput = attnBuf.AsSpan(0, projDim);
+            var query = queryBuf.AsSpan(0, qProjDim);
+            var key = keyBuf.AsSpan(0, kvProjDim);
+            var value = valueBuf.AsSpan(0, kvProjDim);
+            var attnOutput = attnBuf.AsSpan(0, qProjDim);
 
-            // Q = hidden @ wQ
-            MatVecMul(hiddenStates, wQ, query, hiddenDim, projDim);
-            // K = hidden @ wK
-            MatVecMul(hiddenStates, wK, key, hiddenDim, projDim);
-            // V = hidden @ wV
-            MatVecMul(hiddenStates, wV, value, hiddenDim, projDim);
+            // Q = hidden @ wQ (query heads)
+            MatVecMul(hiddenStates, wQ, query, hiddenDim, qProjDim);
+            // K = hidden @ wK (KV heads)
+            MatVecMul(hiddenStates, wK, key, hiddenDim, kvProjDim);
+            // V = hidden @ wV (KV heads)
+            MatVecMul(hiddenStates, wV, value, hiddenDim, kvProjDim);
 
             // Update cache with new K, V
             UpdateCache(key, value, sequenceId, position, layer);
 
-            // Compute attention
+            // Compute attention (GQA-aware: repeats each KV head across its query-head group)
             ComputeTiledPagedAttention(query, sequenceId, layer, attnOutput, scale);
 
             // Project output: out = attn @ wO
-            MatVecMul(attnOutput, wO, output, projDim, hiddenDim);
+            MatVecMul(attnOutput, wO, output, qProjDim, hiddenDim);
         }
         finally
         {
@@ -566,28 +583,31 @@ internal class PagedAttentionKernel<T>
         Span<float> output)
     {
         int hiddenDim = hiddenStates.Length;
-        int numHeads = _config.NumHeads;
+        int numKVHeads = _config.NumHeads;
+        int numQueryHeads = _config.NumQueryHeads > 0 ? _config.NumQueryHeads : numKVHeads;
         int headDim = _config.HeadDimension;
-        int projDim = numHeads * headDim;
+        // Q/O over query heads, K/V over the (possibly fewer) KV heads — same asymmetry as HF q_proj vs k_proj.
+        int qProjDim = numQueryHeads * headDim;
+        int kvProjDim = numKVHeads * headDim;
         float scale = 1.0f / MathF.Sqrt(headDim);
 
-        if (wQ.Cols != hiddenDim || wK.Cols != hiddenDim || wV.Cols != hiddenDim || wO.Cols != projDim)
+        if (wQ.Cols != hiddenDim || wK.Cols != hiddenDim || wV.Cols != hiddenDim || wO.Cols != qProjDim)
         {
             throw new ArgumentException("Quantized weight dimensions do not match expected shapes.");
         }
 
         var pool = ArrayPool<float>.Shared;
-        var queryBuf = pool.Rent(projDim);
-        var keyBuf = pool.Rent(projDim);
-        var valueBuf = pool.Rent(projDim);
-        var attnBuf = pool.Rent(projDim);
+        var queryBuf = pool.Rent(qProjDim);
+        var keyBuf = pool.Rent(kvProjDim);
+        var valueBuf = pool.Rent(kvProjDim);
+        var attnBuf = pool.Rent(qProjDim);
 
         try
         {
-            var query = queryBuf.AsSpan(0, projDim);
-            var key = keyBuf.AsSpan(0, projDim);
-            var value = valueBuf.AsSpan(0, projDim);
-            var attnOutput = attnBuf.AsSpan(0, projDim);
+            var query = queryBuf.AsSpan(0, qProjDim);
+            var key = keyBuf.AsSpan(0, kvProjDim);
+            var value = valueBuf.AsSpan(0, kvProjDim);
+            var attnOutput = attnBuf.AsSpan(0, qProjDim);
 
             MatVecMulInt8(hiddenStates, wQ, query);
             MatVecMulInt8(hiddenStates, wK, key);
@@ -697,8 +717,20 @@ internal class PagedAttentionKernel<T>
 /// </summary>
 internal class PagedAttentionConfig
 {
-    /// <summary>Number of attention heads.</summary>
+    /// <summary>
+    /// Number of KEY/VALUE attention heads. This is the head count the paged KV cache physically stores, so
+    /// it is always the cache's head count. Under multi-head attention it equals the number of query heads;
+    /// under grouped-query attention (GQA) it is smaller (see <see cref="NumQueryHeads"/>).
+    /// </summary>
     public int NumHeads { get; set; } = 32;
+
+    /// <summary>
+    /// Number of QUERY attention heads. Under grouped-query attention the query heads outnumber the KV heads
+    /// (<see cref="NumHeads"/>): each KV head is shared by <c>NumQueryHeads / NumHeads</c> query heads, and
+    /// query head <c>q</c> reads KV head <c>q / (NumQueryHeads / NumHeads)</c>. 0 (the default) means "same as
+    /// <see cref="NumHeads"/>" — standard multi-head attention with no KV sharing.
+    /// </summary>
+    public int NumQueryHeads { get; set; }
 
     /// <summary>Dimension of each head.</summary>
     public int HeadDimension { get; set; } = 128;
