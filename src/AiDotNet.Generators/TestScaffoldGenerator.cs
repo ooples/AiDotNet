@@ -758,6 +758,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> HeavyTrainingTimeoutClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
+        // SambaLanguageModel (Ren et al. 2024, arXiv:2406.07522 — Mamba + sliding-window attention + MLP
+        // hybrid): once HybridBlockScheduler was fixed to register its inner blocks + pre-norms as
+        // trainable (they were previously invisible to the gradient tape, so the model never learned),
+        // the full SSM+attention stack now trains every step. Training_ShouldReduceLoss and
+        // LossStrictlyDecreasesOnMemorizationTask pass at <double>, but the 50+200-iteration MoreData
+        // probe (~8 s/step over the deep hybrid stack) overran the 120 s gate. <float> is NOT viable
+        // here (the fused-float optimizer path diverges: loss 0.35 -> 3.4), so smoke-cap the
+        // many-iteration convergence probes at <double> — same treatment as the seg foundation models.
+        "SambaLanguageModel",
         // Segmentation foundation models (Swin/ViT encoder + transformer mask decoder) — 250-iter
         // MoreData / 100-iter memorization overrun 120 s on CPU (verified: solo timeout).
         "Mask2Former", "EfficientSAM", "U2Seg",
@@ -2700,17 +2709,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (IsVoiceCloningTTS(model.ClassName) && model.TypeParameterCount == 1)
             {
-                // MetaVoice-1B (transformer LLM voice cloner) builds its layer chain from options
-                // (speaker-embedding dim = 256) and consumes [seq, 256] embedding sequences — see the
-                // matching InputShape override. The generic fallback architecture (inputWidth = 32) makes
-                // the base's construction-time lazy-shape resolution size the first LayerNorm to 32, which
-                // then mismatches the [8, 256] test input at forward time ("Gamma shape (32) does not
-                // match ... input shape (8, 256)"). Build a 2-D architecture whose input matches [8, 256]
-                // so the lazy LayerNorms resolve to 256 up front.
+                // MetaVoice-1B (metavoiceio/metavoice-src) defaults to its paper 1.2B scale: a
+                // firstStageDim=2048 × 24-layer causal GPT/LLaMA transformer + a 1024 × 12-layer
+                // non-causal second stage + a 512-channel HiFi-GAN vocoder — far too many parameters to
+                // Clone / serialize / train inside the CI memory + time budget. Build the SAME multi-stage
+                // architecture (RMSNorm + RoPE + SwiGLU two-stage transformers → conv-transpose vocoder)
+                // at CI-smoke width/depth via a small MetaVoice1BOptions; only the scale shrinks
+                // (InitializeLayers reads these dims). RoPE needs an even per-head dim: 32/2 = 16.
+                // The rank-3 [1, 8, 256] test input (see the matching InputShape override) carries the
+                // additive text+speaker conditioning embeddings; the 2-D architecture (inputWidth = 256)
+                // lets the base's lazy-shape walk resolve the first Dense to 256 up front. Floatified to
+                // <float> by the generator since MetaVoice1B is in Fp32TestClassNames.
+                pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 8, inputWidth: 256, inputDepth: 1, outputSize: 4))";
+                    "inputHeight: 8, inputWidth: 256, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions { FirstStageDim = 32, " +
+                    "NumFirstStageLayers = 1, SecondStageDim = 32, NumSecondStageLayers = 1, NumHeads = 2, " +
+                    "NumCodebooks = 2, FirstStageCodebooks = 1, CodecLatentDim = 16, VocoderChannels = 16, " +
+                    "VocoderUpsampleFactor = 2, SwiGLUMultipleOf = 8 })";
             }
             else if (model.ClassName == "AnimateDiff" && model.TypeParameterCount == 1)
             {
@@ -3220,6 +3238,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
                     "new AiDotNet.SpeechRecognition.LLMIntegrated.OLMoASROptions { EncoderDim = 32, " +
                     "NumEncoderLayers = 2, VocabSize = 64, NumMels = 32 })";
+            }
+            else if (model.ClassName == "SambaASR" && model.TypeParameterCount == 1)
+            {
+                // SambaASR (Yadav et al. 2025, arXiv:2501.02832): a Mamba selective-SSM ASR encoder.
+                // Its paper defaults (EncoderDim=512, 24 Mamba layers, MaxSequenceLength=750) make each
+                // CPU training step multi-second — the many-iteration MoreData / memorization probes
+                // would overrun the 120 s gate — and the selective scan is far heavier per layer than
+                // the previous (dense-approximated Conformer) build. Construct the SAME Mamba encoder
+                // (Dense frontend -> N MambaBlocks -> LayerNorm -> vocab head) at CI-smoke width/depth.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "new AiDotNet.SpeechRecognition.LLMIntegrated.SambaASROptions { EncoderDim = 32, " +
+                    "NumEncoderLayers = 2, StateDimension = 8, ExpandFactor = 2, VocabSize = 64, " +
+                    "NumMels = 32, MaxSequenceLength = 64 })";
             }
             else if (model.ClassName == "Cutie" && model.TypeParameterCount == 1)
             {
@@ -4794,14 +4828,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (IsVoiceCloningTTS(model.ClassName))
             {
-                // MetaVoice-1B is a 1.2B transformer LLM voice cloner; its layer chain
-                // (CreateDefaultVoiceCloningLayers) is a residual transformer whose first real layer is
-                // MultiHeadAttention(speakerEmbeddingDim = 256). It consumes speaker/text embedding
-                // sequences [seq, 256], not mel-spectrograms, so the vocoder default [8, 80] trips
-                // `Input embedding dimension (80) does not match weight dimension (256)`. Emit the
-                // embedding-sequence shape so the encoder→projection→decoder chain actually runs.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 8, 256 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 256 };");
+                // MetaVoice-1B (CreateDefaultMetaVoice1BLayers) is a multi-stage transformer voice cloner:
+                // RMSNorm+RoPE+SwiGLU causal first-stage GPT → non-causal second stage → conv-transpose
+                // HiFi-GAN vocoder. It consumes a rank-3 [B, seq, embedDim] text+speaker conditioning
+                // embedding sequence (embedDim = SpeakerEmbeddingDim = 256) and emits a [B, 1, seq·upsample]
+                // waveform. The conv vocoder requires a batch axis, hence rank-3 [1, 8, 256]. The token
+                // (sequence) axis is axis 1 — DifferentInputLengths_ShouldNotCrash must halve the tokens,
+                // NOT the final embedding dim (fixed by the first projection). OutputShape is a fallback;
+                // the base infers the true shape from a warm-up Predict.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 256 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 16 };");
+                // NOTE: no VariableLengthAxis override here — TTSModelTestBase (which MetaVoice1BTests
+                // extends) does not declare that virtual (it's an AudioNNModelTestBase member), so
+                // emitting it produced CS0115 and broke the test build.
             }
             else if (model.ImplementsVocoder && IsConv1DWaveformVocoder(model.ClassName))
             {

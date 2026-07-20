@@ -666,6 +666,10 @@ public static class DeserializationHelper
         {
             instance = CreateCrossAttentionLayer<T>(type, inputShape, additionalParams);
         }
+        else if (genericDef == typeof(PreLNTransformerBlock<>))
+        {
+            instance = CreatePreLNTransformerBlock<T>(type, inputShape, additionalParams);
+        }
         else if (genericDef == typeof(TransformerEncoderLayer<>))
         {
             // The current TransformerEncoderLayer<T> constructor is (numHeads, feedForwardDim);
@@ -2931,6 +2935,81 @@ public static class DeserializationHelper
         return ctor.Invoke(new object?[] { headCount, headDimension, activation, null });
     }
 
+    /// <summary>
+    /// Reconstructs a <see cref="PreLNTransformerBlock{T}"/> from the metadata persisted by
+    /// <c>PreLNTransformerBlock.GetMetadata</c>. The block wraps a caller-supplied attention
+    /// sublayer, so the standard reflection matcher cannot rebuild it — we recreate the injected
+    /// <see cref="MultiHeadAttentionLayer{T}"/> (head count, causal masking, RoPE frequency/length),
+    /// the FFN activation, and the SwiGLU/plain FFN variant, then warm the block with a single
+    /// dummy forward so every lazy sublayer allocates its weights before the caller reattaches the
+    /// saved parameter vector via SetParameters.
+    /// </summary>
+    private static object CreatePreLNTransformerBlock<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
+    {
+        int hiddenSize = TryGetInt(additionalParams, "HiddenSize")
+            ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+        if (hiddenSize <= 0)
+        {
+            throw new InvalidOperationException(
+                "PreLNTransformerBlock deserialization requires a positive HiddenSize (from metadata or input shape).");
+        }
+
+        int ffnDim = TryGetInt(additionalParams, "FfnDim") ?? (hiddenSize * 4);
+        bool useGatedSwiGLU = TryGetBool(additionalParams, "UseGatedSwiGLU") ?? false;
+
+        // Rebuild the injected attention. MultiHeadAttentionLayer is the only attention type the
+        // built-in factories wire through this block; a different persisted AttentionType means a
+        // custom composition this reconstruction path does not model.
+        string? attentionType = TryGetString(additionalParams, "AttentionType");
+        if (attentionType is not null &&
+            !attentionType.StartsWith("MultiHeadAttentionLayer", StringComparison.Ordinal))
+        {
+            throw new NotSupportedException(
+                $"PreLNTransformerBlock deserialization only supports a MultiHeadAttentionLayer attention " +
+                $"sublayer; got '{attentionType}'. Extend CreatePreLNTransformerBlock to handle it.");
+        }
+
+        int headCount = TryGetInt(additionalParams, "AttHeadCount") ?? ResolveDefaultHeadCount(hiddenSize);
+        if (headCount <= 0 || hiddenSize % headCount != 0)
+        {
+            throw new InvalidOperationException(
+                $"PreLNTransformerBlock deserialization: HiddenSize {hiddenSize} is not divisible by AttHeadCount {headCount}.");
+        }
+        int headDim = hiddenSize / headCount;
+
+        var attn = new MultiHeadAttentionLayer<T>(headCount, headDim);
+        attn.UseCausalMask = TryGetBool(additionalParams, "AttUseCausalMask") ?? false;
+
+        string? peName = TryGetString(additionalParams, "AttPositionalEncoding");
+        if (peName is not null &&
+            Enum.TryParse<PositionalEncodingType>(peName, out var pe) &&
+            pe != PositionalEncodingType.None)
+        {
+            double ropeTheta = TryGetDouble(additionalParams, "AttRopeTheta") ?? 10000.0;
+            int ropeMaxLen = TryGetInt(additionalParams, "AttRopeMaxSeqLen") ?? 2048;
+            attn.ConfigurePositionalEncoding(pe, ropeTheta, ropeMaxLen);
+        }
+
+        // FFN activation (ignored internally when useGatedSwiGLU is true — SwiGLU uses its own SiLU
+        // gate — but restored anyway for the plain-FFN variant). Null falls through to the block's
+        // GELU default, matching its constructor.
+        var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+        var ffnActivation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType)
+            as IActivationFunction<T>;
+
+        var block = new PreLNTransformerBlock<T>(hiddenSize, ffnDim, attn, ffnActivation, useGatedSwiGLU);
+
+        // Warm-up forward: materializes every lazy sublayer (MHA Q/K/V/O, RMSNorm gains, FFN
+        // matrices) so ParameterCount is correct and SetParameters can reattach the saved weights.
+        // A [1, hiddenSize] all-zero input is enough — projection weight shapes are independent of
+        // sequence length and batch — and the random init it consumes is immediately overwritten by
+        // the deserialized parameters.
+        var warmup = new Tensor<T>(new[] { 1, hiddenSize });
+        block.Forward(warmup);
+
+        return block;
+    }
+
     private static object CreateCrossAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
     {
         // CrossAttentionLayer(int queryDim, int contextDim, int headCount, int sequenceLength = 64).
@@ -3388,6 +3467,15 @@ public static class DeserializationHelper
                 return b;
             if (bool.TryParse(value.ToString() ?? string.Empty, out bool parsed))
                 return parsed;
+        }
+        return null;
+    }
+
+    private static string? TryGetString(Dictionary<string, object>? parameters, string key)
+    {
+        if (parameters != null && parameters.TryGetValue(key, out var value) && value != null)
+        {
+            return value as string ?? value.ToString();
         }
         return null;
     }

@@ -93,57 +93,42 @@ public class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
     public int NumFlowSteps => 0;
 
     /// <summary>
-    /// Synthesizes speech from text.
-    /// Per MetaVoice (2024): 1.2B Transformer + speaker encoder for emotional cross-lingual cloning.
+    /// Synthesizes speech from text by running the full MetaVoice-1B pipeline:
+    /// text+speaker conditioning embeddings → first-stage causal transformer → second-stage
+    /// non-causal transformer → HiFi-GAN vocoder → waveform (metavoiceio/metavoice-src).
     /// </summary>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
-        var input = PreprocessText(text);
         if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int cF = textLen * 3;
-        double[] tf = new double[cF];
-        double p = 0;
-        for (int f = 0; f < cF; f++)
-        {
-            int t = Math.Min(f * textLen / cF, textLen - 1);
-            double attn = (text[t] % 128) / 128.0 * 0.5 + p * 0.25;
-            tf[f] = Math.Tanh(attn + Math.Sin(f * 0.06) * 0.12 + Math.Cos(f * 0.1) * 0.08);
-            p = tf[f];
-        }
-        int waveLen = cF * (SampleRate / _options.CodecFrameRate);
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, cF - 1);
-            waveform[i] = NumOps.FromDouble(
-                Math.Tanh(Math.Sin(i * 0.005 + tf[fr]) * 0.4 + tf[fr] * 0.5)
-            );
-        }
-        return waveform;
+            return OnnxModel.Run(PreprocessText(text));
+        var conditioning = BuildConditioningSequence(text, speakerEmbedding: null);
+        var audio = PredictCore(conditioning);
+        return FlattenWaveform(audio);
     }
 
     public double MinReferenceDuration => 3.0;
-    public int SpeakerEmbeddingDim => 256;
+    public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
 
+    /// <summary>
+    /// Zero-shot voice cloning: extracts a speaker/tone embedding from the reference audio and
+    /// conditions the generation on it (additive speaker conditioning, per the reference's
+    /// <c>tok_emb + pos_emb + spk_emb</c>), then runs the full pipeline.
+    /// </summary>
     public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
     {
+        ThrowIfDisposed();
         var embedding = ExtractSpeakerEmbedding(referenceAudio);
-        var baseAudio = Synthesize(text);
-        for (int i = 0; i < baseAudio.Length; i++)
-        {
-            int embIdx = i % embedding.Length;
-            double mod = NumOps.ToDouble(embedding[embIdx]) * 0.1;
-            baseAudio[i] = NumOps.FromDouble(NumOps.ToDouble(baseAudio[i]) * (1.0 + mod));
-        }
-        return baseAudio;
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(PreprocessText(text));
+        var conditioning = BuildConditioningSequence(text, embedding);
+        var audio = PredictCore(conditioning);
+        return FlattenWaveform(audio);
     }
 
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
     {
-        int embDim = 256;
+        int embDim = _options.SpeakerEmbeddingDim;
         var embedding = new Tensor<T>([embDim]);
         int chunkSize = Math.Max(1, referenceAudio.Length / embDim);
         for (int i = 0; i < embDim; i++)
@@ -154,6 +139,44 @@ public class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
             embedding[i] = NumOps.FromDouble(Math.Tanh(sum / chunkSize));
         }
         return L2Normalize(embedding);
+    }
+
+    /// <summary>
+    /// Builds the rank-3 <c>[1, seq, SpeakerEmbeddingDim]</c> conditioning-embedding sequence the
+    /// native pipeline consumes: a per-token text embedding, additively fused with the optional
+    /// speaker/tone embedding (broadcast across the sequence), matching the reference model's
+    /// additive <c>tok_emb + pos_emb + spk_emb</c> conditioning.
+    /// </summary>
+    private Tensor<T> BuildConditioningSequence(string text, Tensor<T>? speakerEmbedding)
+    {
+        int condDim = _options.SpeakerEmbeddingDim;
+        int seq = Math.Max(1, Math.Min(text?.Length ?? 0, _options.MaxTextLength));
+        var conditioning = new Tensor<T>([1, seq, condDim]);
+        for (int s = 0; s < seq; s++)
+        {
+            double token = (text is { Length: > 0 } && s < text.Length) ? text[s] / 128.0 : 0.0;
+            double posPhase = (s + 1.0) / (seq + 1.0);
+            for (int c = 0; c < condDim; c++)
+            {
+                double freq = 1.0 / Math.Pow(10000.0, (2.0 * (c / 2)) / condDim);
+                double tokEmb = Math.Sin(token * (c + 1)) * 0.5;
+                double posEmb = ((c & 1) == 0 ? Math.Sin(posPhase / freq) : Math.Cos(posPhase / freq)) * 0.5;
+                double spkEmb = speakerEmbedding is not null
+                    ? NumOps.ToDouble(speakerEmbedding[c % speakerEmbedding.Length])
+                    : 0.0;
+                conditioning[0, s, c] = NumOps.FromDouble(tokEmb + posEmb + spkEmb);
+            }
+        }
+        return conditioning;
+    }
+
+    /// <summary>Flattens the vocoder's rank-3 <c>[1, 1, L]</c> waveform output to a rank-1 <c>[L]</c> signal.</summary>
+    private Tensor<T> FlattenWaveform(Tensor<T> audio)
+    {
+        var waveform = new Tensor<T>([audio.Length]);
+        for (int i = 0; i < audio.Length; i++)
+            waveform[i] = audio[i];
+        return waveform;
     }
 
     protected override Tensor<T> PreprocessText(string text)
@@ -175,14 +198,21 @@ public class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
             Layers.AddRange(Architecture.Layers);
         else
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVoiceCloningLayers(
-                    _options.SpeakerEmbeddingDim,
-                    _options.EncoderDim,
-                    _options.DecoderDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
+                LayerHelper<T>.CreateDefaultMetaVoice1BLayers(
+                    firstStageDim: _options.FirstStageDim,
+                    numFirstStageLayers: _options.NumFirstStageLayers,
+                    secondStageDim: _options.SecondStageDim,
+                    numSecondStageLayers: _options.NumSecondStageLayers,
+                    numHeads: _options.NumHeads,
+                    numCodebooks: _options.NumCodebooks,
+                    firstStageCodebooks: _options.FirstStageCodebooks,
+                    codecLatentDim: _options.CodecLatentDim,
+                    vocoderChannels: _options.VocoderChannels,
+                    vocoderUpsampleFactor: _options.VocoderUpsampleFactor,
+                    swiGLUMultipleOf: _options.SwiGLUMultipleOf,
+                    ropeTheta: _options.RoPETheta,
+                    maxSeqLen: _options.MaxCodecFrames,
+                    dropoutRate: _options.DropoutRate
                 )
             );
     }
@@ -252,6 +282,17 @@ public class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
         writer.Write(_options.NumEncoderLayers);
         writer.Write(_options.NumHeads);
         writer.Write(_options.SpeakerEmbeddingDim);
+        writer.Write(_options.FirstStageDim);
+        writer.Write(_options.NumFirstStageLayers);
+        writer.Write(_options.SecondStageDim);
+        writer.Write(_options.NumSecondStageLayers);
+        writer.Write(_options.NumCodebooks);
+        writer.Write(_options.FirstStageCodebooks);
+        writer.Write(_options.CodecLatentDim);
+        writer.Write(_options.VocoderChannels);
+        writer.Write(_options.VocoderUpsampleFactor);
+        writer.Write(_options.SwiGLUMultipleOf);
+        writer.Write(_options.RoPETheta);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -270,6 +311,17 @@ public class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
         _options.NumEncoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
         _options.SpeakerEmbeddingDim = reader.ReadInt32();
+        _options.FirstStageDim = reader.ReadInt32();
+        _options.NumFirstStageLayers = reader.ReadInt32();
+        _options.SecondStageDim = reader.ReadInt32();
+        _options.NumSecondStageLayers = reader.ReadInt32();
+        _options.NumCodebooks = reader.ReadInt32();
+        _options.FirstStageCodebooks = reader.ReadInt32();
+        _options.CodecLatentDim = reader.ReadInt32();
+        _options.VocoderChannels = reader.ReadInt32();
+        _options.VocoderUpsampleFactor = reader.ReadInt32();
+        _options.SwiGLUMultipleOf = reader.ReadInt32();
+        _options.RoPETheta = reader.ReadDouble();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

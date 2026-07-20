@@ -20145,6 +20145,68 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Builds the paper-accurate SAMBA-ASR encoder (Yadav et al., "SAMBA-ASR: State-of-the-Art
+    /// Speech Recognition Leveraging Structured State-Space Models", arXiv:2501.02832, 2025).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Unlike Conformer/Transformer ASR, SAMBA-ASR replaces quadratic self-attention with a stack
+    /// of linear-time Mamba selective state-space blocks (Gu &amp; Dao 2023). The encoder is:
+    /// </para>
+    /// <list type="number">
+    /// <item>a convolutional/linear frontend that projects the log-Mel features to the model width
+    ///   and captures local temporal patterns (each <see cref="NeuralNetworks.Layers.SSM.MambaBlock{T}"/>
+    ///   also applies an internal depthwise causal conv of width <paramref name="convKernelSize"/>);</item>
+    /// <item>a series of Mamba blocks — the selective-scan core that contextualizes the audio; each
+    ///   block carries its own pre-norm + residual, so no external residual wiring is needed;</item>
+    /// <item>Layer Normalization over the contextualized audio embeddings, then a linear projection
+    ///   to the vocabulary (the token-emission head).</item>
+    /// </list>
+    /// <para>
+    /// This mirrors <see cref="CreateDefaultConformerLayers"/>'s input/output contract
+    /// (<c>[*, T, numMels] -&gt; [*, T, vocabSize]</c>) so it is a drop-in encoder, but its core is
+    /// Mamba rather than attention — the paper's defining architectural choice.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSambaASRLayers(
+        int encoderDim = 512,
+        int numLayers = 24,
+        int stateDimension = 16,
+        int expandFactor = 2,
+        int convKernelSize = 4,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // --- Convolutional/linear frontend: log-Mel [*, T, numMels] -> model width. ---
+        yield return new DenseLayer<T>(encoderDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Mamba selective-SSM encoder core. ---
+        // Each MambaBlock implements the full S6 block (in-proj -> depthwise conv -> selective scan
+        // -> gate -> out-proj) with an internal pre-norm + residual, taking and returning
+        // [batch, T, encoderDim]. Stacking bare blocks is the reference Mamba encoder pattern.
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new NeuralNetworks.Layers.SSM.MambaBlock<T>(
+                sequenceLength: maxSequenceLength,
+                modelDimension: encoderDim,
+                stateDimension: stateDimension,
+                expandFactor: expandFactor,
+                convKernelSize: convKernelSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // --- Output head: LayerNorm + linear projection to vocabulary. ---
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(vocabSize, identityActivation);
+    }
+
+    /// <summary>
     /// Creates default layers for a CTC decoder ASR model.
     /// Architecture: Mel projection → N Transformer encoder layers → CTC head.
     /// </summary>
@@ -33447,6 +33509,165 @@ public static class LayerHelper<T>
         yield return new HiFiGANResBlockLayer<T>(decDim, new[] { 3, 7, 11 }, new[] { 1, 3, 5 });
         yield return new Conv1DLayer<T>(
             outputChannels: 1, kernelSize: 7, dilation: 1, stride: 1, padding: null, activation: tanhActivation);
+    }
+
+    /// <summary>
+    /// LLaMA / MetaVoice SwiGLU FFN hidden width (Shazeer 2020; Touvron 2023 §2.2):
+    /// <c>hidden = multipleOf · ceil( (2/3 · 4·dim) / multipleOf )</c>. The 2/3 factor keeps a
+    /// gated SwiGLU FFN (which has three matrices w1/w2/w3) at roughly the same parameter count
+    /// as a plain 4×-expansion two-matrix FFN; rounding to <paramref name="multipleOf"/> keeps the
+    /// matmul dimensions hardware-friendly.
+    /// </summary>
+    private static int SwiGLUHiddenDim(int dim, int multipleOf)
+    {
+        if (multipleOf < 1) multipleOf = 1;
+        int hidden = (int)(2.0 * (4 * dim) / 3.0);
+        hidden = multipleOf * ((hidden + multipleOf - 1) / multipleOf);
+        return Math.Max(multipleOf, hidden);
+    }
+
+    /// <summary>
+    /// Paper-faithful MetaVoice-1B voice-cloning pipeline (metavoiceio/metavoice-src). Unlike the
+    /// generic transformer stand-in in <see cref="CreateDefaultVoiceCloningLayers"/>, this builds
+    /// MetaVoice-1B's actual multi-stage architecture on channels-last rank-3
+    /// <c>[B, seq, embedDim]</c> text+speaker conditioning embeddings:
+    /// <list type="number">
+    /// <item><b>First-stage model</b> — a causal GPT / LLaMA-style transformer decoder that predicts
+    /// the FIRST TWO hierarchies of EnCodec (residual-vector-quantized) audio tokens. Each block is a
+    /// pre-norm <see cref="PreLNTransformerBlock{T}"/> with <see cref="RMSNormalizationLayer{T}"/>,
+    /// rotary-position (<see cref="PositionalEncodingType.Rotary"/>) <b>causal</b>
+    /// <see cref="MultiHeadAttentionLayer{T}"/>, and a gated <b>SwiGLU</b> FFN
+    /// (<c>silu(W1·x) ⊙ W3·x</c>). Conditioning is the additive text-token + speaker/tone embedding
+    /// sequence fed as the model input (matching the reference's <c>tok_emb + pos_emb + spk_emb</c>).</item>
+    /// <item><b>Second-stage model</b> — a non-causal (encoder-style, bidirectional) RMSNorm+RoPE+SwiGLU
+    /// transformer that predicts the REMAINING EnCodec hierarchies from the first two, producing the full
+    /// RVQ latent stack.</item>
+    /// <item><b>Vocoder</b> — a HiFi-GAN-style transposed-convolution decoder (EnCodec-decoder role:
+    /// multi-band diffusion in the paper; a HiFi-GAN conv decoder is a faithful token→waveform stage)
+    /// that reconstructs the waveform from the RVQ latent: a pre-net <see cref="Conv1DLayer{T}"/>, a
+    /// time-upsampling <see cref="Conv1DTransposeLayer{T}"/>, a multi-receptive-field
+    /// <see cref="HiFiGANResBlockLayer{T}"/>, and a final tanh waveform projection.</item>
+    /// </list>
+    /// The whole chain is differentiable (the RVQ hierarchies are represented by their continuous
+    /// codebook-embedding contributions rather than hard argmax token IDs, so the gradient tape stays
+    /// intact for training), and every block carries residual skips so distinct inputs never collapse
+    /// to a constant output.
+    /// </summary>
+    /// <param name="firstStageDim">First-stage (GPT/LLaMA) transformer width. Must be divisible by
+    /// <paramref name="numHeads"/> with an even per-head dim (RoPE requirement).</param>
+    /// <param name="numFirstStageLayers">Number of first-stage causal transformer blocks.</param>
+    /// <param name="secondStageDim">Second-stage (non-causal) transformer width. Must be divisible by
+    /// <paramref name="numHeads"/> with an even per-head dim.</param>
+    /// <param name="numSecondStageLayers">Number of second-stage transformer blocks.</param>
+    /// <param name="numHeads">Attention heads for both stages.</param>
+    /// <param name="numCodebooks">Total EnCodec RVQ codebook hierarchies.</param>
+    /// <param name="firstStageCodebooks">Hierarchies predicted by the first stage (paper: 2).</param>
+    /// <param name="codecLatentDim">EnCodec continuous-latent width (the summed RVQ embedding dim) —
+    /// the vocoder's input channel count.</param>
+    /// <param name="vocoderChannels">HiFi-GAN upsample-stem channel width.</param>
+    /// <param name="vocoderUpsampleFactor">Time-upsampling factor of the transposed conv (T → T·factor).</param>
+    /// <param name="swiGLUMultipleOf">Round SwiGLU hidden dims to this multiple.</param>
+    /// <param name="ropeTheta">RoPE base frequency.</param>
+    /// <param name="maxSeqLen">RoPE cache length (auto-extends beyond this).</param>
+    /// <param name="dropoutRate">Dropout between blocks (paper default 0.0).</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultMetaVoice1BLayers(
+        int firstStageDim = 2048,
+        int numFirstStageLayers = 24,
+        int secondStageDim = 1024,
+        int numSecondStageLayers = 12,
+        int numHeads = 16,
+        int numCodebooks = 8,
+        int firstStageCodebooks = 2,
+        int codecLatentDim = 128,
+        int vocoderChannels = 512,
+        int vocoderUpsampleFactor = 2,
+        int swiGLUMultipleOf = 256,
+        double ropeTheta = 10000.0,
+        int maxSeqLen = 2048,
+        double dropoutRate = 0.0)
+    {
+        if (firstStageDim <= 0 || firstStageDim % numHeads != 0 || (firstStageDim / numHeads) % 2 != 0)
+            throw new ArgumentException(
+                $"firstStageDim ({firstStageDim}) must be a positive multiple of numHeads ({numHeads}) " +
+                "with an even per-head dimension (RoPE requires even head dims).", nameof(firstStageDim));
+        if (secondStageDim <= 0 || secondStageDim % numHeads != 0 || (secondStageDim / numHeads) % 2 != 0)
+            throw new ArgumentException(
+                $"secondStageDim ({secondStageDim}) must be a positive multiple of numHeads ({numHeads}) " +
+                "with an even per-head dimension (RoPE requires even head dims).", nameof(secondStageDim));
+        if (firstStageCodebooks <= 0 || firstStageCodebooks > numCodebooks)
+            throw new ArgumentException(
+                $"firstStageCodebooks ({firstStageCodebooks}) must be in [1, numCodebooks ({numCodebooks})].",
+                nameof(firstStageCodebooks));
+
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var tanh = (IActivationFunction<T>)new TanhActivation<T>();
+
+        // (1) Input projection: additive text-token + speaker/tone conditioning embedding sequence
+        //     [B, seq, embedDim] -> first-stage width. (The [B, seq, embedDim] input already carries
+        //     the fused wte + wpe + spk_emb conditioning.)
+        yield return new DenseLayer<T>(firstStageDim, identity);
+
+        // (2) First-stage GPT / LLaMA transformer: N × (RMSNorm -> RoPE CAUSAL MHA -> residual,
+        //     RMSNorm -> SwiGLU FFN -> residual). Predicts the first two EnCodec RVQ hierarchies.
+        int firstHeadDim = firstStageDim / numHeads;
+        int firstFfn = SwiGLUHiddenDim(firstStageDim, swiGLUMultipleOf);
+        for (int i = 0; i < numFirstStageLayers; i++)
+        {
+            var attn = new MultiHeadAttentionLayer<T>(headCount: numHeads, headDimension: firstHeadDim);
+            attn.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSeqLen);
+            attn.UseCausalMask = true;
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: firstStageDim, ffnDim: firstFfn, attention: attn,
+                ffnActivation: silu, useGatedSwiGLU: true);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new RMSNormalizationLayer<T>();
+
+        // (3) First-stage head: the first two RVQ hierarchies' continuous codebook embeddings.
+        yield return new DenseLayer<T>(firstStageCodebooks * codecLatentDim, identity);
+
+        // (4) Second-stage input projection -> second-stage width.
+        yield return new DenseLayer<T>(secondStageDim, identity);
+
+        // (5) Second-stage transformer: M × (RMSNorm -> RoPE NON-CAUSAL MHA -> residual,
+        //     RMSNorm -> SwiGLU FFN -> residual). Predicts the remaining hierarchies from the first two.
+        int secondHeadDim = secondStageDim / numHeads;
+        int secondFfn = SwiGLUHiddenDim(secondStageDim, swiGLUMultipleOf);
+        for (int i = 0; i < numSecondStageLayers; i++)
+        {
+            var attn = new MultiHeadAttentionLayer<T>(headCount: numHeads, headDimension: secondHeadDim);
+            attn.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSeqLen);
+            // Non-causal: the second stage attends over the whole first-two-hierarchy sequence.
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: secondStageDim, ffnDim: secondFfn, attention: attn,
+                ffnActivation: silu, useGatedSwiGLU: true);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new RMSNormalizationLayer<T>();
+
+        // (6) Second-stage head: the full EnCodec RVQ latent (all hierarchies summed), channels-last
+        //     [B, seq, codecLatentDim].
+        yield return new DenseLayer<T>(codecLatentDim, identity);
+
+        // (7) EnCodec / HiFi-GAN vocoder: RVQ latent -> waveform.
+        //     Channels-last [B, seq, codecLatentDim] -> channels-first [B, codecLatentDim, seq]
+        //     (TransposeLayer permutes the non-batch axes, so swapping [seq, C] -> [C, seq] is [1, 0]).
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
+        // Pre-net conv ("same" padding preserves T). Eager ctors (input channels known) so Clone /
+        // serialize round-trips exactly.
+        yield return new Conv1DLayer<T>(codecLatentDim, vocoderChannels, 7, 1, 1, null, leakyRelu);
+        // Transposed-conv time upsample: T -> T · vocoderUpsampleFactor.
+        int decDim = Math.Max(1, vocoderChannels / 2);
+        yield return new Conv1DTransposeLayer<T>(
+            inputChannels: vocoderChannels, outputChannels: decDim,
+            kernelSize: 2 * vocoderUpsampleFactor, stride: vocoderUpsampleFactor,
+            activation: leakyRelu);
+        // Multi-receptive-field residual block (HiFi-GAN v1 kernels/dilations).
+        yield return new HiFiGANResBlockLayer<T>(decDim, new[] { 3, 7, 11 }, new[] { 1, 3, 5 });
+        // Final waveform projection to a single channel, tanh-bounded (HiFi-GAN convention).
+        yield return new Conv1DLayer<T>(decDim, 1, 7, 1, 1, null, tanh);
     }
 
     /// <summary>

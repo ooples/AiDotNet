@@ -35,9 +35,16 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     private readonly RMSNormalizationLayer<T> _norm1;
     private readonly LayerBase<T> _attention;
     private readonly RMSNormalizationLayer<T> _norm2;
-    private readonly DenseLayer<T> _ffnUp;
+    // FFN "up" projection. When <see cref="_useGatedSwiGLU"/> is false this is a plain
+    // DenseLayer (linear -> activation) matching the T5/Gemma/Qwen2 convention. When true it
+    // is a gated SwiGLU projection (silu(W1 x) * W3(x)) — the LLaMA / MetaVoice-1B FFN
+    // (Shazeer 2020, "GLU Variants Improve Transformer"): F.silu(w1(x)) * w3(x), followed by
+    // the w2/c_proj down-projection in <see cref="_ffnDown"/>. Typed as the polymorphic
+    // LayerBase so both variants flow through the same GetParameters/SetParameters/Forward path.
+    private readonly LayerBase<T> _ffnUp;
     private readonly DenseLayer<T> _ffnDown;
     private readonly IActivationFunction<T> _ffnActivation;
+    private readonly bool _useGatedSwiGLU;
     private readonly int _hiddenSize;
     private readonly int _ffnDim;
 
@@ -56,12 +63,19 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     /// <see cref="GroupedQueryAttentionLayer{T}"/> for Qwen2/ChatGLM3.</param>
     /// <param name="ffnActivation">FFN activation function. Paper canonical:
     /// <see cref="GELUActivation{T}"/> for T5/DistilledT5,
-    /// <see cref="SiLUActivation{T}"/> for Gemma/Qwen2/ChatGLM3.</param>
+    /// <see cref="SiLUActivation{T}"/> for Gemma/Qwen2/ChatGLM3. Ignored when
+    /// <paramref name="useGatedSwiGLU"/> is true (SwiGLU uses its own internal SiLU gate).</param>
+    /// <param name="useGatedSwiGLU">When true the FFN "up" projection is a gated SwiGLU unit
+    /// (<c>silu(W1·x) ⊙ W3·x</c>, Shazeer 2020) instead of the plain <c>activation(W·x)</c>
+    /// projection. This is the LLaMA / MetaVoice-1B first- and second-stage transformer FFN.
+    /// The down-projection (<c>c_proj</c>) is unchanged. Defaults to false so the existing
+    /// T5 / Gemma / Qwen2 / ChatGLM3 encoders keep their plain FFN, byte-for-byte.</param>
     public PreLNTransformerBlock(
         int hiddenSize,
         int ffnDim,
         LayerBase<T> attention,
-        IActivationFunction<T>? ffnActivation = null)
+        IActivationFunction<T>? ffnActivation = null,
+        bool useGatedSwiGLU = false)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
         if (hiddenSize <= 0)
@@ -75,15 +89,21 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         _ffnDim = ffnDim;
         _attention = attention;
         _ffnActivation = ffnActivation ?? new GELUActivation<T>();
+        _useGatedSwiGLU = useGatedSwiGLU;
 
         _norm1 = new RMSNormalizationLayer<T>();
         _norm2 = new RMSNormalizationLayer<T>();
 
-        // T5 / LLaMA / Gemma / Qwen2 / ChatGLM3 FFN: linear (no bias) → activation → linear (no bias).
-        // DenseLayer's vector activation overload accepts scalar IActivationFunction.
-        // DenseLayer(outputSize, activation): lazy-resolves input dim on first
-        // forward, so the FFN expands hidden -> ffnDim, then projects ffnDim -> hidden.
-        _ffnUp = new DenseLayer<T>(outputSize: ffnDim, activationFunction: _ffnActivation);
+        // FFN up-projection:
+        //  • Plain (default): T5 / Gemma / Qwen2 / ChatGLM3 — linear → activation, expanding
+        //    hidden → ffnDim. DenseLayer lazy-resolves its input dim on the first forward.
+        //  • Gated SwiGLU (useGatedSwiGLU): LLaMA / MetaVoice-1B — SwiGLUFeedForwardLayer computes
+        //    silu(W1·x) ⊙ (W3·x), also expanding hidden → ffnDim, then the shared _ffnDown
+        //    projects ffnDim → hidden (the w2 / c_proj matrix). Both share the identical
+        //    GetParameters / SetParameters / Forward code path (typed as LayerBase<T>).
+        _ffnUp = useGatedSwiGLU
+            ? new SwiGLUFeedForwardLayer<T>(ffnDim)
+            : new DenseLayer<T>(outputSize: ffnDim, activationFunction: _ffnActivation);
         _ffnDown = new DenseLayer<T>(outputSize: hiddenSize, activationFunction: new IdentityActivation<T>());
 
         // Register every sublayer so TapeTrainingStep<T>.CollectParameters
@@ -166,6 +186,42 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         var slice = source.Slice(offset, count);
         layer.SetParameters(slice);
         offset += count;
+    }
+
+    /// <summary>
+    /// Persists the constructor configuration (block widths, FFN variant/activation, and the
+    /// injected attention sublayer's descriptor) so the block can be rebuilt during
+    /// deserialization / <c>Clone</c>. The sublayer WEIGHTS travel separately in the flat
+    /// parameter vector (see <see cref="GetParameters"/>); this metadata only carries the
+    /// STRUCTURE needed to recreate an identically-shaped block before <see cref="SetParameters"/>
+    /// runs. Reconstruction lives in <c>DeserializationHelper.CreatePreLNTransformerBlock</c>.
+    /// </summary>
+    internal override System.Collections.Generic.Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["HiddenSize"] = _hiddenSize.ToString(ci);
+        metadata["FfnDim"] = _ffnDim.ToString(ci);
+        metadata["UseGatedSwiGLU"] = _useGatedSwiGLU ? "true" : "false";
+        // Store the assembly-qualified name (mirrors LayerBase's ScalarActivationType) so the
+        // reader can resolve it via Type.GetType through TryCreateActivationInstance.
+        metadata["FfnActivationType"] =
+            _ffnActivation.GetType().AssemblyQualifiedName ?? _ffnActivation.GetType().FullName ?? string.Empty;
+        metadata["AttentionType"] = _attention.GetType().Name;
+        // MultiHeadAttentionLayer is the only attention type wired through this block by the
+        // built-in model factories (LLaMA/Gemma/MetaVoice-1B use RoPE MHA). Persist its full
+        // descriptor — head count, causal masking, and the RoPE frequency/length — so the
+        // reconstructed attention computes bit-identical outputs. Head dimension is derived
+        // as HiddenSize / AttHeadCount on the read side.
+        if (_attention is MultiHeadAttentionLayer<T> mha)
+        {
+            metadata["AttHeadCount"] = mha.HeadCount.ToString(ci);
+            metadata["AttUseCausalMask"] = mha.UseCausalMask ? "true" : "false";
+            metadata["AttPositionalEncoding"] = mha.PositionalEncoding.ToString();
+            metadata["AttRopeTheta"] = mha.RopeTheta.ToString(ci);
+            metadata["AttRopeMaxSeqLen"] = mha.PositionalMaxSequenceLength.ToString(ci);
+        }
+        return metadata;
     }
 
     /// <inheritdoc/>

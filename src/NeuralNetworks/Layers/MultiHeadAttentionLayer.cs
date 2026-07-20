@@ -101,6 +101,14 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
+    // RoPE / ALiBi hyper-parameters captured at ConfigurePositionalEncoding time so a
+    // deserialized layer (which rebuilds via the (headCount, headDimension) ctor and then
+    // re-applies ConfigurePositionalEncoding) can restore the SAME rotation frequencies —
+    // otherwise a cloned/loaded model with non-default theta or max length would compute a
+    // different attention output than the original. Defaults mirror ConfigurePositionalEncoding.
+    private double _ropeTheta = 10000.0;
+    private int _positionalMaxSequenceLength = 2048;
+
     /// <summary>
     /// Gets or sets whether causal masking is applied during attention computation.
     /// When true, positions can only attend to earlier positions (autoregressive behavior).
@@ -112,6 +120,15 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Gets the positional encoding type used by this attention layer.
     /// </summary>
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
+
+    /// <summary>Per-head embedding dimension (headCount × headDimension = embeddingDimension).</summary>
+    public int HeadDimension => _headDimension;
+
+    /// <summary>RoPE base frequency (theta) last passed to <see cref="ConfigurePositionalEncoding"/>.</summary>
+    public double RopeTheta => _ropeTheta;
+
+    /// <summary>Maximum sequence length last passed to <see cref="ConfigurePositionalEncoding"/>.</summary>
+    public int PositionalMaxSequenceLength => _positionalMaxSequenceLength;
 
     /// <summary>
     /// Gets the RoPE theta parameter if RoPE is configured, or the default 10000.0.
@@ -467,6 +484,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         int maxSequenceLength = 2048)
     {
         PositionalEncoding = encodingType;
+        _ropeTheta = ropeTheta;
+        _positionalMaxSequenceLength = maxSequenceLength;
         _ropeLayer = null;
         _alibiLayer = null;
 

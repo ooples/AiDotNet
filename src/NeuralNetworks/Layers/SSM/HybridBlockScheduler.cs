@@ -209,6 +209,17 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
             _normGammas[i].Fill(NumOps.One);
             _normBetas[i] = new Tensor<T>(new[] { modelDimension });
             _normBetas[i].Fill(NumOps.Zero);
+
+            // Tape-based training (NeuralNetworkBase.TrainWithTape) discovers all
+            // trainable state by recursively walking GetSubLayers() and
+            // GetTrainableParameters(). Register each inner Mamba/attention block as a
+            // sub-layer and each pre-norm gain/shift as a trainable parameter so the
+            // optimizer actually updates them. Without this the ENTIRE hybrid stack was
+            // invisible to the gradient tape — only the embedding and LM head trained,
+            // so loss never decreased (Samba/Zamba/Jamba training-convergence failures).
+            RegisterSubLayer(blocks[i]);
+            RegisterTrainableParameter(_normGammas[i], PersistentTensorRole.NormalizationParams);
+            RegisterTrainableParameter(_normBetas[i], PersistentTensorRole.NormalizationParams);
         }
     }
 
@@ -266,37 +277,25 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     private Tensor<T> ApplyRMSNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
+        // Tape-aware pre-norm over the last (feature) axis, composed entirely from
+        // Engine ops so the gradient tape records the graph: gamma/beta receive
+        // gradients and the norm's Jacobian flows into the residual input. The
+        // previous per-timestep scalar-write implementation severed the tape (the
+        // rented output tensor was disconnected from `input`), so this normalization
+        // was invisible to autodiff. gamma/beta are 1-D [modelDim] and broadcast
+        // against the trailing feature axis of `input` ([batch, seq, modelDim]).
+        int rank = input.Shape.Length;
         T eps = NumOps.FromDouble(1e-6);
-        var gamma2D = gamma.Reshape(1, _modelDimension);
-        var beta2D = beta.Reshape(1, _modelDimension);
 
-        for (int t = 0; t < seqLen; t++)
-        {
-            var slice = input.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+        var squared = Engine.TensorSquare(input);
+        var sumSq = Engine.ReduceSum(squared, new[] { rank - 1 }, keepDims: true);
+        var meanSq = Engine.TensorDivideScalar(sumSq, NumOps.FromDouble(_modelDimension));
+        var rms = Engine.TensorSqrt(Engine.TensorAddScalar(meanSq, eps));
+        var invRms = Engine.TensorReciprocal(rms);
 
-            // RMS = sqrt(mean(x^2))
-            var squared = Engine.TensorMultiply(slice, slice);
-            var meanSquared = Engine.ReduceSum(squared, new int[] { 1 });  // [batch]
-            T divisor = NumOps.FromDouble(_modelDimension);
-
-            var normed = new Tensor<T>(slice._shape);
-            for (int b = 0; b < batchSize; b++)
-            {
-                T rms = NumOps.Sqrt(NumOps.Add(NumOps.Divide(meanSquared[new[] { b }], divisor), eps));
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    normed[new[] { b, d }] = NumOps.Divide(slice[new[] { b, d }], rms);
-                }
-            }
-
-            // Apply gamma and beta
-            var scaled = Engine.TensorBroadcastMultiply(normed, gamma2D);
-            scaled = Engine.TensorBroadcastAdd(scaled, beta2D);
-            output.SetSlice(1, t, scaled);
-        }
-
-        return output;
+        var normalised = Engine.TensorBroadcastMultiply(input, invRms);
+        var scaled = Engine.TensorBroadcastMultiply(normalised, gamma);
+        return Engine.TensorBroadcastAdd(scaled, beta);
     }
 
     private Tensor<T> BackwardRMSNorm(Tensor<T> dOutput, Tensor<T> input, Tensor<T> gamma,

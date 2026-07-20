@@ -40,7 +40,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("An Exploration of State Space Models and Mamba for Speech Recognition", "https://arxiv.org/abs/2406.02832", Year = 2024, Authors = "Miyazaki et al.")]
+[ResearchPaper("SAMBA-ASR: State-of-the-Art Speech Recognition Leveraging Structured State-Space Models", "https://arxiv.org/abs/2501.02832", Year = 2025, Authors = "Yadav et al.")]
 public class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SambaASROptions _options; public override ModelOptions GetOptions() => _options;
@@ -92,7 +92,7 @@ public class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("SambaASR does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
+    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultSambaASRLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, stateDimension: _options.StateDimension, expandFactor: _options.ExpandFactor, convKernelSize: _options.ConvKernelSize, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate, maxSequenceLength: _options.MaxSequenceLength)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
