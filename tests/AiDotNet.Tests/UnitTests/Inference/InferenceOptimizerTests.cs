@@ -266,6 +266,120 @@ public class InferenceOptimizerTests
         Assert.Contains(optimized.Layers, l => l is GraphAttentionLayer<float>);
     }
 
+    /// <summary>
+    /// A grouped-query decoder (numHeads &gt; numKVHeads) hosts its attention inside a PreLNTransformerBlock,
+    /// so enumerate the block's attention sublayer too.
+    /// </summary>
+    private static IEnumerable<ILayer<float>> PagedAttentionHosts(NeuralNetworkBase<float> model)
+    {
+        foreach (var layer in model.Layers)
+        {
+            yield return layer;
+            if (layer is PreLNTransformerBlock<float> preLn)
+                yield return preLn.AttentionLayer;
+        }
+    }
+
+    /// <summary>
+    /// End-to-end proof that the paged grouped-query attention path is numerically faithful: a tiny GQA decoder
+    /// (numHeads=4, numKVHeads=2, RoPE) is optimized with the paged KV cache enabled, and the optimized model's
+    /// forward must match the original within fp tolerance. This exercises the whole paged-GQA subsystem — the
+    /// kernel's repeat-KV, the layer's narrow K/V projections, the [Q][K][V][O][outBias] weight copy, and (the
+    /// key risk) that the paged layer's interleaved RoPE matches the source RotaryPositionalEncodingLayer. A
+    /// convention or wiring bug shows up as a large logit divergence here.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task InferenceOptimizer_PagedGroupedQueryAttention_MatchesOriginal_AndEnablesPagedCache()
+    {
+        var model = CreateTinyGqaDecoder();
+
+        // Original hosts a GroupedQueryAttentionLayer nested in a PreLNTransformerBlock.
+        Assert.Contains(PagedAttentionHosts(model), l => l is GroupedQueryAttentionLayer<float>);
+
+        var input = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 1, 32 });
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = ((i % 13) - 6) / 6.0f;
+        }
+
+        // Capture the reference output BEFORE optimization so an in-place rewrite still yields a valid baseline.
+        var baseline = model.Predict(input);
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = true,
+            EnablePagedKVCache = true,
+            EnableFlashAttention = false,
+            AttentionMasking = AttentionMaskingMode.Auto
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        // The GQA was rewritten onto the paged path, and the paged KV cache is live (incremental-generation ready).
+        Assert.True(anyApplied);
+        Assert.NotNull(optimizer.PagedKVCache);
+        Assert.Contains(PagedAttentionHosts(optimized), l => l is PagedCachedMultiHeadAttention<float>);
+        Assert.DoesNotContain(PagedAttentionHosts(optimized), l => l is GroupedQueryAttentionLayer<float>);
+
+        var y = optimized.Predict(input);
+        Assert.Equal(baseline.Shape.ToArray(), y.Shape.ToArray());
+        for (int i = 0; i < y.Length; i++)
+        {
+            Assert.True(Math.Abs(baseline[i] - y[i]) < 1e-3f,
+                $"Paged-GQA diverged from the original at {i}: {baseline[i]} vs {y[i]}");
+        }
+    }
+
+    private static NeuralNetworkBase<float> CreateTinyGqaDecoder()
+    {
+        const int seqLen = 4;
+        const int embDim = 8;
+        const int numHeads = 4;
+        const int numKVHeads = 2;
+        const int ffnDim = 16;
+        const int flatSize = seqLen * embDim;
+
+        var gqa = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: seqLen,
+            embeddingDimension: embDim,
+            numHeads: numHeads,
+            numKVHeads: numKVHeads,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>(),
+            useCausalMask: true);
+        gqa.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta: 10000.0, maxSequenceLength: seqLen);
+
+        var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new InputLayer<float>(flatSize),
+            new ReshapeLayer<float>(new[] { seqLen, embDim }),
+            new PreLNTransformerBlock<float>(hiddenSize: embDim, ffnDim: ffnDim, attention: gqa, gated: true),
+            new FlattenLayer<float>(),
+            new DenseLayer<float>(flatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.TextGeneration,
+            complexity: NetworkComplexity.Simple,
+            inputSize: flatSize,
+            outputSize: flatSize,
+            layers: layers);
+
+        var model = new NeuralNetwork<float>(architecture);
+
+        // Deterministic parameters for a stable, reproducible parity comparison.
+        var p = model.GetParameters();
+        var deterministic = new float[p.Length];
+        for (int i = 0; i < deterministic.Length; i++)
+        {
+            deterministic[i] = ((i % 17) - 8) / 16.0f;
+        }
+        model.UpdateParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<float>(deterministic));
+
+        return model;
+    }
+
     private static Transformer<float> CreateTinyTransformer(NeuralNetworkTaskType taskType)
     {
         var architecture = new TransformerArchitecture<float>(
