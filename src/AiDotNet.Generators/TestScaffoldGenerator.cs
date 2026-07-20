@@ -6254,7 +6254,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Skip ImageMatrix (requires feature extractor function — can't auto-construct)
                 // Skip SelfSupervised (implements ISelfSupervisedLoss, not LossFunctionBase)
                 // Skip ComplexInterleaved (needs ComplexLossTestBase — TODO)
-                if (loss.ApiShape == ApiShapeImageMatrix || loss.ApiShape == ApiShapeSelfSupervised || loss.ApiShape == ApiShapeComplexInterleaved || loss.ApiShape == ApiShapePairedEmbedding)
+                // Sequence losses (CTCLoss) require a batch/sequence-encoded actual vector, not a
+                // pointwise target — the pointwise invariant suite cannot exercise them, and they
+                // have dedicated sequence-API integration tests. Skip like the other non-pointwise
+                // shapes below.
+                if (loss.ApiShape == ApiShapeImageMatrix || loss.ApiShape == ApiShapeSelfSupervised || loss.ApiShape == ApiShapeComplexInterleaved || loss.ApiShape == ApiShapePairedEmbedding || loss.ApiShape == ApiShapeSequence)
                 {
                     lossTested++; // Don't count as untested since they can't auto-test
                     continue;
@@ -7114,6 +7118,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const int ApiShapeSparseIndex = 5;
     private const int ApiShapeComplexInterleaved = 6;
     private const int ApiShapePairedEmbedding = 7;
+    private const int ApiShapeSequence = 8;
 
     // LossTestInputFormat enum values (must match AiDotNet.Enums.LossTestInputFormat)
     private const int InputFormatContinuous = 0;
