@@ -107,6 +107,10 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
     // Input embedding
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
+    // Host-side copy of the (constant) positional encoding. The forward assembles a per-window PE tensor from
+    // it every step; indexing _positionalEncoding[i] on a GPU-resident tensor would sync per element (seqLen*dim
+    // reads per forward). The PE never changes after construction, so cache one host download and read that.
+    private T[]? _positionalEncodingHost;
 
     // Encoder components
     private readonly List<AutoformerEncoderLayer<T>> _encoderLayers;
@@ -195,6 +199,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         // Sinusoidal positional encoding
         int maxLen = Math.Max(_options.LookbackWindow, _options.ForecastHorizon) * 2;
         _positionalEncoding = CreateSinusoidalPositionalEncoding(maxLen, _options.EmbeddingDim);
+        _positionalEncodingHost = _positionalEncoding.GetCpuData();
 
         // Encoder layers with series decomposition and auto-correlation
         for (int i = 0; i < _options.NumEncoderLayers; i++)
@@ -468,7 +473,8 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         var inputTensor = new Tensor<T>(new[] { seqLen, 1 }, inData);
 
         var posData = new Vector<T>(seqLen * embDim);
-        for (int i = 0; i < seqLen * embDim; i++) posData[i] = _positionalEncoding[i];
+        var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
+        for (int i = 0; i < seqLen * embDim; i++) posData[i] = peHost[i];
         var posTensor = new Tensor<T>(new[] { seqLen, embDim }, posData);
 
         // Embedding: input @ inputProj(1×embDim) + positional encoding.
@@ -572,9 +578,13 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         var corr = Engine.Concat(corrParts, 0); // [corrLen]
 
         // Top-k delays by correlation value (host read of the forward values; the index choice is
-        // non-differentiable, like the paper's topk over the autocorrelation spectrum).
+        // non-differentiable, like the paper's topk over the autocorrelation spectrum). Download the whole
+        // [corrLen] vector in ONE device->host copy: indexing corr[lag] per element on a GPU-resident tensor
+        // forces a separate transfer + full pipeline sync each time (corrLen syncs per call, ×4 calls per
+        // forward, ×samples, ×epochs) — the dominant cost that left the GPU ~7% busy while the model timed out.
+        var corrHost = corr.GetCpuData();
         var corrVals = new double[corrLen];
-        for (int lag = 0; lag < corrLen; lag++) corrVals[lag] = _numOps.ToDouble(corr[lag]);
+        for (int lag = 0; lag < corrLen; lag++) corrVals[lag] = _numOps.ToDouble(corrHost[lag]);
         var topLags = Enumerable.Range(0, corrLen)
             .OrderByDescending(i => corrVals[i])
             .Take(topK)
@@ -886,6 +896,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         // Read tensors
         _inputProjection = ReadTensor(reader);
         _positionalEncoding = ReadTensor(reader);
+        _positionalEncodingHost = _positionalEncoding.GetCpuData();
         _decoderSeasonalInit = ReadTensor(reader);
         _decoderTrendInit = ReadTensor(reader);
         _seasonalProjection = ReadTensor(reader);

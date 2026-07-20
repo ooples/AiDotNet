@@ -76,6 +76,10 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
     // Input embedding and positional encoding (Tensor-based)
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
+    // Host-side copy of the (constant) positional encoding. The forward assembles the per-batch PE from it
+    // every step; indexing _positionalEncoding[i] on a GPU-resident tensor syncs per element
+    // (batch*seqLen*dim reads per forward). The PE never changes, so cache one host download.
+    private T[]? _positionalEncodingHost;
 
     // Encoder components with distilling (Tensor-based)
     private readonly List<InformerEncoderLayerTensor<T>> _encoderLayers;
@@ -170,6 +174,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
         // Sinusoidal positional encoding for the maximum sequence length
         int maxLen = Math.Max(_options.LookbackWindow, _options.ForecastHorizon) * 2;
         _positionalEncoding = CreateSinusoidalPositionalEncoding(maxLen, _options.EmbeddingDim);
+        _positionalEncodingHost = _positionalEncoding.GetCpuData();
 
         // Encoder layers with distilling
         int currentSeqLen = _options.LookbackWindow;
@@ -727,10 +732,11 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
         var flatIn = Engine.Reshape(batchInput, new[] { batch * encLen0, 1 });
         var proj = Engine.TensorMatMul(flatIn, Engine.Reshape(_inputProjection, new[] { 1, d })); // [B*L, d]
         var posEnc = new Vector<T>(batch * encLen0 * d);
+        var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
         for (int bi = 0; bi < batch; bi++)
             for (int t = 0; t < encLen0; t++)
                 for (int j = 0; j < d; j++)
-                    posEnc[(bi * encLen0 + t) * d + j] = _positionalEncoding[t * d + j];
+                    posEnc[(bi * encLen0 + t) * d + j] = peHost[t * d + j];
         var embFlat = Engine.TensorAdd(proj, new Tensor<T>(new[] { batch * encLen0, d }, posEnc));
 
         // Encoder stack with distilling.
@@ -751,7 +757,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
         var decPosData = new Vector<T>(horizon * d);
         for (int t = 0; t < horizon; t++)
             for (int j = 0; j < d; j++)
-                decPosData[t * d + j] = _positionalEncoding[(_options.LookbackWindow + t) * d + j];
+                decPosData[t * d + j] = peHost[(_options.LookbackWindow + t) * d + j];
         var decPos = new Tensor<T>(new[] { 1, horizon, d }, decPosData);
         var start3 = Engine.Reshape(_decoderStartToken, new[] { 1, 1, d });
         var dec3 = Engine.TensorBroadcastAdd(
@@ -972,6 +978,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
         // Read main tensors
         _inputProjection = ReadTensor(reader);
         _positionalEncoding = ReadTensor(reader);
+        _positionalEncodingHost = _positionalEncoding.GetCpuData();
         _decoderStartToken = ReadTensor(reader);
         _outputProjection = ReadTensor(reader);
         _outputBias = ReadTensor(reader);
