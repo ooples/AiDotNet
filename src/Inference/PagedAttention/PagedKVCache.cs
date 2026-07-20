@@ -361,6 +361,44 @@ internal class PagedKVCache<T> : IDisposable
     }
 
     /// <summary>
+    /// Bulk-reads Key AND Value for a contiguous range of token positions [startPosition, startPosition+count)
+    /// for one layer, under a SINGLE lock, into contiguous per-position slices of <paramref name="keyDst"/>
+    /// and <paramref name="valueDst"/> (each laid out [count, NumHeads*HeadDimension]). Decode attention reads
+    /// the whole KV history every token; doing that as one locked bulk copy instead of a lock per position
+    /// removes O(seqLen) lock acquisitions per layer per token — the dominant decode cost (profiled at ~51%
+    /// of decode time as contended Monitor.Enter).
+    /// </summary>
+    public virtual void ReadKeyValueRange(
+        long sequenceId, int startPosition, int count, int layer, Span<T> keyDst, Span<T> valueDst)
+    {
+        int perPos = _config.NumHeads * _config.HeadDimension;
+        if (keyDst.Length < count * perPos || valueDst.Length < count * perPos)
+            throw new ArgumentException("Destination spans are too small for the requested range.");
+        lock (_lock)
+        {
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+            for (int i = 0; i < count; i++)
+            {
+                int pos = startPosition + i;
+                var (blockId, offset) = table.GetBlockAndOffset(pos);
+                var blockStorage = _kvBlocks[blockId];
+                int posBase = i * perPos;
+                for (int head = 0; head < _config.NumHeads; head++)
+                {
+                    int dataOffset = posBase + head * _config.HeadDimension;
+                    int kOff = GetBlockStorageOffset(layer, isValue: false, offset, head);
+                    int vOff = GetBlockStorageOffset(layer, isValue: true, offset, head);
+                    blockStorage.AsSpan(kOff, _config.HeadDimension).CopyTo(keyDst.Slice(dataOffset, _config.HeadDimension));
+                    blockStorage.AsSpan(vOff, _config.HeadDimension).CopyTo(valueDst.Slice(dataOffset, _config.HeadDimension));
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets the block table for a sequence (for paged attention kernel).
     /// </summary>
     public virtual int[]? GetBlockTable(long sequenceId)

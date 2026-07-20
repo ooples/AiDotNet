@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.ModelLoading.Pretrained;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Controllers;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
@@ -122,6 +123,41 @@ if (!string.IsNullOrWhiteSpace(ggufPath))
 
     repo.LoadModel<float>(ModelName, ggufWrapper);
     tokenizers.Register(ModelName, ggufTokenizer);
+
+    // Decode-throughput benchmark: DEVHOST_DECODE=1 drives the REAL incremental (paged KV-cache) generation
+    // path and reports tokens/second + ms/token — the metric competitors quote as "tg" (token generation).
+    // NO web server; runs and exits. DEVHOST_DECODE_PROMPT / DEVHOST_DECODE_LEN tune the prompt + generated
+    // length.
+    if (Environment.GetEnvironmentVariable("DEVHOST_DECODE") == "1")
+    {
+        var genSvc = app.Services.GetRequiredService<ITextGenerationService>();
+        int promptLen = EnvInt("DEVHOST_DECODE_PROMPT", 16);
+        int genLen = EnvInt("DEVHOST_DECODE_LEN", 64);
+        var prompt = new int[promptLen];
+        for (int i = 0; i < promptLen; i++) prompt[i] = (i % 100) + 5;
+        var req = new SpeculativeDecodingRequest
+        {
+            InputTokens = prompt,
+            MaxNewTokens = genLen,
+            EosTokenId = -1, // out of range -> generate to the token limit
+            NumDraftTokens = 0,
+            Temperature = 0, // greedy
+        };
+        Console.WriteLine($"[Decode] incrementalPaged={ggufWrapper.SupportsIncrementalGeneration} warmup...");
+        _ = genSvc.Generate(ModelName, NumericType.Float, req);
+        const int runs = 3;
+        var dsw = System.Diagnostics.Stopwatch.StartNew();
+        int produced = 0;
+        for (int r = 0; r < runs; r++)
+        {
+            var gt = genSvc.Generate(ModelName, NumericType.Float, req).GeneratedTokens;
+            produced += gt is null ? 0 : System.Linq.Enumerable.Count(gt);
+        }
+        dsw.Stop();
+        double msPerTok = dsw.Elapsed.TotalMilliseconds / Math.Max(1, produced);
+        Console.WriteLine($"[Decode] prompt={promptLen} gen={genLen} produced={produced} : {1000.0 / msPerTok:F1} tok/s ({msPerTok:F2} ms/token)");
+        return;
+    }
 
     app.MapControllers();
     app.Logger.LogInformation(
