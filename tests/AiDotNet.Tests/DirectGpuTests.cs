@@ -107,8 +107,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_MatMul_Benchmark()
+    public async Task DirectGpuEngine_MatMul_Benchmark()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Arrange
         using var engine = new DirectGpuEngine();
         if (!engine.IsAvailable)
@@ -155,8 +157,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_MatMul_Benchmark_KernelOnly()
+    public async Task DirectGpuEngine_MatMul_Benchmark_KernelOnly()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // This benchmark measures ONLY kernel compute time by:
         // 1. Uploading data once to GPU
         // 2. Running GEMM multiple times with data staying on GPU
@@ -233,8 +237,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_MatMul_Benchmark_KernelComparison()
+    public async Task DirectGpuEngine_MatMul_Benchmark_KernelComparison()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Compare simple tiled kernel vs double-buffered kernel
         // This helps identify if double buffering complexity is hurting performance.
 
@@ -320,8 +326,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_MatMul_Benchmark_AllKernelVariations()
+    public async Task DirectGpuEngine_MatMul_Benchmark_AllKernelVariations()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Comprehensive benchmark comparing ALL kernel variations to identify best configuration
         // This test helps identify which kernel configuration gives the best performance
         // by testing different hypotheses:
@@ -499,8 +507,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_Relu_Activation()
+    public async Task DirectGpuEngine_Relu_Activation()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Arrange
         using var engine = new DirectGpuEngine();
         if (!engine.IsAvailable)
@@ -531,8 +541,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_Softmax()
+    public async Task DirectGpuEngine_Softmax()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Arrange
         using var engine = new DirectGpuEngine();
         if (!engine.IsAvailable)
@@ -603,8 +615,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_NewKernels_Correctness()
+    public async Task DirectGpuEngine_NewKernels_Correctness()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Validate that the 3 new GEMM kernels produce correct results
         // Test: gemm_kreg4, gemm_prefetch, gemm_wide_vec
 
@@ -685,10 +699,14 @@ public class DirectGpuTests
                 {
                     _output.WriteLine($"{name}: FAIL ({errorCount} elements with error > {tolerance}, max error: {maxError:E3})");
                 }
+
+                Assert.True(errorCount == 0,
+                    $"{name}: {errorCount} elements exceeded tolerance {tolerance} (max error: {maxError:E3})");
             }
             catch (Exception ex)
             {
                 _output.WriteLine($"{name}: ERROR - {ex.Message}");
+                throw;
             }
         }
 
@@ -698,8 +716,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_NewKernels_Benchmark()
+    public async Task DirectGpuEngine_NewKernels_Benchmark()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Benchmark the 3 new GEMM kernels against the current best (gemm_medium_tile)
         // Tests: gemm_kreg4, gemm_prefetch, gemm_wide_vec
 
@@ -801,8 +821,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_DynamicKernelGeneration_CompilesAndBenchmarks()
+    public async Task DirectGpuEngine_DynamicKernelGeneration_CompilesAndBenchmarks()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Test dynamic kernel generation like CLBlast - parameters are baked in as compile-time constants
         using var engine = new DirectGpuEngine();
         if (!engine.IsAvailable)
@@ -870,8 +892,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_DynamicKernelGeneration_LargeMatrices()
+    public async Task DirectGpuEngine_DynamicKernelGeneration_LargeMatrices()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Test dynamic kernel generation on larger matrices (2048, 4096)
         // This should achieve higher GFLOPS due to better occupancy
         using var engine = new DirectGpuEngine();
@@ -928,8 +952,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_StaticVsDynamic_DiagnosticBenchmark()
+    public async Task DirectGpuEngine_StaticVsDynamic_DiagnosticBenchmark()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Diagnostic benchmark comparing static optimized kernel vs dynamic kernel system
         // This identifies bottlenecks and regression sources
         using var engine = new DirectGpuEngine();
@@ -1273,8 +1299,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_ABTestKernelVariants_OptimizationComparison()
+    public async Task DirectGpuEngine_ABTestKernelVariants_OptimizationComparison()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Compare GEMM kernel variants:
         // - Variant 0: CLBlast Baseline (original implementation)
         // - Variant 1: XOR Swizzle (eliminates LDS bank conflicts)
@@ -1328,8 +1356,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_ComprehensiveAbTest_AllSizes()
+    public async Task DirectGpuEngine_ComprehensiveAbTest_AllSizes()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Runs comprehensive A/B testing across ALL sizes to identify:
         // 1. Which kernel variant wins at each size
         // 2. Bottleneck analysis (memory vs compute bound)
@@ -1368,8 +1398,10 @@ public class DirectGpuTests
 
     [Fact(Timeout = 60000)]
     [Trait("Category", "GPU")]
-    public void DirectGpuEngine_GemmProfiler_RooflineAnalysis()
+    public async Task DirectGpuEngine_GemmProfiler_RooflineAnalysis()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         // Uses the GemmProfiler to run full profiling with roofline analysis
 
         using var engine = new DirectGpuEngine();

@@ -48,6 +48,21 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
 
+      - name: Inject license public key (aidn2 offline verification, test-only key set)
+        # Embed the TEST key set (prod + ci-2026a) so the build can verify the offline aidn2 CI token in
+        # AIDOTNET_LICENSE_KEY on the real path (else the ModuleInitializer falls back to a synthetic license —
+        # tests still pass, just not exercising real verification). The CI key is NOT shipped: only
+        # release-please.yml's separate AIDOTNET_LICENSE_PUBLIC_KEY_JSON (prod-only) reaches published NuGets.
+        shell: bash
+        run: |
+          mkdir -p src/BuildKey
+          if [ -n "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
+            echo "Injected LicensePublicKey.json ($(wc -c < src/BuildKey/LicensePublicKey.json) bytes)"
+          else
+            echo "No license public key configured — using the committed src/BuildKey/LicensePublicKey.json if present."
+          fi
+
       - name: Build (Release, net10.0)
         run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 --no-restore
 
