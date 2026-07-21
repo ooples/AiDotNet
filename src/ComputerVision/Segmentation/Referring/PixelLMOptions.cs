@@ -23,6 +23,30 @@ public class PixelLMOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        OptimizerBatchSize = other.OptimizerBatchSize;
+        OptimizerBeta1 = other.OptimizerBeta1;
+        OptimizerBeta2 = other.OptimizerBeta2;
+        OptimizerEpsilon = other.OptimizerEpsilon;
     }
+
+    /// <summary>Gets or sets the AdamW learning rate. The paper default is 3e-4.</summary>
+    public double LearningRate { get; set; } = 3e-4;
+
+    /// <summary>Gets or sets decoupled weight decay. The paper default is zero.</summary>
+    public double WeightDecay { get; set; } = 0.0;
+
+    /// <summary>Gets or sets the optimizer batch size. The paper default is 16.</summary>
+    public int OptimizerBatchSize { get; set; } = 16;
+
+    /// <summary>Gets or sets AdamW's first-moment decay.</summary>
+    public double OptimizerBeta1 { get; set; } = 0.9;
+
+    /// <summary>Gets or sets AdamW's second-moment decay. The paper default is 0.95.</summary>
+    public double OptimizerBeta2 { get; set; } = 0.95;
+
+    /// <summary>Gets or sets AdamW's numerical-stability epsilon.</summary>
+    public double OptimizerEpsilon { get; set; } = 1e-8;
 
 }

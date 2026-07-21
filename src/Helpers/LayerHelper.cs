@@ -23619,20 +23619,29 @@ public static class LayerHelper<T>
         int numTextLayers = 12,
         int numFusionLayers = 6,
         int numHeads = 16,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int? numVisionHeads = null,
+        int? numTextHeads = null,
+        int? numFusionHeads = null,
+        int? visionIntermediateDim = null,
+        int? textIntermediateDim = null,
+        int? fusionIntermediateDim = null)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        int visionFfnDim = visionDim * 4;
-        int textFfnDim = textDim * 4;
-        int fusionFfnDim = fusionDim * 4;
+        int visionHeadCount = numVisionHeads ?? numHeads;
+        int textHeadCount = numTextHeads ?? numHeads;
+        int fusionHeadCount = numFusionHeads ?? numHeads;
+        int visionFfnDim = visionIntermediateDim ?? visionDim * 4;
+        int textFfnDim = textIntermediateDim ?? textDim * 4;
+        int fusionFfnDim = fusionIntermediateDim ?? fusionDim * 4;
 
         // === Vision Stream (transformer encoder) ===
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(visionHeadCount, visionDim / visionHeadCount);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23649,7 +23658,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (textDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(textHeadCount, textDim / textHeadCount);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textDim, identityActivation);
@@ -23665,10 +23674,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numFusionLayers; i++)
         {
             // Vision-to-text cross-attention (vision queries attend to text keys/values)
-            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, fusionHeadCount);
             yield return new LayerNormalizationLayer<T>();
             // Text-to-vision cross-attention (text queries attend to vision keys/values)
-            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, fusionHeadCount);
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(fusionFfnDim, geluActivation);

@@ -183,28 +183,21 @@ jobs:
       - name: Build for CodeQL (net10.0)
         run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
 
-      - name: Select CodeQL upload mode
-        id: codeql_upload
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          CHANGED_FILES: ${{ github.event.pull_request.changed_files || 0 }}
-        run: |
-          # 250-changed-files heuristic: very large PRs produce SARIF that repeatedly hits GitHub's
-          # code-scanning upload size/rate limits (and the upload adds little signal on a sweeping
-          # change), so skip the upload on those and keep it on for normal-sized PRs. Not a hard API
-          # constant — tune if GitHub's limits change.
-          if [[ "$EVENT_NAME" == "pull_request" && "$CHANGED_FILES" -gt 250 ]]; then
-            echo "mode=never" >> "$GITHUB_OUTPUT"
-          else
-            echo "mode=always" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Perform CodeQL Analysis
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250 }}
         uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
         with:
           category: "/language:csharp"
-          upload: ${{ steps.codeql_upload.outputs.mode }}
+          upload: always
+
+      # The CodeQL action validates `upload` before step expressions are resolved, so the input
+      # must be a literal. Keep the large-PR heuristic as a mutually exclusive analysis step.
+      - name: Perform CodeQL Analysis without upload
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.changed_files > 250 }}
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        with:
+          category: "/language:csharp"
+          upload: never
 
   # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
   build:

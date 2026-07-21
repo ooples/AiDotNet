@@ -77,6 +77,19 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.Contains(floatScaffolds, t => t.Name == "CIFEncoderTests");
         Assert.Contains(floatScaffolds, t => t.Name == "BasicVSRTests");
         Assert.Contains(floatScaffolds, t => t.Name == "OuteTTSTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "Chirp2Tests");
+        Assert.Contains(floatScaffolds, t => t.Name == "FlowDiffuserTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "FLIPTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "Gemma3Tests");
+        Assert.Contains(floatScaffolds, t => t.Name == "MemFlowTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "MiniGPT4Tests");
+        Assert.Contains(floatScaffolds, t => t.Name == "SpeechGPTTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PixelLMTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "OpenCLIPTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PointTransformerV3Tests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PyramidNERTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PerVFITests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PIDNetTests");
         Assert.Contains(doubleScaffolds, t => t.Name == "ABINetTests");
     }
 

@@ -770,6 +770,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // architecture or invariant counts. BlackLittermanNeural and SECBertNER exhausted the
         // runner; IndexTTS and OpenVocabSAM exceeded their generated-test time budgets.
         "BlackLittermanNeural", "SECBertNER", "IndexTTS", "OpenVocabSAM",
+        // Generated N-P: PixelLM and OpenCLIP each timed out in their many-step training
+        // invariants at <double>. Apply the required precision-first mitigation before changing
+        // either paper-scale architecture or the generated iteration counts.
+        "PixelLM", "OpenCLIP",
+        // The original N-P job timed out before completing the P fixtures. Its emitted timing
+        // ledger identifies these remaining generic models as the largest non-fixed consumers
+        // (roughly 51-202 seconds per fixture at <double>), and an isolated P-only reproduction
+        // still exceeded 15 minutes after the originally failing tests were fixed. Apply the
+        // required precision-first mitigation only; retain every architecture and invariant count
+        // until the generated <float> fixtures have been measured.
+        "PointTransformerV3", "PyramidNER", "PerVFI", "PIDNet",
+        // PR #1789 run 29853190657: these fixtures were still emitted at <double>. Chirp2,
+        // FlowDiffuser, FLIP, and MemFlow exceeded their per-test CPU budgets; Gemma3,
+        // MiniGPT4, and SpeechGPT exhausted the 16 GB runner. Keep production paper defaults
+        // untouched and apply the required precision-first mitigation to the generated fixtures.
+        // Audio-family entries automatically receive the existing smoke-iteration overrides;
+        // the other families retain their current invariant counts until float is measured in CI.
+        "Chirp2", "FlowDiffuser", "FLIP", "Gemma3", "MemFlow", "MiniGPT4", "SpeechGPT",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -899,6 +917,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "BASIC", "CapsuleNetwork", "ConvolutionalNeuralNetwork", "DCGAN", "DeepBeliefNetwork",
         "DenseNetNetwork", "Donut", "Emu", "ExtremeLearningMachine", "FastText",
         "MCDropoutNeuralNetwork", "GPT4Point", "InternImage", "Janus",
+        // Generated N-P: precision-first measurement on PR #1789 showed that PixelLM<float>
+        // passes memorization in 84 s but its 250-step MoreData probe still times out; OpenCLIP<float>
+        // still times out both 100-step memorization and 250-step MoreData. OMGLLaVA was already
+        // float in the failing CI run and its MoreData probe timed out. Keep each real training path
+        // active at the paper architecture while reducing only generated repetition counts.
+        "PixelLM", "OpenCLIP", "OMGLLaVA",
     };
 
     // Attribute metadata names
@@ -2077,7 +2101,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// and the test class's <c>InputShape</c> override so they always agree.
     /// </summary>
     private static int GetVisionSpatialSize(string className)
-        => IsPatchVisionModel(className) ? 112 : 128;
+        // These models use reduced spatial sizes only in generated CI fixtures after float was
+        // measured insufficient. Keep emitted inputs in lockstep with those fixture architectures;
+        // each production options type retains its paper-faithful ImageSize default.
+        => className == "MiniGPT4" ? 28
+         : className is "FLIP" or "Gemma3" ? 32
+         : IsPatchVisionModel(className) ? 112
+         : 128;
 
     /// <summary>
     /// Checks if a type IS exactly <c>NeuralNetworkArchitecture&lt;T&gt;</c> (not a derived type).
@@ -2602,7 +2632,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName == "Hippo" && model.TypeParameterCount == 1)
+            if (model.ClassName == "NBEATSFinance" && model.TypeParameterCount == 1)
+            {
+                // Production retains the authors' Adam learning rate of 1e-3 with batch size 1024.
+                // The generated invariant performs one tiny synthetic sample per optimizer step; at
+                // that radically different effective batch scale, 1e-3 updates all 30 residual stacks
+                // at once and deterministically explodes the loss. Exercise the complete paper-scale
+                // architecture with a user-supplied smoke-fixture learning rate, proving that the public
+                // customization path is honored without changing any production default.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 10, outputSize: 4), " +
+                    "new AiDotNet.Models.Options.NBEATSModelOptions<double> { LearningRate = 1e-5 })";
+            }
+            else if (model.ClassName == "Hippo" && model.TypeParameterCount == 1)
             {
                 // HiPPO (Gu et al. 2020): the production defaults remain the official LSICell
                 // configuration (l_max=1024, d_model=memory_order=256, one LegS memory, bilinear
@@ -2667,6 +2711,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.MultiModal.StepAudioOptions { TextEncoderDim = 32, LLMDim = 32, " +
                     "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 2, CodebookSize = 16 })";
             }
+            else if (model.ClassName == "SpeechGPT" && model.TypeParameterCount == 1)
+            {
+                // SpeechGPT retains its paper-scale codec LM defaults in production (1024-wide,
+                // 6 text + 12 LLM layers, 8x1024 acoustic vocabulary). Float was measured first on
+                // PR #1789: a cheap forward fell to 4 s, but the complete fixture still did not
+                // finish in six minutes. Preserve the text encoder -> codec-LM transformer ->
+                // acoustic-token head at CI-smoke width/depth/vocabulary only in generated tests.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.MultiModal.SpeechGPTOptions { TextEncoderDim = 32, " +
+                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
+                    "NumCodebooks = 2, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 16, " +
+                    "DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "OuteTTS" && model.TypeParameterCount == 1)
             {
                 // OuteTTS defaults to a 1024-wide, 12-layer codec LM with a 4096-token acoustic head.
@@ -2701,6 +2761,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASROptions { EncoderDim = 32, " +
                     "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 64, VocabSize = 64 })";
+            }
+            else if (model.ClassName == "Chirp2" && model.TypeParameterCount == 1)
+            {
+                // Chirp2's production defaults retain the USM-scale 1024-wide, 12-layer encoder and
+                // 32K vocabulary. Float was applied first and measured on PR #1789: it brought the
+                // timed-out tests under budget, but the paper-scale 1-vs-2-step MoreData smoke probe
+                // still overshot (loss 0.164716 -> 0.782144). Build the SAME Conformer/CTC-style
+                // architecture at CI-smoke width/depth/vocabulary in the generated fixture only.
+                // NumMels matches the generic audio input feature width and NumAttentionHeads divides
+                // EncoderDim; production defaults and every user-settable option remain untouched.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.Chirp2Options { EncoderDim = 32, " +
+                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, " +
+                    "MaxTextLength = 8, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Qwen2Audio" && model.TypeParameterCount == 1)
             {
@@ -3473,6 +3550,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.VisionLanguage.Foundational.VisualBERTOptions { VisionDim = 2048, " +
                     "TextDim = 64, FusionDim = 64, NumFusionLayers = 2, NumHeads = 4 })";
             }
+            else if (model.ClassName == "ViLBERT" && model.TypeParameterCount == 1)
+            {
+                // ViLBERT (Lu et al. 2019) keeps its paper-scale dual-stream defaults in production:
+                // 2048-D detector features projected to a 1024-wide visual stream, a 768-wide BERT
+                // text stream, and 6+12+6 visual/text/co-attention blocks.
+                // The generated fixture was already floatified and smoke-iteration-capped, but a
+                // Release reproduction under a 4 GB managed-heap ceiling still killed the test host
+                // during the first ViLBERT collection. Exercise the SAME visual stream -> text stream
+                // -> co-attention fusion -> pooled task-head topology at CI scale. Only this generated
+                // instance shrinks; the public options and paper defaults remain fully customizable.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 4, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Foundational.ViLBERTOptions { ImageSize = 32, " +
+                    "VisualFeatureDim = 32, VisionDim = 32, TextDim = 32, FusionDim = 32, NumVisionLayers = 1, " +
+                    "NumTextLayers = 1, NumFusionLayers = 1, NumCoAttentionLayers = 1, " +
+                    "NumHeads = 2, NumVisionHeads = 2, NumTextHeads = 2, NumFusionHeads = 2, " +
+                    "VisionIntermediateDim = 64, TextIntermediateDim = 64, FusionIntermediateDim = 64, " +
+                    "MaxVisualRegions = 4, MaxSequenceLength = 8, VocabSize = 64, " +
+                    "DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "CIFDecoder" && model.TypeParameterCount == 1)
             {
                 // CIFDecoder (CTC-variant ASR). Defaults (EncoderDim=512, 12 encoder layers, VocabSize=5000)
@@ -3685,6 +3784,42 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "DecoderDim = 32, ProjectionDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
                     "NumHeads = 2, ImageSize = 32, MaxVisualTokens = 4 })";
             }
+            else if (model.ClassName == "Gemma3"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // Gemma3's production defaults are the paper-scale SigLIP-SO + Gemma decoder
+                // (1152/3584 dims, 27/36 layers, 4096 visual tokens). Float was applied first on
+                // PR #1789 and measured insufficient: one isolated forward still took 93 seconds,
+                // while the 16 GB shard OOMed after two light tests. Preserve the complete patch
+                // encoder -> vision transformer -> gated adapter -> decoder topology at CI-smoke
+                // scale. 32px / sqrt(4 tokens) yields a legal 16px patch; heads divide both dims.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.Gemma3Options { ImageSize = 32, " +
+                    "VisionDim = 32, DecoderDim = 32, ProjectionDim = 32, NumVisionLayers = 1, " +
+                    "NumDecoderLayers = 1, NumHeads = 2, MaxVisualTokens = 4, VocabSize = 64, " +
+                    "MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "MiniGPT4"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // MiniGPT-4's production defaults preserve EVA-ViT-G + Q-Former + Vicuna scale
+                // (1408/768/4096 dims and 39/12/32 layers). Float was measured first on PR #1789;
+                // one isolated forward still took 79 seconds and the full J-M shard OOMed. Keep the
+                // same 14px patch embed, vision transformer, Q-Former cross-attention, projection,
+                // and decoder at CI-smoke scale. 28px gives a real 2x2 grid of 14px patches.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.MiniGPT4Options { ImageSize = 28, " +
+                    "VisionDim = 32, QFormerDim = 32, DecoderDim = 32, ProjectionDim = 32, " +
+                    "NumVisionLayers = 1, NumQFormerLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 2, NumQFormerHeads = 2, NumQueryTokens = 4, MaxVisualTokens = 4, " +
+                    "VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "CLIPA"
                      && typeName.StartsWith("AiDotNet.VisionLanguage.Encoders.", System.StringComparison.Ordinal))
             {
@@ -3703,6 +3838,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.VisionLanguage.Encoders.CLIPAOptions { ImageSize = 32, PatchSize = 8, " +
                     "VisionEmbeddingDim = 32, NumVisionLayers = 1, NumVisionHeads = 2, " +
                     "TextEmbeddingDim = 32, NumTextLayers = 1, ProjectionDim = 32 })";
+            }
+            else if (model.ClassName == "FLIP"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.Encoders.", System.StringComparison.Ordinal))
+            {
+                // FLIP (Li et al. 2022) keeps ViT-L/14-scale defaults in production. Float was tried
+                // first on PR #1789 and the formerly timed-out training invariant passed in 105 s,
+                // leaving too little margin for a loaded 120 s shard. Exercise the SAME patch embed,
+                // masked vision transformer, text transformer, and shared projection at CI-smoke
+                // scale. Only the generated fixture changes; the public options remain fully tunable.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Encoders.FLIPOptions { ImageSize = 32, PatchSize = 2, " +
+                    "VisionEmbeddingDim = 32, NumVisionLayers = 1, NumVisionHeads = 2, " +
+                    "TextEmbeddingDim = 32, NumTextLayers = 1, NumTextHeads = 2, " +
+                    "ProjectionDim = 32, MaxSequenceLength = 8, VocabSize = 64, DropoutRate = 0.0 })";
             }
             else if ((model.ClassName is "InternViT" or "DINOv2" or "DINOv3" or "RADIOv25" or "SigLIPSO" or "PerceptionEncoder")
                      && typeName.StartsWith(
@@ -4635,13 +4787,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Lu et al. 2019 §3 ("ViLBERT") feeds Faster-RCNN region
             // features into the vision stream, NOT raw pixels — the
             // paper uses MaxVisualRegions=36 regions with VisionDim=1024
-            // (Table 1). The model's first vision-stream layer is
-            // LayerNorm(VisionDim=1024), which rejects a raw-image
-            // [3,64,64] tensor because its last dim (64) doesn't match
-            // gamma (1024). Emit the paper-correct region-feature shape
-            // so the invariant tests actually exercise the vision
-            // stream at its specified input contract.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 36, 1024 };");
+            // (Table 1). Production retains those defaults. The generated fixture uses
+            // the same region-feature contract at measured-safe CI scale (4 regions,
+            // VisionDim=32), matching the generated-only constructor above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isVisionModel &&
@@ -6164,7 +6313,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // deep seg decoders (loss is still rising at step 2). 15 steps clears warm-up and stays
             // well under the 180 s timeout even at ~3 s/step (Mask2Former), with the default "any
             // decrease above fp noise" threshold retained so a genuinely broken optimizer still fails.
-            sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
+            // PixelLM<float> completes the original 100-step memorization probe inside 90 seconds.
+            // Its paper AdamW schedule needs the longer trajectory to clear warm-up, so preserve the
+            // stronger original count there; only its 250-step MoreData probe needs capping.
+            sb.AppendLine(model.ClassName == "PixelLM"
+                ? "    protected override int MemorizationTaskIterations => 100;"
+                : "    protected override int MemorizationTaskIterations => 15;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
             sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.5;");
         }

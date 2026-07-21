@@ -42,6 +42,33 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TVAEOptions<T> : RiskModelOptions<T>
 {
+    /// <summary>Initializes a new instance with the paper-default TVAE settings.</summary>
+    public TVAEOptions() { }
+
+    /// <summary>Initializes a new instance by copying all user-configurable settings.</summary>
+    /// <param name="other">The options instance to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public TVAEOptions(TVAEOptions<T> other)
+    {
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
+        NumFeatures = other.NumFeatures;
+        ConfidenceLevel = other.ConfidenceLevel;
+        TimeHorizon = other.TimeHorizon;
+        LossFunction = other.LossFunction;
+        EncoderDimensions = (int[])other.EncoderDimensions.Clone();
+        DecoderDimensions = (int[])other.DecoderDimensions.Clone();
+        LatentDimension = other.LatentDimension;
+        BatchSize = other.BatchSize;
+        Epochs = other.Epochs;
+        LearningRate = other.LearningRate;
+        LossWeight = other.LossWeight;
+        VGMModes = other.VGMModes;
+    }
+
     /// <summary>
     /// Gets or sets the hidden layer sizes for the encoder network.
     /// </summary>
