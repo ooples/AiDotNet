@@ -265,8 +265,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p src/BuildKey
-          if [ -n "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" ]; then
-            printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
+          # Prefer the TEST-only key set (prod + ci-2026a) so this CI build embeds the CI public key and can
+          # verify the offline aidn2 CI token in AIDOTNET_LICENSE_KEY on the real verification path. The CI key
+          # is intentionally NOT in AIDOTNET_LICENSE_PUBLIC_KEY_JSON (used by release-please.yml), so published
+          # NuGets trust ONLY the production key. Falls back to the prod var / committed file.
+          if [ -n "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
             echo "Injected LicensePublicKey.json ($(wc -c < src/BuildKey/LicensePublicKey.json) bytes)"
           else
             echo "AIDOTNET_LICENSE_PUBLIC_KEY_JSON not set — skipping (offline aidn2 verification unavailable in this build)."

@@ -78,6 +78,8 @@ def main() -> int:
                     help="audience binding (e.g. 'ci'); the host must set AIDOTNET_LICENSE_SCOPE to match")
     ap.add_argument("--private-key-pem", default=None,
                     help="path to an existing Ed25519 private key PEM to reuse (else generate a fresh one)")
+    ap.add_argument("--token-out", default=None,
+                    help="optional path to write only the aidn2 bearer token with owner-only permissions")
     ap.add_argument("--out-dir", default=".", help="directory to write private_key.pem + LicensePublicKey.json")
     args = ap.parse_args()
 
@@ -126,6 +128,17 @@ def main() -> int:
                 encryption_algorithm=serialization.NoEncryption(),
             ))
 
+    if args.token_out:
+        parent = os.path.dirname(os.path.abspath(args.token_out))
+        os.makedirs(parent, exist_ok=True)
+        fd = os.open(args.token_out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(token + "\n")
+
     print("=== aidn2 license issued ===")
     print(f"kid:            {args.kid}")
     print(f"tier/seats:     {args.tier} / {args.seats}")
@@ -137,6 +150,8 @@ def main() -> int:
     print()
     print("AIDOTNET_LICENSE_KEY (secret) =")
     print(token)
+    if args.token_out:
+        print(f"token -> {args.token_out}  (KEEP SECRET — never commit)")
     print()
     print(f"public JWK -> {jwk_path}  (embed as src/BuildKey/LicensePublicKey.json)")
     print(f"public x (base64url 32B):   {b64url(pub_raw)}")
