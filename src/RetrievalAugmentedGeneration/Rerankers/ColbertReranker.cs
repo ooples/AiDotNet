@@ -53,13 +53,31 @@ public class ColbertReranker<T> : RerankerBase<T>
     /// Initializes a new instance of the <see cref="ColbertReranker{T}"/> class.
     /// </summary>
     /// <param name="tokenEmbeddingModel">
-    /// The per-token embedding model used to produce query and document token vectors. When
-    /// <c>null</c>, a deterministic offline <see cref="HashingTokenEmbeddingModel{T}"/> is used so the
-    /// reranker works without any model download (useful for tests and development).
+    /// The per-token embedding model used to produce query and document token vectors. Required —
+    /// there is no default. ColBERT late interaction is only meaningful over real (semantic) token
+    /// embeddings; a placeholder would silently produce meaningless scores. Supply a real model,
+    /// e.g. an <see cref="EmbeddingModelTokenAdapter{T}"/> over any real <c>IEmbeddingModel&lt;T&gt;</c>
+    /// (Word2Vec / GloVe / ONNX sentence-transformer / a hosted embedder).
     /// </param>
-    public ColbertReranker(ITokenEmbeddingModel<T>? tokenEmbeddingModel = null)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="tokenEmbeddingModel"/> is null.</exception>
+    public ColbertReranker(ITokenEmbeddingModel<T> tokenEmbeddingModel)
     {
-        _tokenEmbeddingModel = tokenEmbeddingModel ?? new HashingTokenEmbeddingModel<T>();
+        if (tokenEmbeddingModel is null)
+            throw new ArgumentNullException(nameof(tokenEmbeddingModel),
+                "ColbertReranker requires a real token-embedding model; late interaction over placeholder " +
+                "embeddings is meaningless. Wrap a real IEmbeddingModel<T> in EmbeddingModelTokenAdapter<T>.");
+        _tokenEmbeddingModel = tokenEmbeddingModel;
+    }
+
+    /// <summary>
+    /// Creates a reranker whose token embeddings come from a real single-vector
+    /// <see cref="IEmbeddingModel{T}"/>, adapted to per-token output via <see cref="EmbeddingModelTokenAdapter{T}"/>.
+    /// </summary>
+    /// <param name="embeddingModel">A real embedding model used to embed each token.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="embeddingModel"/> is null.</exception>
+    public ColbertReranker(IEmbeddingModel<T> embeddingModel)
+        : this(new EmbeddingModelTokenAdapter<T>(embeddingModel))
+    {
     }
 
     /// <summary>
@@ -94,21 +112,8 @@ public class ColbertReranker<T> : RerankerBase<T>
             .ToList();
     }
 
-    /// <summary>
-    /// Asynchronously reranks documents using ColBERT MaxSim scoring, honoring cancellation.
-    /// </summary>
-    /// <param name="query">The query text used to assess relevance.</param>
-    /// <param name="documents">The documents to rerank.</param>
-    /// <param name="cancellationToken">A token to observe for cancellation.</param>
-    /// <returns>The documents reordered by descending MaxSim score, with updated relevance scores.</returns>
-    public Task<IEnumerable<Document<T>>> RerankAsync(
-        string query,
-        IEnumerable<Document<T>> documents,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Rerank(query, documents));
-    }
+    // Async reranking is provided by RerankerBase<T>.RerankAsync, which delegates to RerankCore above;
+    // no override is needed (ColBERT MaxSim is CPU-bound and synchronous).
 
     /// <summary>
     /// Computes the ColBERT MaxSim score: Σ over query tokens of the max over document tokens of the
