@@ -74,6 +74,9 @@ public class GeneratedFloatScaffoldSmokeTests
         // no manual scaffold (so it IS auto-generated); ABINet is a stable auto-generated double model not in
         // any float roster. If the float rewrite silently stops floating the Whisper/ASR family, this fails.
         Assert.Contains(floatScaffolds, t => t.Name == "WhisperLargeV3Tests");
+        Assert.Contains(floatScaffolds, t => t.Name == "CIFEncoderTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "BasicVSRTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "OuteTTSTests");
         Assert.Contains(doubleScaffolds, t => t.Name == "ABINetTests");
     }
 

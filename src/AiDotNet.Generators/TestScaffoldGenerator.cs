@@ -619,6 +619,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "DistilWhisper", "FasterWhisper", "KotobaWhisper", "WhisperLargeV3",
         "WhisperLargeV3Turbo", "WhisperLive", "WhisperX", "Moonshine", "WhisperCPP",
         "CanaryFlash", "NeMoMultitask",
+        // #1789 run 29837311320: these three generated fixtures were still emitted at <double>.
+        // CIFEncoder and BasicVSR repeatedly hit the 120/180 s per-test CPU limits; OuteTTS exhausted
+        // the 16 GB runner while its training tests were executing. Precision is the first,
+        // architecture-preserving mitigation: production paper defaults and all user options remain
+        // unchanged, while the generated invariant fixtures run with half-width values and activations.
+        "CIFEncoder", "BasicVSR", "OuteTTS",
         // AST (Gong et al. 2021): a 12-layer ViT-style residual transformer (CreateDefaultASTLayers,
         // AudioClassifier family — AudioClassifierTestBase<T> is generic). Restoring the paper's residual
         // TransformerEncoderLayer blocks (commit 297f65351) fixed its flat-loss training failures, but the
@@ -777,6 +783,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> HeavyTrainingTimeoutClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
+        // BasicVSR (Chan et al. 2021): fp32 was applied first, but its bidirectional recurrent
+        // propagation still made the default 50+200 MoreData probe hit 120 s in isolation. Keep the
+        // paper-scale model and trim only the multi-iteration generated invariants to smoke counts.
+        "BasicVSR",
         // SambaLanguageModel (Ren et al. 2024, arXiv:2406.07522 — Mamba + sliding-window attention + MLP
         // hybrid): once HybridBlockScheduler was fixed to register its inner blocks + pre-norms as
         // trainable (they were previously invisible to the gradient tape, so the model never learned),
@@ -2657,6 +2667,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.MultiModal.StepAudioOptions { TextEncoderDim = 32, LLMDim = 32, " +
                     "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 2, CodebookSize = 16 })";
             }
+            else if (model.ClassName == "OuteTTS" && model.TypeParameterCount == 1)
+            {
+                // OuteTTS defaults to a 1024-wide, 12-layer codec LM with a 4096-token acoustic head.
+                // Float was applied first, but the full generated fixture still consumed several GB and
+                // did not complete. Build the same embedding -> text transformer -> codec-LM transformer
+                // -> token-head structure at CI scale only. Production defaults and user options are
+                // untouched; NumHeads=2 divides both 32-wide stages.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.Latest.OuteTTSOptions { TextEncoderDim = 32, LLMDim = 32, " +
+                    "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 1, " +
+                    "CodebookSize = 16, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "Qwen3ASR" && model.TypeParameterCount == 1)
             {
                 // Qwen3-ASR (Alibaba 2025) LLM-integrated ASR defaults to a foundation-scale stack:
@@ -2982,6 +3007,57 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
                     $"new AiDotNet.Audio.Foundations.{model.ClassName}Options {{ HiddenDim = 64, NumLayers = 2, " +
                     "NumAttentionHeads = 4, FeedForwardDim = 128, FeatureEncoderDim = 64 })";
+            }
+            else if ((model.ClassName is "DistilWhisper" or "KotobaWhisper" or "WhisperLargeV3"
+                     or "WhisperLargeV3Turbo" or "WhisperLive" or "WhisperX")
+                     && model.TypeParameterCount == 1)
+            {
+                // The production constructors intentionally retain each checkpoint's paper scale
+                // (up to 32 encoder + 32 decoder layers at width 1280 with a 51,866-token head).
+                // Float was already applied to this family and proved insufficient in #1789:
+                // DistilWhisper stalled Generated D-F, KotobaWhisper consumed the J-M runner, and
+                // WhisperLargeV3Turbo consumed the T-Z runner. Exercise the identical Whisper
+                // encoder/decoder structure with explicit CI-only width/depth/vocabulary options.
+                // No production default is changed and every option remains user-customizable.
+                string feedForwardOption = model.ClassName is "DistilWhisper" or "WhisperLargeV3" or "WhisperLargeV3Turbo"
+                    ? "FeedForwardDim = 128, "
+                    : string.Empty;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
+                    $"new AiDotNet.SpeechRecognition.WhisperFamily.{model.ClassName}Options " +
+                    "{ SampleRate = 16000, NumMels = 32, EncoderDim = 32, DecoderDim = 32, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
+                    feedForwardOption + "VocabSize = 16, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "CanaryFlash" or "NeMoMultitask") && model.TypeParameterCount == 1)
+            {
+                // NeMo's Whisper-style encoder/decoder variants have the same foundation-scale failure
+                // mode as the large-v3 family above. Keep their defaults intact and reduce only the
+                // generated fixture's structural scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
+                    $"new AiDotNet.SpeechRecognition.NeMo.{model.ClassName}Options " +
+                    "{ SampleRate = 16000, NumMels = 32, EncoderDim = 32, DecoderDim = 32, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
+                    "VocabSize = 16, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "Moonshine" or "WhisperCPP") && model.TypeParameterCount == 1)
+            {
+                // These variants derive decoder depth as NumEncoderLayers / 2, so two smoke encoder
+                // layers preserve a real decoder block. Their paper defaults remain unchanged.
+                string optionsType = model.ClassName == "Moonshine"
+                    ? "AiDotNet.SpeechRecognition.Streaming.MoonshineOptions"
+                    : "AiDotNet.SpeechRecognition.Specialized.WhisperCPPOptions";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
+                    $"new {optionsType} {{ SampleRate = 16000, NumMels = 32, EncoderDim = 32, " +
+                    "NumEncoderLayers = 2, NumAttentionHeads = 2, VocabSize = 16, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "FasterWhisper" && model.TypeParameterCount == 1)
             {
@@ -5260,13 +5336,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isAudioModel)
         {
-            if (model.ClassName == "FasterWhisper")
+            if (model.ClassName is "DistilWhisper" or "FasterWhisper" or "KotobaWhisper"
+                or "WhisperLargeV3" or "WhisperLargeV3Turbo" or "WhisperLive" or "WhisperX"
+                or "Moonshine" or "WhisperCPP" or "CanaryFlash" or "NeMoMultitask")
             {
-                // Whisper consumes frame-major 80-channel log-mel features.
-                // Match the smoke-scale constructor above: 8 frames, 4-token
-                // vocabulary logits.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 80 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 4 };");
+                // Whisper consumes frame-major log-mel features. Match the CI-only constructor scale;
+                // FasterWhisper retains its existing 80-mel / 4-token fixture, while the other
+                // foundation variants use 32 mel features and a 16-token head.
+                int whisperMels = model.ClassName == "FasterWhisper" ? 80 : 32;
+                int whisperVocab = model.ClassName == "FasterWhisper" ? 4 : 16;
+                sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 8, {whisperMels} }};");
+                sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, 8, {whisperVocab} }};");
                 sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
             }
@@ -6100,6 +6180,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // genuine divergence still spirals to NaN / 1e6+ and is caught by the finiteness guard plus
         // OptimizerStep_ParamL2_DoesNotExplode and the DifferentInputs collapse check (all passing).
         // These two route through family branches that emit no MoreDataTolerance, so this fires once.
+        if (model.ClassName == "LayoutGraph")
+        {
+            // LayoutGraph is a nine-way classifier trained with CrossEntropyWithLogitsLoss. Dense
+            // random [0,1) targets are not class distributions: their unnormalised mass makes the
+            // CE objective task-dependent and produced the deterministic 12.36 -> 14.76 MoreData
+            // failure in #1789. Feed one legal one-hot label per output row, preserving every
+            // training assertion while matching the model's documented classification contract.
+            sb.AppendLine();
+            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        var target = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
+            sb.AppendLine("        int classes = System.Math.Max(1, shape[shape.Length - 1]);");
+            sb.AppendLine("        int samples = System.Math.Max(1, target.Length / classes);");
+            sb.AppendLine("        for (int i = 0; i < samples; i++)");
+            sb.AppendLine("            target[i * classes + rng.Next(classes)] = 1.0;");
+            sb.AppendLine("        return target;");
+            sb.AppendLine("    }");
+        }
+
         if (model.ClassName is "SpikingNeuralNetwork" or "Kokoro")
         {
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
@@ -8227,7 +8326,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "CSM" or "IndexTTS" || IsValleCodecLMModel(className);
+        return className is "GPTSoVITS" or "CSM" or "IndexTTS" or "OuteTTS"
+            || IsValleCodecLMModel(className);
     }
 
     /// <summary>
@@ -8245,6 +8345,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "VALLE2" => 16,
             "VALLEXClone" => 16,
             "IndexTTS" => 16,
+            "OuteTTS" => 16,
             "GPTSoVITS" => 1024,
             _ => 1024,
         };
@@ -8254,7 +8355,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return IsValleCodecLMModel(className) || className == "IndexTTS" ? 64 : 256;
+        return IsValleCodecLMModel(className) || className is "IndexTTS" or "OuteTTS" ? 64 : 256;
     }
 
     private static bool IsValleCodecLMModel(string className)

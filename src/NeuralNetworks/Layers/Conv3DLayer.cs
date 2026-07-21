@@ -4,6 +4,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
@@ -805,29 +806,60 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         int colsPerRow = CI * K * K * K;
         int rowsTotal = B * OD * OH * OW;
 
-        // im2col data movement — produces a fresh tensor; this is NOT a
-        // tape-tracked op on its own (no Engine.* call). We bind it into
-        // the autodiff graph below via RegisterManualBackwardNode.
-        var im2colMatrix = new Tensor<T>(new[] { rowsTotal, colsPerRow });
-        Im2Col3DHelper.Im2Col3D(input5D, im2colMatrix, K, Stride, Padding);
-
-        // Tape entry: input5D --im2col--> im2colMatrix. Backward is col2im.
-        // Other downstream tape ops (MatMul, Reshape, Permute, ...) will
-        // contribute to ∂L/∂im2colMatrix automatically; this node converts
-        // that into ∂L/∂input5D via the col2im scatter.
+        // Im2col is manual data movement rather than an Engine operation.
+        // Bind it explicitly to whichever training graph is active below:
+        // a lazy graph node for compiled training, or a manual tape node
+        // for eager training.
         int kernelSizeCapture = K;
         int strideCapture = Stride;
         int paddingCapture = Padding;
         int[] inputShapeCapture = (int[])input5D.Shape.ToArray().Clone();
-        im2colMatrix = RegisterManualBackwardNode(
-            im2colMatrix,
-            new[] { input5D },
-            gradOutput =>
-            {
-                var gradInput = new Tensor<T>(inputShapeCapture);
-                Im2Col3DHelper.Col2Im3D(gradOutput, gradInput, kernelSizeCapture, strideCapture, paddingCapture);
-                return new Tensor<T>?[] { gradInput };
-            });
+
+        Tensor<T> im2colMatrix;
+        var graphScope = GraphMode.Current;
+        if (graphScope is not null)
+        {
+            // Compiled training traces with lazy tensors. Reading input5D
+            // eagerly here would consume the trace-time placeholder and bake
+            // a stale im2col matrix into every replay. Record im2col as a real
+            // graph node so it executes after its input producer on every
+            // step, and attach the matching col2im backward edge so gradients
+            // continue through stacked Conv3D layers.
+            graphScope.BindEngineIfUnset(Engine);
+            var graphInput = input5D;
+            im2colMatrix = graphScope.RecordUnary(
+                LazyNodeType.Custom,
+                "Im2Col3D",
+                graphInput,
+                new[] { rowsTotal, colsPerRow },
+                (_, output) => Im2Col3DHelper.Im2Col3D(
+                    graphInput, output, kernelSizeCapture, strideCapture, paddingCapture),
+                (gradOutput, inputs, _, _, engine, grads) =>
+                {
+                    var gradInput = new Tensor<T>(inputShapeCapture);
+                    Im2Col3DHelper.Col2Im3D(
+                        gradOutput, gradInput, kernelSizeCapture, strideCapture, paddingCapture);
+                    DifferentiableOps.AccumulateGrad(grads, inputs[0], gradInput, engine);
+                });
+        }
+        else
+        {
+            // Tape entry: input5D --im2col--> im2colMatrix. Other
+            // downstream tape ops contribute dL/d(im2colMatrix); this node
+            // converts it to dL/d(input5D) via col2im scatter-add.
+            im2colMatrix = new Tensor<T>(new[] { rowsTotal, colsPerRow });
+            Im2Col3DHelper.Im2Col3D(input5D, im2colMatrix, K, Stride, Padding);
+            im2colMatrix = RegisterManualBackwardNode(
+                im2colMatrix,
+                new[] { input5D },
+                gradOutput =>
+                {
+                    var gradInput = new Tensor<T>(inputShapeCapture);
+                    Im2Col3DHelper.Col2Im3D(
+                        gradOutput, gradInput, kernelSizeCapture, strideCapture, paddingCapture);
+                    return new Tensor<T>?[] { gradInput };
+                });
+        }
 
         // K_flat: kernel reshaped from [CO, CI, K, K, K] to [CO, CI·K³].
         var kFlat = Engine.Reshape(_kernels, new[] { OC, colsPerRow });
