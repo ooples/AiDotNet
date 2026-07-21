@@ -18,9 +18,13 @@ namespace AiDotNet.Tests.Fixtures;
 ///         _fixture = fixture;
 ///     }
 ///
+///     // Timeout is only honoured on ASYNC tests — xUnit rejects it on a synchronous method with
+///     // "Tests marked with Timeout are only supported for async tests", so the test never runs at all.
+///     // Keep the Timeout and make the test async; await Task.Yield() is enough.
 ///     [Fact(Timeout = 60000)]
-///     public void Test_Something()
+///     public async Task Test_Something()
 ///     {
+///         await Task.Yield();
 ///         var network = _fixture.MiniDenseNet;
 ///         // Use network...
 ///     }

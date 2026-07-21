@@ -542,6 +542,32 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         => ClusteringEvaluation = evaluation;
 
     /// <summary>
+    /// The financial evaluation of a forecasting/financial model — how its held-out predictions would have
+    /// performed as a trading signal (directional accuracy, strategy Sharpe/Sortino, max drawdown, profit
+    /// factor, information coefficient), or <c>null</c> when the model is not a financial/forecasting family
+    /// or the evaluation could not be computed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The analogue of <see cref="ClusteringEvaluation"/> for a clustering model: it runs automatically
+    /// whenever the trained model is a financial or time-series forecasting family, scoring the forecaster on
+    /// money rather than error alone. The individual metric values are also copied into
+    /// <see cref="ConfiguredMetrics"/> for uniform access.
+    /// </para>
+    /// <para>
+    /// Computed on the held-out test partition (predicted vs realized) when one is available — so it is
+    /// out-of-sample in that case; the direct-training path falls back to the training partition when no
+    /// held-out split exists. The model's level forecasts are differenced to per-step changes first, so the
+    /// strategy goes long when the model forecasts a rise above the last realized value.
+    /// </para>
+    /// </remarks>
+    public Finance.Evaluation.FinancialEvaluationResult? FinancialEvaluation { get; private set; }
+
+    /// <summary>Records the financial evaluation. Called by the builder during Build.</summary>
+    internal void SetFinancialEvaluation(Finance.Evaluation.FinancialEvaluationResult evaluation)
+        => FinancialEvaluation = evaluation;
+
+    /// <summary>
     /// The attributed drift assessment computed on the held-out test stream, or <c>null</c> when no drift
     /// detector was configured via <c>ConfigureDriftDetection(...)</c>.
     /// </summary>

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -107,6 +108,10 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
     // Input embedding
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
+    // Host-side copy of the (constant) positional encoding. The forward assembles a per-window PE tensor from
+    // it every step; indexing _positionalEncoding[i] on a GPU-resident tensor would sync per element (seqLen*dim
+    // reads per forward). The PE never changes after construction, so cache one host download and read that.
+    private T[]? _positionalEncodingHost;
 
     // Encoder components
     private readonly List<AutoformerEncoderLayer<T>> _encoderLayers;
@@ -195,6 +200,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         // Sinusoidal positional encoding
         int maxLen = Math.Max(_options.LookbackWindow, _options.ForecastHorizon) * 2;
         _positionalEncoding = CreateSinusoidalPositionalEncoding(maxLen, _options.EmbeddingDim);
+        _positionalEncodingHost = _positionalEncoding.GetCpuData();
 
         // Encoder layers with series decomposition and auto-correlation
         for (int i = 0; i < _options.NumEncoderLayers; i++)
@@ -468,7 +474,8 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         var inputTensor = new Tensor<T>(new[] { seqLen, 1 }, inData);
 
         var posData = new Vector<T>(seqLen * embDim);
-        for (int i = 0; i < seqLen * embDim; i++) posData[i] = _positionalEncoding[i];
+        var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
+        for (int i = 0; i < seqLen * embDim; i++) posData[i] = peHost[i];
         var posTensor = new Tensor<T>(new[] { seqLen, embDim }, posData);
 
         // Embedding: input @ inputProj(1×embDim) + positional encoding.
@@ -534,6 +541,42 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         return Engine.TensorMultiplyScalar(acc, _numOps.FromDouble(1.0 / kernelSize));
     }
 
+    /// <summary>
+    /// Batched series-decomposition moving average over [B, S, D]. Identical arithmetic to the per-sample
+    /// <see cref="MovingAverageEngine"/>, lifted one rank: narrows move from dim 0 to dim 1.
+    /// </summary>
+    /// <remarks>
+    /// The replication padding is taken per sample from that sample's OWN first and last step (narrow on
+    /// dim 1), so padding never bleeds across the batch boundary — flattening to [B*S, D] and padding there
+    /// would splice one window's tail onto the next window's head and silently corrupt the trend.
+    /// </remarks>
+    internal Tensor<T> MovingAverageBatched(Tensor<T> x, int kernelSize, int seqLen)
+    {
+        int leftPad = kernelSize / 2;
+        int rightPad = kernelSize - 1 - leftPad;
+        Tensor<T> padded;
+        if (leftPad + rightPad == 0)
+        {
+            padded = x;
+        }
+        else
+        {
+            var front = Engine.TensorNarrow(x, 1, 0, 1);            // [B, 1, D] — each sample's own first step
+            var back = Engine.TensorNarrow(x, 1, seqLen - 1, 1);    // [B, 1, D] — each sample's own last step
+            var parts = new Tensor<T>[leftPad + 1 + rightPad];
+            int idx = 0;
+            for (int i = 0; i < leftPad; i++) parts[idx++] = front;
+            parts[idx++] = x;
+            for (int i = 0; i < rightPad; i++) parts[idx++] = back;
+            padded = Engine.Concat(parts, 1);
+        }
+
+        Tensor<T> acc = Engine.TensorNarrow(padded, 1, 0, seqLen);
+        for (int j = 1; j < kernelSize; j++)
+            acc = Engine.TensorAdd(acc, Engine.TensorNarrow(padded, 1, j, seqLen));
+        return Engine.TensorMultiplyScalar(acc, _numOps.FromDouble(1.0 / kernelSize));
+    }
+
     // Broadcast-add a [D] bias across the sequence dim of a [S, D] tensor
     // (Engine.TensorAdd requires equal shapes; the FFN biases need broadcasting).
     private Tensor<T> AddBias(Tensor<T> x, Tensor<T> bias)
@@ -547,6 +590,90 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
     // rolled by those delays (out[t] = Σ_i softmax(R)_i · v[(t+lag_i) mod L]). The top-k SELECTION is
     // data-dependent (non-differentiable, exactly as in the official implementation), but the gradient
     // still flows through the softmax weights (gathered R values → q, k) and through the rolled v.
+    // Cache for the constant diagonal-sum operator used by the matmul spectrum, keyed by (lq, lk, corrLen, d).
+    // Shape [corrLen, lq*lk]; ~110 KB at the default 24x24x512, and it never changes for a given model.
+    private readonly ConcurrentDictionary<(int Lq, int Lk, int CorrLen, int D), Tensor<T>> _diagOperatorCache = new();
+
+    /// <summary>
+    /// Builds the constant operator A with A[lag, t*lk + (t+lag)] = 1/((corrLen-lag)*d) for t &lt; corrLen-lag,
+    /// so that A @ vec(Q.K^T) is exactly the correlation spectrum R.
+    /// </summary>
+    private Tensor<T> DiagonalMeanOperator(int lq, int lk, int corrLen, int d)
+    {
+        return _diagOperatorCache.GetOrAdd((lq, lk, corrLen, d), _ =>
+        {
+            var data = new Vector<T>(corrLen * lq * lk);
+            for (int lag = 0; lag < corrLen; lag++)
+            {
+                int valid = corrLen - lag;
+                T w = _numOps.FromDouble(1.0 / (valid * d));
+                for (int t = 0; t < valid; t++)
+                    data[lag * (lq * lk) + t * lk + (t + lag)] = w;
+            }
+
+            return new Tensor<T>(new[] { corrLen, lq * lk }, data);
+        });
+    }
+
+    /// <summary>
+    /// Correlation spectrum via a single matmul instead of a per-lag loop.
+    /// R[lag] = mean over (t &lt; corrLen-lag, dim) of q[t,:]·k[t+lag,:] is, by definition, the mean of the
+    /// lag-th diagonal of M = Q.K^T. Summing a diagonal is LINEAR in M, so the whole spectrum is one constant
+    /// operator applied to vec(M): R = A @ vec(Q.K^T).
+    /// </summary>
+    /// <remarks>
+    /// This is the op-count fix. The per-lag loop issued corrLen x ~5 dispatches (~120 at the default
+    /// lookback of 24) at EACH of four call sites per forward; this issues ~5 total, independent of corrLen.
+    ///
+    /// NOT bit-identical to the loop: the products are summed in a different ORDER (matmul reduction vs
+    /// per-lag ReduceSum), so results agree to floating-point tolerance rather than exactly. The mathematics
+    /// is identical — same quantity, same gradients (A is a constant, so the tape differentiates through
+    /// vec(M) unchanged) — only the association order differs. Equivalence is asserted at 1e-9 in
+    /// AutoformerBatchedEquivalenceTests; a mismatch beyond that means the formula, not the rounding, broke.
+    /// </remarks>
+    internal Tensor<T> CorrelationSpectrumMatmul(Tensor<T> q, Tensor<T> k, int corrLen, int d)
+    {
+        int lq = q.Shape[0];
+        int lk = k.Shape[0];
+
+        var m = Engine.TensorMatMul(q, Engine.TensorTranspose(k));      // [lq, lk]
+        var flat = Engine.Reshape(m, new[] { lq * lk, 1 });             // [lq*lk, 1]
+        var spectrum = Engine.TensorMatMul(DiagonalMeanOperator(lq, lk, corrLen, d), flat); // [corrLen, 1]
+        return Engine.Reshape(spectrum, new[] { corrLen });
+    }
+
+    /// <summary>
+    /// Batched correlation spectrum: R[b, lag] = mean over (t &lt; corrLen-lag, dim) of q[b,t,:]·k[b,t+lag,:],
+    /// for q/k shaped [B, S, D]. Returns [B, corrLen].
+    /// </summary>
+    /// <remarks>
+    /// This is the op-count hot spot. The per-sample path issues corrLen x ~5 ops PER SAMPLE, so a batch of
+    /// B costs B*corrLen*5 dispatches; four call sites per forward (encoder self x N, decoder self, decoder
+    /// cross) multiply that again. Computing the spectrum for the whole batch at once collapses the B factor:
+    /// the SAME ops run on tensors one rank wider, so each sample's arithmetic and its summation ORDER are
+    /// unchanged and results stay bit-identical to the per-sample path — only the dispatch count drops.
+    /// The top-k SELECTION is deliberately NOT batched: it is data-dependent per sample (each window picks
+    /// delays from its own spectrum), which is Autoformer's defining mechanism.
+    /// </remarks>
+    internal Tensor<T> CorrelationSpectrumBatched(Tensor<T> q, Tensor<T> k, int corrLen, int d)
+    {
+        var parts = new Tensor<T>[corrLen];
+        for (int lag = 0; lag < corrLen; lag++)
+        {
+            int valid = corrLen - lag;
+            // dim 1 is time for [B, S, D]; reduce over time+feature leaving the batch axis.
+            var qSlice = Engine.TensorNarrow(q, 1, 0, valid);
+            var kSlice = Engine.TensorNarrow(k, 1, lag, valid);
+            var summed = Engine.ReduceSum(
+                Engine.TensorMultiply(qSlice, kSlice), new[] { 1, 2 }, keepDims: true); // [B, 1, 1]
+            parts[lag] = Engine.TensorMultiplyScalar(
+                Engine.Reshape(summed, new[] { summed.Shape[0], 1 }),
+                _numOps.FromDouble(1.0 / (valid * d)));
+        }
+
+        return Engine.Concat(parts, 1); // [B, corrLen]
+    }
+
     private Tensor<T> AutoCorrelationEngine(Tensor<T> q, Tensor<T> k, Tensor<T> v)
     {
         int lq = q.Shape[0];
@@ -559,22 +686,20 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         topK = Math.Min(topK, corrLen);
 
         // R[lag] = mean_{t < corrLen-lag, dim} q[t]·k[t+lag], lag in [0, corrLen). Tape-tracked.
-        var corrParts = new Tensor<T>[corrLen];
-        for (int lag = 0; lag < corrLen; lag++)
-        {
-            int valid = corrLen - lag;
-            var qSlice = Engine.TensorNarrow(q, 0, 0, valid);
-            var kSlice = Engine.TensorNarrow(k, 0, lag, valid);
-            var summed = Engine.ReduceSum(Engine.TensorMultiply(qSlice, kSlice), new[] { 0, 1 }, keepDims: false);
-            corrParts[lag] = Engine.TensorMultiplyScalar(
-                Engine.Reshape(summed, new[] { 1 }), _numOps.FromDouble(1.0 / (valid * d)));
-        }
-        var corr = Engine.Concat(corrParts, 0); // [corrLen]
+        // Computed as ONE matmul (see CorrelationSpectrumMatmul): the spectrum is the diagonal means of
+        // Q.K^T, and diagonal summation is linear in that product. The previous formulation issued
+        // corrLen x ~5 dispatches here — ~120 at the default lookback of 24, at each of four call sites per
+        // forward — which is what made Autoformer training dispatch-bound.
+        var corr = CorrelationSpectrumMatmul(q, k, corrLen, d);
 
         // Top-k delays by correlation value (host read of the forward values; the index choice is
-        // non-differentiable, like the paper's topk over the autocorrelation spectrum).
+        // non-differentiable, like the paper's topk over the autocorrelation spectrum). Download the whole
+        // [corrLen] vector in ONE device->host copy: indexing corr[lag] per element on a GPU-resident tensor
+        // forces a separate transfer + full pipeline sync each time (corrLen syncs per call, ×4 calls per
+        // forward, ×samples, ×epochs) — the dominant cost that left the GPU ~7% busy while the model timed out.
+        var corrHost = corr.GetCpuData();
         var corrVals = new double[corrLen];
-        for (int lag = 0; lag < corrLen; lag++) corrVals[lag] = _numOps.ToDouble(corr[lag]);
+        for (int lag = 0; lag < corrLen; lag++) corrVals[lag] = _numOps.ToDouble(corrHost[lag]);
         var topLags = Enumerable.Range(0, corrLen)
             .OrderByDescending(i => corrVals[i])
             .Take(topK)
@@ -886,6 +1011,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
         // Read tensors
         _inputProjection = ReadTensor(reader);
         _positionalEncoding = ReadTensor(reader);
+        _positionalEncodingHost = _positionalEncoding.GetCpuData();
         _decoderSeasonalInit = ReadTensor(reader);
         _decoderTrendInit = ReadTensor(reader);
         _seasonalProjection = ReadTensor(reader);

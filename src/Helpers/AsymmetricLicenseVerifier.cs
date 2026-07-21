@@ -228,7 +228,37 @@ internal static class AsymmetricLicenseVerifier
             return Invalid("License signature verification failed.");
         }
 
-        // Signature is authentic. Fail CLOSED on a missing / non-positive / out-of-range exp claim
+        // Signature is authentic. Now enforce the optional bindings and the revocation list — all only
+        // AFTER the signature check so an attacker cannot strip/alter them (they are signed claims).
+
+        // Revocation (CRL deny-list): a specific leaked token (jti) or a compromised signing key (kid)
+        // can be killed before exp. Absent/expired/unsigned CRL => not enforced (token exp still bounds).
+        if (LicenseRevocationProvider.IsRevoked(kid, claims.Jti))
+        {
+            return new LicenseValidationResult(
+                LicenseKeyStatus.Revoked,
+                tier: claims.Tier,
+                message: "License token has been revoked.");
+        }
+
+        // Machine binding (node-lock): a token carrying `mach` is only valid on the machine whose id hash
+        // matches, so a leaked customer token is useless elsewhere. Omitted on non-node-locked tokens.
+        if (claims.Mach is { Length: > 0 } &&
+            !string.Equals(claims.Mach, LicenseValidator.GetMachineIdHash(), StringComparison.Ordinal))
+        {
+            return Invalid("License token is bound to a different machine.");
+        }
+
+        // Scope/audience binding: a token carrying `scope` is only valid where the host declares the same
+        // expected scope (AIDOTNET_LICENSE_SCOPE). This fences a scoped token (e.g. the CI key, scope="ci")
+        // off from unintended contexts even if it leaks. A scoped token on an unscoped host is rejected.
+        if (claims.Scope is { Length: > 0 } &&
+            !string.Equals(claims.Scope, ResolveExpectedScope(), StringComparison.Ordinal))
+        {
+            return Invalid("License token scope '" + claims.Scope + "' does not match this host's expected scope.");
+        }
+
+        // Fail CLOSED on a missing / non-positive / out-of-range exp claim
         // BEFORE converting it: a malformed exp must never be treated as "non-expiring" (that would let
         // a token with no/garbage expiry live forever offline), and DateTimeOffset.FromUnixTimeSeconds
         // throws on out-of-range input. Every legitimately-issued aidn2 token carries a positive,
@@ -255,7 +285,30 @@ internal static class AsymmetricLicenseVerifier
             tier: claims.Tier,
             expiresAt: expiresAt,
             seatsMax: claims.Seats > 0 ? claims.Seats : (int?)null,
-            message: "Offline validation succeeded (signature verified).");
+            message: "Offline validation succeeded (signature verified).",
+            // Carry the signed capabilities so the persistence/encryption guards gate on exactly what this
+            // token grants (caps are authoritative offline — no "any Active unlocks everything").
+            capabilities: claims.Caps);
+    }
+
+    /// <summary>
+    /// The scope this host expects a scoped license token to declare, from the
+    /// <c>AIDOTNET_LICENSE_SCOPE</c> environment variable (empty when unset). A token that carries a
+    /// <c>scope</c> claim is accepted only when it equals this value, so a scoped token (e.g. the CI key)
+    /// cannot be reused on a host that does not opt into the same scope.
+    /// </summary>
+    private static string ResolveExpectedScope()
+    {
+        try
+        {
+            return Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_SCOPE")?.Trim() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "AsymmetricLicenseVerifier: unable to read AIDOTNET_LICENSE_SCOPE: " + ex.Message);
+            return string.Empty;
+        }
     }
 
     private static LicenseValidationResult Invalid(string message) =>

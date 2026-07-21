@@ -41,12 +41,27 @@ jobs:
           persist-credentials: false
 
       - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
       - name: Restore dependencies
         run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
+
+      - name: Inject license public key (aidn2 offline verification, test-only key set)
+        # Embed the TEST key set (prod + ci-2026a) so the build can verify the offline aidn2 CI token in
+        # AIDOTNET_LICENSE_KEY on the real path (else the ModuleInitializer falls back to a synthetic license —
+        # tests still pass, just not exercising real verification). The CI key is NOT shipped: only
+        # release-please.yml's separate AIDOTNET_LICENSE_PUBLIC_KEY_JSON (prod-only) reaches published NuGets.
+        shell: bash
+        run: |
+          mkdir -p src/BuildKey
+          if [ -n "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
+            echo "Injected LicensePublicKey.json ($(wc -c < src/BuildKey/LicensePublicKey.json) bytes)"
+          else
+            echo "No license public key configured — using the committed src/BuildKey/LicensePublicKey.json if present."
+          fi
 
       - name: Build (Release, net10.0)
         run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 --no-restore
@@ -61,6 +76,8 @@ jobs:
         # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
         # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
         env:
+          # Dedicated enterprise CI license key (save-capable, ~unlimited activations). ModuleInitializer
+          # swaps it for the deterministic synthetic offline license for the suite; it also validates online.
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           $runnerJson = 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'

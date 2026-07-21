@@ -13,6 +13,43 @@ namespace AiDotNet.Tests.UnitTests.Diffusion;
 /// </summary>
 public class MemoryManagementTests : DiffusionUnitTestBase
 {
+    #region DiffusionMemoryManager Tests
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-4)]
+    public void EstimateMemory_NormalizesNonPositiveCheckpointIntervals(int interval)
+    {
+        var manager = new DiffusionMemoryManager<float>(new DiffusionMemoryConfig
+        {
+            UseGradientCheckpointing = true,
+            UseActivationPooling = false,
+            CheckpointEveryNLayers = interval,
+        });
+
+        MemoryEstimate estimate = manager.EstimateMemory(numLayers: 8, activationSizeBytes: 100);
+
+        Assert.Equal(800, estimate.WithoutCheckpointing);
+        Assert.Equal(900, estimate.WithCheckpointing);
+    }
+
+    [Fact]
+    public void EstimateMemory_ClampsPeakSegmentToLayerCount()
+    {
+        var manager = new DiffusionMemoryManager<float>(new DiffusionMemoryConfig
+        {
+            UseGradientCheckpointing = true,
+            UseActivationPooling = false,
+            CheckpointEveryNLayers = 100,
+        });
+
+        MemoryEstimate estimate = manager.EstimateMemory(numLayers: 8, activationSizeBytes: 100);
+
+        Assert.Equal(900, estimate.WithCheckpointing);
+    }
+
+    #endregion
+
     #region ActivationPool Tests
 
     [Fact(Timeout = 120000)]

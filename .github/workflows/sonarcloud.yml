@@ -156,7 +156,7 @@ jobs:
           df -h /
 
       - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -172,7 +172,7 @@ jobs:
         run: dotnet restore src/AiDotNet.csproj
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        uses: github/codeql-action/init@7188fc363630916deb702c7fdcf4e481b751f97a # v4
         with:
           languages: csharp
           config-file: ./.github/codeql/codeql-config.yml
@@ -240,7 +240,7 @@ jobs:
           echo "Disk after cleanup:"; df -h /
 
       - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -254,6 +254,31 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
+
+      - name: Inject license public key + revocation list (aidn2 offline verification)
+        # So the CI-built AiDotNet.dll can verify offline aidn2 tokens (the CI license key path) and
+        # honour the revocation deny-list, drop the PUBLIC signing key + signed CRL where the csproj
+        # embeds them (src/BuildKey/LicensePublicKey.json -> AiDotNet.LicensePublicKey,
+        # src/BuildKey/LicenseRevocation.json -> AiDotNet.LicenseRevocation). Both are PUBLIC/signed and
+        # safe to expose. No-ops when the secrets/vars are unset (embed is Condition="Exists(...)"), so a
+        # build without them simply ships no embedded key/CRL (offline aidn2 verification unavailable).
+        shell: bash
+        run: |
+          mkdir -p src/BuildKey
+          # Prefer the TEST-only key set (prod + ci-2026a) so this CI build embeds the CI public key and can
+          # verify the offline aidn2 CI token in AIDOTNET_LICENSE_KEY on the real verification path. The CI key
+          # is intentionally NOT in AIDOTNET_LICENSE_PUBLIC_KEY_JSON (used by release-please.yml), so published
+          # NuGets trust ONLY the production key. Falls back to the prod var / committed file.
+          if [ -n "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
+            echo "Injected LicensePublicKey.json ($(wc -c < src/BuildKey/LicensePublicKey.json) bytes)"
+          else
+            echo "AIDOTNET_LICENSE_PUBLIC_KEY_JSON not set — skipping (offline aidn2 verification unavailable in this build)."
+          fi
+          if [ -n "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" > src/BuildKey/LicenseRevocation.json
+            echo "Injected LicenseRevocation.json ($(wc -c < src/BuildKey/LicenseRevocation.json) bytes)"
+          fi
 
       - name: Build source generator first
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
@@ -855,7 +880,7 @@ jobs:
           df -h /
 
       - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -882,6 +907,11 @@ jobs:
         # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
         # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
         env:
+          # Dedicated enterprise CI license key (save-capable — lifts the persistence op cap under capability
+          # gating — with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
+          # this online AIDN-* key for the deterministic synthetic OFFLINE license so the persistence-heavy
+          # suite is licensed with no network round-trip; the key still validates online for any job/consumer
+          # that doesn't run the ModuleInitializer hardening.
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           # Sanitize shard name: remove/replace all characters invalid in file paths
@@ -1124,7 +1154,7 @@ jobs:
 
     steps:
       - name: Set up JDK 17
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v4
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v4
         with:
           java-version: 17
           distribution: 'zulu'
@@ -1135,7 +1165,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -1252,7 +1282,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
 
       - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 

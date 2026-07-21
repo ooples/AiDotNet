@@ -277,6 +277,83 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Auto-evaluates a financial or time-series forecasting model with financial-performance metrics — the
+    /// money-side analogue of <see cref="ComputeClusterEvaluation"/>. Runs whenever the trained model is a
+    /// financial/forecasting family (<see cref="Finance.Interfaces.IFinancialModel{T}"/> or
+    /// <see cref="Interfaces.ITimeSeriesModel{T}"/>), scoring its held-out predictions as a trading signal and mirroring
+    /// the metric values into <see cref="AiModelResult{T,TInput,TOutput}.ConfiguredMetrics"/>.
+    /// </summary>
+    /// <remarks>
+    /// The model's level forecasts are differenced against the previous realized value to per-step changes
+    /// (<c>predictedChange[i] = predicted[i] - actual[i-1]</c>, <c>realizedChange[i] = actual[i] - actual[i-1]</c>),
+    /// so the strategy goes long when the model forecasts a rise above the last realized value. Computed on the
+    /// held-out test partition when one is available, otherwise on the training partition the direct-training path
+    /// falls back to — so it is out-of-sample only when a held-out split exists. Any metric added via
+    /// <c>ConfigureFinancialMetric</c> extends the default set. Failures are swallowed with a trace warning —
+    /// the trained model is unaffected and <see cref="AiModelResult{T,TInput,TOutput}.FinancialEvaluation"/>
+    /// is left null.
+    /// </remarks>
+    private void ComputeFinancialEvaluation(
+        AiModelResult<T, TInput, TOutput> result,
+        OptimizationResult<T, TInput, TOutput>.DatasetResult testResult)
+    {
+        if (_model is not (Finance.Interfaces.IFinancialModel<T> or Interfaces.ITimeSeriesModel<T>))
+        {
+            return;
+        }
+
+        try
+        {
+            var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(testResult.Predictions);
+            var actual = ConversionsHelper.ConvertToVector<T, TOutput>(testResult.Y);
+
+            int n = Math.Min(predicted.Length, actual.Length);
+            if (n < 3)
+            {
+                // Need at least two return steps (differencing drops one) for the metrics to be defined.
+                return;
+            }
+
+            // Difference the level forecasts to per-step CHANGES: at step i the model forecasts predicted[i]
+            // against the last realized value actual[i-1], and the realized change is actual[i]-actual[i-1].
+            // sign(predictedChange) is then the long/short signal the financial metrics score.
+            var predictedChange = new double[n - 1];
+            var realizedChange = new double[n - 1];
+            for (int i = 1; i < n; i++)
+            {
+                double prevActual = Convert.ToDouble(actual[i - 1]);
+                predictedChange[i - 1] = Convert.ToDouble(predicted[i]) - prevActual;
+                realizedChange[i - 1] = Convert.ToDouble(actual[i]) - prevActual;
+            }
+
+            var evaluator = new Finance.Evaluation.FinancialEvaluator<T>();
+            if (_configuredFinancialMetric is not null)
+            {
+                evaluator.AddMetric(_configuredFinancialMetric);
+            }
+
+            var evaluation = evaluator.Evaluate(predictedChange, realizedChange);
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            foreach (var kv in evaluation.Metrics)
+            {
+                if (!double.IsNaN(kv.Value) && !double.IsInfinity(kv.Value))
+                {
+                    result.SetConfiguredMetric(kv.Key, numOps.FromDouble(kv.Value));
+                }
+            }
+
+            result.SetFinancialEvaluation(evaluation);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Financial evaluation could not be computed: {ex.Message}. The trained model is " +
+                "unaffected; AiModelResult.FinancialEvaluation is null.");
+        }
+    }
+
+    /// <summary>
     /// Calibrates the configured drift detector on the training residuals, checks it against the test
     /// residuals, and attaches the attributed <see cref="DriftDetection.DriftReport"/> plus the live
     /// <see cref="DriftDetection.DriftMonitor{T}"/> to the result.
@@ -1804,6 +1881,48 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         gradientOptions.LearningRateScheduler = _configuredLearningRateScheduler;
+    }
+
+    /// <summary>
+    /// Embargo (row gap) for the DEFAULT chronological validation split, sized from the model's forecast
+    /// horizon so a horizon-h label never straddles a train/val or val/test boundary (leaking future
+    /// information across partitions). Returns 0 for non-time-series (i.i.d.) models — they get a shuffled
+    /// stratified split with no temporal boundary to protect. Best-effort: reads a
+    /// <c>ForecastHorizon</c>/<c>Horizon</c>/<c>OutputHorizon</c> int off the model's <c>Options</c> when
+    /// present, else defaults to 1 (the minimal gap that blocks one-step-ahead leakage). An explicit
+    /// <c>ConfigureDataSplitter</c> bypasses this entirely. No mainstream library embargoes by default.
+    /// </summary>
+    private int DefaultChronologicalEmbargo(bool isTimeSeriesModel)
+    {
+        if (!isTimeSeriesModel || _model is null)
+        {
+            return 0;
+        }
+
+        int horizon = 1;
+        try
+        {
+            object? options = _model.GetType().GetProperty("Options")?.GetValue(_model);
+            if (options is not null)
+            {
+                foreach (var name in new[] { "ForecastHorizon", "Horizon", "OutputHorizon" })
+                {
+                    var prop = options.GetType().GetProperty(name);
+                    if (prop is not null && prop.PropertyType == typeof(int)
+                        && prop.GetValue(options) is int v && v > 0)
+                    {
+                        horizon = v;
+                        break;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort only — any reflection hiccup falls back to the minimal 1-row embargo.
+        }
+
+        return Math.Max(1, horizon);
     }
 
     /// <summary>
@@ -3887,8 +4006,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             if (!TrySplitWithConfiguredSplitter(preparedX, preparedY,
                     out XTrain, out yTrain, out XVal, out yVal, out XTest, out yTest))
             {
+                // Family-aware DEFAULT: forecast-horizon models get a purged/embargoed chronological split
+                // (gap sized from the horizon so labels never straddle a boundary); i.i.d. families get the
+                // shuffled stratified split (embargo is a no-op when shuffling).
+                int splitEmbargo = DefaultChronologicalEmbargo(isTimeSeriesModel);
                 (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
-                    preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
+                    preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit,
+                    embargo: splitEmbargo);
             }
 
             // Apply data preparation (SMOTE, outlier removal, etc.) to training data ONLY after split.
@@ -5385,6 +5509,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         RunConfiguredCrossValidation(finalResult, preparedX, preparedY, optimizer);
         ComputeConfiguredMetrics(finalResult, optimizationResult.TestResult);
         ComputeClusterEvaluation(finalResult, preparedX, preparedY);
+        ComputeFinancialEvaluation(finalResult, optimizationResult.TestResult);
         ComputeDriftMonitoring(finalResult, optimizationResult);
         ComputeActiveLearningSelection(finalResult, optimizationResult);
         ComputeQueryStrategySelection(finalResult);

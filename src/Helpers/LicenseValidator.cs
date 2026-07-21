@@ -193,6 +193,12 @@ internal sealed class LicenseValidator
             if (result.Status == LicenseKeyStatus.Active)
             {
                 OnlineValidationAttestation.Record(_licenseKey.Key);
+
+                // v2 hybrid: off the hot path (background, throttled), refresh the signed CRL and mint a
+                // fresh machine-bound offline aidn2 token, so this key keeps working — with correct caps and
+                // still revocable — the next time the server is unreachable. Never blocks this result.
+                OnlineLicenseServices.RefreshInBackground(
+                    _licenseKey.ServerUrl ?? DefaultServerUrl, _licenseKey.Key, GetMachineIdHash());
             }
 
             return result;
@@ -210,6 +216,22 @@ internal sealed class LicenseValidator
                 {
                     return _cached;
                 }
+            }
+
+            // Server unreachable with no fresh in-memory result (e.g. a freshly-started offline process): a
+            // cached, machine-bound offline aidn2 token minted during an earlier successful online validation
+            // lets this AIDN-* key keep working offline WITH its correct capabilities, rather than degrading to
+            // a capability-less ValidationPending grace. Verified locally by AsymmetricLicenseVerifier, so it
+            // only grants when genuinely valid (signature + exp + machine-lock + not CRL-revoked).
+            var offlineToken = OnlineLicenseServices.TryValidateCachedOfflineToken(_licenseKey.Key);
+            if (offlineToken is not null)
+            {
+                lock (_cacheLock)
+                {
+                    _cached = offlineToken;
+                }
+
+                return offlineToken;
             }
 
             // No valid cache — if we have a stale cached result, return expired status
@@ -627,6 +649,8 @@ internal sealed class LicenseValidator
             if (result.Status == LicenseKeyStatus.Active)
             {
                 OnlineValidationAttestation.Record(_licenseKey.Key);
+                OnlineLicenseServices.RefreshInBackground(
+                    _licenseKey.ServerUrl ?? DefaultServerUrl, _licenseKey.Key, GetMachineIdHash());
             }
 
             return result;
@@ -640,7 +664,18 @@ internal sealed class LicenseValidator
                 {
                     return _cached;
                 }
+            }
 
+            // Offline fallback to a cached machine-bound aidn2 token (see the sync Validate() for rationale).
+            var offlineToken = OnlineLicenseServices.TryValidateCachedOfflineToken(_licenseKey.Key);
+            if (offlineToken is not null)
+            {
+                lock (_cacheLock) { _cached = offlineToken; }
+                return offlineToken;
+            }
+
+            lock (_cacheLock)
+            {
                 if (_cached is not null)
                 {
                     var expired = new LicenseValidationResult(

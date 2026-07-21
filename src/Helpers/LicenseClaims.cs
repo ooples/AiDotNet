@@ -47,6 +47,39 @@ internal sealed class LicenseClaims
     public string? Alg { get; set; }
 
     /// <summary>
+    /// Unique token id. The revocation deny-list (CRL) names revoked <c>jti</c> values, so a specific
+    /// leaked token can be killed before its <c>exp</c> without revoking the whole signing key. Absent on
+    /// legacy tokens (treated as non-revocable-by-jti — only <c>kid</c>/expiry bound them).
+    /// </summary>
+    [JsonProperty("jti")]
+    public string? Jti { get; set; }
+
+    /// <summary>
+    /// Explicit capability grants (e.g. <c>model:save</c>, <c>tensors:save</c>, <c>model:encrypt</c>,
+    /// <c>offline</c>). Authoritative for offline capability gating: the persistence/encryption guards
+    /// check these rather than assuming any <c>Active</c> license unlocks everything. Null/empty means
+    /// no explicit grants (tier-derived defaults may still apply during migration).
+    /// </summary>
+    [JsonProperty("caps")]
+    public string[]? Caps { get; set; }
+
+    /// <summary>
+    /// Optional machine-binding fingerprint (node-lock). When present, the verifier requires it to equal
+    /// this machine's id hash, so a leaked customer token is useless on another machine. Omitted for
+    /// non-node-locked tokens (e.g. the CI token, which is ephemeral-machine and uses <c>scope</c> instead).
+    /// </summary>
+    [JsonProperty("mach")]
+    public string? Mach { get; set; }
+
+    /// <summary>
+    /// Optional audience/scope binding (e.g. <c>"ci"</c>, <c>"prod"</c>). When present, the verifier
+    /// requires it to equal the host's configured expected scope, fencing a scoped token (like the CI
+    /// key) off from unintended contexts even if it leaks.
+    /// </summary>
+    [JsonProperty("scope")]
+    public string? Scope { get; set; }
+
+    /// <summary>
     /// Serializes the claims to the canonical compact JSON that gets signed. Callers MUST sign/verify
     /// over the exact bytes that appear in the token's middle segment; this helper is used by the
     /// (server/test) signer. The verifier verifies over the raw decoded segment bytes as received.
