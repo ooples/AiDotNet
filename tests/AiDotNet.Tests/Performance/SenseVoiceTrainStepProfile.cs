@@ -12,6 +12,7 @@
 // that exercises SenseVoice.Train.
 
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Diagnostics;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
@@ -42,8 +43,10 @@ public class SenseVoiceTrainStepProfile
     private const double ForwardForTrainingBudgetMs = 2_000;
 
     [Fact(Timeout = 600000)]
-    public void Profile_StepBreakdown()
+    public async Task Profile_StepBreakdown()
     {
+        // Timeout requires an async test; yielding makes this legal without changing the work below.
+        await Task.Yield();
         AiDotNetEngine.ResetToCpu();
 
         // SenseVoice-Small paper-faithful defaults (Du et al. 2024)

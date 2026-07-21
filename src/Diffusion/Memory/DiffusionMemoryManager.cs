@@ -106,65 +106,19 @@ public class DiffusionMemoryManager<T>
 
     #region Gradient Checkpointing Integration
 
-    /// <summary>
-    /// Wraps a function with gradient checkpointing for memory-efficient training.
-    /// </summary>
-    /// <param name="function">The function to execute with checkpointing.</param>
-    /// <param name="inputs">The input computation nodes.</param>
-    /// <returns>The checkpointed output node.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this to wrap expensive computations (like attention blocks).
-    ///
-    /// ```csharp
-    /// // Without checkpointing (stores all activations):
-    /// var output = attentionBlock.Forward(input);
-    ///
-    /// // With checkpointing (recomputes during backward):
-    /// var output = memoryManager.Checkpoint(
-    ///     () => attentionBlock.Forward(inputNode),
-    ///     new[] { inputNode }
-    /// );
-    /// ```
-    /// </para>
-    /// </remarks>
-    public ComputationNode<T> Checkpoint(
-        Func<ComputationNode<T>> function,
-        IEnumerable<ComputationNode<T>> inputs)
-    {
-        if (Config.UseGradientCheckpointing)
-        {
-            return GradientCheckpointing<T>.Checkpoint(function, inputs);
-        }
-
-        // If checkpointing disabled, just execute the function
-        return function();
-    }
-
-    /// <summary>
-    /// Applies checkpointing to a sequence of layer functions.
-    /// </summary>
-    /// <param name="layers">The sequence of layer forward functions.</param>
-    /// <param name="input">The input node.</param>
-    /// <returns>The output after all layers.</returns>
-    public ComputationNode<T> CheckpointSequence(
-        IReadOnlyList<Func<ComputationNode<T>, ComputationNode<T>>> layers,
-        ComputationNode<T> input)
-    {
-        if (Config.UseGradientCheckpointing)
-        {
-            return GradientCheckpointing<T>.SequentialCheckpoint(
-                layers, input, Config.CheckpointEveryNLayers);
-        }
-
-        // If checkpointing disabled, execute all layers directly
-        var current = input;
-        foreach (var layer in layers)
-        {
-            current = layer(current);
-        }
-        return current;
-    }
+    // NOTE: the ComputationNode-based Checkpoint / CheckpointSequence methods that used to sit here were
+    // removed along with AiDotNet.Autodiff.GradientCheckpointing<T>. They could not save any memory: that
+    // helper wrapped its forward in NoGradScope, which suppresses the AiDotNet.Tensors GradientTape, but
+    // ComputationNode carries its own Parents/BackwardFunction graph and never consults that tape — so the
+    // full graph was built regardless while the recompute context was pushed and immediately discarded. The
+    // legacy graph has no backward driver in production at all (nothing outside Autodiff/Testing ever
+    // invokes BackwardFunction), and both methods had zero callers.
+    //
+    // Real activation checkpointing lives in two places, both retained:
+    //   - AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blockFns, input, segmentSize)
+    //     — the tape-based primitive used by Transformer, NeuralNetworkBase, PipelineParallelModel and
+    //     NoisePredictorBase, covered by Diffusion/CheckpointGradientEquivalenceTests.
+    //   - ForwardWithCheckpointing below, the ILayer-based equivalent for layers outside the autodiff system.
 
     /// <summary>
     /// Executes a forward pass through layers with optional checkpointing.
@@ -328,9 +282,14 @@ public class DiffusionMemoryManager<T>
         // With checkpointing
         if (Config.UseGradientCheckpointing)
         {
-            var (_, withCheckpoint, _) = GradientCheckpointing<T>.EstimateMemorySavings(
-                numLayers, activationSizeBytes, Config.CheckpointEveryNLayers);
-            estimate.WithCheckpointing = withCheckpoint;
+            // Segmented-checkpointing peak: one segment's activations held live during recompute, plus one
+            // saved activation per segment boundary. Inlined from the deleted AiDotNet.Autodiff helper (the
+            // arithmetic is sound and independent of that broken class): A*(s + ceil(n/s)), minimised at
+            // s = sqrt(n) to the familiar 2*A*sqrt(n).
+            int segmentSize = Math.Max(1, Config.CheckpointEveryNLayers);
+            int numSegments = (numLayers + segmentSize - 1) / segmentSize;
+            int peakSegmentLength = Math.Min(segmentSize, numLayers);
+            estimate.WithCheckpointing = ((long)peakSegmentLength + numSegments) * activationSizeBytes;
         }
         else
         {
