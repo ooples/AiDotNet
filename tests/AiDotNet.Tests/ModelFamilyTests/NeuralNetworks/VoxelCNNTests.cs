@@ -61,7 +61,9 @@ public class VoxelCNNTests : NeuralNetworkModelTestBase<float>
                 "VoxelCNN's fused compiled step did not update any live model parameter.");
             foreach (var parameter in network.GetParameterChunks())
             {
-                Assert.All(parameter.ToArray(), value => Assert.True(float.IsFinite(value)));
+                Assert.All(
+                    parameter.ToArray(),
+                    value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
             }
         }
         finally
