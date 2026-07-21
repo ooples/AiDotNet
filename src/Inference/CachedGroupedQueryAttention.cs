@@ -234,28 +234,41 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
 
         var cache = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
 
-        // Apply RoPE with position offset
+        // Apply RoPE with the fused, graph-recordable engine op (ApplyRoPEInterleaved) instead of the layer's
+        // managed rotation, so the whole forward can be captured/fused on GPU; the CPU path is identical.
         if (_ropeLayer != null)
         {
             int startPosition = _cache.CurrentLength;
-            (queries, newKeys) = _ropeLayer.ApplyRoPE(queries, newKeys, startPosition);
+            var (cosCache, sinCache) = _ropeLayer.GetInterleavedCaches(startPosition + seqLen);
+            queries = Engine.ApplyRoPEInterleaved(queries, cosCache, sinCache, startPosition);
+            newKeys = Engine.ApplyRoPEInterleaved(newKeys, cosCache, sinCache, startPosition);
         }
 
-        // Append to cache (cache stores numKVHeads, not numHeads)
+        // Append to cache (cache stores numKVHeads, not numHeads).
         var (keys, values) = _cache.Append(_layerIndex, newKeys, newValues);
-
-        // Expand KV heads to match Q heads
         int cachedSeqLen = keys.Shape[2];
-        var expandedKeys = ExpandKVHeads(keys, batchSize, cachedSeqLen);
-        var expandedValues = ExpandKVHeads(values, batchSize, cachedSeqLen);
 
-        // Compute attention
-        Tensor<T> attentionOutput = _useFlashAttention || _alibiLayer != null
-            ? FlashAttention<T>.Forward(queries, expandedKeys, expandedValues,
+        Tensor<T> attentionOutput;
+        if (_alibiLayer != null)
+        {
+            // ALiBi carries a positional bias the fused GQA op does not model, so keep the expand +
+            // FlashAttention path for it. RoPE decoders (the common case) take the recordable GQA path below.
+            var expandedKeys = ExpandKVHeads(keys, batchSize, cachedSeqLen);
+            var expandedValues = ExpandKVHeads(values, batchSize, cachedSeqLen);
+            attentionOutput = FlashAttention<T>.Forward(queries, expandedKeys, expandedValues,
                 new FlashAttentionConfig { UseCausalMask = _useCausalMask },
                 queryOffset: Math.Max(0, cachedSeqLen - seqLen),
-                attentionBias: _alibiLayer?.ComputeBias(seqLen, cachedSeqLen, _useCausalMask)).Output
-            : StandardAttention(queries, expandedKeys, expandedValues, _useCausalMask);
+                attentionBias: _alibiLayer.ComputeBias(seqLen, cachedSeqLen, _useCausalMask)).Output;
+        }
+        else
+        {
+            // Grouped-query attention with UNEXPANDED K/V as ONE device-agnostic, GPU-recordable op — the KV
+            // heads broadcast inside the op (or the fused kernel), dropping the managed ExpandKVHeads hotspot.
+            attentionOutput = Engine.ScaledDotProductAttentionGqa(
+                queries, keys, values,
+                scale: 1.0 / Math.Sqrt(_headDimension),
+                isCausal: _useCausalMask);
+        }
 
         // Reshape and project output
         attentionOutput = attentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, seqLen, _embeddingDimension);

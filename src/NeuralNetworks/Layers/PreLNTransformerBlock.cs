@@ -33,7 +33,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public partial class PreLNTransformerBlock<T> : LayerBase<T>
 {
     private readonly RMSNormalizationLayer<T> _norm1;
-    private readonly LayerBase<T> _attention;
+    // Non-readonly so the inference optimizer can swap the attention sublayer in place (e.g.
+    // GroupedQueryAttentionLayer -> CachedGroupedQueryAttention for KV-cached decode) via ReplaceAttention,
+    // the same contract TransformerEncoderBlock uses.
+    private LayerBase<T> _attention;
     private readonly RMSNormalizationLayer<T> _norm2;
     private readonly DenseLayer<T>? _ffnGate;
     private readonly DenseLayer<T> _ffnUp;
@@ -53,6 +56,20 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
 
     /// <summary>The self-attention sublayer (exposed for tensor-parallel serving partitioning).</summary>
     public LayerBase<T> AttentionLayer => _attention;
+
+    /// <summary>
+    /// Swaps the attention sublayer in place (e.g. the inference optimizer replacing
+    /// <see cref="GroupedQueryAttentionLayer{T}"/> with a KV-cached
+    /// <see cref="AiDotNet.Inference.PagedAttention.CachedGroupedQueryAttention{T}"/> for incremental decode).
+    /// Keeps the registered-sublayer set consistent so parameter enumeration still discovers the block's weights.
+    /// </summary>
+    public void ReplaceAttention(LayerBase<T> replacement)
+    {
+        if (replacement is null) throw new ArgumentNullException(nameof(replacement));
+        UnregisterSubLayer(_attention);
+        _attention = replacement;
+        RegisterSubLayer(_attention);
+    }
 
     /// <summary>
     /// The FFN gate-projection DenseLayer (hidden -&gt; ffnDim, activation), present only in
@@ -201,6 +218,30 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Resolves every sublayer's shape without a data-carrying forward. This block overrides
+    /// <see cref="Forward"/> directly (bypassing the base lazy-init hook), so this runs ONLY via
+    /// <see cref="LayerBase{T}.ResolveFromShape"/> — the deserialization / shape-oracle path. The norms and
+    /// FFN DenseLayers are lazy (input dim resolved on first use), so without this the reconstructed block
+    /// reported a too-small <see cref="ParameterCount"/> and <c>SetParameters</c> rejected the saved vector.
+    /// Sublayers resolve in forward order so any RNG-based weight init consumes the stream exactly as a
+    /// natural forward would.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int hidden = _hiddenSize;
+        var hiddenShape = new[] { 1, hidden };
+        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape(hiddenShape);
+        if (!_attention.IsShapeResolved) _attention.ResolveFromShape(hiddenShape);
+        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape(hiddenShape);
+        if (_ffnGate is not null && !_ffnGate.IsShapeResolved) _ffnGate.ResolveFromShape(hiddenShape);
+        if (!_ffnUp.IsShapeResolved) _ffnUp.ResolveFromShape(hiddenShape);
+        if (!_ffnDown.IsShapeResolved) _ffnDown.ResolveFromShape(new[] { 1, _ffnDim });
+
+        int seq = input.Shape.Length >= 2 ? input.Shape[input.Shape.Length - 2] : 1;
+        ResolveShapes(new[] { seq, hidden }, new[] { seq, hidden });
+    }
+
+    /// <summary>
     /// The block's sublayers in flat-parameter order. The gate (when present) sits
     /// immediately before the up-projection, so a non-gated block keeps its original
     /// layout and a gated block appends the gate deterministically.
@@ -257,6 +298,31 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         var slice = source.Slice(offset, count);
         layer.SetParameters(slice);
         offset += count;
+    }
+
+    /// <inheritdoc/>
+    internal override System.Collections.Generic.Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["HiddenSize"] = _hiddenSize.ToString(ci);
+        metadata["FfnDim"] = _ffnDim.ToString(ci);
+        metadata["Gated"] = _gated.ToString();
+        metadata["FfnActivationType"] = _ffnActivation.GetType().AssemblyQualifiedName
+            ?? _ffnActivation.GetType().FullName ?? string.Empty;
+
+        // Persist the injected (polymorphic T5 / MHA / GQA) attention sublayer as a self-contained sub-blob
+        // under an "Attn." prefix: its concrete type, its own metadata, and its shapes. The block's ctor
+        // rebuilds the norms + FFN from HiddenSize/FfnDim/Gated/FfnActivation, so only the attention needs to
+        // round-trip; the deserializer reconstructs it recursively via CreateLayerFromType (which restores its
+        // full config, e.g. GQA RoPE / causal mask). Without this the block had no known deserialization
+        // constructor and cloning it threw — leaving the paged incremental-serving clone of a decoder inert.
+        foreach (var kv in _attention.GetMetadata())
+            metadata["Attn." + kv.Key] = kv.Value;
+        metadata["Attn.LayerType"] = _attention.GetType().Name;
+        metadata["Attn.InputShape"] = string.Join(",", _attention.GetInputShape());
+        metadata["Attn.OutputShape"] = string.Join(",", _attention.GetOutputShape());
+        return metadata;
     }
 
     /// <inheritdoc/>

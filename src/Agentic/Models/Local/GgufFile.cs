@@ -207,6 +207,42 @@ public sealed class GgufFile : INamedTensorSource
         }
     }
 
+    /// <summary>
+    /// Reads a Q8_0 tensor's raw quantized blocks WITHOUT dequantizing: the int8 quants
+    /// (<paramref name="qs"/>, length = element count) and one fp32 scale per 32-value block
+    /// (<paramref name="scales"/>, length = count/32). This is the native ggml Q8_0 payload —
+    /// keeping it quantized lets a block-Q8_0 GEMM run directly on it (no fp32 expansion, ~3.76×
+    /// less weight memory). Returns <c>false</c> for tensors that are not Q8_0.
+    /// </summary>
+    public bool TryReadQ8_0Raw(string name, out sbyte[] qs, out float[] scales)
+    {
+        Guard.NotNull(name);
+        qs = System.Array.Empty<sbyte>();
+        scales = System.Array.Empty<float>();
+        if (!_byName.TryGetValue(name, out var tensor)) return false;
+        if (tensor.GgmlType != GgufTensorInfo.TypeQ8_0) return false;
+
+        var count = checked((int)tensor.ElementCount);
+        const int blockBytes = 34; // fp16 scale (2) + 32 int8
+        var blocks = count / GgufTensorInfo.QuantBlockSize;
+        var offset = ValidateBlockSpan(tensor, count, blockBytes, GgufTensorInfo.QuantBlockSize);
+
+        qs = new sbyte[count];
+        scales = new float[blocks];
+        for (var b = 0; b < blocks; b++)
+        {
+            var p = offset + (b * blockBytes);
+            scales[b] = (float)HalfToFloat(BitConverter.ToUInt16(_data, p));
+            var qbase = p + 2;
+            var outBase = b * GgufTensorInfo.QuantBlockSize;
+            for (var j = 0; j < GgufTensorInfo.QuantBlockSize; j++)
+            {
+                qs[outBase + j] = unchecked((sbyte)_data[qbase + j]);
+            }
+        }
+        return true;
+    }
+
     // Q8_0: per block = fp16 scale + 32 signed 8-bit quants; value = q * scale.
     private void DequantizeQ8_0(int offset, int count, double[] result)
     {

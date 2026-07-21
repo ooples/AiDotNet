@@ -266,7 +266,7 @@
          weights. Fixes real GGUF-decoder-under-GPU serving (greedy first token 7042 " Paris" was 32084);
          pairs with this branch's LlamaModelBuilder.WriteGamma routing gamma through SetParameters so its
          persistent buffer refreshes too. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.117.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.118.10-q8" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.114.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.114.0" />

@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.ModelLoading.Pretrained;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Controllers;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
@@ -33,6 +34,32 @@ else
     // CPU.
     AiDotNetEngine.ResetToCpu();
     Console.WriteLine($"[DevHost] CPU engine ({AiDotNetEngine.Current.GetType().Name}).");
+}
+
+// Profiling mode: DEVHOST_PROFILE=<gguf-path> runs a steady-state forward loop (NO web server) so a sampler
+// (dotnet-trace / PerfView) can capture the real GGUF decoder's CPU hot paths + allocations. The engine is
+// whatever was selected above (DEVHOST_GPU). Loops the 128-token prefill forward (constant shape = clean
+// steady state; it is the per-forward hot path both prefill and the stateless decode share). Runs until killed.
+string? profileGguf = Environment.GetEnvironmentVariable("DEVHOST_PROFILE");
+if (!string.IsNullOrWhiteSpace(profileGguf))
+{
+    if (!File.Exists(profileGguf)) { Console.Error.WriteLine($"[Profile] GGUF not found: {profileGguf}"); return; }
+    int profLen = int.TryParse(Environment.GetEnvironmentVariable("DEVHOST_PROFILE_LEN"), out var pl) && pl > 0 ? pl : 128;
+    Console.WriteLine($"[Profile] loading {profileGguf} (prefill len={profLen}, engine={AiDotNetEngine.Current.GetType().Name})");
+    var (profModel, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(profileGguf);
+    var profInput = new Tensor<float>(new[] { 1, profLen });
+    for (int i = 0; i < profLen; i++) profInput[0, i] = (i % 100) + 5;
+    Console.WriteLine("[Profile] warmup (compile kernels / JIT)...");
+    for (int w = 0; w < 3; w++) _ = profModel.Predict(profInput).Contiguous().AsSpan()[0];
+    Console.WriteLine("[Profile] steady-state loop — attach dotnet-trace to this PID, then kill to stop.");
+    long profIter = 0;
+    var profSw = System.Diagnostics.Stopwatch.StartNew();
+    while (true)
+    {
+        _ = profModel.Predict(profInput).Contiguous().AsSpan()[0];
+        if (++profIter % 20 == 0)
+            Console.WriteLine($"[Profile] {profIter} forwards, {profIter * profLen / profSw.Elapsed.TotalSeconds:F0} tok/s");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +123,41 @@ if (!string.IsNullOrWhiteSpace(ggufPath))
 
     repo.LoadModel<float>(ModelName, ggufWrapper);
     tokenizers.Register(ModelName, ggufTokenizer);
+
+    // Decode-throughput benchmark: DEVHOST_DECODE=1 drives the REAL incremental (paged KV-cache) generation
+    // path and reports tokens/second + ms/token — the metric competitors quote as "tg" (token generation).
+    // NO web server; runs and exits. DEVHOST_DECODE_PROMPT / DEVHOST_DECODE_LEN tune the prompt + generated
+    // length.
+    if (Environment.GetEnvironmentVariable("DEVHOST_DECODE") == "1")
+    {
+        var genSvc = app.Services.GetRequiredService<ITextGenerationService>();
+        int promptLen = EnvInt("DEVHOST_DECODE_PROMPT", 16);
+        int genLen = EnvInt("DEVHOST_DECODE_LEN", 64);
+        var prompt = new int[promptLen];
+        for (int i = 0; i < promptLen; i++) prompt[i] = (i % 100) + 5;
+        var req = new SpeculativeDecodingRequest
+        {
+            InputTokens = prompt,
+            MaxNewTokens = genLen,
+            EosTokenId = -1, // out of range -> generate to the token limit
+            NumDraftTokens = 0,
+            Temperature = 0, // greedy
+        };
+        Console.WriteLine($"[Decode] incrementalPaged={ggufWrapper.SupportsIncrementalGeneration} warmup...");
+        _ = genSvc.Generate(ModelName, NumericType.Float, req);
+        const int runs = 3;
+        var dsw = System.Diagnostics.Stopwatch.StartNew();
+        int produced = 0;
+        for (int r = 0; r < runs; r++)
+        {
+            var gt = genSvc.Generate(ModelName, NumericType.Float, req).GeneratedTokens;
+            produced += gt is null ? 0 : System.Linq.Enumerable.Count(gt);
+        }
+        dsw.Stop();
+        double msPerTok = dsw.Elapsed.TotalMilliseconds / Math.Max(1, produced);
+        Console.WriteLine($"[Decode] prompt={promptLen} gen={genLen} produced={produced} : {1000.0 / msPerTok:F1} tok/s ({msPerTok:F2} ms/token)");
+        return;
+    }
 
     app.MapControllers();
     app.Logger.LogInformation(

@@ -416,17 +416,21 @@ internal class InferenceOptimizer<T>
         }
 
         var firstLayer = attentionLayers[0];
-        int numHeads = firstLayer.HeadCount;
+        int numHeads = firstLayer.HeadCount;      // query heads
+        int numKVHeads = firstLayer.KVHeadCount;  // KV heads the cache physically stores (== numHeads for MHA)
         int headDim = firstLayer.HeadDimension;
         int numLayers = attentionLayers.Count;
 
         long availableBytes = (long)_config.KVCacheMaxSizeMB * 1024 * 1024;
         int blockSize = _config.PagedKVCacheBlockSize;
 
-        _pagedKVCache = PagedKVCache<T>.FromMemorySize(availableBytes, numLayers, numHeads, headDim, blockSize);
+        // The paged cache stores K/V, so it is sized by the KV head count. The kernel also needs the query-head
+        // count (NumQueryHeads) so it repeats each KV head across its query-head group under grouped-query attention.
+        _pagedKVCache = PagedKVCache<T>.FromMemorySize(availableBytes, numLayers, numKVHeads, headDim, blockSize);
         _pagedKernel = new PagedAttentionKernel<T>(_pagedKVCache, new PagedAttentionConfig
         {
-            NumHeads = numHeads,
+            NumHeads = numKVHeads,
+            NumQueryHeads = numHeads,
             HeadDimension = headDim,
             BlockSize = blockSize,
             MaxBatchSize = _config.MaxBatchSize,
@@ -718,53 +722,137 @@ internal class InferenceOptimizer<T>
                 anyRewritten = true;
             }
 
-            // Handle Grouped-Query Attention -> CachedGroupedQueryAttention
-            // GQA rewrite: use CachedGroupedQueryAttention for regular KV cache.
-            // Paged KV cache does not yet support GQA, so fall back to regular cache.
+            // Handle Grouped-Query Attention. Prefer the PAGED GQA replacement when paged KV is enabled (it feeds
+            // the incremental-generation path); fall back to the contiguous CachedGroupedQueryAttention when the
+            // paged layer cannot represent the source (e.g. Qwen2-style Q/K/V projection bias).
             if (layer is GroupedQueryAttentionLayer<T> gqa && enableKVCache)
             {
-                var inputShape = gqa.GetInputShape();
-                if (inputShape.Length < 2)
-                    continue;
-
-                int seqLen = inputShape[0];
-                int embDim = inputShape[1];
-                var activation = gqa.ScalarActivation;
-
-                var cachedGqa = new CachedGroupedQueryAttention<T>(
-                    sequenceLength: seqLen,
-                    embeddingDimension: embDim,
-                    numHeads: gqa.NumHeads,
-                    numKVHeads: gqa.NumKVHeads,
-                    useFlashAttention: enableFlashAttention,
-                    layerIndex: 0,
-                    useCausalMask: useCausalMask,
-                    activationFunction: activation);
-                cachedGqa.SetParameters(gqa.GetParameters());
-
-                // Preserve positional encoding
-                if (gqa.PositionalEncoding != PositionalEncodingType.None)
+                LayerBase<T>? replacement = enablePagedKVCache
+                    ? BuildPagedGqaReplacement(gqa, useCausalMask)
+                    : null;
+                replacement ??= BuildCachedGqaReplacement(gqa, enableFlashAttention, useCausalMask);
+                if (replacement is not null)
                 {
-                    cachedGqa.ConfigurePositionalEncoding(
-                        gqa.PositionalEncoding,
-                        ropeTheta: gqa.RoPETheta,
-                        maxSequenceLength: seqLen);
+                    model.Layers[i] = replacement;
+                    anyRewritten = true;
                 }
-                else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
-                         _config.PositionalEncoding == PositionalEncodingType.ALiBi)
-                {
-                    cachedGqa.ConfigurePositionalEncoding(
-                        _config.PositionalEncoding,
-                        ropeTheta: _config.RoPETheta,
-                        maxSequenceLength: seqLen);
-                }
+                continue;
+            }
 
-                model.Layers[i] = cachedGqa;
-                anyRewritten = true;
+            // Decoder blocks (LLaMA / GGUF) host their GQA INSIDE a PreLNTransformerBlock, so the top-level scan
+            // above never reaches it (the shard-05-class "no applicable layers" gap, GQA edition). Recurse into
+            // the block and swap its attention in place via ReplaceAttention, preferring the paged variant.
+            if (layer is PreLNTransformerBlock<T> preLnBlock && enableKVCache
+                && preLnBlock.AttentionLayer is GroupedQueryAttentionLayer<T> blockGqa)
+            {
+                LayerBase<T>? replacement = enablePagedKVCache
+                    ? BuildPagedGqaReplacement(blockGqa, useCausalMask)
+                    : null;
+                replacement ??= BuildCachedGqaReplacement(blockGqa, enableFlashAttention, useCausalMask);
+                if (replacement is not null)
+                {
+                    preLnBlock.ReplaceAttention(replacement);
+                    anyRewritten = true;
+                }
+                continue;
             }
         }
 
         return anyRewritten;
+    }
+
+    /// <summary>
+    /// Builds the KV-cached replacement for a <see cref="GroupedQueryAttentionLayer{T}"/> — copying its
+    /// parameters and RoPE/ALiBi positional configuration — or <see langword="null"/> when the layer's input
+    /// shape is not yet resolvable. Shared by the top-level GQA rewrite and the PreLNTransformerBlock recursion.
+    /// </summary>
+    private CachedGroupedQueryAttention<T>? BuildCachedGqaReplacement(
+        GroupedQueryAttentionLayer<T> gqa, bool enableFlashAttention, bool useCausalMask)
+    {
+        var inputShape = gqa.GetInputShape();
+        if (inputShape.Length < 2)
+            return null;
+
+        int seqLen = inputShape[0];
+        int embDim = inputShape[1];
+
+        var cachedGqa = new CachedGroupedQueryAttention<T>(
+            sequenceLength: seqLen,
+            embeddingDimension: embDim,
+            numHeads: gqa.NumHeads,
+            numKVHeads: gqa.NumKVHeads,
+            useFlashAttention: enableFlashAttention,
+            layerIndex: 0,
+            useCausalMask: useCausalMask,
+            activationFunction: gqa.ScalarActivation);
+        cachedGqa.SetParameters(gqa.GetParameters());
+
+        if (gqa.PositionalEncoding != PositionalEncodingType.None)
+        {
+            cachedGqa.ConfigurePositionalEncoding(
+                gqa.PositionalEncoding, ropeTheta: gqa.RoPETheta, maxSequenceLength: seqLen);
+        }
+        else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                 _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+        {
+            cachedGqa.ConfigurePositionalEncoding(
+                _config.PositionalEncoding, ropeTheta: _config.RoPETheta, maxSequenceLength: seqLen);
+        }
+
+        return cachedGqa;
+    }
+
+    /// <summary>
+    /// Builds the PAGED KV-cache replacement for a <see cref="GroupedQueryAttentionLayer{T}"/> — a
+    /// <see cref="PagedCachedMultiHeadAttention{T}"/> with the source's KV-head count — so grouped-query
+    /// decoders reach the incremental paged-generation path. Copies parameters and RoPE/ALiBi positional
+    /// configuration. Returns <see langword="null"/> when the source cannot be represented on the paged layer
+    /// (its input shape is unresolved, or it uses Q/K/V projection bias which the paged layer has no slot for),
+    /// so the caller falls back to the contiguous <see cref="CachedGroupedQueryAttention{T}"/>.
+    /// </summary>
+    private PagedCachedMultiHeadAttention<T>? BuildPagedGqaReplacement(
+        GroupedQueryAttentionLayer<T> gqa, bool useCausalMask)
+    {
+        // The paged layer stores only an output bias; it cannot carry Q/K/V projection biases, and the source's
+        // flattened parameter vector would not line up. Let the caller use the contiguous cache in that case.
+        if (gqa.UsesProjectionBias)
+        {
+            return null;
+        }
+
+        var inputShape = gqa.GetInputShape();
+        if (inputShape.Length < 2)
+        {
+            return null;
+        }
+
+        int seqLen = inputShape[0];
+        int embDim = inputShape[1];
+
+        var paged = new PagedCachedMultiHeadAttention<T>(
+            sequenceLength: seqLen,
+            embeddingDimension: embDim,
+            headCount: gqa.NumHeads,
+            useCausalMask: useCausalMask,
+            activationFunction: gqa.ScalarActivation,
+            kvHeadCount: gqa.NumKVHeads);
+        paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
+        // Same [Q][K][V][O][outBias] layout (no projection bias => the source's q/k/v bias blocks are empty).
+        paged.SetParameters(gqa.GetParameters());
+
+        if (gqa.PositionalEncoding != PositionalEncodingType.None)
+        {
+            paged.ConfigurePositionalEncoding(
+                gqa.PositionalEncoding, ropeTheta: gqa.RoPETheta, maxSequenceLength: seqLen);
+        }
+        else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                 _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+        {
+            paged.ConfigurePositionalEncoding(
+                _config.PositionalEncoding, ropeTheta: _config.RoPETheta, maxSequenceLength: seqLen);
+        }
+
+        return paged;
     }
 
     private bool ApplyWeightOnlyQuantization(NeuralNetworkBase<T> model)
@@ -987,6 +1075,10 @@ internal class InferenceOptimizer<T>
                 yield return decoderBlock.SelfAttentionLayer;
                 yield return decoderBlock.CrossAttentionLayer;
             }
+            // LLaMA / GGUF decoders host their (grouped-query) attention inside PreLNTransformerBlock, so every
+            // KV-cache / detection / quantization scan must reach it too — not just the top-level layer.
+            else if (layer is PreLNTransformerBlock<T> preLnBlock)
+                yield return preLnBlock.AttentionLayer;
         }
     }
 

@@ -28,4 +28,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         return ConfigureModel(typed);
     }
+
+    /// <inheritdoc/>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureModel(
+        PretrainedSource source, AiDotNet.Tensors.DeviceInfo device)
+    {
+        Guard.NotNull(source);
+
+        var model = PretrainedLoader<T>.Load(source);
+        if (model is not IFullModel<T, TInput, TOutput> typed)
+            throw new InvalidOperationException(
+                $"Pretrained source '{source}' produces a Tensor<{typeof(T).Name}> -> Tensor<{typeof(T).Name}> " +
+                $"model, but this builder is configured for {typeof(TInput).Name} -> {typeof(TOutput).Name}. " +
+                "Configure the builder as AiModelBuilder<T, Tensor<T>, Tensor<T>> to load decoder models.");
+
+        // Place the whole model (weights + buffers) on the requested device so its forward runs there.
+        if (typed is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network)
+            network.To(device);
+
+        return ConfigureModel(typed);
+    }
 }
