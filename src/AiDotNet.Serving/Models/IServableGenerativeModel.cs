@@ -53,4 +53,3 @@ internal interface IServableGenerativeModel<T>
     /// </summary>
     bool SupportsBatchedPrefill { get; }
 }
-
