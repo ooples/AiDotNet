@@ -190,7 +190,7 @@ public class STCConnectorLayer<T> : LayerBase<T>
             {
                 throw new ArgumentException(
                     $"Expected STC grid [B,T,{_patchesHeight},{_patchesWidth},{_visionDim}], " +
-                    $"got [{string.Join(',', input.Shape)}].",
+                    $"got [{string.Join(",", input.Shape)}].",
                     nameof(input));
             }
             grid = input;
@@ -449,7 +449,7 @@ public class STCConnectorLayer<T> : LayerBase<T>
             if (input.Rank != 4 || input.Shape[1] != _inputChannels)
             {
                 throw new ArgumentException(
-                    $"RegStageBlock expects [B,{_inputChannels},H,W], got [{string.Join(',', input.Shape)}].",
+                    $"RegStageBlock expects [B,{_inputChannels},H,W], got [{string.Join(",", input.Shape)}].",
                     nameof(input));
             }
 
