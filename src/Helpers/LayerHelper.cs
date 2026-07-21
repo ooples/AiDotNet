@@ -20167,7 +20167,20 @@ public static class LayerHelper<T>
     /// (<c>[*, T, numMels] -&gt; [*, T, vocabSize]</c>) so it is a drop-in encoder, but its core is
     /// Mamba rather than attention — the paper's defining architectural choice.
     /// </para>
+    /// <para><b>For Beginners:</b> This creates the standard SAMBA-ASR layer sequence that turns
+    /// audio features into token scores. Mamba blocks provide long-range context without the
+    /// quadratic cost of attention, and the final projection produces one score per vocabulary item.</para>
     /// </remarks>
+    /// <param name="encoderDim">Feature width used by the encoder and each Mamba block.</param>
+    /// <param name="numLayers">Number of Mamba encoder blocks.</param>
+    /// <param name="stateDimension">Internal state size used by each selective state-space block.</param>
+    /// <param name="expandFactor">Expansion factor for the Mamba block's inner projection.</param>
+    /// <param name="convKernelSize">Width of the local causal convolution inside each Mamba block.</param>
+    /// <param name="numMels">Number of input log-Mel frequency bins.</param>
+    /// <param name="vocabSize">Number of output vocabulary tokens scored at each time step.</param>
+    /// <param name="dropoutRate">Dropout probability applied between encoder blocks.</param>
+    /// <param name="maxSequenceLength">Maximum supported input sequence length.</param>
+    /// <returns>The ordered SAMBA-ASR encoder and CTC projection layer sequence.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultSambaASRLayers(
         int encoderDim = 512,
         int numLayers = 24,
@@ -24838,6 +24851,22 @@ public static class LayerHelper<T>
     /// vision-encoder segment length (patch-embed + norm + vision blocks) is
     /// <c>2 + numVisionLayers·(dropoutRate&gt;0 ? 2 : 1)</c> — callers split encoder/decoder there.
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This builds the layers that convert video frames into visual
+    /// tokens, map those tokens to the language model's width, and process them with a decoder.
+    /// The projector is intentionally simple: it learns a direct linear mapping between the two models.</para>
+    /// </remarks>
+    /// <param name="visionDim">Embedding width of the vision encoder.</param>
+    /// <param name="decoderDim">Embedding width of the language-model decoder.</param>
+    /// <param name="numVisionLayers">Number of residual transformer blocks in the vision encoder.</param>
+    /// <param name="numDecoderLayers">Number of residual transformer blocks in the language decoder.</param>
+    /// <param name="numHeads">Number of attention heads used by both transformer stacks.</param>
+    /// <param name="dropoutRate">Dropout probability applied between transformer blocks.</param>
+    /// <param name="imageHeight">Input frame height in pixels.</param>
+    /// <param name="imageWidth">Input frame width in pixels.</param>
+    /// <param name="imageChannels">Number of channels in each input frame.</param>
+    /// <param name="patchSize">Height and width of each square vision patch.</param>
+    /// <returns>The ordered vision encoder, linear projector, and language decoder layer sequence.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultVideoLinearProjectorVLMLayers(
         int visionDim = 1024,
         int decoderDim = 4096,
@@ -33714,6 +33743,12 @@ public static class LayerHelper<T>
     /// <param name="hiddenDim">Encoder/flow residual channel width.</param>
     /// <param name="numFlowBlocks">Number of dilated WaveNet residual flow blocks.</param>
     /// <param name="upsampleRate">HiFi-GAN decoder time-upsampling factor.</param>
+    /// <returns>The ordered OpenVoice V2 encoder, flow, and waveform-decoder layer sequence.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This assembles the part of OpenVoice V2 that keeps the spoken content
+    /// while converting its voice characteristics. A convolutional encoder reads the spectrum, reversible
+    /// flow blocks transform it, and a HiFi-GAN decoder reconstructs the waveform.</para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultOpenVoiceV2Layers(
         int specChannels = 80,
         int hiddenDim = 192,
@@ -33802,6 +33837,12 @@ public static class LayerHelper<T>
     /// <param name="ropeTheta">RoPE base frequency.</param>
     /// <param name="maxSeqLen">RoPE cache length (auto-extends beyond this).</param>
     /// <param name="dropoutRate">Dropout between blocks (paper default 0.0).</param>
+    /// <returns>The ordered MetaVoice-1B first-stage, second-stage, and vocoder layer sequence.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This builds MetaVoice-1B's three stages: one transformer predicts the
+    /// first audio-token groups, a second fills in the remaining detail, and a convolutional vocoder turns
+    /// those continuous audio representations into a waveform.</para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultMetaVoice1BLayers(
         int firstStageDim = 2048,
         int numFirstStageLayers = 24,
