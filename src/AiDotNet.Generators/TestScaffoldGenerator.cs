@@ -3050,6 +3050,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "DecoderDim = 32, NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, " +
                     "VocabSize = 32, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "PLLaVA" && model.TypeParameterCount == 1)
+            {
+                // PLLaVA (arXiv:2404.16994): per-frame residual ViT -> adaptive spatial pooling -> linear
+                // projection -> residual LLM. Foundation-scale defaults OOM; CI-smoke shrink + [4,3,32,32]
+                // temporal-video input (inputFrames=4). Real defaults stay paper-scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.VideoLanguage.PLLaVAOptions { VisionDim = 32, " +
+                    "DecoderDim = 32, NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, " +
+                    "VocabSize = 32, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "LLaVANeXTVideo" && model.TypeParameterCount == 1)
+            {
+                // LLaVA-NeXT-Video (arXiv:2408.03303): residual ViT -> spatial pooling -> projection ->
+                // residual LLM. Same CI-smoke shrink + [4,3,32,32] video input.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.VideoLanguage.LLaVANeXTVideoOptions { VisionDim = 32, " +
+                    "DecoderDim = 32, NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, " +
+                    "VocabSize = 32, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "JambaLanguageModel" && model.TypeParameterCount == 1)
             {
                 // Jamba's production default is a high-vocab hybrid LM head.

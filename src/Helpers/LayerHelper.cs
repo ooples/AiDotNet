@@ -24885,6 +24885,81 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Builds a video VLM whose temporal aggregation is parameter-free adaptive SPATIAL POOLING of the
+    /// per-frame ViT features — the paper-faithful mechanism for PLLaVA (Xu et al. 2024,
+    /// arXiv:2404.16994, "Parameter-free LLaVA Extension") and LLaVA-NeXT-Video (Zhang et al. 2024,
+    /// arXiv:2408.03303, frame pooling). Structure: per-frame ViT (RESIDUAL transformer blocks) →
+    /// adaptive average pool over the spatial patch grid (Hp×Wp → poolH×poolW, no learned params) →
+    /// shared MLP projection → RESIDUAL LLM decoder. The pool reduces the visual-token count exactly as
+    /// the papers' pooling connectors do. Pooling module (post-vision, pre-projection): transpose the
+    /// [frames, Hp·Wp, dim] token sequence to [frames, dim, Hp·Wp], reshape to the [frames, dim, Hp, Wp]
+    /// spatial grid, AdaptiveAveragePool (leading frame axis passes through), reshape + transpose back to
+    /// [frames, poolH·poolW, dim]. Vision-encoder segment length (for the encoder/decoder split) is
+    /// <c>2 + numVisionLayers·(dropoutRate&gt;0 ? 2 : 1) + 5</c> (patch+norm+vision blocks + 5 pooling layers).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoPoolingVLMLayers(
+        int visionDim = 1024,
+        int decoderDim = 4096,
+        int numVisionLayers = 24,
+        int numDecoderLayers = 32,
+        int numHeads = 12,
+        double dropoutRate = 0.1,
+        int imageHeight = 224,
+        int imageWidth = 224,
+        int imageChannels = 3,
+        int patchSize = 16,
+        int poolFactor = 2)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (imageHeight <= 0 || imageWidth <= 0 || imageChannels <= 0 || patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "image dimensions and patchSize must be positive.");
+        if (poolFactor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(poolFactor), "poolFactor must be positive.");
+        if (imageHeight % patchSize != 0 || imageWidth % patchSize != 0)
+            throw new ArgumentException($"imageHeight ({imageHeight}) and imageWidth ({imageWidth}) must be divisible by patchSize ({patchSize}).");
+
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+        int visionHeads = ChooseDivisibleHeadConfig(visionDim, numHeads).heads;
+        int decoderHeads = ChooseDivisibleHeadConfig(decoderDim, numHeads).heads;
+        int hp = imageHeight / patchSize;
+        int wp = imageWidth / patchSize;
+        int poolH = System.Math.Max(1, hp / poolFactor);
+        int poolW = System.Math.Max(1, wp / poolFactor);
+
+        // === Per-frame ViT vision encoder (residual) ===
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
+        yield return new LayerNormalizationLayer<T>();
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(visionHeads, visionFfnDim, visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Parameter-free adaptive spatial pooling (PLLaVA §3) ===
+        // [frames, Hp*Wp, dim] -> [frames, dim, Hp*Wp] -> [frames, dim, Hp, Wp] -> pool ->
+        // [frames, dim, poolH, poolW] -> [frames, dim, poolH*poolW] -> [frames, poolH*poolW, dim].
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
+        yield return new ReshapeLayer<T>(new[] { visionDim, hp, wp });
+        yield return new AdaptiveAveragePoolingLayer<T>(poolH, poolW);
+        yield return new ReshapeLayer<T>(new[] { visionDim, poolH * poolW });
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
+
+        // === Shared MLP projection to the LLM embedding space ===
+        yield return new DenseLayer<T>(decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>();
+
+        // === LLM decoder (residual) ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(decoderHeads, decoderFfnDim, decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
     /// Creates layers for robotics VLMs with action token output head.
     /// Architecture: ViT -> MLP projector -> LLM decoder -> action token head.
     /// Used by RT-2, PaLM-E, Octo, Pi-Zero, GR00T-N1, Helix, 3D-VLA.
