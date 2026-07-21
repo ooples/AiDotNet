@@ -46,6 +46,14 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 QueriesReceived.Add(query);
                 return _batches.Count > 0 ? _batches.Dequeue() : new List<Document<double>>();
             }
+
+            public Task<IEnumerable<Document<double>>> RetrieveAsync(
+                string query, int topK, Dictionary<string, object>? metadataFilters = null,
+                CancellationToken cancellationToken = default)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(Retrieve(query, topK, metadataFilters ?? new Dictionary<string, object>()));
+            }
         }
 
         /// <summary>
@@ -72,6 +80,19 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             public GroundedAnswer<double> GenerateGrounded(string query, IEnumerable<Document<double>> context) =>
                 new GroundedAnswer<double> { Query = query, Answer = string.Empty };
+
+            public Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(Generate(prompt));
+            }
+
+            public Task<GroundedAnswer<double>> GenerateGroundedAsync(
+                string query, IEnumerable<Document<double>> context, CancellationToken cancellationToken = default)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(GenerateGrounded(query, context));
+            }
         }
 
         private static Document<double> Doc(string id, string content, double score)

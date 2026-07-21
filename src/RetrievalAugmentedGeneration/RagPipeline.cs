@@ -63,6 +63,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration
         public const string TenantMetadataKey = "_tenant";
 
         /// <summary>
+        /// Metadata key used internally to preserve the caller-visible chunk id when tenant isolation
+        /// namespaces the physical document id in a shared store.
+        /// </summary>
+        public const string OriginalDocumentIdMetadataKey = "_rag_original_id";
+
+        /// <summary>
         /// Ingests a document: optionally chunks it, embeds each chunk, and upserts it into the store.
         /// </summary>
         /// <returns>The number of chunks stored.</returns>
@@ -85,7 +91,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration
                 }
                 if (_tenant != null) meta[TenantMetadataKey] = _tenant;
 
-                var doc = new Document<T>(chunks.Count == 1 ? id : $"{id}::{index}", chunk) { Metadata = meta };
+                string publicId = chunks.Count == 1 ? id : $"{id}::{index}";
+                string storageId = publicId;
+                if (_tenant != null)
+                {
+                    // Length-prefixing makes the namespace unambiguous even when tenant/id contain separators.
+                    storageId = $"{_tenant.Length}:{_tenant}{publicId}";
+                    meta[OriginalDocumentIdMetadataKey] = publicId;
+                }
+
+                var doc = new Document<T>(storageId, chunk) { Metadata = meta };
                 var embedding = await _embedding.EmbedAsync(chunk).ConfigureAwait(false);
                 await _store.AddAsync(new VectorDocument<T>(doc, embedding), cancellationToken).ConfigureAwait(false);
                 index++;
@@ -104,7 +119,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration
             var filters = new Dictionary<string, object>();
             if (_tenant != null) filters[TenantMetadataKey] = _tenant;
 
-            var retrieved = (await _retriever.RetrieveAsync(question, topK, filters, cancellationToken).ConfigureAwait(false)).ToList();
+            var retrieved = (await _retriever.RetrieveAsync(question, topK, filters, cancellationToken).ConfigureAwait(false))
+                .Select(ToPublicDocument)
+                .ToList();
 
             if (_reranker != null)
             {
@@ -122,6 +139,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration
             }
 
             return new RagResult<T>(question, context, answer);
+        }
+
+        private static Document<T> ToPublicDocument(Document<T> document)
+        {
+            if (!document.Metadata.TryGetValue(OriginalDocumentIdMetadataKey, out var originalId) ||
+                originalId is not string publicId || string.IsNullOrEmpty(publicId))
+            {
+                return document;
+            }
+
+            return new Document<T>(publicId, document.Content, document.Metadata)
+            {
+                RelevanceScore = document.RelevanceScore,
+                HasRelevanceScore = document.HasRelevanceScore
+            };
         }
     }
 

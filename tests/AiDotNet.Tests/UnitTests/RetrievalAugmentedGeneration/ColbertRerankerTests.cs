@@ -46,6 +46,29 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         private static Vector<double> V(params double[] values) => new Vector<double>(values);
 
+        // A REAL embedder (no placeholder/hash): each known word gets its own orthonormal one-hot vector via
+        // StaticWordEmbeddingModel, so an exact token match contributes cosine 1 to MaxSim and a non-match 0.
+        // Unknown words map to the zero vector. This is a genuine IEmbeddingModel, adapted to per-token output
+        // by ColbertReranker's IEmbeddingModel ctor (EmbeddingModelTokenAdapter).
+        private static StaticWordEmbeddingModel<double> RealEmbedder()
+        {
+            var words = new[]
+            {
+                "quantum", "computing", "qubits", "entanglement", "classical", "algorithms",
+                "xylophone", "zebra", "umbrella", "and", "alpha", "beta", "gamma", "delta",
+                "totally", "unrelated", "words", "here", "content", "hello", "world", "apple"
+            };
+            int dim = words.Length;
+            var vocab = new Dictionary<string, Vector<double>>();
+            for (int i = 0; i < words.Length; i++)
+            {
+                var components = new double[dim];
+                components[i] = 1.0;
+                vocab[words[i]] = new Vector<double>(components);
+            }
+            return new StaticWordEmbeddingModel<double>(vocab, dim, ignoreUnknown: false);
+        }
+
         private static Document<double> Doc(string id, string content) => new Document<double>(id, content);
 
         #endregion
@@ -122,8 +145,25 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         [Fact(Timeout = 60000)]
         public async Task Rerank_OrdersClearlyMoreRelevantDocumentFirst()
         {
-            // Arrange: default offline hashing token embedder gives exact-match tokens a cosine of 1.
-            var reranker = new ColbertReranker<double>();
+            // Arrange: a REAL StaticWordEmbeddingModel with distinct per-word vectors (no placeholder/stub),
+            // adapted to per-token embeddings via EmbeddingModelTokenAdapter and used by the reranker. Each
+            // distinct word gets its own orthogonal unit vector, so an exact token match contributes cosine 1
+            // to MaxSim and a non-match contributes 0 — the doc sharing both query tokens must rank first.
+            var words = new[]
+            {
+                "quantum", "computing", "qubits", "entanglement",
+                "classical", "algorithms", "xylophone", "zebra", "umbrella", "and"
+            };
+            int dim = words.Length;
+            var vocab = new Dictionary<string, Vector<double>>();
+            for (int i = 0; i < words.Length; i++)
+            {
+                var components = new double[dim];
+                components[i] = 1.0;
+                vocab[words[i]] = new Vector<double>(components);
+            }
+            var embedder = new StaticWordEmbeddingModel<double>(vocab, dim, ignoreUnknown: false);
+            var reranker = new ColbertReranker<double>(embedder);
             var docs = new[]
             {
                 Doc("irrelevant", "xylophone zebra umbrella"),
@@ -147,7 +187,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         [Fact(Timeout = 60000)]
         public async Task Rerank_TopK_ReturnsOnlyTopResults()
         {
-            var reranker = new ColbertReranker<double>();
+            var reranker = new ColbertReranker<double>(RealEmbedder());
             var docs = new[]
             {
                 Doc("d1", "alpha beta gamma"),
@@ -165,14 +205,14 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         [Fact(Timeout = 60000)]
         public async Task ModifiesScores_IsTrue()
         {
-            Assert.True(new ColbertReranker<double>().ModifiesScores);
+            Assert.True(new ColbertReranker<double>(RealEmbedder()).ModifiesScores);
             await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Rerank_EmptyDocuments_ReturnsEmpty()
         {
-            var reranker = new ColbertReranker<double>();
+            var reranker = new ColbertReranker<double>(RealEmbedder());
 
             var result = reranker.Rerank("anything", new List<Document<double>>()).ToList();
 
@@ -183,7 +223,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         [Fact(Timeout = 60000)]
         public async Task RerankAsync_ProducesSameOrderingAsSync()
         {
-            var reranker = new ColbertReranker<double>();
+            var reranker = new ColbertReranker<double>(RealEmbedder());
             var docs = new[]
             {
                 Doc("irrelevant", "xylophone zebra umbrella"),
@@ -198,7 +238,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         [Fact(Timeout = 60000)]
         public async Task RerankAsync_CanceledToken_Throws()
         {
-            var reranker = new ColbertReranker<double>();
+            var reranker = new ColbertReranker<double>(RealEmbedder());
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
@@ -208,43 +248,44 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #endregion
 
-        #region Token Embedding Model
+        #region Token Embedding Adapter (real, no stub)
 
         [Fact(Timeout = 60000)]
-        public async Task HashingTokenEmbeddingModel_IsDeterministicAndUnitLength()
+        public async Task EmbeddingModelTokenAdapter_ProducesOneRealVectorPerToken()
         {
-            var model = new HashingTokenEmbeddingModel<double>(embeddingDimension: 64);
+            // Adapts a REAL embedder into per-token embeddings: "quantum computing" -> 2 vectors, each the
+            // embedder's genuine vector for that word. No placeholder/hash anywhere in the path.
+            var adapter = new EmbeddingModelTokenAdapter<double>(RealEmbedder());
 
-            var a = model.EmbedTokens("hello world");
-            var b = model.EmbedTokens("hello world");
+            var tokens = adapter.EmbedTokens("quantum computing");
 
-            Assert.Equal(2, a.Length);
-            Assert.Equal(a.Length, b.Length);
-            for (int t = 0; t < a.Length; t++)
-            {
-                // Deterministic: same text -> identical vectors.
-                for (int i = 0; i < a[t].Length; i++)
-                {
-                    Assert.Equal(a[t][i], b[t][i], 10);
-                }
-
-                // Unit length.
-                double norm = Math.Sqrt(Enumerable.Range(0, a[t].Length).Sum(i => a[t][i] * a[t][i]));
-                Assert.Equal(1.0, norm, 6);
-            }
+            Assert.Equal(2, tokens.Length);
+            Assert.Equal(adapter.EmbeddingDimension, tokens[0].Length);
+            // Distinct words -> orthogonal vectors (dot 0); same text -> identical vectors (deterministic).
+            double cross = Enumerable.Range(0, tokens[0].Length).Sum(i => tokens[0][i] * tokens[1][i]);
+            Assert.Equal(0.0, cross, 6);
+            var repeat = adapter.EmbedTokens("quantum computing");
+            for (int i = 0; i < tokens[0].Length; i++)
+                Assert.Equal(tokens[0][i], repeat[0][i], 10);
             await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
-        public async Task HashingTokenEmbeddingModel_IdenticalTokensHaveCosineOne()
+        public async Task ColbertReranker_NullTokenModel_ThrowsArgumentNull()
         {
-            var model = new HashingTokenEmbeddingModel<double>(embeddingDimension: 64);
+            // No-stub contract: ColBERT refuses to run over a missing/placeholder embedder — it must be given
+            // a real one, failing loudly rather than silently producing meaningless late-interaction scores.
+            Assert.Throws<ArgumentNullException>(
+                () => new ColbertReranker<double>((ITokenEmbeddingModel<double>)null!));
+            await Task.CompletedTask;
+        }
 
-            var one = model.EmbedTokens("apple")[0];
-            var two = model.EmbedTokens("apple")[0];
+        [Fact(Timeout = 60000)]
+        public async Task EmbeddingModelTokenAdapter_NullText_ThrowsArgumentNull()
+        {
+            var adapter = new EmbeddingModelTokenAdapter<double>(RealEmbedder());
 
-            double dot = Enumerable.Range(0, one.Length).Sum(i => one[i] * two[i]);
-            Assert.Equal(1.0, dot, 6);
+            Assert.Throws<ArgumentNullException>(() => adapter.EmbedTokens(null!));
             await Task.CompletedTask;
         }
 

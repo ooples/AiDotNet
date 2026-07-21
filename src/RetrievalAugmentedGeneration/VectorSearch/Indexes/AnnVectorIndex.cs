@@ -164,7 +164,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             _metric = metric;
             _dim = dimension;
             _normalize = metric == AnnVectorMetric.Cosine;
-            _annMetric = metric == AnnVectorMetric.L2 ? AnnPrimitives.MetricL2 : AnnPrimitives.MetricInnerProduct;
+            // Cosine maps to L2 over L2-normalized vectors, NOT inner product: for unit vectors
+            // ||q-x||^2 = 2 - 2<q,x>, so L2-nearest is exactly cosine-nearest, and — critically — L2 keeps
+            // the PQ/IVF Lloyd's k-means CONSISTENT (assignment metric matches the Euclidean-mean centroid
+            // update). Training PQ codebooks under inner product (assign by max-IP, update by mean) produces
+            // near-useless sub-quantizers, which collapsed PQ/IVFPQ recall (benchmarked 0.04-0.45). Only a
+            // raw (un-normalized) inner-product metric actually uses the IP path.
+            _annMetric = metric == AnnVectorMetric.InnerProduct ? AnnPrimitives.MetricInnerProduct : AnnPrimitives.MetricL2;
             _nlist = nlist;
             _nprobe = nprobe;
             _m = m;

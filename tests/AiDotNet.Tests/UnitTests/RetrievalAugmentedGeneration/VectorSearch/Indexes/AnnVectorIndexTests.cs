@@ -118,6 +118,41 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal("a", hits[0].Id);
         }
 
+        [Theory]
+        [InlineData(AnnVectorIndexType.Pq)]
+        [InlineData(AnnVectorIndexType.IvfPq)]
+        public void CosineQuantizedIndexes_PreserveAngularClusterRecall(AnnVectorIndexType type)
+        {
+            var rng = new Random(1234);
+            var index = new AnnVectorIndex<double>(
+                type, Dim, AnnVectorMetric.Cosine, nlist: Clusters, nprobe: 4, m: 4, ksub: 16, seed: 7);
+
+            for (int cluster = 0; cluster < Clusters; cluster++)
+            {
+                for (int sample = 0; sample < PerCluster; sample++)
+                {
+                    var values = new double[Dim];
+                    values[cluster] = 1.0;
+                    values[cluster + Clusters] = 0.5;
+                    for (int d = 0; d < Dim; d++)
+                        values[d] += (rng.NextDouble() - 0.5) * 0.02;
+                    index.Add($"c{cluster}_p{sample}", new Vector<double>(values));
+                }
+            }
+
+            for (int cluster = 0; cluster < Clusters; cluster++)
+            {
+                var query = new double[Dim];
+                query[cluster] = 10.0; // magnitude must not affect cosine ranking
+                query[cluster + Clusters] = 5.0;
+                var hits = index.Search(new Vector<double>(query), 5);
+
+                Assert.Equal(5, hits.Count);
+                Assert.True(hits.Count(hit => ClusterOf(hit.Id) == cluster) >= 4,
+                    $"{type} lost angular recall for cluster {cluster}: {string.Join(", ", hits.Select(hit => hit.Id))}");
+            }
+        }
+
         [Fact]
         public void AddBatch_AddsAllVectors()
         {
