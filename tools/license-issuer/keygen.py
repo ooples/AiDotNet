@@ -3,8 +3,8 @@
 v2 license signing keypair bootstrap.
 
 Generates ONE Ed25519 keypair and prints everything needed to wire up offline `aidn2` licensing, in the
-exact formats each consumer expects. RUN THIS ON YOUR OWN MACHINE — the private key is printed to stdout and
-never leaves your terminal; do not paste it into chat, commit it, or store it unencrypted.
+exact formats each consumer expects. RUN THIS ON YOUR OWN MACHINE. Use --private-key-out when the PEM is
+needed by aidn2_issuer.py; do not paste it into chat, commit it, or store it unencrypted.
 
 Emits:
   1. AIDOTNET_LICENSE_SIGNING_KEY_PKCS8  — base64(DER PKCS#8) private key. This is what the Supabase edge
@@ -46,6 +46,8 @@ def main() -> int:
     ap.add_argument("--kid", required=True, help="key id (e.g. prod-2026a or ci-2026a)")
     ap.add_argument("--jwk-out", default="LicensePublicKey.json",
                     help="path to write the public JWK (embed + CI var). Default: ./LicensePublicKey.json")
+    ap.add_argument("--private-key-out", default=None,
+                    help="optional path to write the private Ed25519 key as owner-only PKCS#8 PEM")
     args = ap.parse_args()
 
     priv = Ed25519PrivateKey.generate()
@@ -82,6 +84,21 @@ def main() -> int:
         json.dump(jwk, f, separators=(",", ":"))
     jwk_compact = json.dumps(jwk, separators=(",", ":"))
 
+    if args.private_key_out:
+        parent = os.path.dirname(os.path.abspath(args.private_key_out))
+        os.makedirs(parent, exist_ok=True)
+        fd = os.open(args.private_key_out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+        with os.fdopen(fd, "wb") as f:
+            f.write(priv.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            ))
+
     print("=== v2 license signing keypair ===")
     print(f"kid: {args.kid}\n")
 
@@ -93,6 +110,8 @@ def main() -> int:
 
     print("--- 2. SDK embed + CI variable (PUBLIC — safe to commit/expose) ---")
     print(f"Wrote JWK -> {args.jwk_out}")
+    if args.private_key_out:
+        print(f"Wrote private PEM -> {args.private_key_out}  (KEEP SECRET — never commit)")
     print("Copy it to BOTH:  src/BuildKey/LicensePublicKey.json  (AiDotNet)  and the AiDotNet.Tensors equivalent.")
     print("Set the CI variable so the build injects it:")
     print(f"  gh variable set AIDOTNET_LICENSE_PUBLIC_KEY_JSON --repo ooples/AiDotNet --body '{jwk_compact}'")
