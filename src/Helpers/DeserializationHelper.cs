@@ -1,4 +1,5 @@
 global using System.Reflection;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 
 namespace AiDotNet.Helpers;
 
@@ -669,6 +670,25 @@ public static class DeserializationHelper
         else if (genericDef == typeof(PreLNTransformerBlock<>))
         {
             instance = CreatePreLNTransformerBlock<T>(type, inputShape, additionalParams);
+        }
+        else if (genericDef == typeof(STCConnectorLayer<>))
+        {
+            instance = CreateSTCConnectorLayer<T>(additionalParams);
+        }
+        else if (genericDef == typeof(HippoMemoryCellLayer<>))
+        {
+            instance = new HippoMemoryCellLayer<T>(
+                hiddenSize: TryGetInt(additionalParams, "HiddenSize") ?? 256,
+                inputSize: TryGetInt(additionalParams, "InputSize") ?? inputShape[^1],
+                memoryOrder: TryGetInt(additionalParams, "MemoryOrder") ?? -1,
+                memorySize: TryGetInt(additionalParams, "MemorySize") ?? 1,
+                measure: TryGetString(additionalParams, "Measure") ?? "legs",
+                discretization: TryGetString(additionalParams, "Discretization") ?? "bilinear",
+                initialTime: TryGetInt(additionalParams, "InitialTime") ?? 0,
+                timeStep: TryGetDouble(additionalParams, "TimeStep") ?? 0.0,
+                timescaleMin: TryGetDouble(additionalParams, "TimescaleMin") ?? 0.0,
+                timescaleMax: TryGetDouble(additionalParams, "TimescaleMax") ?? double.PositiveInfinity,
+                useGate: TryGetBool(additionalParams, "UseGate") ?? true);
         }
         else if (genericDef == typeof(TransformerEncoderLayer<>))
         {
@@ -2936,6 +2956,43 @@ public static class DeserializationHelper
     }
 
     /// <summary>
+    /// Reconstructs an <see cref="STCConnectorLayer{T}"/> from the metadata persisted by
+    /// <c>STCConnectorLayer.GetMetadata</c>. All RegStage, Conv3D, and MLP weights travel in the
+    /// flat parameter vector; the metadata reconstructs the complete connector structure first.
+    /// </summary>
+    private static object CreateSTCConnectorLayer<T>(Dictionary<string, object>? additionalParams)
+    {
+        int visionDim = TryGetInt(additionalParams, "VisionDim")
+            ?? TryGetInt(additionalParams, "Dim")
+            ?? 0;
+        int decoderDim = TryGetInt(additionalParams, "DecoderDim") ?? visionDim;
+        int patchesHeight = TryGetInt(additionalParams, "PatchesHeight") ?? 0;
+        int patchesWidth = TryGetInt(additionalParams, "PatchesWidth") ?? 0;
+        if (visionDim <= 0 || decoderDim <= 0 || patchesHeight <= 0 || patchesWidth <= 0)
+        {
+            throw new InvalidOperationException(
+                "STCConnectorLayer deserialization requires positive VisionDim/Dim, DecoderDim, PatchesHeight, and PatchesWidth metadata.");
+        }
+
+        int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 2;
+        int stride = TryGetInt(additionalParams, "Stride") ?? 2;
+        int padding = TryGetInt(additionalParams, "Padding") ?? 1;
+        int stageDepth = TryGetInt(additionalParams, "StageDepth") ?? 4;
+        int mlpDepth = TryGetInt(additionalParams, "MlpDepth") ?? 2;
+
+        return new STCConnectorLayer<T>(
+            visionDim,
+            decoderDim,
+            patchesHeight,
+            patchesWidth,
+            kernelSize,
+            stride,
+            padding,
+            stageDepth,
+            mlpDepth);
+    }
+
+    /// <summary>
     /// Reconstructs a <see cref="PreLNTransformerBlock{T}"/> from the metadata persisted by
     /// <c>PreLNTransformerBlock.GetMetadata</c>. The block wraps a caller-supplied attention
     /// sublayer, so the standard reflection matcher cannot rebuild it — we recreate the injected
@@ -2957,18 +3014,9 @@ public static class DeserializationHelper
         int ffnDim = TryGetInt(additionalParams, "FfnDim") ?? (hiddenSize * 4);
         bool useGatedSwiGLU = TryGetBool(additionalParams, "UseGatedSwiGLU") ?? false;
 
-        // Rebuild the injected attention. MultiHeadAttentionLayer is the only attention type the
-        // built-in factories wire through this block; a different persisted AttentionType means a
-        // custom composition this reconstruction path does not model.
+        // Rebuild the injected attention variant used by the model factory. VideoLLaMA2/Mistral
+        // uses GQA; the earlier implementation only accepted MHA and therefore made Clone fail.
         string? attentionType = TryGetString(additionalParams, "AttentionType");
-        if (attentionType is not null &&
-            !attentionType.StartsWith("MultiHeadAttentionLayer", StringComparison.Ordinal))
-        {
-            throw new NotSupportedException(
-                $"PreLNTransformerBlock deserialization only supports a MultiHeadAttentionLayer attention " +
-                $"sublayer; got '{attentionType}'. Extend CreatePreLNTransformerBlock to handle it.");
-        }
-
         int headCount = TryGetInt(additionalParams, "AttHeadCount") ?? ResolveDefaultHeadCount(hiddenSize);
         if (headCount <= 0 || hiddenSize % headCount != 0)
         {
@@ -2976,18 +3024,51 @@ public static class DeserializationHelper
                 $"PreLNTransformerBlock deserialization: HiddenSize {hiddenSize} is not divisible by AttHeadCount {headCount}.");
         }
         int headDim = hiddenSize / headCount;
-
-        var attn = new MultiHeadAttentionLayer<T>(headCount, headDim);
-        attn.UseCausalMask = TryGetBool(additionalParams, "AttUseCausalMask") ?? false;
-
         string? peName = TryGetString(additionalParams, "AttPositionalEncoding");
-        if (peName is not null &&
-            Enum.TryParse<PositionalEncodingType>(peName, out var pe) &&
-            pe != PositionalEncodingType.None)
+        PositionalEncodingType pe = PositionalEncodingType.None;
+        if (peName is not null)
+            Enum.TryParse(peName, out pe);
+        double ropeTheta = TryGetDouble(additionalParams, "AttRopeTheta") ?? 10000.0;
+        int ropeMaxLen = TryGetInt(additionalParams, "AttRopeMaxSeqLen") ?? 2048;
+
+        LayerBase<T> attn;
+        if (attentionType is not null &&
+            attentionType.StartsWith("GroupedQueryAttentionLayer", StringComparison.Ordinal))
         {
-            double ropeTheta = TryGetDouble(additionalParams, "AttRopeTheta") ?? 10000.0;
-            int ropeMaxLen = TryGetInt(additionalParams, "AttRopeMaxSeqLen") ?? 2048;
-            attn.ConfigurePositionalEncoding(pe, ropeTheta, ropeMaxLen);
+            int kvHeadCount = TryGetInt(additionalParams, "AttNumKeyValueHeads")
+                ?? throw new InvalidOperationException(
+                    "PreLNTransformerBlock GQA deserialization requires AttNumKeyValueHeads metadata.");
+            if (kvHeadCount <= 0 || headCount % kvHeadCount != 0)
+            {
+                throw new InvalidOperationException(
+                    $"PreLNTransformerBlock GQA deserialization: AttHeadCount {headCount} must be divisible by " +
+                    $"AttNumKeyValueHeads {kvHeadCount}.");
+            }
+
+            var gqa = new GroupedQueryAttentionLayer<T>(
+                ropeMaxLen,
+                hiddenSize,
+                headCount,
+                kvHeadCount,
+                new IdentityActivation<T>(),
+                deferAllocation: true);
+            if (pe != PositionalEncodingType.None)
+                gqa.ConfigurePositionalEncoding(pe, ropeTheta, ropeMaxLen);
+            attn = gqa;
+        }
+        else if (attentionType is null ||
+                 attentionType.StartsWith("MultiHeadAttentionLayer", StringComparison.Ordinal))
+        {
+            var mha = new MultiHeadAttentionLayer<T>(headCount, headDim);
+            mha.UseCausalMask = TryGetBool(additionalParams, "AttUseCausalMask") ?? false;
+            if (pe != PositionalEncodingType.None)
+                mha.ConfigurePositionalEncoding(pe, ropeTheta, ropeMaxLen);
+            attn = mha;
+        }
+        else
+        {
+            throw new NotSupportedException(
+                $"PreLNTransformerBlock deserialization does not support attention sublayer '{attentionType}'.");
         }
 
         // FFN activation (ignored internally when useGatedSwiGLU is true — SwiGLU uses its own SiLU

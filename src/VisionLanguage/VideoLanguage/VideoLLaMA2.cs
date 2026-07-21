@@ -34,9 +34,9 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// // Create a VideoLLaMA 2 model for spatial-temporal video understanding
 /// // with convolution-based video token aggregation and audio support
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.TwoDimensional,
+///     inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///     inputHeight: 336, inputWidth: 336, inputDepth: 3, inputFrames: 8, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
 /// var model = new VideoLLaMA2&lt;double&gt;(architecture, "videollama2.onnx");
@@ -66,11 +66,17 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 
     public override ModelOptions GetOptions() => _options;
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private int _decoderLayerStart;
+
+    // The STC connector contains a composite reshape/permute/Conv3D graph whose backward is not
+    // currently safe to capture and replay as one fused training plan. The eager tape executes the
+    // same paper architecture and optimizer without poisoning the model's parameters on step one.
+    protected override bool SupportsFusedCompiledTraining => false;
 
     public VideoLLaMA2(
         NeuralNetworkArchitecture<T> architecture,
@@ -80,6 +86,7 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         : base(architecture)
     {
         _options = options ?? new VideoLLaMA2Options();
+        ValidateOptions(_options);
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -116,8 +123,11 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
                 );
             _options = new VideoLLaMA2Options(_options) { ImageSize = architecture.InputHeight };
         }
+        ValidateOptions(_options);
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The released first-stage connector training recipe uses AdamW at 1e-3 with zero weight decay.
+        // Both values are options, and callers may still inject an entirely different optimizer.
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -139,10 +149,7 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return L2Normalize(OnnxModel.Run(p));
-        var c = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            c = Layers[i].Forward(c);
-        return L2Normalize(c);
+        return L2Normalize(EncodeFrameFeatures(p, alreadyPreprocessed: true));
     }
 
     /// <summary>
@@ -157,29 +164,18 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
-        // Step 1: Vision encoder
-        var encoderOut = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            encoderOut = Layers[i].Forward(encoderOut);
-
-        // Fuse visual features with prompt tokens via ConcatenateTensors
-        Tensor<T> fusedInput;
-        if (prompt is not null)
+        var encoderOut = EncodeFrameFeatures(p, alreadyPreprocessed: true);
+        Tensor<T> bridgeInput = encoderOut;
+        if (_options.EnableSpatialTemporalConv)
         {
-            var promptTokens = TokenizeText(prompt);
-            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
-        }
-        else
-        {
-            fusedInput = encoderOut;
+            // A custom no-padding kernel may require more than one temporal sample. Repeating a
+            // still frame is the standard image-as-video representation and keeps the STC path intact.
+            int requiredFrames = Math.Max(1, _options.STCKernelSize - 2 * _options.STCPadding);
+            var repeated = Enumerable.Repeat(encoderOut, requiredFrames).ToArray();
+            bridgeInput = Engine.TensorStack(repeated, axis: 0);
         }
 
-        var output = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            output = Layers[i].Forward(output);
-        return output;
+        return RunConnectorAndDecoder(bridgeInput, prompt);
     }
 
     /// <summary>
@@ -196,75 +192,32 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         if (count == 0)
             throw new ArgumentException("At least one frame is required.", nameof(frames));
 
-        // Step 1: Encode each frame through vision encoder
+        if (IsOnnxMode && OnnxModel is not null)
+        {
+            var processedFrames = new Tensor<T>[count];
+            for (int i = 0; i < count; i++)
+                processedFrames[i] = PreprocessImage(frames[i]);
+            return OnnxModel.Run(Engine.TensorStack(processedFrames, axis: 0));
+        }
+
+        // Encode every frame without L2-normalizing away the magnitude information consumed by STC.
         var frameFeatures = new Tensor<T>[count];
         for (int f = 0; f < count; f++)
-            frameFeatures[f] = EncodeImage(frames[f]);
+            frameFeatures[f] = EncodeFrameFeatures(frames[f]);
 
-        int dim = frameFeatures[0].Length;
-
-        if (!_options.EnableSpatialTemporalConv || count == 1)
+        if (_options.EnableSpatialTemporalConv)
         {
-            // Fallback for single frame: just use encoder output
-            var output = frameFeatures[0];
-            for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-                output = Layers[i].Forward(output);
-            return output;
-        }
-
-        // Step 2: Spatial-Temporal Convolution (STC) connector
-        // Arrange features as [T, D] tensor and apply 1D temporal convolution
-        // (approximating the paper's 3D conv since our tensors are 1D feature vectors)
-        var stcOutput = new Tensor<T>([dim]);
-
-        // Temporal convolution with kernel size 3 and stride 1
-        int kernelSize = Math.Min(3, count);
-        for (int d = 0; d < dim; d++)
-        {
-            double convSum = 0;
-            int convCount = 0;
-
-            for (int t = 0; t <= count - kernelSize; t++)
+            int requiredFrames = Math.Max(1, _options.STCKernelSize - 2 * _options.STCPadding);
+            if (frameFeatures.Length < requiredFrames)
             {
-                // 1D temporal conv: weighted sum over kernel window
-                double windowVal = 0;
-                for (int k = 0; k < kernelSize; k++)
-                {
-                    double val = NumOps.ToDouble(frameFeatures[t + k][d]);
-                    // Depthwise conv weight: center-weighted (like a temporal Gaussian)
-                    double weight = k == kernelSize / 2 ? 0.5 : 0.25;
-                    windowVal += val * weight;
-                }
-                convSum += windowVal;
-                convCount++;
+                Array.Resize(ref frameFeatures, requiredFrames);
+                for (int i = count; i < requiredFrames; i++)
+                    frameFeatures[i] = frameFeatures[count - 1];
             }
-
-            // Average pooling over temporal positions after convolution
-            stcOutput[d] = NumOps.FromDouble(convCount > 0 ? convSum / convCount : 0);
         }
 
-        // Step 3: Apply ReLU activation after STC (per paper)
-        for (int d = 0; d < dim; d++)
-        {
-            double val = NumOps.ToDouble(stcOutput[d]);
-            if (val < 0)
-                stcOutput[d] = NumOps.Zero;
-        }
-
-        // Step 4: Temporal position encoding for preserved temporal awareness
-        for (int d = 0; d < dim; d++)
-        {
-            double freq = 1.0 / Math.Pow(10000.0, (2.0 * (d / 2)) / dim);
-            double temporalBias = Math.Sin(0.5 * freq * Math.PI); // Mid-video position
-            double val = NumOps.ToDouble(stcOutput[d]);
-            stcOutput[d] = NumOps.FromDouble(val + temporalBias * 0.05);
-        }
-
-        // Step 5: Project through LLM decoder
-        var decoderOutput = stcOutput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOutput = Layers[i].Forward(decoderOutput);
-        return decoderOutput;
+        var videoFeatures = Engine.TensorStack(frameFeatures, axis: 0);
+        return RunConnectorAndDecoder(videoFeatures, prompt);
     }
 
     protected override void InitializeLayers()
@@ -275,23 +228,37 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         {
             Layers.AddRange(Architecture.Layers);
             _encoderLayerEnd = Layers.Count / 2;
+            _decoderLayerStart = _encoderLayerEnd;
         }
         else
         {
+            // VideoLLaMA2 (Cheng et al. 2024, arXiv:2406.07476) aggregates the per-frame residual-ViT
+            // features with an STC (Spatial-Temporal Convolution) connector — a 3D conv over time+space —
+            // before the LLM. Residual ViT + LLM fix the old shared builder's post-training collapse.
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers(
-                    _options.VisionDim,
-                    _options.VisionDim,
-                    _options.DecoderDim,
-                    _options.NumVisionLayers,
-                    2,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
+                LayerHelper<T>.CreateDefaultVideoSTCVLMLayers(
+                    visionDim: _options.VisionDim,
+                    decoderDim: _options.DecoderDim,
+                    numVisionLayers: _options.NumVisionLayers,
+                    numDecoderLayers: _options.NumDecoderLayers,
+                    visionNumHeads: _options.VisionNumHeads,
+                    decoderNumHeads: _options.DecoderNumHeads,
+                    decoderNumKeyValueHeads: _options.DecoderNumKeyValueHeads,
+                    visionFfnDim: _options.VisionFfnDim,
+                    decoderFfnDim: _options.DecoderFfnDim,
+                    dropoutRate: _options.DropoutRate,
                     imageHeight: _options.ImageSize,
                     imageWidth: _options.ImageSize,
                     imageChannels: 3,
-                    patchSize: 16
+                    patchSize: _options.PatchSize,
+                    maxSequenceLength: _options.MaxSequenceLength,
+                    ropeTheta: _options.RoPETheta,
+                    enableSpatialTemporalConv: _options.EnableSpatialTemporalConv,
+                    stcKernelSize: _options.STCKernelSize,
+                    stcStride: _options.STCStride,
+                    stcPadding: _options.STCPadding,
+                    stcStageDepth: _options.STCStageDepth,
+                    stcMlpDepth: _options.STCMlpDepth
                 )
             );
             ComputeEncoderDecoderBoundary();
@@ -300,25 +267,37 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 
     private void ComputeEncoderDecoderBoundary()
     {
-        // Encoder/decoder boundary mirrors the layer layout produced by
-        // LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers:
-        //   PatchEmbedding(1) + InitialNorm(1)
-        //   + (NumVisionLayers blocks × lpb layers/block)   ← vision encoder
-        //   + (2 temporal blocks × lpb layers/block)        ← temporal encoder
-        //   + ProjectionMLP(2)                              ← end of encoder
-        //   + (NumDecoderLayers blocks × lpb layers/block)  ← LLM decoder
-        // lpb (layers-per-block) is 5 (Norm+Attn+Norm+FFN1+FFN2) or 6 with dropout.
-        const int patchEmbedLayers = 1;
-        const int initialNormLayer = 1;
-        const int temporalBlocks = 2;
-        const int projectionLayers = 2;
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd =
-            patchEmbedLayers
-            + initialNormLayer
-            + (_options.NumVisionLayers * lpb)
-            + (temporalBlocks * lpb)
-            + projectionLayers;
+        // Patch embedding + pre-LN + one composite residual block per CLIP layer.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers;
+        // The connector is one composite layer; the explicit no-STC fallback is an MLP stack.
+        _decoderLayerStart = _encoderLayerEnd
+            + (_options.EnableSpatialTemporalConv ? 1 : _options.STCMlpDepth);
+    }
+
+    private Tensor<T> EncodeFrameFeatures(Tensor<T> image, bool alreadyPreprocessed = false)
+    {
+        var output = alreadyPreprocessed ? image : PreprocessImage(image);
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            output = Layers[i].Forward(output);
+        return output;
+    }
+
+    private Tensor<T> RunConnectorAndDecoder(Tensor<T> visualFeatures, string? prompt)
+    {
+        var output = visualFeatures;
+        for (int i = _encoderLayerEnd; i < _decoderLayerStart; i++)
+            output = Layers[i].Forward(output);
+
+        // Native mode currently owns only the visual connector/decoder weights; prompt embedding
+        // weights come from the published checkpoint. Reject a silent fabricated embedding while
+        // still allowing ONNX mode above to consume the complete exported graph.
+        if (!string.IsNullOrEmpty(prompt))
+            throw new NotSupportedException(
+                "Prompt-conditioned generation in native mode requires a loaded VideoLLaMA2 language-token embedding checkpoint.");
+
+        for (int i = _decoderLayerStart; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+        return output;
     }
 
     private Tensor<T> TokenizeText(string text)
@@ -349,7 +328,7 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
@@ -382,7 +361,10 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         };
         m.AdditionalInfo["Architecture"] = "VideoLLaMA2";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
+        m.AdditionalInfo["VisionEncoder"] = _options.VisionEncoderName;
         m.AdditionalInfo["SpatialTemporalConv"] = _options.EnableSpatialTemporalConv.ToString();
+        m.AdditionalInfo["PatchSize"] = _options.PatchSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        m.AdditionalInfo["STCStageDepth"] = _options.STCStageDepth.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return m;
     }
 
@@ -398,6 +380,21 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         writer.Write(_options.NumHeads);
         writer.Write(_options.MaxFrames);
         writer.Write(_options.EnableSpatialTemporalConv);
+        writer.Write(_options.VisionEncoderName);
+        writer.Write(_options.PatchSize);
+        writer.Write(_options.VisionNumHeads);
+        writer.Write(_options.DecoderNumHeads);
+        writer.Write(_options.DecoderNumKeyValueHeads);
+        writer.Write(_options.VisionFfnDim);
+        writer.Write(_options.DecoderFfnDim);
+        writer.Write(_options.RoPETheta);
+        writer.Write(_options.STCKernelSize);
+        writer.Write(_options.STCStride);
+        writer.Write(_options.STCPadding);
+        writer.Write(_options.STCStageDepth);
+        writer.Write(_options.STCMlpDepth);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.WeightDecay);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -414,6 +411,23 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         _options.NumHeads = reader.ReadInt32();
         _options.MaxFrames = reader.ReadInt32();
         _options.EnableSpatialTemporalConv = reader.ReadBoolean();
+        _options.VisionEncoderName = reader.ReadString();
+        _options.PatchSize = reader.ReadInt32();
+        _options.VisionNumHeads = reader.ReadInt32();
+        _options.DecoderNumHeads = reader.ReadInt32();
+        _options.DecoderNumKeyValueHeads = reader.ReadInt32();
+        _options.VisionFfnDim = reader.ReadInt32();
+        _options.DecoderFfnDim = reader.ReadInt32();
+        _options.RoPETheta = reader.ReadDouble();
+        _options.STCKernelSize = reader.ReadInt32();
+        _options.STCStride = reader.ReadInt32();
+        _options.STCPadding = reader.ReadInt32();
+        _options.STCStageDepth = reader.ReadInt32();
+        _options.STCMlpDepth = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.WeightDecay = reader.ReadDouble();
+        ValidateOptions(_options);
+        _optimizer = _useNativeMode ? CreateDefaultOptimizer() : null;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
@@ -430,6 +444,36 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         if (_disposed)
             throw new ObjectDisposedException(GetType().FullName ?? nameof(VideoLLaMA2<T>));
     }
+
+    private static void ValidateOptions(VideoLLaMA2Options options)
+    {
+        if (options.ImageSize <= 0) throw new ArgumentOutOfRangeException(nameof(options.ImageSize));
+        if (options.PatchSize <= 0 || options.ImageSize % options.PatchSize != 0)
+        {
+            throw new ArgumentException(
+                $"ImageSize ({options.ImageSize}) must be evenly divisible by PatchSize ({options.PatchSize}).",
+                nameof(options));
+        }
+        if (options.MaxFrames <= 0) throw new ArgumentOutOfRangeException(nameof(options.MaxFrames));
+        if (options.STCKernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(options.STCKernelSize));
+        if (options.STCStride <= 0) throw new ArgumentOutOfRangeException(nameof(options.STCStride));
+        if (options.STCPadding < 0) throw new ArgumentOutOfRangeException(nameof(options.STCPadding));
+        if (options.STCStageDepth < 0) throw new ArgumentOutOfRangeException(nameof(options.STCStageDepth));
+        if (options.STCMlpDepth <= 0) throw new ArgumentOutOfRangeException(nameof(options.STCMlpDepth));
+        if (options.LearningRate <= 0 || double.IsNaN(options.LearningRate) || double.IsInfinity(options.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(options.LearningRate));
+        if (options.WeightDecay < 0 || double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(options.WeightDecay));
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
 
     protected override void Dispose(bool disposing)
     {

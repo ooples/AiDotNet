@@ -14958,7 +14958,7 @@ public static class LayerHelper<T>
     /// Creates default layers for the TimeMachine (Time Series State Space Model) architecture.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="contextLength">The input sequence length (default: 512).</param>
+    /// <param name="contextLength">Maximum input sequence length (default: 1024).</param>
     /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
     /// <param name="modelDim">The model dimension d_model (default: 256).</param>
     /// <param name="stateDim">The SSM state dimension (default: 16).</param>
@@ -15070,8 +15070,9 @@ public static class LayerHelper<T>
     /// <param name="contextLength">The input sequence length (default: 512).</param>
     /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
     /// <param name="modelDim">The model dimension d_model (default: 256).</param>
-    /// <param name="stateDim">The HiPPO state dimension/polynomial order (default: 64).</param>
-    /// <param name="numLayers">Number of HiPPO layers (default: 4).</param>
+    /// <param name="stateDim">The HiPPO memory order (-1 resolves to modelDim).</param>
+    /// <param name="numLayers">Number of HiPPO recurrent layers (paper default: 1).</param>
+    /// <param name="dropoutRate">Dropout probability applied after each HiPPO block.</param>
     /// <param name="useNormalization">Whether to use layer normalization (default: true).</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
     /// <returns>A collection of layers forming the HiPPO architecture.</returns>
@@ -15094,54 +15095,59 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultHippoLayers(
         NeuralNetworkArchitecture<T> architecture,
-        int contextLength = 512,
+        int contextLength = 1024,
         int forecastHorizon = 96,
         int modelDim = 256,
-        int stateDim = 64,
-        int numLayers = 4,
-        bool useNormalization = true,
-        int numFeatures = 1)
+        int stateDim = -1,
+        int numLayers = 1,
+        double dropoutRate = 0.0,
+        bool useNormalization = false,
+        int numFeatures = 1,
+        int memorySize = 1,
+        string hippoMethod = "legs",
+        string discretizationMethod = "bilinear",
+        int initialTime = 0,
+        double timeStep = 0.0,
+        double timescaleMin = 0.0,
+        double timescaleMax = double.PositiveInfinity,
+        bool useGate = true)
     {
-        // Paper-faithful HiPPO (Gu et al. 2020): a stack of diagonal state-space
-        // (S4D) layers whose A matrix is initialized with HiPPO-LegS, evolving the
-        // polynomial state per time step across the sequence. This is the genuine
-        // state-space recurrence — NOT a dense projection over the flattened
-        // sequence. The SSM parameters are O(modelDim·stateDim), so the paper-scale
-        // contextLength (512) no longer overflows TensorAllocator.
-        //
-        // Layer order (consumed by Hippo.ExtractLayerReferences):
-        //   [InputEmbedding Dense] ([InputNorm]) { S4DLayer ([BlockNorm]) [Dropout] }×numLayers [OutputHead Dense]
-        // The model's forward pass applies the residual connection, mean-pools the
-        // SSM output over time to [batch, modelDim], then runs the output head.
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
 
-        // === Input Embedding === (features -> modelDim, per time step)
-        yield return new DenseLayer<T>(
-            outputSize: modelDim,
-            activationFunction: new GELUActivation<T>());
+        if (numLayers <= 0) throw new ArgumentOutOfRangeException(nameof(numLayers));
+        if (modelDim <= 0 || numFeatures <= 0 || memorySize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(modelDim));
 
-        if (useNormalization)
-        {
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        // === HiPPO state-space layers ===
+        // Original HiPPO-RNN wiring: fixed HiPPO memory inside a gated recurrent cell,
+        // followed by an end-state decoder. The paper experiment uses one layer; extra
+        // layers, normalization, and dropout remain explicit user customizations.
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // Diagonal SSM with HiPPO-LegS-initialized A (Gu et al. 2020):
-            //   x' = A x + B u,  y = C x + D u  evolved over the sequence.
-            yield return new S4DLayer<T>(
-                sequenceLength: contextLength,
-                modelDimension: modelDim,
-                stateDimension: stateDim);
+            yield return new HippoMemoryCellLayer<T>(
+                hiddenSize: modelDim,
+                inputSize: layer == 0 ? numFeatures : modelDim,
+                memoryOrder: stateDim,
+                memorySize: memorySize,
+                measure: hippoMethod,
+                discretization: discretizationMethod,
+                initialTime: initialTime,
+                timeStep: timeStep,
+                timescaleMin: timescaleMin,
+                timescaleMax: timescaleMax,
+                useGate: useGate);
 
             if (useNormalization)
             {
                 yield return new LayerNormalizationLayer<T>();
             }
-            yield return new DropoutLayer<T>(0.1);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
         }
 
-        // === Output Head === (pooled modelDim -> forecastHorizon)
+        // End-state decoder (the model extracts the final recurrent state before this head).
         yield return new DenseLayer<T>(
             outputSize: forecastHorizon,
             activationFunction: null);
@@ -25044,6 +25050,121 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Builds the VideoLLaMA 2 default architecture: CLIP-style residual ViT, the complete
+    /// <see cref="NeuralNetworks.Layers.STCConnectorLayer{T}"/>, and a Mistral-style RMSNorm/RoPE/GQA
+    /// decoder with a gated SwiGLU feed-forward network. Every paper dimension remains caller-configurable.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoSTCVLMLayers(
+        int visionDim = 1024,
+        int decoderDim = 4096,
+        int numVisionLayers = 24,
+        int numDecoderLayers = 32,
+        int visionNumHeads = 16,
+        int decoderNumHeads = 32,
+        int decoderNumKeyValueHeads = 8,
+        int visionFfnDim = 4096,
+        int decoderFfnDim = 14336,
+        double dropoutRate = 0.0,
+        int imageHeight = 336,
+        int imageWidth = 336,
+        int imageChannels = 3,
+        int patchSize = 14,
+        int maxSequenceLength = 2048,
+        double ropeTheta = 10000.0,
+        bool enableSpatialTemporalConv = true,
+        int stcKernelSize = 2,
+        int stcStride = 2,
+        int stcPadding = 1,
+        int stcStageDepth = 4,
+        int stcMlpDepth = 2)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (imageHeight <= 0 || imageWidth <= 0 || imageChannels <= 0 || patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "image dimensions and patchSize must be positive.");
+        if (imageHeight % patchSize != 0 || imageWidth % patchSize != 0)
+            throw new ArgumentException($"imageHeight ({imageHeight}) and imageWidth ({imageWidth}) must be divisible by patchSize ({patchSize}).");
+        if (visionDim <= 0 || decoderDim <= 0 || visionFfnDim <= 0 || decoderFfnDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(visionDim), "model and feed-forward dimensions must be positive.");
+        if (numVisionLayers < 0 || numDecoderLayers < 0)
+            throw new ArgumentOutOfRangeException(nameof(numVisionLayers), "layer counts must be non-negative.");
+        if (visionNumHeads <= 0 || visionDim % visionNumHeads != 0)
+            throw new ArgumentException("visionNumHeads must be positive and evenly divide visionDim.", nameof(visionNumHeads));
+        if (decoderNumHeads <= 0 || decoderDim % decoderNumHeads != 0)
+            throw new ArgumentException("decoderNumHeads must be positive and evenly divide decoderDim.", nameof(decoderNumHeads));
+        if (decoderNumKeyValueHeads <= 0 || decoderNumHeads % decoderNumKeyValueHeads != 0)
+            throw new ArgumentException("decoderNumKeyValueHeads must be positive and evenly divide decoderNumHeads.", nameof(decoderNumKeyValueHeads));
+        if (maxSequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxSequenceLength));
+        if (ropeTheta <= 0 || double.IsNaN(ropeTheta) || double.IsInfinity(ropeTheta))
+            throw new ArgumentOutOfRangeException(nameof(ropeTheta));
+
+        int hp = imageHeight / patchSize;
+        int wp = imageWidth / patchSize;
+
+        // CLIP ViT-L/14 defaults: 24 layers, width 1024, 16 heads, and FFN width 4096.
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, imageChannels);
+        yield return new LayerNormalizationLayer<T>(visionDim);
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new TransformerEncoderBlock<T>(
+                visionDim,
+                visionNumHeads,
+                visionFfnDim,
+                dropoutRate,
+                new GELUActivation<T>());
+        }
+
+        if (enableSpatialTemporalConv)
+        {
+            yield return new STCConnectorLayer<T>(
+                visionDim,
+                decoderDim,
+                hp,
+                wp,
+                stcKernelSize,
+                stcStride,
+                stcPadding,
+                stcStageDepth,
+                stcMlpDepth);
+        }
+        else
+        {
+            // Explicit user fallback: retain a configurable MLP projector without temporal mixing.
+            for (int i = 0; i < stcMlpDepth; i++)
+            {
+                IActivationFunction<T> activation = i < stcMlpDepth - 1
+                    ? new GELUActivation<T>()
+                    : new IdentityActivation<T>();
+                yield return new DenseLayer<T>(decoderDim, activation);
+            }
+        }
+
+        // Mistral-7B-Instruct-v0.2 defaults: 32 query heads, 8 KV heads, RoPE,
+        // RMSNorm, and a 14336-wide gated SwiGLU feed-forward network.
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            var attention = new GroupedQueryAttentionLayer<T>(
+                maxSequenceLength,
+                decoderDim,
+                decoderNumHeads,
+                decoderNumKeyValueHeads,
+                new IdentityActivation<T>(),
+                deferAllocation: true);
+            attention.ConfigurePositionalEncoding(
+                PositionalEncodingType.Rotary,
+                ropeTheta,
+                maxSequenceLength);
+            yield return new PreLNTransformerBlock<T>(
+                decoderDim,
+                decoderFfnDim,
+                attention,
+                new SiLUActivation<T>(),
+                useGatedSwiGLU: true);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
     /// Creates layers for robotics VLMs with action token output head.
     /// Architecture: ViT -> MLP projector -> LLM decoder -> action token head.
     /// Used by RT-2, PaLM-E, Octo, Pi-Zero, GR00T-N1, Helix, 3D-VLA.
@@ -28616,12 +28737,16 @@ public static class LayerHelper<T>
     /// Creates decoder layers for the OpenVocabSAM model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateOpenVocabSAMDecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
+        int encoderOutputChannels, int neckEmbeddingDim, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
     {
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
+        // OVSAM's SAM2CLIP transformer neck maps the RN50x16 backbone to its
+        // configured embedding width before CLIP2SAM projects to the 256-wide
+        // FPN/mask-decoder representation.
+        yield return new ConvolutionalLayer<T>(neckEmbeddingDim, 1, 1, 0, relu);
         yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
         yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
         yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);

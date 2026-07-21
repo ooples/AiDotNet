@@ -474,8 +474,24 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         // (Engine.TensorRandomUniformRangeInto<T>(_kernels, low, high))
         // would write directly into the registered tensor. Tracked in
         // the AiDotNet.Tensors repo, not blocking on this PR.
-        var randomKernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
-        randomKernels.AsSpan().CopyTo(_kernels.AsWritableSpan());
+        // Honour the layer-level deterministic seed: when LayerBase<T>.RandomSeed is set, fill the
+        // kernels from a seeded RNG so the He init is REPRODUCIBLE across process launches (mirrors
+        // DenseLayer.InitializeParameters). The ambient Engine.TensorRandomUniformRange RNG is NOT
+        // seeded, so without this a Conv3D-based model re-randomizes every run — non-reproducible init
+        // that intermittently lands on unstable seeds (the GRULayer/DenseLayer seeding bug pattern).
+        if (RandomSeed.HasValue)
+        {
+            var rng = RandomHelper.CreateSeededRandom(RandomSeed.Value);
+            double s = NumOps.ToDouble(scale);
+            var span = _kernels.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++)
+                span[i] = NumOps.FromDouble((rng.NextDouble() * 2.0 - 1.0) * s);
+        }
+        else
+        {
+            var randomKernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
+            randomKernels.AsSpan().CopyTo(_kernels.AsWritableSpan());
+        }
 
         Engine.TensorFill(_biases, NumOps.Zero);
     }

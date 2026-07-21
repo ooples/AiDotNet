@@ -208,11 +208,8 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         metadata["FfnActivationType"] =
             _ffnActivation.GetType().AssemblyQualifiedName ?? _ffnActivation.GetType().FullName ?? string.Empty;
         metadata["AttentionType"] = _attention.GetType().Name;
-        // MultiHeadAttentionLayer is the only attention type wired through this block by the
-        // built-in model factories (LLaMA/Gemma/MetaVoice-1B use RoPE MHA). Persist its full
-        // descriptor — head count, causal masking, and the RoPE frequency/length — so the
-        // reconstructed attention computes bit-identical outputs. Head dimension is derived
-        // as HiddenSize / AttHeadCount on the read side.
+        // Persist the injected attention's full structural descriptor so deserialization can
+        // recreate the same attention variant before restoring the flat parameter vector.
         if (_attention is MultiHeadAttentionLayer<T> mha)
         {
             metadata["AttHeadCount"] = mha.HeadCount.ToString(ci);
@@ -220,6 +217,15 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
             metadata["AttPositionalEncoding"] = mha.PositionalEncoding.ToString();
             metadata["AttRopeTheta"] = mha.RopeTheta.ToString(ci);
             metadata["AttRopeMaxSeqLen"] = mha.PositionalMaxSequenceLength.ToString(ci);
+        }
+        else if (_attention is GroupedQueryAttentionLayer<T> gqa)
+        {
+            var gqaMetadata = gqa.GetMetadata();
+            metadata["AttHeadCount"] = gqa.NumHeads.ToString(ci);
+            metadata["AttNumKeyValueHeads"] = gqa.NumKVHeads.ToString(ci);
+            metadata["AttPositionalEncoding"] = gqa.PositionalEncoding.ToString();
+            metadata["AttRopeTheta"] = gqa.RoPETheta.ToString(ci);
+            metadata["AttRopeMaxSeqLen"] = gqaMetadata["SequenceLength"];
         }
         return metadata;
     }

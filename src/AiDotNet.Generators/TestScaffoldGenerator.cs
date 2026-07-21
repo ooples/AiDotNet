@@ -449,6 +449,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // training-divergence/collapse fixes (real TrainWithTape instead of the gradient-discarding
         // TrainCore; AdamW->Adam LR 0.0002 + MaxGradientNorm=1.0 clipping) are in the model.
         "InvestLM",
+        // HiPPO (Gu et al. 2020): the original recurrent cell uses a 256-wide hidden state and
+        // order-256 LegS memory across the paper context of 1024. The unchanged <double> generated
+        // model suite measured ~132 s even at the stale 512-token scaffold, making it a shard-timeout
+        // risk. <float> is the first architecture-preserving mitigation; production defaults remain
+        // paper-faithful and fully user-configurable.
+        "Hippo",
         // HuBERTSER (Hsu 2021) — HuBERT emotion CLASSIFIER. Its LossStrictlyDecreases explosion was NOT a
         // clipping gap (both the eager tape path and the fused float path DO apply the model's
         // MaxGradientNorm=1.0 clip — verified against Tensors 0.115.0's CompiledTrainingPlan.SetMaxGradNorm).
@@ -754,6 +760,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // LSTMDetector (AnomalyDetection.TimeSeries): Builder/Predictions overran the 60 s gate at
         // <double>. Now that TimeSeriesModelTestBase is generic over T, <float> halves its per-step cost.
         "LSTMDetector",
+        // PR #1789 shard failures: apply the standard float-first policy before changing paper
+        // architecture or invariant counts. BlackLittermanNeural and SECBertNER exhausted the
+        // runner; IndexTTS and OpenVocabSAM exceeded their generated-test time budgets.
+        "BlackLittermanNeural", "SECBertNER", "IndexTTS", "OpenVocabSAM",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -2582,7 +2592,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName == "TimeSformer" && model.TypeParameterCount == 1)
+            if (model.ClassName == "Hippo" && model.TypeParameterCount == 1)
+            {
+                // HiPPO (Gu et al. 2020): the production defaults remain the official LSICell
+                // configuration (l_max=1024, d_model=memory_order=256, one LegS memory, bilinear
+                // discretization, sigmoid gate). Float was applied first and measured insufficient:
+                // the complete generated suite still took 3m32s at that scale. Build the SAME
+                // recurrent-cell architecture at CI-smoke context/width/order only in this generated
+                // factory, retaining every structural/default choice while shrinking scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.HippoOptions<double> { ContextLength = 64, " +
+                    "ForecastHorizon = 8, ModelDimension = 32, StateDimension = 32, MemorySize = 1, " +
+                    "NumLayers = 1, DropoutRate = 0.0, HippoMethod = \"legs\", " +
+                    "DiscretizationMethod = \"bilinear\", InitialTime = 0, TimeStep = 0.0, " +
+                    "TimescaleMin = 0.0, TimescaleMax = double.PositiveInfinity, UseGate = true, " +
+                    "UseNormalization = false }, numFeatures: 1)";
+            }
+            else if (model.ClassName == "TimeSformer" && model.TypeParameterCount == 1)
             {
                 // TimeSformer has a paper-scale parameterless constructor
                 // (224x224, 8 frames, 12 layers, 768 hidden dim). The generated
@@ -2685,6 +2714,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.TextToSpeech.CodecBased.FishSpeechOptions { LLMDim = 32, " +
                     "NumLLMLayers = 1, NumCodebooks = 2, CodebookSize = 16, NumGroups = 1 })";
+            }
+            else if (model.ClassName == "IndexTTS" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // IndexTTS (Zhou et al., 2025) defaults to a 1024-wide, 20-layer GPT with a
+                // 12000-token text vocabulary and an 8192-way acoustic-token head. Float was
+                // applied first via Fp32TestClassNames and measured insufficient: the generated
+                // Clone_AfterTraining test still exceeded its 120 s budget. Keep production defaults
+                // paper-faithful and build the same text-encoder -> GPT -> single-codebook-logit
+                // structure at CI-smoke width/depth only in this generated test factory.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions { SampleRate = 24000, " +
+                    "NumCodebooks = 1, CodebookSize = 16, CodecFrameRate = 25, TextEncoderDim = 32, " +
+                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
+                    "VocabSize = 64, MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0, " +
+                    "LearningRate = 1e-3, WeightDecay = 0.0 })";
             }
             else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1 && typeName.Contains("CodecBased"))
             {
@@ -3089,6 +3139,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "QFormerDim = 32, NumQFormerLayers = 2, NumQueryTokens = 8, NumQFormerHeads = 4, " +
                     "VocabSize = 32, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "VideoLLaMA2" && model.TypeParameterCount == 1)
+            {
+                // VideoLLaMA2 (arXiv:2406.07476): residual ViT -> STC (Spatial-Temporal Conv) connector
+                // -> projection -> residual LLM. Foundation-scale defaults OOM; CI-smoke shrink +
+                // [4,3,56,56] temporal-video input. The 14px CLIP patch size yields a 4x4 patch grid,
+                // preserving the paper's ViT-L/14 and complete RegStage -> Conv3D -> RegStage -> MLP
+                // connector at CI scale. Only widths/layer counts and STC stage depth are reduced;
+                // VideoLLaMA2Options itself retains the published 336px / CLIP-L / Mistral defaults.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 56, inputWidth: 56, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.VideoLanguage.VideoLLaMA2Options { VisionDim = 32, " +
+                    "DecoderDim = 32, NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, " +
+                    "VisionNumHeads = 4, DecoderNumHeads = 4, DecoderNumKeyValueHeads = 2, " +
+                    "VisionFfnDim = 128, DecoderFfnDim = 96, ImageSize = 56, PatchSize = 14, " +
+                    "MaxSequenceLength = 64, STCStageDepth = 1, VocabSize = 32, DropoutRate = 0.0, " +
+                    "LearningRate = 2e-5, WeightDecay = 0.0 })";
+            }
             else if (model.ClassName == "JambaLanguageModel" && model.TypeParameterCount == 1)
             {
                 // Jamba's production default is a high-vocab hybrid LM head.
@@ -3383,6 +3452,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
                     "numFeatures: 32, memorySize: 8)";
+            }
+            else if (model.ClassName == "OpenVocabSAM" && model.TypeParameterCount == 1)
+            {
+                // OVSAM (Yuan et al., ECCV 2024) uses a 1024px CLIP RN50x16 backbone with
+                // [384,768,1536,3072] feature stages, [6,8,18,8] residual blocks, a 1280-wide
+                // SAM2CLIP neck, and a 256-wide CLIP2SAM decoder. Float was applied first and
+                // measured insufficient: the generated class still exceeded two minutes locally.
+                // Keep those official production defaults and reduce only this generated FP32
+                // instance to the same four-stage encoder -> neck -> spatial mask-decoder structure.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 16), " +
+                    "numClasses: 1, options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAMOptions { " +
+                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "NeckEmbeddingDimension = 32, DecoderDimension = 16, LearningRate = 1e-3, " +
+                    "WeightDecay = 0.0 })";
             }
             else if (model.ClassName == "VideoMAE" && model.TypeParameterCount == 1)
             {
@@ -4398,8 +4485,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // match the temporal-video factory emitted above (inputframes=4,
             // inputdepth=3, inputheight=32, inputwidth=32) so the test's
             // inputshape and the model's architecture are consistent.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            if (model.ClassName == "VideoLLaMA2")
+            {
+                // The CI constructor uses CLIP's 14px patch size at 56px, yielding a 4x4 patch grid.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 56, 56 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            }
+            else
+            {
+                sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            }
             if (model.ClassName == "TimeSformer")
             {
                 sb.AppendLine();
@@ -4603,6 +4699,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // at CI-smoke cost. OutputShape is inferred from the warm-up Predict (mask logits).
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (model.ClassName == "OpenVocabSAM")
+        {
+            // Four stride-2/4 encoder stages reduce 128x128 to 4x4; the generated
+            // factory uses one mask channel, so train targets must match [1,4,4].
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 128, 128 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 4 };");
         }
         else if (model.ClassName == "DocBank")
         {
@@ -5022,7 +5125,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("            return tensor;");
                 sb.AppendLine("        }");
                 sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = rng.NextDouble();");
+                sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}rng.NextDouble();");
                 sb.AppendLine("        return tensor;");
                 sb.AppendLine("    }");
                 sb.AppendLine();
@@ -5040,7 +5143,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("            return tensor;");
                 sb.AppendLine("        }");
                 sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = value;");
+                sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}value;");
                 sb.AppendLine("        return tensor;");
                 sb.AppendLine("    }");
                 sb.AppendLine();
@@ -5590,7 +5693,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("            // Scale each feature by a position-dependent factor so the");
             sb.AppendLine("            // within-token pattern changes (not just the global magnitude).");
             sb.AppendLine("            double factor = 1.0 + 0.5 * ((i % lastDim) / (double)lastDim);");
-            sb.AppendLine("            perturbed[i] = input[i] * factor;");
+            sb.AppendLine("            perturbed[i] = NumOps.Multiply(input[i], NumOps.FromDouble(factor));");
             sb.AppendLine("        }");
             sb.AppendLine("        var output1 = network.Predict(input);");
             sb.AppendLine("        var output2 = network.Predict(perturbed);");
@@ -5648,8 +5751,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("                batchInput[0, s, d] = input1[s, d];");
             sb.AppendLine("                batchInput[1, s, d] = input2[s, d];");
             sb.AppendLine("            }");
-            sb.AppendLine("            batchTarget[0, s] = 0.0;");
-            sb.AppendLine("            batchTarget[1, s] = 1.0;");
+            sb.AppendLine("            batchTarget[0, s] = NumOps.Zero;");
+            sb.AppendLine("            batchTarget[1, s] = NumOps.One;");
             sb.AppendLine("        }");
             sb.AppendLine("        int maxLearnIterations = System.Math.Max(TrainingIterations, 60);");
             sb.AppendLine("        bool anyDifferent = false;");
@@ -8124,7 +8227,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "CSM" || IsValleCodecLMModel(className);
+        return className is "GPTSoVITS" or "CSM" or "IndexTTS" || IsValleCodecLMModel(className);
     }
 
     /// <summary>
@@ -8141,6 +8244,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "VALLEX" => 16,
             "VALLE2" => 16,
             "VALLEXClone" => 16,
+            "IndexTTS" => 16,
             "GPTSoVITS" => 1024,
             _ => 1024,
         };
@@ -8150,7 +8254,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return IsValleCodecLMModel(className) ? 64 : 256;
+        return IsValleCodecLMModel(className) || className == "IndexTTS" ? 64 : 256;
     }
 
     private static bool IsValleCodecLMModel(string className)
@@ -8372,6 +8476,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // DeepAR: the generated CreateNetwork builds it with default (null)
             // options, so SequenceLength falls back to 96 (options?.LookbackWindow ?? 96).
             "DeepAR" => 96,
+            // Production HippoOptions keeps the official LSICell l_max=1024. Float at that
+            // scale was measured insufficient (3m32s for the generated class), so this generated
+            // CI factory uses ContextLength=64 while retaining the same recurrent architecture.
+            "Hippo" => 64,
             // 512 is the modal paper default across the family.
             _ => 512,
         };
@@ -8428,6 +8536,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Base default's OOM; keep OutputShape in lockstep with that reduced horizon.
             "MOMENT" => "16",
             "TFC" => "96",
+
+            // Generated HiPPO CI factory uses ForecastHorizon=8; production remains 96.
+            "Hippo" => "8",
 
             // TimeGrad: forecast horizon (diffusion output is denoised target).
             "TimeGrad" => "24",
@@ -8538,7 +8649,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             // HiPPO (Gu et al. 2020) state-space memory: needs rank-3
             // [batch, contextLength, features] with contextLength == SequenceLength
-            // (ContextLength default 512) and features == NumFeatures (univariate,
+            // (test-only ContextLength 64; production paper default 1024) and features == NumFeatures (univariate,
             // default 1). A 1-D default shape made the SSM flatten contextLength
             // into the weight dims (512*256 x 512*64), tripping the 2 GB allocator.
             "Hippo" => $"1, {ctx}, 1",
