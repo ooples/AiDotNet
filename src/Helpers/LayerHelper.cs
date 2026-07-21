@@ -24960,6 +24960,90 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Builds a video VLM whose temporal aggregation is a Q-Former — a stack of learnable query tokens
+    /// that cross-attend to the per-frame ViT features and resample them to a fixed token set — the
+    /// paper-faithful mechanism for VideoChat2 (Li et al. 2023, arXiv:2311.17005; Q-Former from BLIP-2,
+    /// Li et al. 2023). Structure: per-frame ViT (RESIDUAL transformer blocks) → [linear map to
+    /// qFormerDim] → numQFormerLayers Q-Former blocks (cross-attention query←visual, self-attention
+    /// among queries, FFN) → shared MLP projection → RESIDUAL LLM decoder. Mirrors the established
+    /// <see cref="CreateDefaultQFormerGenerativeLayers"/> Q-Former block (CrossAttentionLayer + MHA +
+    /// FFN); the deep ViT + LLM stacks are residual (the old shared builder's non-residual stack
+    /// collapsed to an input-independent output after training). Vision-encoder segment length is
+    /// <c>2 + numVisionLayers·(dropoutRate&gt;0 ? 2 : 1) + (visionDim != qFormerDim ? 1 : 0)
+    /// + numQFormerLayers·(dropoutRate&gt;0 ? 8 : 7)</c>.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoQFormerVLMLayers(
+        int visionDim = 1024,
+        int qFormerDim = 768,
+        int decoderDim = 4096,
+        int numVisionLayers = 24,
+        int numQFormerLayers = 12,
+        int numDecoderLayers = 32,
+        int numQueryTokens = 32,
+        int numHeads = 12,
+        int numQFormerHeads = 12,
+        double dropoutRate = 0.1,
+        int imageHeight = 224,
+        int imageWidth = 224,
+        int imageChannels = 3,
+        int patchSize = 16)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (imageHeight <= 0 || imageWidth <= 0 || imageChannels <= 0 || patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "image dimensions and patchSize must be positive.");
+        if (numQueryTokens <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numQueryTokens), "numQueryTokens must be positive.");
+        if (imageHeight % patchSize != 0 || imageWidth % patchSize != 0)
+            throw new ArgumentException($"imageHeight ({imageHeight}) and imageWidth ({imageWidth}) must be divisible by patchSize ({patchSize}).");
+
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int qfFfnDim = qFormerDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+        int visionHeads = ChooseDivisibleHeadConfig(visionDim, numHeads).heads;
+        var (qfHeads, qfHeadDim) = ChooseDivisibleHeadConfig(qFormerDim, numQFormerHeads);
+        int decoderHeads = ChooseDivisibleHeadConfig(decoderDim, numHeads).heads;
+
+        // === Per-frame ViT vision encoder (residual) ===
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
+        yield return new LayerNormalizationLayer<T>();
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(visionHeads, visionFfnDim, visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Q-Former: learnable queries cross-attend to the visual features, resampling to a fixed
+        // token set (BLIP-2 §3.1). Block = cross-attn(query←visual) + self-attn(queries) + FFN. ===
+        if (visionDim != qFormerDim)
+            yield return new DenseLayer<T>(qFormerDim, identityActivation);
+        for (int i = 0; i < numQFormerLayers; i++)
+        {
+            yield return new CrossAttentionLayer<T>(qFormerDim, visionDim, numQFormerHeads);
+            yield return new LayerNormalizationLayer<T>();
+            yield return new MultiHeadAttentionLayer<T>(qfHeads, qfHeadDim);
+            yield return new LayerNormalizationLayer<T>();
+            yield return new DenseLayer<T>(qfFfnDim, geluActivation);
+            yield return new DenseLayer<T>(qFormerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>();
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Shared MLP projection to the LLM embedding space ===
+        yield return new DenseLayer<T>(decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>();
+
+        // === LLM decoder (residual) ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(decoderHeads, decoderFfnDim, decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
     /// Creates layers for robotics VLMs with action token output head.
     /// Architecture: ViT -> MLP projector -> LLM decoder -> action token head.
     /// Used by RT-2, PaLM-E, Octo, Pi-Zero, GR00T-N1, Helix, 3D-VLA.
