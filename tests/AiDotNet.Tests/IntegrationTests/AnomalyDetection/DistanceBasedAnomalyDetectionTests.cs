@@ -156,7 +156,8 @@ public class DistanceBasedAnomalyDetectionTests
 
         Assert.Equal(query.Rows, scores.Length);
         for (int i = 0; i < scores.Length; i++)
-            Assert.True(double.IsFinite(scores[i]), $"COF score {i} was {scores[i]}.");
+            Assert.True(!double.IsNaN(scores[i]) && !double.IsInfinity(scores[i]),
+                $"COF score {i} was {scores[i]}.");
     }
 
     #endregion

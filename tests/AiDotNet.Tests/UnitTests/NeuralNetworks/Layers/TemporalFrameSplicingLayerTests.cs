@@ -19,7 +19,7 @@ public class TemporalFrameSplicingLayerTests
         Assert.Equal(new[] { 1, 2, 4 }, output.Shape.ToArray());
         Assert.Equal(input.Length, output.Length);
         for (int i = 0; i < input.Length; i++)
-            Assert.Equal(input._data[i], output._data[i]);
+            Assert.Equal(input[i], output[i]);
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public class TemporalFrameSplicingLayerTests
         Assert.Equal(new[] { 1, 2, 4 }, output.Shape.ToArray());
         Assert.Equal(8, output.Length);
         for (int i = 0; i < output.Length; i++)
-            Assert.Equal(input._data[i], output._data[i]);
+            Assert.Equal(input[i], output[i]);
     }
 
     [Fact]
