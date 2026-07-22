@@ -19,6 +19,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0](https://github.com/ooples/AiDotNet/compare/v0.231.0...v1.0.0) (2026-07-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **autoformer:** removes public API (AiDotNet.Autodiff.GradientCheckpointing<T>, CheckpointingExtensions, DiffusionMemoryManager.Checkpoint/.CheckpointSequence). No caller existed in this repo, but downstream consumers referencing them will need to move to the AiDotNet.Tensors primitive.
+
+### Features
+
+* **deepar:** pluggable predictive-distribution head (Gaussian | Student-t | spline) ([#1890](https://github.com/ooples/AiDotNet/issues/1890)) ([8b8fd64](https://github.com/ooples/AiDotNet/commit/8b8fd6404d8247fac8fbfde6cbb90ad602a1df8c))
+* **facade:** purged/embargoed chronological validation split by default for forecast models ([#1894](https://github.com/ooples/AiDotNet/issues/1894)) ([6b83163](https://github.com/ooples/AiDotNet/commit/6b83163ff3fcc57248c76a7c820be6255a1caf9a))
+* **finance-rl:** greenfield portfolio-manager RL core — env + risk-adjusted rewards + honest-eval harness ([#1895](https://github.com/ooples/AiDotNet/issues/1895)) ([259d58b](https://github.com/ooples/AiDotNet/commit/259d58baa5927c24420ae1e2eac5f8997c53ba74))
+* **optimizer:** divergence guard + ReduceLROnPlateau coordinated with early stopping ([#1892](https://github.com/ooples/AiDotNet/issues/1892)) ([a923166](https://github.com/ooples/AiDotNet/commit/a9231660fc923058aeb34a8c12549343dc24dc66))
+* **rag:** productionize the RAG pipeline (real LLM, real vector stores, async, quantization, eval, facade wiring) ([#1896](https://github.com/ooples/AiDotNet/issues/1896)) ([61bb013](https://github.com/ooples/AiDotNet/commit/61bb0133a913f266c527fa0f8029c03999a66d98))
+* **serving:** OpenAI-compatible API, streaming generation, and serving benchmark ([#1882](https://github.com/ooples/AiDotNet/issues/1882)) ([b2464b4](https://github.com/ooples/AiDotNet/commit/b2464b4471d79d06ab48b70a9411d05f88c7f1cd))
+
+
+### Bug Fixes
+
+* **facade:** quantization trained-state + rank-3 tensor training + interface-completeness guard ([#1887](https://github.com/ooples/AiDotNet/issues/1887)) ([d70b641](https://github.com/ooples/AiDotNet/commit/d70b64115f6f0d07dd35dba6d424037ea6b9c207))
+* **licensing:** unblock CI + v2 aidn2 hardening (P1) — capability gating, CRL, scope/machine binding ([#1891](https://github.com/ooples/AiDotNet/issues/1891)) ([c551cbb](https://github.com/ooples/AiDotNet/commit/c551cbb88c092d7fd9c6348b0dbc415d3ad8e91a))
+* **tests:** repair UTF-8 corruption in TrainingContractParityTests doc comment ([#1898](https://github.com/ooples/AiDotNet/issues/1898)) ([e50cca9](https://github.com/ooples/AiDotNet/commit/e50cca99377cd68b0c27dd7a00ea60accfe92d76))
+
+
+### Performance
+
+* **autoformer:** compute the correlation spectrum with one matmul; revive 20 dead GPU tests ([#1916](https://github.com/ooples/AiDotNet/issues/1916)) ([1f691fd](https://github.com/ooples/AiDotNet/commit/1f691fd3503aa28107c1493c12f337bc454046a5))
+* **timeseries:** stop per-element GPU host reads in Autoformer/Informer/TFT forwards ([#1897](https://github.com/ooples/AiDotNet/issues/1897)) ([7be00cd](https://github.com/ooples/AiDotNet/commit/7be00cddfa53db490113c1f465998ca2b1dc686e))
+
 ## [0.231.0](https://github.com/ooples/AiDotNet/compare/v0.230.0...v0.231.0) (2026-07-17)
 
 
