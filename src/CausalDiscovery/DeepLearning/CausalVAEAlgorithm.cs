@@ -372,7 +372,8 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
 
                 double covariance = NumOps.ToDouble(cov[i, j]);
                 double correlation = Math.Abs(covariance) / Math.Sqrt(varI * varJ);
-                if (!double.IsFinite(correlation) || correlation < correlationFloor) continue;
+                if (double.IsNaN(correlation) || double.IsInfinity(correlation) || correlation < correlationFloor)
+                    continue;
 
                 int source = varI > varJ || (Math.Abs(varI - varJ) < 1e-12 && i < j) ? i : j;
                 int target = source == i ? j : i;
