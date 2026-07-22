@@ -1182,13 +1182,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             for (int i = 0; i < shortParams.Length; i++)
             {
                 double value = NumOps.ToDouble(shortParams[i]);
-                if (!double.IsFinite(value)) shortNonFinite++;
+                if (double.IsNaN(value) || double.IsInfinity(value)) shortNonFinite++;
                 else shortParamNormSq += value * value;
             }
             for (int i = 0; i < longParams.Length; i++)
             {
                 double value = NumOps.ToDouble(longParams[i]);
-                if (!double.IsFinite(value)) longNonFinite++;
+                if (double.IsNaN(value) || double.IsInfinity(value)) longNonFinite++;
                 else longParamNormSq += value * value;
             }
             Assert.Fail(
