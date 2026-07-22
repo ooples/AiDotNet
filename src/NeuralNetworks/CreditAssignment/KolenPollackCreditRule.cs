@@ -32,10 +32,16 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
 {
     private readonly double _feedbackLearningRate;
     private readonly double _weightDecay;
+    private Matrix<T>?[]? _previousForwardWeights;
 
-    public KolenPollackCreditRule(int? seed = null, double feedbackLearningRate = 0.05, double weightDecay = 0.001)
+    public KolenPollackCreditRule(int? seed = null, double feedbackLearningRate = 1.0, double weightDecay = 0.001)
         : base(seed)
     {
+        if (double.IsNaN(feedbackLearningRate) || double.IsInfinity(feedbackLearningRate) || feedbackLearningRate < 0)
+            throw new ArgumentOutOfRangeException(nameof(feedbackLearningRate), "The feedback update scale must be finite and non-negative.");
+        if (double.IsNaN(weightDecay) || double.IsInfinity(weightDecay) || weightDecay < 0 || weightDecay >= 1)
+            throw new ArgumentOutOfRangeException(nameof(weightDecay), "Weight decay must be finite and in [0, 1).");
+
         _feedbackLearningRate = feedbackLearningRate;
         _weightDecay = weightDecay;
     }
@@ -51,6 +57,12 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
         var feedback = EnsureFeedback(context);
         var layers = context.Layers;
         int last = layers.Count - 1;
+
+        // The gradient hook runs before the external optimizer mutates W. At the beginning of the next
+        // step, observe the completed optimizer delta and give B that same increment. This preserves the
+        // Kolen-Pollack symmetry rule for Adam and other adaptive optimizers; the old fixed-rate SGD
+        // approximation updated B differently from W and therefore could not reliably align them.
+        ApplyObservedForwardUpdates(layers, feedback, context.NumOps);
 
         // δ starts as the output error at the output layer's output space, then is transported down one trainable
         // layer at a time via that layer's learned feedback matrix.
@@ -76,20 +88,46 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
 
     protected override void UpdateFeedback(ICreditAssignmentContext<T> context)
     {
-        var feedback = Feedback;
-        if (feedback.Count == 0) return;
-        var layers = context.Layers;
-        int last = layers.Count - 1;
-        var ops = context.NumOps;
+        // This hook runs before the caller's optimizer step, while W still has its old value.
+        // ApplyObservedForwardUpdates consumes the completed delta at the next step.
+    }
 
-        // Each feedback matrix receives the same mean outer-product increment its forward weight receives:
-        // ΔB_j ∝ (δ_j^out)ᵀ · input_j, with weight decay — driving B_j → W_j (Kolen-Pollack).
-        for (int j = 1; j <= last; j++)
+    private void ApplyObservedForwardUpdates(
+        IReadOnlyList<ICreditLayer<T>> layers,
+        IReadOnlyList<Matrix<T>?> feedback,
+        INumericOperations<T> ops)
+    {
+        if (_previousForwardWeights is null || _previousForwardWeights.Length != layers.Count)
+            _previousForwardWeights = new Matrix<T>?[layers.Count];
+
+        T decay = ops.FromDouble(_weightDecay);
+        T updateScale = ops.FromDouble(_feedbackLearningRate);
+
+        for (int j = 1; j < layers.Count; j++)
         {
-            Matrix<T> deltaOut = j == last ? ErrorMatrix(context) : FlatMatrix(layers[j].TeachingSignal!);
-            Matrix<T> input = FlatMatrix(layers[j].Input); // [B, inFeatures_j]
-            Matrix<T> grad = MeanOuter(deltaOut, input, ops); // [outFeatures_j, inFeatures_j]
-            KpUpdate(feedback[j]!, grad, _feedbackLearningRate, _weightDecay, ops);
+            Matrix<T> current = layers[j].Weights ?? throw new NotSupportedException(
+                $"KolenPollack requires layer {j} to expose a single rank-2 forward weight matrix. " +
+                "Use CreditRule.DirectKolenPollack for attention, normalization, or composite layers.");
+            Matrix<T> b = feedback[j]!;
+            Matrix<T>? previous = _previousForwardWeights[j];
+
+            if (previous is not null &&
+                previous.Rows == current.Rows && previous.Columns == current.Columns)
+            {
+                for (int row = 0; row < b.Rows; row++)
+                {
+                    for (int column = 0; column < b.Columns; column++)
+                    {
+                        T forwardIncrement = ops.Subtract(current[row, column], previous[row, column]);
+                        T alignmentError = ops.Subtract(b[row, column], previous[row, column]);
+                        b[row, column] = ops.Subtract(
+                            ops.Add(b[row, column], ops.Multiply(updateScale, forwardIncrement)),
+                            ops.Multiply(decay, alignmentError));
+                    }
+                }
+            }
+
+            _previousForwardWeights[j] = current.Clone();
         }
     }
 }

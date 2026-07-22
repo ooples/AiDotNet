@@ -7,9 +7,9 @@ namespace AiDotNet.Models.Options;
 /// <remarks>
 /// <para>
 /// Defaults follow the published CNN14 recipe (Kong et al. 2020 §3): 64 mel
-/// bands, 32 kHz sample rate, 1024-sample STFT window, 320-sample hop, four
-/// CNN stages (64→128→256→512 channels) + global pool + embedding head +
-/// 527-class AudioSet linear classifier.
+/// bands spanning 50-14000 Hz, 32 kHz sample rate, 1024-sample STFT window,
+/// 320-sample hop, six CNN stages (64→128→256→512→1024→2048 channels),
+/// temporal pooling, an embedding head, and a 527-class AudioSet classifier.
 /// </para>
 /// <para><b>For Beginners:</b> PANNs is a family of pretrained convolutional
 /// networks for audio tagging. CNN14 is the canonical balanced-accuracy
@@ -39,7 +39,12 @@ public class PANNsModelOptions : AudioNeuralNetworkOptions
         NumMelBands = other.NumMelBands;
         NumClasses = other.NumClasses;
         EmbeddingDim = other.EmbeddingDim;
+        BaseChannels = other.BaseChannels;
+        NumBlocks = other.NumBlocks;
         DropoutRate = other.DropoutRate;
+        HeadDropoutRate = other.HeadDropoutRate;
+        MinFrequency = other.MinFrequency;
+        MaxFrequency = other.MaxFrequency;
     }
 
     /// <summary>Audio sample rate in Hz used by the STFT frontend.</summary>
@@ -69,6 +74,15 @@ public class PANNsModelOptions : AudioNeuralNetworkOptions
     /// pretrained weights expect this exact value.</para></remarks>
     public int NumMelBands { get; init; } = 64;
 
+    /// <summary>Lowest frequency represented by the mel filterbank, in Hz.</summary>
+    /// <value>Default 50 Hz, matching the released CNN14 frontend.</value>
+    public double MinFrequency { get; init; } = 50.0;
+
+    /// <summary>Highest frequency represented by the mel filterbank, in Hz.</summary>
+    /// <value>Default 14000 Hz, matching the released CNN14 frontend.</value>
+    /// <remarks>Must not exceed half of <see cref="SampleRate"/>.</remarks>
+    public double MaxFrequency { get; init; } = 14000.0;
+
     /// <summary>Number of output classes for the classification head.</summary>
     /// <value>Default 527 (the AudioSet ontology PANNs trained on).</value>
     /// <remarks><para><b>For Beginners:</b> Set this to your label count
@@ -82,6 +96,18 @@ public class PANNsModelOptions : AudioNeuralNetworkOptions
     /// PANNs variants emit 512 or 1024.</para></remarks>
     public int EmbeddingDim { get; init; } = 2048;
 
+    /// <summary>Number of channels in the first CNN14 convolution block.</summary>
+    /// <value>Default 64; subsequent blocks double this width independently of <see cref="EmbeddingDim"/>.</value>
+    /// <remarks><para><b>For Beginners:</b> Lower values create a smaller PANNs variant while
+    /// preserving the same double-convolution block design.</para></remarks>
+    public int BaseChannels { get; init; } = 64;
+
+    /// <summary>Number of double-convolution blocks in the native PANNs backbone.</summary>
+    /// <value>Default 6, reproducing CNN14's 64, 128, 256, 512, 1024, 2048 stages.</value>
+    /// <remarks><para><b>For Beginners:</b> CNN14 has six blocks (twelve convolution layers),
+    /// followed by two fully connected layers, hence the name CNN14.</para></remarks>
+    public int NumBlocks { get; init; } = 6;
+
     /// <summary>Dropout rate inside the CNN blocks.</summary>
     /// <value>Default 0.2 (paper §3).</value>
     /// <remarks><para><b>For Beginners:</b> Dropout randomly zeroes a
@@ -89,4 +115,8 @@ public class PANNsModelOptions : AudioNeuralNetworkOptions
     /// 0.2 is the PANNs CNN14 default; tune up to 0.5 if you see severe
     /// overfitting on a small dataset.</para></remarks>
     public double DropoutRate { get; init; } = 0.2;
+
+    /// <summary>Dropout rate used around the fully connected embedding head.</summary>
+    /// <value>Default 0.5, matching the released CNN14 implementation.</value>
+    public double HeadDropoutRate { get; init; } = 0.5;
 }

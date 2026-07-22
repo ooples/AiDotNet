@@ -121,6 +121,13 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
             outputSize: _patchSizes.Length,
             activationFunction: new SoftmaxActivation<T>());
 
+        // Every input width is part of this layer's constructor contract. Materialize
+        // the weights now so parameter enumeration, cloning, and serialization have
+        // the same layout before and after the first forward pass.
+        _router.ResolveFromShape(new[] { _contextLength });
+        for (int k = 0; k < _patchEmbeddings.Count; k++)
+            _patchEmbeddings[k].ResolveFromShape(new[] { _patchSizes[k] });
+
         foreach (var emb in _patchEmbeddings)
             RegisterSubLayer(emb);
         RegisterSubLayer(_router);

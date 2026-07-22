@@ -135,8 +135,11 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         _ffnActivation = ffnActivation ?? new GELUActivation<T>();
         _gated = gated;
 
-        _norm1 = new RMSNormalizationLayer<T>();
-        _norm2 = new RMSNormalizationLayer<T>();
+        // hiddenSize is known here, so these parameters must exist before the
+        // first GetParameters()/serialization call. Leaving them lazy made a
+        // pre-forward parameter vector shorter than the post-forward layout.
+        _norm1 = new RMSNormalizationLayer<T>(hiddenSize);
+        _norm2 = new RMSNormalizationLayer<T>(hiddenSize);
 
         // DenseLayer(outputSize, activation): lazy-resolves input dim on first forward
         // and (with no init strategy) zero-inits biases, matching the bias-free FFN
@@ -155,6 +158,14 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         }
 
         _ffnDown = new DenseLayer<T>(outputSize: hiddenSize, activationFunction: new IdentityActivation<T>());
+
+        // The FFN input widths are also constructor-known. Resolve only the
+        // sublayers—not this block's sequence dimension—so sequence length stays
+        // dynamic while parameter enumeration is complete and stable from birth.
+        if (_ffnGate is not null)
+            _ffnGate.ResolveFromShape(new[] { hiddenSize });
+        _ffnUp.ResolveFromShape(new[] { hiddenSize });
+        _ffnDown.ResolveFromShape(new[] { ffnDim });
 
         // Register every sublayer so TapeTrainingStep<T>.CollectParameters
         // recursively discovers their trainable tensors. Without this the

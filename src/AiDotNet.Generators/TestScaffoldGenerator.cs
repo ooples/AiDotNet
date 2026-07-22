@@ -630,7 +630,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // J-M reached 50-166 MB available memory before runner shutdown. Their generated constructors
         // therefore also supply reduced user options/arguments below. Production defaults remain the
         // published values and every public customization path remains available.
-        "Amphion", "CLAPModel", "Dia", "MATCHA",
+        "Amphion", "CLAPModel", "Dia", "FILM", "MATCHA",
+        // PR #1789 run 29922036148: these paper-scale generated fixtures exhausted either the
+        // per-test CPU training budget or the 16 GB runner at <double>. Apply the project's
+        // required precision-first mitigation before considering any reduced smoke options:
+        // GraniteSpeech timed out in two training invariants and then OOM-killed G-I; MaskGCT
+        // was the last completed class before J-M's memory cliff; SegNeXt and SigLIP timed out
+        // before Q-S was OOM-killed. Production defaults and user customization are unchanged.
+        "GraniteSpeech", "MaskGCT", "SegNeXt", "SigLIP",
         // #1789 run 29877759783, Generated A-C: the generated MoreData probes for CUPS and
         // ContextNet both exhausted the 120-second CPU budget at <double>. Apply the required
         // precision-first mitigation to their test fixtures; production defaults and every public
@@ -799,6 +806,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Audio-family entries automatically receive the existing smoke-iteration overrides;
         // the other families retain their current invariant counts until float is measured in CI.
         "Chirp2", "FlowDiffuser", "FLIP", "Gemma3", "MemFlow", "MiniGPT4", "SpeechGPT",
+        // Generated T-Z ended in a runner-level OOM without an xUnit failure record. These are the
+        // remaining demonstrably paper-scale fixtures in that shard: YuE builds 24x2048 semantic plus
+        // 12x1024 acoustic transformer stacks; the codec TTS family builds a 12x1024 codec LM; and
+        // VideoGigaGAN/XDecoder run deep visual backbones. Apply the required precision-first mitigation
+        // only. Production defaults and all public architecture options remain unchanged. The workflow's
+        // per-test marker will identify any remaining offender before a fixture-size override is considered.
+        "YuE", "UniAudio", "Voicebox", "Zonos", "WhisperSpeech", "VideoGigaGAN", "XDecoder",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -2689,6 +2703,46 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "encoderLayers: 1, decoderLayers: 1, numHeads: 2, vocabSize: 64, " +
                     "maxPatchesPerImage: 4)";
             }
+            else if (model.ClassName == "REaLTabFormerGenerator" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.NeuralNetworks.SyntheticData.", System.StringComparison.Ordinal))
+            {
+                // REaLTabFormer's default 128-wide GPT-2 embedding is paper-faithful. The generic
+                // one-dimensional scaffold deliberately feeds 16 features, however, while the
+                // parameterless constructor advertises inputSize=128; whichever lazy warm-up ran
+                // first could therefore materialize the FFN as [128,256] and later reject [1,16].
+                // Keep the production defaults intact and make this generated fixture internally
+                // consistent through the public architecture/options customization surface.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
+                    "inputSize: 16, outputSize: 16), " +
+                    "new AiDotNet.Models.Options.REaLTabFormerOptions<double> { " +
+                    "EmbeddingDimension = 16, FeedForwardDimension = 32, NumLayers = 1, " +
+                    "NumHeads = 2, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "FireRedASRLLM" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal))
+            {
+                // FireRedASR-LLM-L uses the paper's 1280-wide/16-layer FireRed encoder and the
+                // complete Qwen2-7B-Instruct decoder by default. That research-scale default must
+                // remain intact, but constructing it for a CPU unit-test invariant is neither a
+                // useful correctness probe nor feasible on the 16 GB runner. Exercise the same
+                // encoder -> adapter -> LLM -> vocabulary-head path at smoke scale through the
+                // public options object. FireRedASRLLM is also in Fp32TestClassNames, so this
+                // expression is precision-rewritten to <float> after generation.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASRLLMOptions { " +
+                    "EncoderDim = 32, EncoderFeedForwardDim = 128, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 2, AdapterDim = 32, NumAdapterLayers = 1, " +
+                    "LlmDim = 32, LlmFeedForwardDim = 128, NumLlmLayers = 1, " +
+                    "NumLlmAttentionHeads = 2, NumLlmKvHeads = 1, NumMels = 32, VocabSize = 4, " +
+                    "MaxTextLength = 8, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "NBEATSFinance" && model.TypeParameterCount == 1)
             {
                 // Production retains the authors' Adam learning rate of 1e-3 with batch size 1024.
@@ -2815,6 +2869,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Classification.PANNsOptions { BaseChannels = 8, NumBlocks = 2, " +
                     "EmbeddingDim = 16, DropoutRate = 0.0, " +
                     "CustomLabels = new[] { \"a\", \"b\", \"c\", \"d\" } })";
+            }
+            else if (model.ClassName == "PANNsModel" && model.TypeParameterCount == 1)
+            {
+                // PANNsModel is already generated as FP32. That precision-first fixture still
+                // trained the full 142M-parameter CNN14 and produced NaNs after two iterations,
+                // so exercise the same configurable CNN14 block/head topology at smoke scale.
+                // Production defaults remain the paper's six blocks, 64 base channels, 2048-d
+                // embedding, and 527 AudioSet labels.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiLabelClassification, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Models.Options.PANNsModelOptions { BaseChannels = 8, NumBlocks = 2, " +
+                    "NumMelBands = 16, NumClasses = 4, EmbeddingDim = 16, DropoutRate = 0.0, HeadDropoutRate = 0.0 })";
             }
             else if (model.ClassName == "WavLMSER" && model.TypeParameterCount == 1)
             {
@@ -4742,6 +4810,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("[Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         if (GradientCheckOptOutClassNames.Contains(model.ClassName))
             sb.AppendLine("    protected override bool GradientCheckApplicable => false;");
 
@@ -7475,6 +7544,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
         sb.AppendLine($"public class {testClassName} : LayerTestBase");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
 
@@ -7539,6 +7609,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
         sb.AppendLine($"public class {testClassName} : DualInputLayerTestBase");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
 
@@ -7607,6 +7678,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
         sb.AppendLine($"public class {testClassName} : MultiInputLayerTestBase");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
 
@@ -7666,6 +7738,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
         sb.AppendLine($"public class {testClassName} : GraphLayerTestBase");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
         sb.AppendLine();
@@ -8024,6 +8097,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public class {testClassName} : ActivationFunctionTestBase");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override IActivationFunction<double> CreateActivation()");
         sb.AppendLine($"        => {constructorExpr};");
 
@@ -8072,6 +8146,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public class {testClassName} : LossFunctionTestBase");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override ILossFunction<double> CreateLoss()");
         sb.AppendLine($"        => {constructorExpr};");
 
@@ -8193,6 +8268,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public class {testClassName} : TripletLossTestBase");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override TripletLoss<double> CreateLoss()");
         sb.AppendLine($"        => {constructorExpr};");
         sb.AppendLine("}");
@@ -8222,6 +8298,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public class {testClassName} : ContrastiveLossTestBase");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override NoiseContrastiveEstimationLoss<double> CreateLoss()");
         sb.AppendLine($"        => {constructorExpr};");
         sb.AppendLine("}");
@@ -8251,6 +8328,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public class {testClassName} : SparseCategoricalLossTestBase");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override ILossFunction<double> CreateLoss()");
         sb.AppendLine($"        => {constructorExpr};");
         sb.AppendLine("}");
@@ -9582,6 +9660,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public class {testClassName} : {baseClass}");
         sb.AppendLine("{");
+        sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
         sb.AppendLine($"    protected override {factoryReturnType} {factoryMethod}()");
         sb.AppendLine($"        => {constructorExpr};");
 

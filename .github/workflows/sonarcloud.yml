@@ -1083,12 +1083,10 @@ jobs:
             # matrix entries.
             Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
           }
-          # Heavy shards OOM-kill the runner mid-model, and a construction-time OOM prints NO test
-          # result (the model dies inside CreateNetwork before xUnit logs "Passed"). verbosity=normal
-          # only prints on COMPLETION, so the culprit is invisible. verbosity=detailed prints
-          # "Starting: <Class>.<Method>" BEFORE each test runs, so the last "Starting:" line before the
-          # memory cliff (correlated with the background [memdiag] samples) names the model that blew
-          # the envelope. Only for serialized heavy shards (the light shards stay quiet at normal).
+          # Detailed VSTest output still prints individual tests only on completion with the current
+          # xUnit adapter. The opt-in AIDOTNET_TEST_TRACE_FILE below is written by every source-generated
+          # test constructor before its model/component factory runs and streamed by the sampler, so an OOM has
+          # an attributable [test-start] class marker in the live log.
           $consoleVerbosity = if ($serializeShard) { 'detailed' } else { 'normal' }
           $dotnetArgs += @(
             '--logger', 'trx;LogFileName=test-results.trx',
@@ -1154,17 +1152,29 @@ jobs:
           # [Console]::Out is thread-safe and flushed per line, so samples stream immediately.
           $memSampler = $null
           if ($serializeShard) {
+            $testTrace = Join-Path $results 'active-test.trace'
+            $env:AIDOTNET_TEST_TRACE_FILE = $testTrace
             $memSampler = [powershell]::Create()
             [void]$memSampler.AddScript({
+              param($tracePath)
+              $traceLineCount = 0
               while ($true) {
+                if (Test-Path $tracePath) {
+                  $traceLines = @(Get-Content -Path $tracePath)
+                  while ($traceLineCount -lt $traceLines.Count) {
+                    [Console]::Out.WriteLine($traceLines[$traceLineCount])
+                    $traceLineCount++
+                  }
+                }
                 $avail = ((Select-String -Path /proc/meminfo -Pattern '^MemAvailable:').Line -replace '\s+', ' ').Trim()
                 [Console]::Out.WriteLine("[memdiag $([DateTime]::UtcNow.ToString('HH:mm:ss'))] $avail")
                 [Console]::Out.Flush()
                 Start-Sleep -Seconds 2
               }
             })
+            [void]$memSampler.AddArgument($testTrace)
             [void]$memSampler.BeginInvoke()
-            Write-Host "Heavy shard: started background memory sampler (runspace)"
+            Write-Host "Heavy shard: started live test-start + memory sampler (runspace)"
           }
 
           & dotnet @dotnetArgs

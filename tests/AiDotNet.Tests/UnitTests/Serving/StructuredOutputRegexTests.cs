@@ -87,7 +87,11 @@ public class StructuredOutputRegexTests
     [InlineData(@"a{2,}")]
     public void MatchesDotNetRegex_Exhaustively(string pattern)
     {
-        const string alphabet = "ab01";
+        // Include every literal used by the theory patterns. Omitting 'c' made a
+        // prefix such as "0" for \dc enter a valid NFA state whose only completion
+        // token did not exist in the vocabulary; ApplyMask correctly failed closed,
+        // so the exhaustive matcher threw before it could compare accepted strings.
+        const string alphabet = "abc01";
         var v = new CharVocab(alphabet);
         var net = new Regex("^(?:" + pattern + ")$", RegexOptions.None, TimeSpan.FromSeconds(1));
 

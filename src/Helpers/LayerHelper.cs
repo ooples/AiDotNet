@@ -7154,6 +7154,7 @@ public static class LayerHelper<T>
     /// <param name="numClasses">Number of labels (default 527).</param>
     /// <param name="maxFrames">Maximum time frames (default 1001).</param>
     /// <param name="dropoutRate">Dropout rate (default 0.2).</param>
+    /// <param name="headDropoutRate">Dropout rate around the embedding head (default 0.5).</param>
     /// <returns>A collection of layers implementing the PANNs CNN14 architecture.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultPANNsLayers(
         int numMels = 64,
@@ -7162,7 +7163,8 @@ public static class LayerHelper<T>
         int embeddingDim = 2048,
         int numClasses = 527,
         int maxFrames = 1001,
-        double dropoutRate = 0.2)
+        double dropoutRate = 0.2,
+        double headDropoutRate = 0.5)
     {
         if (numMels <= 0) throw new ArgumentOutOfRangeException(nameof(numMels));
         if (baseChannels <= 0) throw new ArgumentOutOfRangeException(nameof(baseChannels));
@@ -7170,6 +7172,7 @@ public static class LayerHelper<T>
         if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));
         if (numClasses <= 0) throw new ArgumentOutOfRangeException(nameof(numClasses));
         if (dropoutRate < 0.0 || dropoutRate >= 1.0) throw new ArgumentOutOfRangeException(nameof(dropoutRate));
+        if (headDropoutRate < 0.0 || headDropoutRate >= 1.0) throw new ArgumentOutOfRangeException(nameof(headDropoutRate));
 
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -7189,14 +7192,25 @@ public static class LayerHelper<T>
                 outputDepth: channels, kernelSize: 3, stride: 1, padding: 1);
             yield return new BatchNormalizationLayer<T>();
             yield return new ActivationLayer<T>(reluActivation);
-            yield return new PoolingLayer<T>(poolSize: 2, stride: 2, type: PoolingType.Average);
+            // CNN14 downsamples in blocks 1-5; the sixth/paper-final block uses
+            // pool_size=(1,1). Keeping the final block at 1x1 preserves the last
+            // convolutional features and matches the authors' released model.
+            int poolSize = block == numBlocks - 1 ? 1 : 2;
+            yield return new PoolingLayer<T>(poolSize: poolSize, stride: poolSize, type: PoolingType.Average);
             if (dropoutRate > 0.0) yield return new DropoutLayer<T>(dropoutRate);
-            channels = Math.Min(channels * 2, embeddingDim);
+            // Convolution width and embedding-head width are independent public
+            // controls. CNN14 doubles channels per block; EmbeddingDim must not
+            // silently cap or shrink that caller-selected progression.
+            if (block < numBlocks - 1)
+                channels = checked(channels * 2);
         }
 
-        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
+        // Released CNN14 uses NCHW features: average over frequency, then
+        // max-over-time + mean-over-time, preserving the convolution channels.
+        yield return new PANNsPoolingLayer<T>();
+        if (headDropoutRate > 0.0) yield return new DropoutLayer<T>(headDropoutRate);
         yield return new DenseLayer<T>(embeddingDim, reluActivation);
-        if (dropoutRate > 0.0) yield return new DropoutLayer<T>(dropoutRate);
+        if (headDropoutRate > 0.0) yield return new DropoutLayer<T>(headDropoutRate);
 
         // Return logits during training so BCE-with-logits is numerically
         // stable. PANNs.PredictCore applies the paper's sigmoid exactly once.
@@ -22759,11 +22773,28 @@ public static class LayerHelper<T>
         int numMels = 80,
         int vocabSize = 32000,
         double dropoutRate = 0.1,
-        int maxSequenceLength = 1500)
+        int maxSequenceLength = 1500,
+        int encoderFeedForwardDim = 0,
+        int llmFeedForwardDim = 0,
+        int numLlmAttentionHeads = 0,
+        IActivationFunction<T>? adapterActivation = null,
+        bool useAdapterLayerNormalization = true,
+        int numLlmKvHeads = 0,
+        double llmRopeTheta = 10000.0,
+        bool useQwen2Decoder = false,
+        int adapterFrameSplicingFactor = 1)
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        adapterActivation ??= geluActivation;
+
+        int resolvedEncoderFeedForwardDim = encoderFeedForwardDim > 0
+            ? encoderFeedForwardDim
+            : encoderDim * 4;
+        int resolvedLlmFeedForwardDim = llmFeedForwardDim > 0
+            ? llmFeedForwardDim
+            : llmDim * 4;
 
         // Audio feature front-end (Dense projection + normalization).
         // Use LayerNormalization, NOT BatchNormalization: (1) these are plain Dense projections, not a
@@ -22776,10 +22807,14 @@ public static class LayerHelper<T>
         // has un-initialised gamma and threw NullReferenceException in the eval-path scale computation.
         // LayerNorm normalizes per-sample over the feature axis, so it is batch-independent, deterministic,
         // and has no running-stats init hazard.
-        yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>();
+        var audioProjection = new DenseLayer<T>(encoderDim, reluActivation);
+        audioProjection.ResolveFromShape(new[] { numMels });
+        yield return audioProjection;
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        var audioRefinement = new DenseLayer<T>(encoderDim, reluActivation);
+        audioRefinement.ResolveFromShape(new[] { encoderDim });
+        yield return audioRefinement;
+        yield return new LayerNormalizationLayer<T>(encoderDim);
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Residual Pre-LN encoder blocks. A residual-FREE attention/FFN stack collapses to an
@@ -22791,38 +22826,85 @@ public static class LayerHelper<T>
             yield return new TransformerEncoderBlock<T>(
                 hiddenSize: encoderDim,
                 numHeads: numAttentionHeads,
-                ffnDim: encoderDim * 4,
+                ffnDim: resolvedEncoderFeedForwardDim,
                 dropoutRate: dropoutRate,
                 ffnActivation: geluActivation);
         }
-        yield return new LayerNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        if (adapterFrameSplicingFactor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(adapterFrameSplicingFactor));
+        int adapterInputDim = checked(encoderDim * adapterFrameSplicingFactor);
+        if (adapterFrameSplicingFactor > 1)
+            yield return new TemporalFrameSplicingLayer<T>(adapterFrameSplicingFactor);
 
         // Adapter MLP (projects audio features to LLM embedding space)
         for (int i = 0; i < numAdapterLayers; i++)
         {
-            int inDim = i == 0 ? encoderDim : adapterDim;
-            yield return new DenseLayer<T>(adapterDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
+            int inDim = i == 0 ? adapterInputDim : adapterDim;
+            var adapterProjection = new DenseLayer<T>(adapterDim, adapterActivation);
+            adapterProjection.ResolveFromShape(new[] { inDim });
+            yield return adapterProjection;
+            if (useAdapterLayerNormalization)
+                yield return new LayerNormalizationLayer<T>(adapterDim);
         }
-        yield return new DenseLayer<T>(llmDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>();
+        int adapterOutputDim = numAdapterLayers > 0 ? adapterDim : adapterInputDim;
+        var llmProjection = new DenseLayer<T>(llmDim, identityActivation);
+        llmProjection.ResolveFromShape(new[] { adapterOutputDim });
+        yield return llmProjection;
+        if (useAdapterLayerNormalization)
+            yield return new LayerNormalizationLayer<T>(llmDim);
 
         // LLM decoder (lightweight Transformer decoder) — residual Pre-LN blocks, same
         // rationale as the encoder above (a residual-free stack collapses under training).
         // Use ChooseDivisibleHeadConfig to ensure llmHeads evenly divides llmDim (see
         // ChooseDivisibleHeadConfig for the snap-to-divisor rationale).
-        var (llmHeads, _) = ChooseDivisibleHeadConfig(llmDim, Math.Max(1, llmDim / 128));
-        for (int i = 0; i < numLLMLayers; i++)
+        int requestedLlmHeads = numLlmAttentionHeads > 0
+            ? numLlmAttentionHeads
+            : Math.Max(1, llmDim / 128);
+        if (numLlmAttentionHeads > 0 && llmDim % numLlmAttentionHeads != 0)
+            throw new ArgumentException("llmDim must be divisible by an explicitly configured numLlmAttentionHeads.", nameof(numLlmAttentionHeads));
+        var (llmHeads, _) = ChooseDivisibleHeadConfig(llmDim, requestedLlmHeads);
+        if (useQwen2Decoder)
         {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenSize: llmDim,
-                numHeads: llmHeads,
-                ffnDim: llmDim * 4,
-                dropoutRate: dropoutRate,
-                ffnActivation: geluActivation);
+            int resolvedKvHeads = numLlmKvHeads > 0 ? numLlmKvHeads : llmHeads;
+            for (int i = 0; i < numLLMLayers; i++)
+            {
+                var attention = new GroupedQueryAttentionLayer<T>(
+                    sequenceLength: maxSequenceLength,
+                    embeddingDimension: llmDim,
+                    numHeads: llmHeads,
+                    numKVHeads: resolvedKvHeads);
+                attention.ConfigurePositionalEncoding(
+                    PositionalEncodingType.Rotary, llmRopeTheta, maxSequenceLength);
+                yield return new PreLNTransformerBlock<T>(
+                    hiddenSize: llmDim,
+                    ffnDim: resolvedLlmFeedForwardDim,
+                    attention: attention,
+                    ffnActivation: new SiLUActivation<T>(),
+                    gated: true);
+            }
+            // The Qwen2 width is known here. Eagerly materialize the final norm so
+            // parameter discovery, cloning, and serving see the same parameter set
+            // before and after the first forward pass.
+            yield return new RMSNormalizationLayer<T>(llmDim);
         }
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, identityActivation);
+        else
+        {
+            for (int i = 0; i < numLLMLayers; i++)
+            {
+                yield return new TransformerEncoderBlock<T>(
+                    hiddenSize: llmDim,
+                    numHeads: llmHeads,
+                    ffnDim: resolvedLlmFeedForwardDim,
+                    dropoutRate: dropoutRate,
+                    ffnActivation: geluActivation);
+            }
+            yield return new LayerNormalizationLayer<T>(llmDim);
+        }
+        var vocabularyProjection = new DenseLayer<T>(vocabSize, identityActivation);
+        vocabularyProjection.ResolveFromShape(new[] { llmDim });
+        yield return vocabularyProjection;
     }
 
     /// <summary>
@@ -35117,12 +35199,14 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>(numHeads, intermediateSize, hiddenDim);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        var outputProjection = new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null);
+        outputProjection.ResolveFromShape(new[] { hiddenDim });
+        yield return outputProjection;
     }
 
     /// <summary>
@@ -36008,50 +36092,33 @@ public static class LayerHelper<T>
     /// <param name="embeddingDim">Embedding head width (CNN14: 2048).</param>
     /// <param name="dropoutRate">Dropout rate inside the CNN blocks (paper §3).</param>
     /// <remarks>
-    /// CNN14 architecture per paper Table 1: four conv stages with channel
-    /// progression 64 → 128 → 256 → 512, each stage = Conv(3×3) + BN + ReLU +
-    /// Conv(3×3) + BN + ReLU + AvgPool(2×2). Global average pool over time,
-    /// then dense → embedding → dense → class logits → sigmoid.
+    /// CNN14 architecture per paper Table 1: six convolution blocks with channel
+    /// progression 64 → 128 → 256 → 512 → 1024 → 2048. Blocks 1-5 use
+    /// AvgPool(2×2), the final block uses the released model's 1×1 pool, and the
+    /// NCHW head averages frequency before max+mean pooling over time.
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultPANNsLayers(
         int numClasses,
         int embeddingDim,
         double dropoutRate)
     {
-        // Helper: one CNN14 "double conv + pool" stage.
-        IEnumerable<ILayer<T>> ConvStage(int outChannels)
+        // Preserve the original three-argument API and its documented probability
+        // output, but route it through the single paper-faithful CNN14 implementation
+        // so the overloads cannot drift into different pooling/channel semantics.
+        foreach (var layer in CreateDefaultPANNsLayers(
+            numMels: 64,
+            baseChannels: 64,
+            numBlocks: 6,
+            embeddingDim: embeddingDim,
+            numClasses: numClasses,
+            maxFrames: 1001,
+            dropoutRate: dropoutRate,
+            headDropoutRate: 0.5))
         {
-            yield return new ConvolutionalLayer<T>(outputDepth: outChannels, kernelSize: 3, stride: 1, padding: 1);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(outputDepth: outChannels, kernelSize: 3, stride: 1, padding: 1);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new PoolingLayer<T>(poolSize: 2, stride: 2, type: PoolingType.Average);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return layer;
         }
 
-        // Six conv stages — paper §3.1 Table 1 + reference implementation
-        // (qiuqiangkong/audioset_tagging_cnn Cnn14). The reviewer flagged
-        // that earlier builds stopped at 4 stages (64→512); the published
-        // Cnn14 has 6 conv blocks (64→128→256→512→1024→2048) before the
-        // global pool. Pre-pooling channel width = embedding dim.
-        foreach (var l in ConvStage(64)) yield return l;
-        foreach (var l in ConvStage(128)) yield return l;
-        foreach (var l in ConvStage(256)) yield return l;
-        foreach (var l in ConvStage(512)) yield return l;
-        foreach (var l in ConvStage(1024)) yield return l;
-        foreach (var l in ConvStage(2048)) yield return l;
-
-        // Global average pool over the (time × freq) spatial axes → channel vector.
-        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
-
-        // Embedding head (paper §3.1: 2048-d).
-        yield return new DenseLayer<T>(outputSize: embeddingDim, activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-
-        // Classification head with sigmoid for multi-label AudioSet output.
-        yield return new DenseLayer<T>(outputSize: numClasses, activationFunction: new SigmoidActivation<T>() as IActivationFunction<T>);
+        yield return new ActivationLayer<T>(new SigmoidActivation<T>());
     }
 
     #endregion

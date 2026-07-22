@@ -231,6 +231,16 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var prepared = PrepareNativeInput(input, out _);
+        return base.GetNamedLayerActivations(prepared);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)
@@ -454,19 +464,22 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
         // the router and per-path Dense embeddings are all trainable and
         // gradient-connected via Engine-ops in
         // KairosMultiSizePatchLayer.Forward.
-        var current = ApplyInstanceNormalization(input);
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
+        var current = PrepareNativeInput(input, out bool addedBatchDim);
 
         foreach (var layer in Layers)
             current = layer.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = Engine.Reshape(current, new[] { current.Shape[1] });
+        return current;
+    }
+
+    private Tensor<T> PrepareNativeInput(Tensor<T> input, out bool addedBatchDim)
+    {
+        var current = ApplyInstanceNormalization(input);
+        addedBatchDim = current.Rank == 1;
+        if (addedBatchDim)
+            current = Engine.Reshape(current, new[] { 1, current.Length });
         return current;
     }
 

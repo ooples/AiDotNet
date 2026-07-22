@@ -40,6 +40,7 @@ public class DiffusionModelOptions<T> : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        Seed = other.Seed;
         LearningRate = other.LearningRate;
         OptimizerFactory = other.OptimizerFactory;
         TrainTimesteps = other.TrainTimesteps;
