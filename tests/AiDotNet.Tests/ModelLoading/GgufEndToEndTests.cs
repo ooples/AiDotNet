@@ -390,6 +390,7 @@ namespace AiDotNet.Tests.ModelLoading
             Assert.True(grosslyBad is null, $"Grossly diverging block-12 sub-op: {grosslyBad}\n{report}");
         }
 
+#if NET10_0_OR_GREATER
         /// <summary>
         /// Drives the actual ContinuousBatcher (the live serving path, which the direct-Forward checks
         /// bypass) on CPU vs GPU, with speculative decoding off and on, and asserts the greedy first token
@@ -511,6 +512,7 @@ namespace AiDotNet.Tests.ModelLoading
                 $"CPU model={cpuDirect.model} wrapper={cpuDirect.wrapper} batcher={cpuNoSpec}; " +
                 $"GPU model={gpuDirect.model} wrapper={gpuDirect.wrapper} batcher(noSpec)={gpuNoSpec} batcher(spec)={gpuSpec}");
         }
+#endif
 
         [Fact]
         public void Gguf_EndToEnd_Llama_TiedHead_BuildsAndForwards()
