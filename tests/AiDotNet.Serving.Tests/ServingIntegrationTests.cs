@@ -110,6 +110,27 @@ public class ServingIntegrationTests : IClassFixture<ServingTestWebApplicationFa
     }
 
     /// <summary>
+    /// Verifies the Prometheus /metrics scrape endpoint is routed, returns the text-exposition format, and
+    /// folds in the running batcher's live gauges (vLLM/TGI-style observability out of the box).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Metrics_Endpoint_ReturnsPrometheusExposition()
+    {
+        var response = await _client.GetAsync("/metrics");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("text/plain", response.Content.Headers.ContentType?.MediaType);
+
+        var body = await response.Content.ReadAsStringAsync();
+        // Request-level series (counters + histograms).
+        Assert.Contains("# TYPE aidotnet_serving_requests_total counter", body);
+        Assert.Contains("# TYPE aidotnet_serving_request_duration_seconds histogram", body);
+        Assert.Contains("aidotnet_serving_request_duration_seconds_bucket{le=\"+Inf\"}", body);
+        // Live batcher gauges folded in from GetPerformanceMetrics().
+        Assert.Contains("aidotnet_serving_throughput_requests_per_second", body);
+    }
+
+    /// <summary>
     /// Verifies that a model can be loaded programmatically and appears in the model list.
     /// </summary>
     [Fact(Timeout = 120000)]

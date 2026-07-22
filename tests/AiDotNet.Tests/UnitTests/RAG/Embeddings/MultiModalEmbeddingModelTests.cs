@@ -19,8 +19,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             return tempFile;
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithValidParameters_CreatesInstance()
+        [Fact]
+        public void Constructor_WithValidParameters_CreatesInstance()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
 
@@ -29,65 +29,63 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Constructor_WithNullModelPath_ThrowsArgumentNullException()
+        [Fact]
+        public void Constructor_WithNullModelPath_ThrowsArgumentNullException()
         {
             Assert.Throws<ArgumentNullException>(() =>
                 new MultiModalEmbeddingModel<double>(null, true, 512));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithValidText_ThrowsFileNotFoundForMissingModel()
+        // ────────── Text path: missing ONNX model throws (no fake vector) ──────────
+
+        [Fact]
+        public void Embed_WithValidText_ThrowsFileNotFoundForMissingModel()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-
             Assert.Throws<FileNotFoundException>(() => model.Embed("This is a test sentence."));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithNormalization_ThrowsFileNotFoundForMissingModel()
+        [Fact]
+        public void Embed_WithNullText_ThrowsArgumentException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Test normalization"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithoutNormalization_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", false, 512);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Test no normalization"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithNullText_ThrowsArgumentException()
-        {
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithEmptyText_ThrowsArgumentException()
+        [Fact]
+        public void Embed_WithEmptyText_ThrowsArgumentException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task EmbedImage_WithValidImagePath_ReturnsVectorOfCorrectDimension()
+        [Fact]
+        public void EmbedBatch_WithValidTexts_ThrowsFileNotFoundForMissingModel()
+        {
+            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
+            var texts = new List<string> { "First text", "Second text", "Third text" };
+            Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
+        }
+
+        [Fact]
+        public void MaxTokens_ReturnsCorrectValue()
+        {
+            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
+            Assert.Equal(512, model.MaxTokens);
+        }
+
+        // ────────── Image path: no fake hash-based vector — throws clearly ──────────
+
+        [Fact]
+        public void EmbedImage_WithValidImagePath_ThrowsNotSupported()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
             var tempImageFile = CreateTempImageFile();
 
             try
             {
-                var embedding = model.EmbedImage(tempImageFile);
-
-                Assert.NotNull(embedding);
-                Assert.Equal(512, embedding.Length);
+                var ex = Assert.Throws<NotSupportedException>(() => model.EmbedImage(tempImageFile));
+                Assert.Contains("Image embedding is not supported", ex.Message);
             }
             finally
             {
@@ -96,50 +94,32 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task EmbedImage_WithNullImagePath_ThrowsArgumentException()
+        [Fact]
+        public void EmbedImage_WithNullImagePath_ThrowsArgumentException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-
             var exception = Assert.Throws<ArgumentException>(() => model.EmbedImage(null));
             Assert.Contains("Image path cannot be null or whitespace", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task EmbedImage_WithEmptyImagePath_ThrowsArgumentException()
+        [Fact]
+        public void EmbedImage_WithEmptyImagePath_ThrowsArgumentException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-
             var exception = Assert.Throws<ArgumentException>(() => model.EmbedImage(string.Empty));
             Assert.Contains("Image path cannot be null or whitespace", exception.Message);
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task EmbedImage_WithNonExistentImagePath_ThrowsFileNotFoundException()
-        {
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-            var nonExistentPath = Path.Combine("non", "existent", "image.jpg");
-
-            Assert.Throws<FileNotFoundException>(() => model.EmbedImage(nonExistentPath));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedImage_WithNormalization_ReturnsNormalizedVector()
+        [Fact]
+        public void EmbedImageBatch_WhenEnumerated_ThrowsNotSupported()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
             var tempImageFile = CreateTempImageFile();
 
             try
             {
-                var embedding = model.EmbedImage(tempImageFile);
-
-                var magnitude = 0.0;
-                for (int i = 0; i < embedding.Length; i++)
-                {
-                    magnitude += embedding[i] * embedding[i];
-                }
-                magnitude = Math.Sqrt(magnitude);
-                Assert.Equal(1.0, magnitude, 5);
+                var imagePaths = new List<string> { tempImageFile };
+                Assert.Throws<NotSupportedException>(() => model.EmbedImageBatch(imagePaths).ToList());
             }
             finally
             {
@@ -148,124 +128,11 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task EmbedImage_WithSameImageTwice_ReturnsSameEmbedding()
+        [Fact]
+        public void EmbedImageBatch_WithNullImagePaths_ThrowsArgumentNullException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-            var tempImageFile = CreateTempImageFile();
-
-            try
-            {
-                var embedding1 = model.EmbedImage(tempImageFile);
-                var embedding2 = model.EmbedImage(tempImageFile);
-
-                for (int i = 0; i < embedding1.Length; i++)
-                {
-                    Assert.Equal(embedding1[i], embedding2[i], 10);
-                }
-            }
-            finally
-            {
-                if (File.Exists(tempImageFile))
-                    File.Delete(tempImageFile);
-            }
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedImageBatch_WithValidImagePaths_ReturnsCorrectNumberOfEmbeddings()
-        {
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-            var tempImageFile1 = CreateTempImageFile();
-            var tempImageFile2 = CreateTempImageFile();
-            var tempImageFile3 = CreateTempImageFile();
-
-            try
-            {
-                var imagePaths = new List<string> { tempImageFile1, tempImageFile2, tempImageFile3 };
-
-                var embeddings = model.EmbedImageBatch(imagePaths).ToList();
-
-                Assert.Equal(3, embeddings.Count);
-                foreach (var embedding in embeddings)
-                {
-                    Assert.Equal(512, embedding.Length);
-                }
-            }
-            finally
-            {
-                if (File.Exists(tempImageFile1)) File.Delete(tempImageFile1);
-                if (File.Exists(tempImageFile2)) File.Delete(tempImageFile2);
-                if (File.Exists(tempImageFile3)) File.Delete(tempImageFile3);
-            }
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedImageBatch_WithNullImagePaths_ThrowsArgumentNullException()
-        {
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-
             Assert.Throws<ArgumentNullException>(() => model.EmbedImageBatch(null));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedBatch_WithValidTexts_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-            var texts = new List<string> { "First text", "Second text", "Third text" };
-
-            Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithFloatType_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new MultiModalEmbeddingModel<float>("test-model-path.onnx", true, 512);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_WithCustomDimension_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 768);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Testing custom dimension"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task EmbedImage_WithCustomDimension_ReturnsCorrectSize()
-        {
-            var customDimension = 768;
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, customDimension);
-            var tempImageFile = CreateTempImageFile();
-
-            try
-            {
-                var embedding = model.EmbedImage(tempImageFile);
-
-                Assert.Equal(customDimension, embedding.Length);
-            }
-            finally
-            {
-                if (File.Exists(tempImageFile))
-                    File.Delete(tempImageFile);
-            }
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Embed_Deterministic_MultipleInstances_ThrowsFileNotFoundForMissingModel()
-        {
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-
-            Assert.Throws<FileNotFoundException>(() => model.Embed("Determinism test"));
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task MaxTokens_ReturnsCorrectValue()
-        {
-            var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-
-            Assert.Equal(512, model.MaxTokens);
         }
     }
 }

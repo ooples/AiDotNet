@@ -45,6 +45,23 @@ public class KGConstructionOptions
     /// </summary>
     public int? MaxEntitiesPerSentence { get; set; }
 
+    /// <summary>
+    /// Whether to use the injected LLM text generator for entity/relation extraction when one
+    /// is available. Default: true. When no generator is injected into the constructor this
+    /// setting has no effect and the regex/heuristic extractor is always used. When a generator
+    /// is present but returns malformed output, extraction transparently degrades to the
+    /// regex/heuristic fallback (no silent pretending).
+    /// </summary>
+    public bool? UseLlmExtraction { get; set; }
+
+    /// <summary>
+    /// Whether to additionally ask the LLM to extract claims/covariates (Microsoft GraphRAG style)
+    /// about entities. Only takes effect when an LLM generator is injected and
+    /// <see cref="UseLlmExtraction"/> is enabled. Default: false. Extracted claims are attached to
+    /// the corresponding entity node under the "claims" property.
+    /// </summary>
+    public bool? ExtractClaims { get; set; }
+
     internal int GetEffectiveMaxChunkSize()
     {
         var value = MaxChunkSize ?? 500;
@@ -83,6 +100,10 @@ public class KGConstructionOptions
         if (value <= 0) throw new ArgumentOutOfRangeException(nameof(MaxEntitiesPerSentence), "MaxEntitiesPerSentence must be > 0.");
         return value;
     }
+
+    internal bool GetEffectiveUseLlmExtraction() => UseLlmExtraction ?? true;
+
+    internal bool GetEffectiveExtractClaims() => ExtractClaims ?? false;
 
     /// <summary>
     /// Validates cross-field constraints. Call after individual fields are set.

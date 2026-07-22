@@ -1,310 +1,677 @@
-
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 {
     /// <summary>
-    /// Azure Cognitive Search-inspired document store with field-based indexing and search capabilities.
-    /// Provides in-memory simulation of Azure Search features including field-level search and faceted filtering.
+    /// Azure AI Search document store backed by the real Azure AI Search REST API.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    /// <remarks>
+    /// <para>
+    /// This store talks to an Azure AI Search service over HTTP. It manages a single index with a
+    /// vector field and an HNSW vector-search profile, upserts documents via the <c>mergeOrUpload</c>
+    /// action, performs vector search with an OData <c>$filter</c>, deletes documents via the
+    /// <c>delete</c> action and pages the whole index. The original id and content are stored under
+    /// <c>id</c> and <c>content</c>; the full metadata dictionary is stored as a JSON string under
+    /// <c>metadata_json</c> (for lossless round-tripping) while each scalar metadata entry is also
+    /// flattened to a top-level field so it can be used in <c>$filter</c> expressions.
+    /// </para>
+    /// <para><b>For Beginners:</b> Azure AI Search is Microsoft's managed search-and-vector service.
+    /// This class is a real client for it - every method here makes an HTTP call to your search
+    /// service. Authentication uses the <c>api-key</c> header and every request carries an
+    /// <c>api-version</c> query-string parameter.
+    /// </para>
+    /// <para><b>API deviation:</b> Azure indexes have a fixed schema, so metadata keys used in filters
+    /// must exist as filterable fields in the index. This client creates the index with the base fields
+    /// (<c>id</c>, <c>content</c>, <c>metadata_json</c>, <c>embedding</c>); flattened metadata fields are
+    /// still sent on upload and referenced by <c>$filter</c>, but for production filtering the caller
+    /// should ensure those fields are declared in the index (or pre-create the index).
+    /// </para>
+    /// </remarks>
     [ComponentType(ComponentType.DocumentStore)]
     [PipelineStage(PipelineStage.Indexing)]
     public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
     {
-        private readonly Dictionary<string, VectorDocument<T>> _documents;
-        private readonly Dictionary<string, Dictionary<string, HashSet<string>>> _invertedIndex;
-        private readonly string _serviceName;
-        private readonly string _indexName;
-        private int _vectorDimension;
+        private const string IdField = "id";
+        private const string ContentField = "content";
+        private const string MetadataField = "metadata_json";
+        private const string EmbeddingField = "embedding";
+        private const string VectorProfile = "vprofile";
+        private const string VectorAlgorithm = "hnsw-algo";
 
-        public override int DocumentCount => _documents.Count;
+        private readonly HttpClient _httpClient;
+        private readonly string _indexName;
+        private readonly string _apiVersion;
+        private readonly string _vectorMetric;
+        private int _vectorDimension;
+        private int _documentCount;
+        private bool _indexReady;
+
+        /// <summary>
+        /// Gets the number of documents currently stored in the index.
+        /// </summary>
+        public override int DocumentCount => _documentCount;
+
+        /// <summary>
+        /// Gets the dimensionality of vectors stored in this index.
+        /// </summary>
         public override int VectorDimension => _vectorDimension;
 
-        public AzureSearchDocumentStore(string serviceName, string indexName, int initialCapacity = 1000)
+        /// <summary>
+        /// Gets the name of the Azure AI Search index this store is bound to.
+        /// </summary>
+        public string IndexName { get; }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AzureSearchDocumentStore{T}"/> class.
+        /// </summary>
+        /// <param name="indexName">The Azure AI Search index name.</param>
+        /// <param name="endpoint">The service endpoint, e.g. <c>https://myservice.search.windows.net</c>.</param>
+        /// <param name="apiKey">The Azure AI Search admin API key (sent as the <c>api-key</c> header).</param>
+        /// <param name="distanceMetric">The vector distance metric used when creating the index.</param>
+        /// <param name="vectorDimension">
+        /// The vector dimension used to create the index if it does not already exist.
+        /// When 0 the index must already exist or the dimension is inferred from the first document.
+        /// </param>
+        /// <param name="apiVersion">The REST API version query-string value.</param>
+        /// <param name="httpClient">Optional pre-configured <see cref="HttpClient"/> (primarily for testing).</param>
+        /// <param name="handler">Optional <see cref="HttpMessageHandler"/> used to build the client (for testing).</param>
+        public AzureSearchDocumentStore(
+            string indexName,
+            string endpoint,
+            string apiKey,
+            DistanceMetricType distanceMetric = DistanceMetricType.Cosine,
+            int vectorDimension = 0,
+            string apiVersion = "2023-11-01",
+            HttpClient? httpClient = null,
+            HttpMessageHandler? handler = null)
         {
-            if (string.IsNullOrWhiteSpace(serviceName))
-                throw new ArgumentException("Service name cannot be empty", nameof(serviceName));
             if (string.IsNullOrWhiteSpace(indexName))
                 throw new ArgumentException("Index name cannot be empty", nameof(indexName));
-            if (initialCapacity <= 0)
-                throw new ArgumentException("Initial capacity must be greater than zero", nameof(initialCapacity));
+            if (vectorDimension < 0)
+                throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension cannot be negative");
 
-            _serviceName = serviceName;
             _indexName = indexName;
-            _documents = new Dictionary<string, VectorDocument<T>>(initialCapacity);
-            _invertedIndex = new Dictionary<string, Dictionary<string, HashSet<string>>>();
-            _vectorDimension = 0;
-        }
+            IndexName = indexName;
+            _apiVersion = string.IsNullOrWhiteSpace(apiVersion) ? "2023-11-01" : apiVersion;
+            _vectorMetric = MapMetric(distanceMetric);
+            _vectorDimension = vectorDimension;
+            _documentCount = 0;
 
-        protected override void AddCore(VectorDocument<T> vectorDocument)
-        {
-            if (_documents.Count == 0)
+            _httpClient = httpClient ?? (handler != null ? new HttpClient(handler) : new HttpClient());
+            if (_httpClient.BaseAddress == null)
             {
-                _vectorDimension = vectorDocument.Embedding.Length;
+                if (string.IsNullOrWhiteSpace(endpoint))
+                    throw new ArgumentException("Endpoint cannot be empty", nameof(endpoint));
+                _httpClient.BaseAddress = new Uri(endpoint);
             }
 
-            _documents[vectorDocument.Document.Id] = vectorDocument;
-            IndexMetadata(vectorDocument.Document);
+            if (!string.IsNullOrWhiteSpace(apiKey) && !_httpClient.DefaultRequestHeaders.Contains("api-key"))
+                _httpClient.DefaultRequestHeaders.Add("api-key", apiKey);
+
+            InitializeIndex(vectorDimension);
         }
 
+        private static string MapMetric(DistanceMetricType metric)
+        {
+            switch (metric)
+            {
+                case DistanceMetricType.Cosine:
+                    return "cosine";
+                case DistanceMetricType.Euclidean:
+                    return "euclidean";
+                default:
+                    throw new NotSupportedException(
+                        $"Metric '{metric}' is not supported by Azure AI Search. Use Cosine or Euclidean (or dotProduct via a pre-created index).");
+            }
+        }
+
+        private string WithApiVersion(string path)
+        {
+            var separator = path.Contains("?") ? "&" : "?";
+            return path + separator + "api-version=" + _apiVersion;
+        }
+
+        private void InitializeIndex(int requestedDimension)
+        {
+            HttpResponseInfo info;
+            try
+            {
+                info = SendAsync(HttpMethod.Get, WithApiVersion($"/indexes/{_indexName}"), null).GetAwaiter().GetResult();
+            }
+            catch (HttpRequestException)
+            {
+                // Service not reachable at construction time; defer creation to first write.
+                return;
+            }
+
+            if (info.Status == HttpStatusCode.OK)
+            {
+                _indexReady = true;
+                var fields = JObject.Parse(info.Body)["fields"] as JArray;
+                if (fields != null)
+                {
+                    foreach (var field in fields)
+                    {
+                        if ((string?)field?["name"] == EmbeddingField)
+                        {
+                            var dim = field?["dimensions"];
+                            if (dim != null && dim.Type != JTokenType.Null)
+                            {
+                                var parsed = Convert.ToInt32(dim, CultureInfo.InvariantCulture);
+                                if (parsed > 0)
+                                    _vectorDimension = parsed;
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+
+            if (info.Status == HttpStatusCode.NotFound && requestedDimension > 0)
+                CreateIndex(requestedDimension);
+        }
+
+        private void CreateIndex(int dimension)
+        {
+            var body = new
+            {
+                name = _indexName,
+                fields = new object[]
+                {
+                    new { name = IdField, type = "Edm.String", key = true, filterable = true, retrievable = true },
+                    new { name = ContentField, type = "Edm.String", searchable = true, retrievable = true },
+                    new { name = MetadataField, type = "Edm.String", retrievable = true },
+                    new
+                    {
+                        name = EmbeddingField,
+                        type = "Collection(Edm.Single)",
+                        searchable = true,
+                        retrievable = false,
+                        dimensions = dimension,
+                        vectorSearchProfile = VectorProfile
+                    }
+                },
+                vectorSearch = new
+                {
+                    algorithms = new object[]
+                    {
+                        new
+                        {
+                            name = VectorAlgorithm,
+                            kind = "hnsw",
+                            hnswParameters = new { metric = _vectorMetric, m = 4, efConstruction = 400, efSearch = 500 }
+                        }
+                    },
+                    profiles = new object[]
+                    {
+                        new { name = VectorProfile, algorithm = VectorAlgorithm }
+                    }
+                }
+            };
+
+            var info = SendAsync(HttpMethod.Put, WithApiVersion($"/indexes/{_indexName}"), body).GetAwaiter().GetResult();
+            EnsureSuccess(info, "create index");
+            _vectorDimension = dimension;
+            _indexReady = true;
+        }
+
+        private void EnsureIndexForDimension(int dimension)
+        {
+            if (_indexReady)
+                return;
+            CreateIndex(dimension);
+        }
+
+        /// <inheritdoc/>
+        protected override void AddCore(VectorDocument<T> vectorDocument)
+            => AddCoreImplAsync(vectorDocument, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddCoreAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+            => AddCoreImplAsync(vectorDocument, cancellationToken);
+
+        private async Task AddCoreImplAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+        {
+            EnsureIndexForDimension(vectorDocument.Embedding.Length);
+            if (_vectorDimension == 0)
+                _vectorDimension = vectorDocument.Embedding.Length;
+
+            await UploadActionsAsync(new[] { BuildAction(vectorDocument, "mergeOrUpload") }, "upload document", cancellationToken).ConfigureAwait(false);
+            _documentCount++;
+        }
+
+        /// <inheritdoc/>
         protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+            => AddBatchCoreImplAsync(vectorDocuments, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task AddBatchCoreAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
+            => AddBatchCoreImplAsync(vectorDocuments, cancellationToken);
+
+        private async Task AddBatchCoreImplAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
         {
             if (vectorDocuments.Count == 0)
                 return;
 
-            if (_documents.Count == 0)
-            {
+            EnsureIndexForDimension(vectorDocuments[0].Embedding.Length);
+            if (_vectorDimension == 0)
                 _vectorDimension = vectorDocuments[0].Embedding.Length;
-            }
 
-            foreach (var vectorDoc in vectorDocuments)
-            {
-                _documents[vectorDoc.Document.Id] = vectorDoc;
-                IndexMetadata(vectorDoc.Document);
-            }
+            var actions = vectorDocuments.Select(d => BuildAction(d, "mergeOrUpload")).ToList();
+            await UploadActionsAsync(actions, "batch upload documents", cancellationToken).ConfigureAwait(false);
+            _documentCount += vectorDocuments.Count;
         }
 
-        protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+        private async Task UploadActionsAsync(IEnumerable<Dictionary<string, object?>> actions, string operation, CancellationToken cancellationToken)
         {
-            var candidateIds = GetCandidateIds(metadataFilters);
-            var scoredDocuments = new List<(Document<T> Document, T Score)>();
+            var body = new { value = actions };
+            var info = await SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/index"), body, cancellationToken).ConfigureAwait(false);
+            EnsureSuccess(info, operation);
+        }
 
-            IEnumerable<VectorDocument<T>> candidates;
-            if (candidateIds != null)
+        private Dictionary<string, object?> BuildAction(VectorDocument<T> vectorDocument, string action)
+        {
+            var vector = vectorDocument.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
+            var metadata = vectorDocument.Document.Metadata ?? new Dictionary<string, object>();
+
+            var doc = new Dictionary<string, object?>
             {
-                candidates = candidateIds
-                    .Where(id => _documents.ContainsKey(id))
-                    .Select(id => _documents[id]);
-            }
-            else
+                ["@search.action"] = action,
+                [IdField] = vectorDocument.Document.Id,
+                [ContentField] = vectorDocument.Document.Content,
+                [MetadataField] = JsonConvert.SerializeObject(metadata),
+                [EmbeddingField] = vector
+            };
+
+            foreach (var kvp in metadata)
+                doc[kvp.Key] = kvp.Value;
+
+            return doc;
+        }
+
+        /// <inheritdoc/>
+        protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
+
+        private Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, BuildODataFilter(metadataFilters), cancellationToken);
+
+        /// <inheritdoc/>
+        protected override IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+            => SearchImplAsync(queryVector, topK, TranslateFilter(filter), CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+            => SearchImplAsync(queryVector, topK, TranslateFilter(filter), cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> SearchImplAsync(Vector<T> queryVector, int topK, string? filter, CancellationToken cancellationToken)
+        {
+            var vector = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
+
+            var body = new Dictionary<string, object>
             {
-                candidates = _documents.Values;
-            }
-
-            var matchingDocuments = candidates
-                .Where(vectorDoc => MatchesFilters(vectorDoc.Document, metadataFilters));
-
-            foreach (var vectorDoc in matchingDocuments)
-            {
-                var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vectorDoc.Embedding);
-                scoredDocuments.Add((vectorDoc.Document, similarity));
-            }
-
-            var results = scoredDocuments
-                .OrderByDescending(x => x.Score)
-                .Take(topK)
-                .Select(x =>
+                ["vectorQueries"] = new object[]
                 {
-                    x.Document.RelevanceScore = x.Score;
-                    x.Document.HasRelevanceScore = true;
-                    return x.Document;
-                })
-                .ToList();
+                    new { kind = "vector", vector, fields = EmbeddingField, k = topK }
+                },
+                ["select"] = $"{IdField},{ContentField},{MetadataField}",
+                ["top"] = topK
+            };
+
+            if (filter != null)
+                body["filter"] = filter;
+
+            var info = await SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/search"), body, cancellationToken).ConfigureAwait(false);
+            EnsureSuccess(info, "search");
+
+            var results = new List<Document<T>>();
+            var hits = JObject.Parse(info.Body)["value"] as JArray;
+            if (hits == null)
+                return results;
+
+            foreach (var hit in hits)
+            {
+                var doc = ParseDocument(hit as JObject);
+                if (doc == null)
+                    continue;
+
+                var scoreToken = hit?["@search.score"];
+                var score = scoreToken != null && scoreToken.Type != JTokenType.Null
+                    ? Convert.ToDouble(scoreToken, CultureInfo.InvariantCulture)
+                    : 0.0;
+                doc.RelevanceScore = NumOps.FromDouble(score);
+                doc.HasRelevanceScore = true;
+                results.Add(doc);
+            }
 
             return results;
         }
 
-        protected override Document<T>? GetByIdCore(string documentId)
-        {
-            return _documents.TryGetValue(documentId, out var vectorDoc) ? vectorDoc.Document : null;
-        }
-
-        protected override bool RemoveCore(string documentId)
-        {
-            if (!_documents.TryGetValue(documentId, out var vectorDoc))
-                return false;
-
-            RemoveFromIndex(vectorDoc.Document);
-            _documents.Remove(documentId);
-
-            if (_documents.Count == 0)
-            {
-                _vectorDimension = 0;
-            }
-
-            return true;
-        }
-
         /// <summary>
-        /// Core logic for retrieving all documents in the index.
-        /// </summary>
-        /// <returns>An enumerable of all documents without their vector embeddings.</returns>
-        /// <remarks>
-        /// <para>
-        /// Returns all documents from the Azure Search index in no particular order.
-        /// Vector embeddings are not included, only document content and metadata.
-        /// </para>
-        /// <para><b>For Beginners:</b> Gets every document in the index.
-        /// 
-        /// Use cases:
-        /// - Export all documents for backup
-        /// - Migrate to a different index or service
-        /// - Bulk reindexing or analysis
-        /// - Debugging facet indices
-        /// 
-        /// Warning: For large indices (> 10K documents), this can use significant memory.
-        /// In real Azure Search, use continuation tokens for pagination.
-        /// 
-        /// Example:
-        /// <code>
-        /// // Get all documents
-        /// var allDocs = store.GetAll().ToList();
-        /// // Result is available in the returned value
-        /// 
-        /// // Export to JSON
-        /// var json = JsonConvert.SerializeObject(allDocs);
-        /// File.WriteAllText($"{_serviceName}_{_indexName}_export.json", json);
-        /// </code>
-        /// </para>
-        /// </remarks>
-        protected override IEnumerable<Document<T>> GetAllCore()
-        {
-            return _documents.Values.Select(vd => vd.Document).ToList();
-        }
-
-        /// <summary>
-        /// Removes all documents from the index and clears all inverted indices.
+        /// Translates the metadata filter dictionary into an Azure AI Search OData <c>$filter</c> string.
         /// </summary>
         /// <remarks>
-        /// <para>
-        /// Clears all documents, field-level inverted indices, and resets the vector dimension to 0.
-        /// The service and index names remain unchanged and the index is ready to accept new documents.
-        /// </para>
-        /// <para><b>For Beginners:</b> Completely empties the Azure Search index and all its facet indices.
-        /// 
-        /// After calling Clear():
-        /// - All documents are removed
-        /// - Inverted index is cleared (all facets)
-        /// - Vector dimension resets to 0
-        /// - Index is ready for new documents
-        /// 
-        /// Use with caution - this cannot be undone!
-        /// 
-        /// Example:
-        /// <code>
-        /// store.Clear();
-        /// // Result is available in the returned value // 0
-        /// </code>
-        /// </para>
+        /// Equality (string/bool) uses <c>eq</c>, numeric values use <c>ge</c> (mirroring the base-class
+        /// "field &gt;= value" semantics) and collection values become an <c>or</c> group of <c>eq</c>
+        /// comparisons (any-of). All conditions are combined with <c>and</c>.
         /// </remarks>
-        public override void Clear()
+        private static string? BuildODataFilter(Dictionary<string, object>? metadataFilters)
         {
-            _documents.Clear();
-            _invertedIndex.Clear();
-            _vectorDimension = 0;
-        }
-
-        private void IndexMetadata(Document<T> document)
-        {
-            foreach (var kvp in document.Metadata)
-            {
-                var fieldName = kvp.Key;
-                var fieldValue = kvp.Value;
-
-                if (!_invertedIndex.ContainsKey(fieldName))
-                {
-                    _invertedIndex[fieldName] = new Dictionary<string, HashSet<string>>();
-                }
-
-                // Create normalized key that preserves type information for accurate comparisons
-                var indexKey = NormalizeMetadataValue(fieldValue);
-
-                if (!_invertedIndex[fieldName].ContainsKey(indexKey))
-                {
-                    _invertedIndex[fieldName][indexKey] = new HashSet<string>();
-                }
-
-                _invertedIndex[fieldName][indexKey].Add(document.Id);
-            }
-        }
-
-        private string NormalizeMetadataValue(object? value)
-        {
-            if (value == null)
-                return "null";
-
-            // Preserve type information in the key to ensure accurate comparisons
-            return value switch
-            {
-                bool b => $"bool:{(b ? "true" : "false")}",
-                int i => $"int:{i}",
-                long l => $"long:{l}",
-                float f => $"float:{f:R}",
-                double d => $"double:{d:R}",
-                decimal dec => $"decimal:{dec}",
-                _ => $"string:{value}"
-            };
-        }
-
-        private void RemoveFromIndex(Document<T> document)
-        {
-            foreach (var kvp in document.Metadata)
-            {
-                var fieldName = kvp.Key;
-                var fieldValue = NormalizeMetadataValue(kvp.Value);
-
-                if (_invertedIndex.TryGetValue(fieldName, out var fieldIndex))
-                {
-                    if (fieldIndex.TryGetValue(fieldValue, out var docIds))
-                    {
-                        docIds.Remove(document.Id);
-                        if (docIds.Count == 0)
-                        {
-                            fieldIndex.Remove(fieldValue);
-                        }
-                    }
-                    if (fieldIndex.Count == 0)
-                    {
-                        _invertedIndex.Remove(fieldName);
-                    }
-                }
-            }
-        }
-
-        private HashSet<string>? GetCandidateIds(Dictionary<string, object> metadataFilters)
-        {
-            if (metadataFilters.Count == 0)
+            if (metadataFilters == null || metadataFilters.Count == 0)
                 return null;
 
-            HashSet<string>? candidateIds = null;
+            var clauses = new List<string>();
 
-            foreach (var filter in metadataFilters)
+            foreach (var kvp in metadataFilters)
             {
-                var fieldName = filter.Key;
-                var indexKey = NormalizeMetadataValue(filter.Value);
+                var field = kvp.Key;
+                var value = kvp.Value;
 
-                if (_invertedIndex.TryGetValue(fieldName, out var fieldIndex))
+                if (value == null)
                 {
-                    if (fieldIndex.TryGetValue(indexKey, out var docIds))
+                    clauses.Add($"{field} eq null");
+                }
+                else if (value is string s)
+                {
+                    clauses.Add($"{field} eq {ODataString(s)}");
+                }
+                else if (value is bool b)
+                {
+                    clauses.Add($"{field} eq {(b ? "true" : "false")}");
+                }
+                else if (IsNumeric(value))
+                {
+                    clauses.Add($"{field} ge {Convert.ToDouble(value, CultureInfo.InvariantCulture).ToString("R", CultureInfo.InvariantCulture)}");
+                }
+                else if (value is System.Collections.IEnumerable enumerable)
+                {
+                    var anyOf = new List<string>();
+                    foreach (var item in enumerable)
                     {
-                        if (candidateIds == null)
-                        {
-                            candidateIds = new HashSet<string>(docIds);
-                        }
+                        if (item is string || item == null)
+                            anyOf.Add($"{field} eq {ODataString(item?.ToString() ?? string.Empty)}");
+                        else if (item is bool ib)
+                            anyOf.Add($"{field} eq {(ib ? "true" : "false")}");
+                        else if (IsNumeric(item))
+                            anyOf.Add($"{field} eq {Convert.ToDouble(item, CultureInfo.InvariantCulture).ToString("R", CultureInfo.InvariantCulture)}");
                         else
-                        {
-                            candidateIds.IntersectWith(docIds);
-                        }
+                            anyOf.Add($"{field} eq {ODataString(item.ToString() ?? string.Empty)}");
                     }
-                    else
-                    {
-                        return new HashSet<string>();
-                    }
+                    if (anyOf.Count > 0)
+                        clauses.Add("(" + string.Join(" or ", anyOf) + ")");
                 }
                 else
                 {
-                    return new HashSet<string>();
+                    clauses.Add($"{field} eq {ODataString(value.ToString() ?? string.Empty)}");
                 }
             }
 
-            return candidateIds;
+            return clauses.Count > 0 ? string.Join(" and ", clauses) : null;
+        }
+
+        // OData string literals are single-quoted; embedded single quotes are doubled.
+        private static string ODataString(string value) => "'" + value.Replace("'", "''") + "'";
+
+        // ------------------------------------------------------------------
+        // MetadataFilter AST -> Azure AI Search OData $filter translation.
+        // ------------------------------------------------------------------
+
+        /// <summary>Translates a <see cref="MetadataFilter"/> expression tree into an Azure AI Search OData <c>$filter</c>.</summary>
+        internal static string TranslateFilter(MetadataFilter filter)
+        {
+            if (filter == null)
+                throw new ArgumentNullException(nameof(filter));
+            return BuildOData(filter);
+        }
+
+        private static string BuildOData(MetadataFilter filter)
+        {
+            switch (filter)
+            {
+                case ComparisonFilter comparison:
+                    return comparison.Key + " " + ODataOperator(comparison.Operator) + " " + ODataValue(comparison.Value);
+                case InFilter inFilter:
+                    // search.in(field, 'a|b|c', '|') - '|' delimiter avoids clashing with commas in values.
+                    var joined = string.Join("|", inFilter.Values.Select(v => MetadataFilter.ToInvariantString(v)));
+                    return "search.in(" + inFilter.Key + ", " + ODataString(joined) + ", '|')";
+                case ExistsFilter existsFilter:
+                    return existsFilter.Key + " ne null";
+                case NotFilter notFilter:
+                    return "not (" + BuildOData(notFilter.Operand) + ")";
+                case LogicalFilter logical when logical.Operator == MetadataFilterOperator.And:
+                    return "(" + string.Join(" and ", logical.Operands.Select(BuildOData)) + ")";
+                case LogicalFilter logical:
+                    return "(" + string.Join(" or ", logical.Operands.Select(BuildOData)) + ")";
+                default:
+                    throw new NotSupportedException($"Unsupported metadata filter node: {filter.GetType().Name}");
+            }
+        }
+
+        private static string ODataValue(object value)
+        {
+            if (value == null)
+                return "null";
+            if (value is bool b)
+                return b ? "true" : "false";
+            if (MetadataFilter.IsNumeric(value))
+                return Convert.ToDouble(value, CultureInfo.InvariantCulture).ToString("R", CultureInfo.InvariantCulture);
+            return ODataString(value.ToString() ?? string.Empty);
+        }
+
+        private static string ODataOperator(MetadataFilterOperator op)
+        {
+            switch (op)
+            {
+                case MetadataFilterOperator.Eq: return "eq";
+                case MetadataFilterOperator.Ne: return "ne";
+                case MetadataFilterOperator.Gt: return "gt";
+                case MetadataFilterOperator.Gte: return "ge";
+                case MetadataFilterOperator.Lt: return "lt";
+                case MetadataFilterOperator.Lte: return "le";
+                default: throw new NotSupportedException($"Unsupported comparison operator: {op}");
+            }
+        }
+
+        /// <inheritdoc/>
+        protected override Document<T>? GetByIdCore(string documentId)
+            => GetByIdCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<Document<T>?> GetByIdCoreAsync(string documentId, CancellationToken cancellationToken)
+            => GetByIdCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<Document<T>?> GetByIdCoreImplAsync(string documentId, CancellationToken cancellationToken)
+        {
+            var encoded = Uri.EscapeDataString(documentId);
+            var info = await SendAsync(HttpMethod.Get, WithApiVersion($"/indexes/{_indexName}/docs/{encoded}"), null, cancellationToken).ConfigureAwait(false);
+            if (info.Status == HttpStatusCode.NotFound)
+                return null;
+            EnsureSuccess(info, "get document");
+
+            return ParseDocument(JObject.Parse(info.Body));
+        }
+
+        /// <inheritdoc/>
+        protected override bool RemoveCore(string documentId)
+            => RemoveCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<bool> RemoveCoreAsync(string documentId, CancellationToken cancellationToken)
+            => RemoveCoreImplAsync(documentId, cancellationToken);
+
+        private async Task<bool> RemoveCoreImplAsync(string documentId, CancellationToken cancellationToken)
+        {
+            var action = new Dictionary<string, object?>
+            {
+                ["@search.action"] = "delete",
+                [IdField] = documentId
+            };
+
+            var body = new { value = new[] { action } };
+            var info = await SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/index"), body, cancellationToken).ConfigureAwait(false);
+            if (!IsSuccess(info.Status))
+                return false;
+
+            if (_documentCount > 0)
+                _documentCount--;
+            return true;
+        }
+
+        /// <inheritdoc/>
+        protected override IEnumerable<Document<T>> GetAllCore()
+            => GetAllCoreImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        protected override Task<IEnumerable<Document<T>>> GetAllCoreAsync(CancellationToken cancellationToken)
+            => GetAllCoreImplAsync(cancellationToken);
+
+        private async Task<IEnumerable<Document<T>>> GetAllCoreImplAsync(CancellationToken cancellationToken)
+        {
+            var all = new List<Document<T>>();
+            const int pageSize = 1000;
+            var skip = 0;
+
+            while (true)
+            {
+                var body = new Dictionary<string, object>
+                {
+                    ["search"] = "*",
+                    ["select"] = $"{IdField},{ContentField},{MetadataField}",
+                    ["top"] = pageSize,
+                    ["skip"] = skip
+                };
+
+                var info = await SendAsync(HttpMethod.Post, WithApiVersion($"/indexes/{_indexName}/docs/search"), body, cancellationToken).ConfigureAwait(false);
+                EnsureSuccess(info, "list documents");
+
+                var rows = JObject.Parse(info.Body)["value"] as JArray;
+                if (rows == null || rows.Count == 0)
+                    break;
+
+                foreach (var row in rows)
+                {
+                    var doc = ParseDocument(row as JObject);
+                    if (doc != null)
+                        all.Add(doc);
+                }
+
+                if (rows.Count < pageSize)
+                    break;
+                skip += pageSize;
+            }
+
+            return all;
+        }
+
+        /// <inheritdoc/>
+        public override void Clear()
+            => ClearImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        /// <inheritdoc/>
+        public override Task ClearAsync(CancellationToken cancellationToken = default)
+            => ClearImplAsync(cancellationToken);
+
+        private async Task ClearImplAsync(CancellationToken cancellationToken)
+        {
+            var info = await SendAsync(HttpMethod.Delete, WithApiVersion($"/indexes/{_indexName}"), null, cancellationToken).ConfigureAwait(false);
+            if (!IsSuccess(info.Status) && info.Status != HttpStatusCode.NotFound)
+                EnsureSuccess(info, "delete index");
+
+            _documentCount = 0;
+            _indexReady = false;
+
+            if (_vectorDimension > 0)
+                CreateIndex(_vectorDimension);
+        }
+
+        private Document<T>? ParseDocument(JObject? row)
+        {
+            if (row == null)
+                return null;
+
+            var id = row[IdField]?.ToString();
+            if (string.IsNullOrEmpty(id))
+                return null;
+
+            var content = row[ContentField]?.ToString() ?? string.Empty;
+
+            var metadata = new Dictionary<string, object>();
+            var metaJson = row[MetadataField]?.ToString();
+            if (!string.IsNullOrEmpty(metaJson))
+            {
+                var parsed = JsonConvert.DeserializeObject<Dictionary<string, object>>(metaJson!);
+                if (parsed != null)
+                    metadata = parsed;
+            }
+
+            return new Document<T>(id!, content, metadata);
+        }
+
+        private static bool IsNumeric(object value)
+        {
+            return value is sbyte || value is byte || value is short || value is ushort
+                || value is int || value is uint || value is long || value is ulong
+                || value is float || value is double || value is decimal;
+        }
+
+        private static bool IsSuccess(HttpStatusCode status) => (int)status >= 200 && (int)status < 300;
+
+        private void EnsureSuccess(HttpResponseInfo info, string operation)
+        {
+            if (!IsSuccess(info.Status))
+                throw new HttpRequestException($"Azure AI Search {operation} failed with status {(int)info.Status}: {info.Body}");
+        }
+
+        private async Task<HttpResponseInfo> SendAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken = default)
+        {
+            using (var request = new HttpRequestMessage(method, path))
+            {
+                if (body != null)
+                {
+                    var json = JsonConvert.SerializeObject(body);
+                    request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                }
+
+                using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
+                {
+                    var content = response.Content != null
+                        ? await response.Content.ReadAsStringAsync().ConfigureAwait(false)
+                        : string.Empty;
+                    return new HttpResponseInfo(response.StatusCode, content);
+                }
+            }
+        }
+
+        private readonly struct HttpResponseInfo
+        {
+            public HttpResponseInfo(HttpStatusCode status, string body)
+            {
+                Status = status;
+                Body = body;
+            }
+
+            public HttpStatusCode Status { get; }
+            public string Body { get; }
         }
     }
 }

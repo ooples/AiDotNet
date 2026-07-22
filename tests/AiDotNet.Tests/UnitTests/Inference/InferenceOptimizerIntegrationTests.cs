@@ -289,6 +289,37 @@ public class InferenceOptimizerIntegrationTests
         Assert.Contains(optimized.Layers, l => l.GetType().Name.Contains("QuantizedDenseLayer"));
     }
 
+    [Theory]
+    [InlineData(InferenceQuantizationMode.WeightOnlyInt8)]
+    [InlineData(InferenceQuantizationMode.WeightOnlyFP8)]
+    [InlineData(InferenceQuantizationMode.WeightOnlyNF4)]
+    public void Optimizer_QuantizesDenseFFN_HonorsSelectedFormat(InferenceQuantizationMode mode)
+    {
+        // Regression: the DenseLayer/FFN quantization path used to hardcode INT8 and ignore the
+        // requested format, so selecting FP8/NF4 quantized attention correctly but silently downgraded
+        // every FFN/dense weight to INT8. The dense layer must report the SAME format as attention.
+        var model = CreateMixedModel();
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = false,
+            EnableFlashAttention = false,
+            InferenceQuantization = mode
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        Assert.True(anyApplied);
+        var quantizedDense = optimized.Layers.OfType<QuantizedDenseLayer>().ToList();
+        Assert.NotEmpty(quantizedDense);
+        Assert.All(quantizedDense, d => Assert.Equal(mode, d.QuantizationFormat));
+
+        // Attention honors the same format, so the whole model is uniformly quantized.
+        var quantizedAttn = optimized.Layers.OfType<QuantizedAttentionLayer>().First();
+        Assert.Equal(mode, quantizedAttn.QuantizationFormat);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task KVCacheConfig_GQA_MemorySavings_ProportionalToKVHeadRatio()
     {

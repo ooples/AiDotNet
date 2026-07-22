@@ -173,6 +173,14 @@ public class Program
         AddConfiguredRequestBatcher(builder.Services);
         builder.Services.AddSingleton<ITextGenerationService, TextGenerationService>();
         builder.Services.AddSingleton<ITokenizerRegistry, TokenizerRegistry>();
+        // Per-request generation limits enforced by OpenAiController. Bound from the "ServingLimits" config
+        // section when present; otherwise the industry-standard defaults on ServingLimitsOptions apply.
+        builder.Services.AddSingleton(sp =>
+        {
+            var limits = new Configuration.ServingLimitsOptions();
+            builder.Configuration.GetSection("ServingLimits").Bind(limits);
+            return limits;
+        });
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<ITierResolver, ClaimsTierResolver>();
         builder.Services.AddSingleton<ITierPolicyProvider, DefaultTierPolicyProvider>();

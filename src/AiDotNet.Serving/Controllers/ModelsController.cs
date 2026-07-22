@@ -138,7 +138,7 @@ public class ModelsController : ControllerBase
             var candidatePath = Path.GetFullPath(Path.Combine(modelsRoot, request.Path));
 
             // Ensure the resolved path is within the models directory (with directory boundary check)
-            if (!candidatePath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
+            if (!IsWithinRoot(candidatePath, modelsRoot))
             {
                 _logger.LogWarning("Attempted path traversal: requested path '{Path}' resolves outside model directory",
                     request.Path);
@@ -190,11 +190,28 @@ public class ModelsController : ControllerBase
             // token-ID endpoint; the OpenAI endpoints will report the missing tokenizer if used.
             if (!string.IsNullOrWhiteSpace(request.TokenizerPath))
             {
+                // The model is already registered at this point, so tokenizer association is best-effort:
+                // ANY failure (including path canonicalization) must stay inside this warning-only boundary,
+                // otherwise the request 500s while the model stays loaded and retries then get a 409.
+                // The path is user-controlled, so canonicalize and boundary-check it against the model
+                // directory (exactly like the model path above) — a path resolving outside is skipped so it
+                // cannot be used to read arbitrary local files. Either way the model remains usable via the
+                // native token-ID endpoint.
                 try
                 {
-                    _tokenizers.LoadAndRegister(request.Name, request.TokenizerPath!);
-                    _logger.LogInformation("Registered tokenizer for model '{ModelName}' from '{TokenizerPath}'",
-                        request.Name, request.TokenizerPath);
+                    var tokenizerPath = Path.GetFullPath(Path.Combine(modelsRoot, request.TokenizerPath!));
+                    if (!IsWithinRoot(tokenizerPath, modelsRoot))
+                    {
+                        _logger.LogWarning(
+                            "Attempted path traversal: tokenizer path '{TokenizerPath}' resolves outside the model directory; skipping tokenizer registration.",
+                            request.TokenizerPath);
+                    }
+                    else
+                    {
+                        _tokenizers.LoadAndRegister(request.Name, tokenizerPath);
+                        _logger.LogInformation("Registered tokenizer for model '{ModelName}' from '{TokenizerPath}'",
+                            request.Name, tokenizerPath);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -526,5 +543,21 @@ public class ModelsController : ControllerBase
             LoadedAt = DateTime.UtcNow
         };
         } // end InternalOperation scope
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="candidate"/> (already <see cref="Path.GetFullPath(string)"/>-canonicalized)
+    /// lies inside <paramref name="rootWithSeparator"/> (a canonical directory ending in a separator). The prefix
+    /// comparison is case-sensitive (<see cref="StringComparison.Ordinal"/>) on Unix-like file systems and
+    /// case-insensitive (<see cref="StringComparison.OrdinalIgnoreCase"/>) on Windows — matching how each OS
+    /// actually resolves paths, so <c>/srv/models/x</c> cannot escape a <c>/srv/Models/</c> root on Linux.
+    /// </summary>
+    private static bool IsWithinRoot(string candidate, string rootWithSeparator)
+    {
+        var comparison = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+            System.Runtime.InteropServices.OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return candidate.StartsWith(rootWithSeparator, comparison);
     }
 }

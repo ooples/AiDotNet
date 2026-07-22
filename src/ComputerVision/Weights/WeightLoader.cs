@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.ModelLoading;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Weights;
@@ -174,43 +175,9 @@ public class WeightLoader
     /// </remarks>
     private Dictionary<string, Tensor<float>> LoadSafeTensors(string filePath)
     {
-        var weights = new Dictionary<string, Tensor<float>>();
-
-        using var stream = File.OpenRead(filePath);
-        using var reader = new BinaryReader(stream);
-
-        // Read header size (8 bytes, little endian)
-        long headerSize = reader.ReadInt64();
-
-        if (headerSize <= 0 || headerSize > 100_000_000) // Sanity check
-        {
-            throw new InvalidDataException("Invalid SafeTensors header size");
-        }
-
-        // Read header JSON
-        byte[] headerBytes = reader.ReadBytes((int)headerSize);
-        string headerJson = Encoding.UTF8.GetString(headerBytes);
-
-        // Parse header using simple JSON parsing
-        var tensorInfos = ParseSafeTensorsHeader(headerJson);
-
-        // Read tensor data
-        long dataStart = 8 + headerSize;
-
-        foreach (var info in tensorInfos)
-        {
-            stream.Position = dataStart + info.DataStart;
-            int byteCount = (int)(info.DataEnd - info.DataStart);
-            byte[] tensorBytes = reader.ReadBytes(byteCount);
-
-            var tensor = ParseTensorData(tensorBytes, info.Shape, info.DType);
-            if (tensor != null)
-            {
-                weights[info.Name] = tensor;
-            }
-        }
-
-        return weights;
+        // Delegate to the single shared safetensors loader (bounds-validated framing +
+        // full dtype coverage including BF16); keeps one parser for the whole codebase.
+        return new SafeTensorsLoader<float>().Load(filePath);
     }
 
     /// <summary>
@@ -529,152 +496,6 @@ public class WeightLoader
     }
 
     /// <summary>
-    /// Parses SafeTensors header JSON.
-    /// </summary>
-    private List<SafeTensorInfo> ParseSafeTensorsHeader(string json)
-    {
-        var infos = new List<SafeTensorInfo>();
-
-        // Simple JSON parsing for SafeTensors format
-        // Format: {"tensor_name": {"dtype": "F32", "shape": [3, 224, 224], "data_offsets": [0, 602112]}, ...}
-        int pos = 0;
-
-        while (pos < json.Length)
-        {
-            // Find tensor name
-            int nameStart = json.IndexOf('"', pos);
-            if (nameStart < 0) break;
-
-            int nameEnd = json.IndexOf('"', nameStart + 1);
-            if (nameEnd < 0) break;
-
-            string name = json.Substring(nameStart + 1, nameEnd - nameStart - 1);
-
-            // Skip __metadata__ key
-            if (name == "__metadata__")
-            {
-                pos = json.IndexOf('}', nameEnd) + 1;
-                continue;
-            }
-
-            // Find tensor info object
-            int objStart = json.IndexOf('{', nameEnd);
-            if (objStart < 0) break;
-
-            int objEnd = FindMatchingBrace(json, objStart);
-            if (objEnd < 0) break;
-
-            string objStr = json.Substring(objStart, objEnd - objStart + 1);
-
-            // Parse dtype
-            string dtype = "F32";
-            int dtypeStart = objStr.IndexOf("\"dtype\"");
-            if (dtypeStart >= 0)
-            {
-                int dquoteStart = objStr.IndexOf('"', dtypeStart + 7);
-                int dquoteEnd = objStr.IndexOf('"', dquoteStart + 1);
-                if (dquoteStart >= 0 && dquoteEnd > dquoteStart)
-                {
-                    dtype = objStr.Substring(dquoteStart + 1, dquoteEnd - dquoteStart - 1);
-                }
-            }
-
-            // Parse shape
-            int[] shape = Array.Empty<int>();
-            int shapeStart = objStr.IndexOf("\"shape\"");
-            if (shapeStart >= 0)
-            {
-                int bracketStart = objStr.IndexOf('[', shapeStart);
-                int bracketEnd = objStr.IndexOf(']', bracketStart);
-                if (bracketStart >= 0 && bracketEnd > bracketStart)
-                {
-                    string shapeStr = objStr.Substring(bracketStart + 1, bracketEnd - bracketStart - 1);
-                    if (!string.IsNullOrWhiteSpace(shapeStr))
-                    {
-                        shape = shapeStr.Split(',')
-                            .Select(s => s.Trim())
-                            .Where(s => !string.IsNullOrEmpty(s))
-                            .Select(int.Parse)
-                            .ToArray();
-                    }
-                    else
-                    {
-                        shape = new[] { 1 }; // Scalar
-                    }
-                }
-            }
-
-            // Parse data_offsets
-            long dataStart = 0, dataEnd = 0;
-            int offsetsStart = objStr.IndexOf("\"data_offsets\"");
-            if (offsetsStart >= 0)
-            {
-                int bracketStart = objStr.IndexOf('[', offsetsStart);
-                int bracketEnd = objStr.IndexOf(']', bracketStart);
-                if (bracketStart >= 0 && bracketEnd > bracketStart)
-                {
-                    string offsetsStr = objStr.Substring(bracketStart + 1, bracketEnd - bracketStart - 1);
-                    var offsets = offsetsStr.Split(',')
-                        .Select(s => s.Trim())
-                        .Where(s => !string.IsNullOrEmpty(s))
-                        .Select(long.Parse)
-                        .ToArray();
-
-                    if (offsets.Length >= 2)
-                    {
-                        dataStart = offsets[0];
-                        dataEnd = offsets[1];
-                    }
-                }
-            }
-
-            // Map SafeTensors dtype to standard
-            string standardDtype = dtype switch
-            {
-                "F32" => "float32",
-                "F64" => "float64",
-                "F16" => "float16",
-                "BF16" => "bfloat16",
-                "I32" => "int32",
-                "I64" => "int64",
-                "I16" => "int16",
-                "I8" => "int8",
-                "U8" => "uint8",
-                "BOOL" => "bool",
-                _ => "float32"
-            };
-
-            infos.Add(new SafeTensorInfo
-            {
-                Name = name,
-                DType = standardDtype,
-                Shape = shape,
-                DataStart = dataStart,
-                DataEnd = dataEnd
-            });
-
-            pos = objEnd + 1;
-        }
-
-        return infos;
-    }
-
-    private int FindMatchingBrace(string json, int start)
-    {
-        int depth = 0;
-        for (int i = start; i < json.Length; i++)
-        {
-            if (json[i] == '{') depth++;
-            else if (json[i] == '}')
-            {
-                depth--;
-                if (depth == 0) return i;
-            }
-        }
-        return -1;
-    }
-
-    /// <summary>
     /// Parses pickle metadata to extract tensor information.
     /// </summary>
     private Dictionary<string, TensorMetadata> ParsePickleMetadata(Stream stream)
@@ -715,15 +536,6 @@ public class WeightLoader
         }
 
         return ParseTensorData(data.Data.ToArray(), data.Shape, data.DType);
-    }
-
-    private class SafeTensorInfo
-    {
-        public string Name { get; set; } = string.Empty;
-        public string DType { get; set; } = "float32";
-        public int[] Shape { get; set; } = Array.Empty<int>();
-        public long DataStart { get; set; }
-        public long DataEnd { get; set; }
     }
 
     private class TensorMetadata

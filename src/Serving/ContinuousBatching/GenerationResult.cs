@@ -18,6 +18,12 @@ public class GenerationResult<T>
     /// <summary>Reason why generation stopped.</summary>
     public StopReason FinishReason { get; set; }
 
+    /// <summary>
+    /// A human-readable error message when <see cref="FinishReason"/> is <see cref="StopReason.Error"/>
+    /// (e.g. a structured-output constraint reached an unsatisfiable dead-end); null otherwise.
+    /// </summary>
+    public string? Error { get; set; }
+
     /// <summary>Number of tokens generated.</summary>
     public int GeneratedLength { get; set; }
 
@@ -29,4 +35,10 @@ public class GenerationResult<T>
 
     /// <summary>Generation speed.</summary>
     public double? TokensPerSecond { get; set; }
+
+    /// <summary>
+    /// Per-generated-token log-probability records, present only when the request set
+    /// <see cref="GenerationRequest{T}.IncludeLogProbs"/>. One entry per generated token, in order.
+    /// </summary>
+    public List<PositionLogProbs>? LogProbs { get; set; }
 }

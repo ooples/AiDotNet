@@ -230,6 +230,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IReranker<T>? _ragReranker;
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
+    private IChunkingStrategy? _chunkingStrategy;
+    private IContextCompressor<T>? _contextCompressor;
+    private IDocumentStore<T>? _ragDocumentStore;
 
     // Graph RAG components for knowledge graph-enhanced retrieval
     private KnowledgeGraph<T>? _knowledgeGraph;
@@ -256,6 +259,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // optimizable attention. Opt out by calling ConfigureInferenceOptimizations with disabled flags.
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig
         = AiDotNet.Configuration.InferenceOptimizationConfig.Default;
+    // Optional user-supplied speculative-decoding draft model (ConfigureSpeculativeDecoding). Live object,
+    // in-process serving only; the serving engine verifies this draft's guesses against the target model.
+    private AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? _servingDraftModel;
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
     private bool _reportAccelerationAtBuild;
     private Action<string>? _accelerationLogger;

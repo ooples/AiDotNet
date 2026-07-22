@@ -99,4 +99,105 @@ public abstract class RAGMetricBase<T> : IRAGMetric<T>
                 .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' },
                        StringSplitOptions.RemoveEmptyEntries));
     }
+
+    /// <summary>
+    /// Computes the Jaccard (word-overlap) similarity between two texts. Used as the offline
+    /// lexical fallback for metrics when no embedding model or text generator is supplied.
+    /// </summary>
+    /// <param name="a">The first text.</param>
+    /// <param name="b">The second text.</param>
+    /// <returns>A value in [0, 1]; 0 when both texts have no words.</returns>
+    protected double JaccardSimilarity(string a, string b)
+    {
+        var wa = GetWords(a);
+        var wb = GetWords(b);
+        var union = wa.Union(wb).Count();
+        if (union == 0)
+            return 0.0;
+
+        var intersection = wa.Intersect(wb).Count();
+        return (double)intersection / union;
+    }
+
+    /// <summary>
+    /// Splits text into individual sentences/claims on sentence-terminating punctuation and
+    /// line breaks. Whitespace-only fragments are dropped.
+    /// </summary>
+    /// <param name="text">The text to split.</param>
+    /// <returns>The list of non-empty, trimmed sentences.</returns>
+    protected static List<string> SplitIntoSentences(string text)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrWhiteSpace(text))
+            return result;
+
+        var parts = text.Split(new[] { '.', '!', '?', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (trimmed.Length > 0)
+                result.Add(trimmed);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Parses a multi-line LLM reply into individual lines, stripping common list markers
+    /// (leading numbering like "1." / "1)" and bullets like "-", "*", "•").
+    /// </summary>
+    /// <param name="reply">The raw generator reply.</param>
+    /// <returns>The cleaned, non-empty lines.</returns>
+    protected static List<string> ParseListLines(string? reply)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrWhiteSpace(reply))
+            return result;
+
+        var lines = reply!.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines)
+        {
+            var cleaned = System.Text.RegularExpressions.Regex.Replace(
+                line.Trim(), @"^\s*(\d+[\.\)]|[-*•])\s*", string.Empty).Trim();
+            if (cleaned.Length > 0)
+                result.Add(cleaned);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Interprets a yes/no style LLM verdict. Returns <c>true</c> when the reply affirms
+    /// (starts with or clearly contains "yes"/"true"/"supported"), <c>false</c> otherwise.
+    /// </summary>
+    /// <param name="reply">The raw generator reply.</param>
+    /// <returns><c>true</c> for an affirmative verdict; otherwise <c>false</c>.</returns>
+    protected static bool ParseAffirmative(string? reply)
+    {
+        if (string.IsNullOrWhiteSpace(reply))
+            return false;
+
+        var s = reply!.Trim().ToLowerInvariant();
+        if (s.StartsWith("yes") || s.StartsWith("true") || s.StartsWith("support"))
+            return true;
+        if (s.StartsWith("no") || s.StartsWith("false") || s.StartsWith("not"))
+            return false;
+
+        return s.Contains("yes") && !s.Contains("no");
+    }
+
+    /// <summary>
+    /// Computes cosine similarity between the embeddings of two texts using the supplied
+    /// embedding model. Reuses the shared <see cref="StatisticsHelper{T}.CosineSimilarity"/>.
+    /// </summary>
+    /// <param name="model">The embedding model.</param>
+    /// <param name="a">The first text.</param>
+    /// <param name="b">The second text.</param>
+    /// <returns>The cosine similarity as a double in [-1, 1].</returns>
+    protected static double EmbeddingCosine(IEmbeddingModel<T> model, string a, string b)
+    {
+        var va = model.Embed(a ?? string.Empty);
+        var vb = model.Embed(b ?? string.Empty);
+        return Convert.ToDouble(StatisticsHelper<T>.CosineSimilarity(va, vb));
+    }
 }

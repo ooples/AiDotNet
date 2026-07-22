@@ -26,30 +26,6 @@ namespace AiDotNet.Inference.Quantization;
 /// </remarks>
 internal sealed class QuantizedAttentionLayer : LayerBase<float>
 {
-    /// <summary>
-    /// Holds quantized data for a single weight projection (Q, K, V, or O).
-    /// Only one of the three format storage fields is populated based on <see cref="Format"/>.
-    /// </summary>
-    private readonly struct QuantizedProjection
-    {
-        public InferenceQuantizationMode Format { get; init; }
-        public int OutDim { get; init; }
-        public int InDim { get; init; }
-
-        // INT8 storage
-        public sbyte[]? Int8Weights { get; init; }
-        public float[]? Int8Scales { get; init; }
-
-        // FP8 storage
-        public byte[]? FP8Weights { get; init; }
-        public float[]? FP8Scales { get; init; }
-
-        // NF4 storage
-        public byte[]? NF4PackedWeights { get; init; }
-        public float[]? NF4GroupScales { get; init; }
-        public int NF4GroupSize { get; init; }
-    }
-
     private readonly int _embeddingDimension;
     private readonly int _headCount;
     private readonly int _headDimension;
@@ -58,10 +34,10 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     private readonly InferenceQuantizationMode _format;
 
     // One projection per weight matrix
-    private readonly QuantizedProjection _qProj;
-    private readonly QuantizedProjection _kProj;
-    private readonly QuantizedProjection _vProj;
-    private readonly QuantizedProjection _oProj;
+    private readonly WeightOnlyProjection _qProj;
+    private readonly WeightOnlyProjection _kProj;
+    private readonly WeightOnlyProjection _vProj;
+    private readonly WeightOnlyProjection _oProj;
 
     // Bias (kept in FP32)
     private readonly float[] _outputBias;
@@ -96,10 +72,10 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         if (!source.IsShapeResolved)
             source.ResolveFromShape(new[] { 1, _embeddingDimension });
 
-        _qProj = QuantizeProjection(source.GetQueryWeights(), _embeddingDimension, _embeddingDimension, _format);
-        _kProj = QuantizeProjection(source.GetKeyWeights(), _embeddingDimension, _embeddingDimension, _format);
-        _vProj = QuantizeProjection(source.GetValueWeights(), _embeddingDimension, _embeddingDimension, _format);
-        _oProj = QuantizeProjection(source.GetOutputWeights(), _embeddingDimension, _embeddingDimension, _format);
+        _qProj = WeightOnlyProjection.Quantize(source.GetQueryWeights(), _embeddingDimension, _embeddingDimension, _format);
+        _kProj = WeightOnlyProjection.Quantize(source.GetKeyWeights(), _embeddingDimension, _embeddingDimension, _format);
+        _vProj = WeightOnlyProjection.Quantize(source.GetValueWeights(), _embeddingDimension, _embeddingDimension, _format);
+        _oProj = WeightOnlyProjection.Quantize(source.GetOutputWeights(), _embeddingDimension, _embeddingDimension, _format);
 
         _outputBias = ExtractBias(source);
 
@@ -132,10 +108,10 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         int qOutDim = _headCount * _headDimension;
         int kvOutDim = _numKVHeads * _headDimension;
 
-        _qProj = QuantizeProjection(source.GetQueryWeights(), qOutDim, _embeddingDimension, _format);
-        _kProj = QuantizeProjection(source.GetKeyWeights(), kvOutDim, _embeddingDimension, _format);
-        _vProj = QuantizeProjection(source.GetValueWeights(), kvOutDim, _embeddingDimension, _format);
-        _oProj = QuantizeProjection(source.GetOutputWeights(), _embeddingDimension, _headCount * _headDimension, _format);
+        _qProj = WeightOnlyProjection.Quantize(source.GetQueryWeights(), qOutDim, _embeddingDimension, _format);
+        _kProj = WeightOnlyProjection.Quantize(source.GetKeyWeights(), kvOutDim, _embeddingDimension, _format);
+        _vProj = WeightOnlyProjection.Quantize(source.GetValueWeights(), kvOutDim, _embeddingDimension, _format);
+        _oProj = WeightOnlyProjection.Quantize(source.GetOutputWeights(), _embeddingDimension, _headCount * _headDimension, _format);
 
         _outputBias = ExtractBiasFromGQA(source);
 
@@ -203,9 +179,9 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         var inputSpan = input2D.AsSpan();
 
         // Dequantize and project Q, K, V
-        var qFlat = DequantizeMatMul(inputSpan, batchSize * seqLen, _qProj);
-        var kFlat = DequantizeMatMul(inputSpan, batchSize * seqLen, _kProj);
-        var vFlat = DequantizeMatMul(inputSpan, batchSize * seqLen, _vProj);
+        var qFlat = _qProj.MatMul(inputSpan, batchSize * seqLen);
+        var kFlat = _kProj.MatMul(inputSpan, batchSize * seqLen);
+        var vFlat = _vProj.MatMul(inputSpan, batchSize * seqLen);
 
         // Reshape Q to [batch, numHeads, seq, headDim]
         var queries = ReshapeToHeads(qFlat, batchSize, seqLen, _headCount, _headDimension);
@@ -252,7 +228,7 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
 
         // Output projection with quantized weights
         var contextSpan = contextFlat.AsSpan();
-        var outputFlat = DequantizeMatMul(contextSpan, batchSize * seqLen, _oProj);
+        var outputFlat = _oProj.MatMul(contextSpan, batchSize * seqLen);
 
         // Add bias
         var output = new Tensor<float>(new[] { batchSize, seqLen, _embeddingDimension });
@@ -296,71 +272,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
 
     #region Private Helpers
 
-    /// <summary>
-    /// Quantizes a weight projection to the specified format.
-    /// Weights are [inDim, outDim] and transposed to [outDim, inDim] for per-output-row quantization.
-    /// </summary>
-    private static QuantizedProjection QuantizeProjection(
-        Tensor<float> weights, int outDim, int inDim, InferenceQuantizationMode format)
-    {
-        // Transpose weights from [inDim, outDim] to [outDim, inDim]
-        var transposed = new float[outDim * inDim];
-        for (int o = 0; o < outDim; o++)
-        {
-            for (int i = 0; i < inDim; i++)
-            {
-                transposed[o * inDim + i] = weights[i, o];
-            }
-        }
-
-        return format switch
-        {
-            InferenceQuantizationMode.WeightOnlyFP8 => QuantizeFP8(transposed, outDim, inDim),
-            InferenceQuantizationMode.WeightOnlyNF4 => QuantizeNF4(transposed, outDim, inDim),
-            _ => QuantizeInt8(transposed, outDim, inDim) // Default to INT8
-        };
-    }
-
-    private static QuantizedProjection QuantizeInt8(float[] transposed, int outDim, int inDim)
-    {
-        var q = Int8WeightOnlyQuantization.QuantizePerRow(transposed, rows: outDim, cols: inDim);
-        return new QuantizedProjection
-        {
-            Format = InferenceQuantizationMode.WeightOnlyInt8,
-            OutDim = outDim,
-            InDim = inDim,
-            Int8Weights = q.Weights,
-            Int8Scales = q.Scales
-        };
-    }
-
-    private static QuantizedProjection QuantizeFP8(float[] transposed, int outDim, int inDim)
-    {
-        var q = FP8WeightOnlyQuantization.QuantizePerRow(transposed, rows: outDim, cols: inDim);
-        return new QuantizedProjection
-        {
-            Format = InferenceQuantizationMode.WeightOnlyFP8,
-            OutDim = outDim,
-            InDim = inDim,
-            FP8Weights = q.Weights,
-            FP8Scales = q.Scales
-        };
-    }
-
-    private static QuantizedProjection QuantizeNF4(float[] transposed, int outDim, int inDim)
-    {
-        var q = NF4WeightOnlyQuantization.QuantizePerGroup(transposed, rows: outDim, cols: inDim);
-        return new QuantizedProjection
-        {
-            Format = InferenceQuantizationMode.WeightOnlyNF4,
-            OutDim = outDim,
-            InDim = inDim,
-            NF4PackedWeights = q.PackedWeights,
-            NF4GroupScales = q.GroupScales,
-            NF4GroupSize = q.GroupSize
-        };
-    }
-
     private static float[] ExtractBias(MultiHeadAttentionLayer<float> source)
     {
         var params1 = source.GetParameters();
@@ -402,118 +313,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
                 encodingType, $"Unsupported positional encoding type: {encodingType}. " +
                 "Supported types are None, Rotary (RoPE), and ALiBi.")
         };
-    }
-
-    /// <summary>
-    /// Performs dequantized matrix multiplication dispatching on the projection's format.
-    /// Input [rows, inDim] @ dequant(W)[outDim, inDim]^T -> output [rows, outDim].
-    /// </summary>
-    private static Tensor<float> DequantizeMatMul(
-        ReadOnlySpan<float> input, int rows, in QuantizedProjection proj)
-    {
-        return proj.Format switch
-        {
-            InferenceQuantizationMode.WeightOnlyFP8
-                => DequantizeMatMulFP8(input, rows, proj),
-            InferenceQuantizationMode.WeightOnlyNF4
-                => DequantizeMatMulNF4(input, rows, proj),
-            _ => DequantizeMatMulInt8(input, rows, proj)
-        };
-    }
-
-    private static Tensor<float> DequantizeMatMulInt8(
-        ReadOnlySpan<float> input, int rows, in QuantizedProjection proj)
-    {
-        int outDim = proj.OutDim;
-        int inDim = proj.InDim;
-        var weights = proj.Int8Weights
-            ?? throw new InvalidOperationException("Int8 weights not initialized for quantized projection.");
-        var scales = proj.Int8Scales
-            ?? throw new InvalidOperationException("Int8 scales not initialized for quantized projection.");
-        var output = new Tensor<float>(new[] { rows, outDim });
-
-        // Q/K/V/O projections have no per-projection bias — attention's
-        // _outputBias is applied separately in Forward after the
-        // O-projection scatter (review #1363 C6XGz). Routed through
-        // AiDotNet.Tensors' tiled SGEMM + AVX2 dequant primitives
-        // (Int8WeightOnlyMatMul) instead of the scalar dequant-on-fly loop
-        // the #1348 PR description called out as a follow-up.
-        Int8WeightOnlyMatMul.MultiplyAddBias(
-            input: input,
-            weightsInt8: weights,
-            rowScales: scales,
-            biases: null,
-            output: output.AsWritableSpan(),
-            rows: rows,
-            inputSize: inDim,
-            outputSize: outDim);
-
-        return output;
-    }
-
-    private static Tensor<float> DequantizeMatMulFP8(
-        ReadOnlySpan<float> input, int rows, in QuantizedProjection proj)
-    {
-        int outDim = proj.OutDim;
-        int inDim = proj.InDim;
-        var weights = proj.FP8Weights
-            ?? throw new InvalidOperationException("FP8 weights not initialized for quantized projection.");
-        var scales = proj.FP8Scales
-            ?? throw new InvalidOperationException("FP8 scales not initialized for quantized projection.");
-        var output = new Tensor<float>(new[] { rows, outDim });
-
-        for (int r = 0; r < rows; r++)
-        {
-            int inputBase = r * inDim;
-            int outputBase = r * outDim;
-            for (int o = 0; o < outDim; o++)
-            {
-                float sum = 0f;
-                float scale = scales[o];
-                int wBase = o * inDim;
-                for (int i = 0; i < inDim; i++)
-                {
-                    float w = FP8WeightOnlyQuantization.Dequantize(weights[wBase + i], scale);
-                    sum += input[inputBase + i] * w;
-                }
-                output.SetFlat(outputBase + o, sum);
-            }
-        }
-        return output;
-    }
-
-    private static Tensor<float> DequantizeMatMulNF4(
-        ReadOnlySpan<float> input, int rows, in QuantizedProjection proj)
-    {
-        int outDim = proj.OutDim;
-        int inDim = proj.InDim;
-        var packed = proj.NF4PackedWeights
-            ?? throw new InvalidOperationException("NF4 packed weights not initialized for quantized projection.");
-        var groupScales = proj.NF4GroupScales
-            ?? throw new InvalidOperationException("NF4 group scales not initialized for quantized projection.");
-        int groupSize = proj.NF4GroupSize;
-        var output = new Tensor<float>(new[] { rows, outDim });
-
-        for (int r = 0; r < rows; r++)
-        {
-            int inputBase = r * inDim;
-            int outputBase = r * outDim;
-            for (int o = 0; o < outDim; o++)
-            {
-                float sum = 0f;
-                int wBaseFlat = o * inDim;
-                for (int i = 0; i < inDim; i++)
-                {
-                    int elementIdx = wBaseFlat + i;
-                    int group = elementIdx / groupSize;
-                    int nf4Index = NF4WeightOnlyQuantization.ExtractIndex(packed, elementIdx);
-                    float w = NF4WeightOnlyQuantization.Dequantize(nf4Index, groupScales[group]);
-                    sum += input[inputBase + i] * w;
-                }
-                output.SetFlat(outputBase + o, sum);
-            }
-        }
-        return output;
     }
 
     private static Tensor<float> ReshapeToHeads(Tensor<float> flat, int batchSize, int seqLen, int numHeads, int headDim)

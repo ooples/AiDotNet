@@ -218,7 +218,7 @@ internal class InferenceOptimizer<T>
         }
 
         // Initialize speculative decoding if enabled
-        if (_config.EnableSpeculativeDecoding)
+        if (_config.SpeculativeDecoding.Enabled)
         {
             anyOptimizationsApplied |= InitializeSpeculativeDecoding(model);
         }
@@ -416,20 +416,30 @@ internal class InferenceOptimizer<T>
         }
 
         var firstLayer = attentionLayers[0];
-        int numHeads = firstLayer.HeadCount;
+        int numHeads = firstLayer.HeadCount;      // query heads
+        int numKVHeads = firstLayer.KVHeadCount;  // KV heads the cache physically stores (== numHeads for MHA)
         int headDim = firstLayer.HeadDimension;
         int numLayers = attentionLayers.Count;
 
         long availableBytes = (long)_config.KVCacheMaxSizeMB * 1024 * 1024;
         int blockSize = _config.PagedKVCacheBlockSize;
 
-        _pagedKVCache = PagedKVCache<T>.FromMemorySize(availableBytes, numLayers, numHeads, headDim, blockSize);
+        // The paged cache stores K/V, so it is sized by the KV head count. The kernel also needs the query-head
+        // count (NumQueryHeads) so it repeats each KV head across its query-head group under grouped-query attention.
+        _pagedKVCache = PagedKVCache<T>.FromMemorySize(availableBytes, numLayers, numKVHeads, headDim, blockSize);
         _pagedKernel = new PagedAttentionKernel<T>(_pagedKVCache, new PagedAttentionConfig
         {
-            NumHeads = numHeads,
+            NumHeads = numKVHeads,
+            NumQueryHeads = numHeads,
             HeadDimension = headDim,
             BlockSize = blockSize,
-            MaxBatchSize = _config.MaxBatchSize
+            MaxBatchSize = _config.MaxBatchSize,
+            // Sliding-window attention (Mistral-style) on the paged path: each query attends only to the most
+            // recent KVCacheWindowSize keys. This is now backed by real KV retention — the kernel evicts KV
+            // blocks that fall entirely below the window (PagedKVCache.EvictBlocksBelow), so long sequences
+            // keep a bounded KV footprint instead of leaving old blocks allocated. 0 (window disabled) keeps
+            // full causal attention with no eviction.
+            WindowSize = _config.UseSlidingWindowKVCache ? Math.Max(0, _config.KVCacheWindowSize) : 0
         });
 
         // Allocate a fresh sequence ID for this optimized model instance (one model == one sequence).
@@ -712,53 +722,137 @@ internal class InferenceOptimizer<T>
                 anyRewritten = true;
             }
 
-            // Handle Grouped-Query Attention -> CachedGroupedQueryAttention
-            // GQA rewrite: use CachedGroupedQueryAttention for regular KV cache.
-            // Paged KV cache does not yet support GQA, so fall back to regular cache.
+            // Handle Grouped-Query Attention. Prefer the PAGED GQA replacement when paged KV is enabled (it feeds
+            // the incremental-generation path); fall back to the contiguous CachedGroupedQueryAttention when the
+            // paged layer cannot represent the source (e.g. Qwen2-style Q/K/V projection bias).
             if (layer is GroupedQueryAttentionLayer<T> gqa && enableKVCache)
             {
-                var inputShape = gqa.GetInputShape();
-                if (inputShape.Length < 2)
-                    continue;
-
-                int seqLen = inputShape[0];
-                int embDim = inputShape[1];
-                var activation = gqa.ScalarActivation;
-
-                var cachedGqa = new CachedGroupedQueryAttention<T>(
-                    sequenceLength: seqLen,
-                    embeddingDimension: embDim,
-                    numHeads: gqa.NumHeads,
-                    numKVHeads: gqa.NumKVHeads,
-                    useFlashAttention: enableFlashAttention,
-                    layerIndex: 0,
-                    useCausalMask: useCausalMask,
-                    activationFunction: activation);
-                cachedGqa.SetParameters(gqa.GetParameters());
-
-                // Preserve positional encoding
-                if (gqa.PositionalEncoding != PositionalEncodingType.None)
+                LayerBase<T>? replacement = enablePagedKVCache
+                    ? BuildPagedGqaReplacement(gqa, useCausalMask)
+                    : null;
+                replacement ??= BuildCachedGqaReplacement(gqa, enableFlashAttention, useCausalMask);
+                if (replacement is not null)
                 {
-                    cachedGqa.ConfigurePositionalEncoding(
-                        gqa.PositionalEncoding,
-                        ropeTheta: gqa.RoPETheta,
-                        maxSequenceLength: seqLen);
+                    model.Layers[i] = replacement;
+                    anyRewritten = true;
                 }
-                else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
-                         _config.PositionalEncoding == PositionalEncodingType.ALiBi)
-                {
-                    cachedGqa.ConfigurePositionalEncoding(
-                        _config.PositionalEncoding,
-                        ropeTheta: _config.RoPETheta,
-                        maxSequenceLength: seqLen);
-                }
+                continue;
+            }
 
-                model.Layers[i] = cachedGqa;
-                anyRewritten = true;
+            // Decoder blocks (LLaMA / GGUF) host their GQA INSIDE a PreLNTransformerBlock, so the top-level scan
+            // above never reaches it (the shard-05-class "no applicable layers" gap, GQA edition). Recurse into
+            // the block and swap its attention in place via ReplaceAttention, preferring the paged variant.
+            if (layer is PreLNTransformerBlock<T> preLnBlock && enableKVCache
+                && preLnBlock.AttentionLayer is GroupedQueryAttentionLayer<T> blockGqa)
+            {
+                LayerBase<T>? replacement = enablePagedKVCache
+                    ? BuildPagedGqaReplacement(blockGqa, useCausalMask)
+                    : null;
+                replacement ??= BuildCachedGqaReplacement(blockGqa, enableFlashAttention, useCausalMask);
+                if (replacement is not null)
+                {
+                    preLnBlock.ReplaceAttention(replacement);
+                    anyRewritten = true;
+                }
+                continue;
             }
         }
 
         return anyRewritten;
+    }
+
+    /// <summary>
+    /// Builds the KV-cached replacement for a <see cref="GroupedQueryAttentionLayer{T}"/> — copying its
+    /// parameters and RoPE/ALiBi positional configuration — or <see langword="null"/> when the layer's input
+    /// shape is not yet resolvable. Shared by the top-level GQA rewrite and the PreLNTransformerBlock recursion.
+    /// </summary>
+    private CachedGroupedQueryAttention<T>? BuildCachedGqaReplacement(
+        GroupedQueryAttentionLayer<T> gqa, bool enableFlashAttention, bool useCausalMask)
+    {
+        var inputShape = gqa.GetInputShape();
+        if (inputShape.Length < 2)
+            return null;
+
+        int seqLen = inputShape[0];
+        int embDim = inputShape[1];
+
+        var cachedGqa = new CachedGroupedQueryAttention<T>(
+            sequenceLength: seqLen,
+            embeddingDimension: embDim,
+            numHeads: gqa.NumHeads,
+            numKVHeads: gqa.NumKVHeads,
+            useFlashAttention: enableFlashAttention,
+            layerIndex: 0,
+            useCausalMask: useCausalMask,
+            activationFunction: gqa.ScalarActivation);
+        cachedGqa.SetParameters(gqa.GetParameters());
+
+        if (gqa.PositionalEncoding != PositionalEncodingType.None)
+        {
+            cachedGqa.ConfigurePositionalEncoding(
+                gqa.PositionalEncoding, ropeTheta: gqa.RoPETheta, maxSequenceLength: seqLen);
+        }
+        else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                 _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+        {
+            cachedGqa.ConfigurePositionalEncoding(
+                _config.PositionalEncoding, ropeTheta: _config.RoPETheta, maxSequenceLength: seqLen);
+        }
+
+        return cachedGqa;
+    }
+
+    /// <summary>
+    /// Builds the PAGED KV-cache replacement for a <see cref="GroupedQueryAttentionLayer{T}"/> — a
+    /// <see cref="PagedCachedMultiHeadAttention{T}"/> with the source's KV-head count — so grouped-query
+    /// decoders reach the incremental paged-generation path. Copies parameters and RoPE/ALiBi positional
+    /// configuration. Returns <see langword="null"/> when the source cannot be represented on the paged layer
+    /// (its input shape is unresolved, or it uses Q/K/V projection bias which the paged layer has no slot for),
+    /// so the caller falls back to the contiguous <see cref="CachedGroupedQueryAttention{T}"/>.
+    /// </summary>
+    private PagedCachedMultiHeadAttention<T>? BuildPagedGqaReplacement(
+        GroupedQueryAttentionLayer<T> gqa, bool useCausalMask)
+    {
+        // The paged layer stores only an output bias; it cannot carry Q/K/V projection biases, and the source's
+        // flattened parameter vector would not line up. Let the caller use the contiguous cache in that case.
+        if (gqa.UsesProjectionBias)
+        {
+            return null;
+        }
+
+        var inputShape = gqa.GetInputShape();
+        if (inputShape.Length < 2)
+        {
+            return null;
+        }
+
+        int seqLen = inputShape[0];
+        int embDim = inputShape[1];
+
+        var paged = new PagedCachedMultiHeadAttention<T>(
+            sequenceLength: seqLen,
+            embeddingDimension: embDim,
+            headCount: gqa.NumHeads,
+            useCausalMask: useCausalMask,
+            activationFunction: gqa.ScalarActivation,
+            kvHeadCount: gqa.NumKVHeads);
+        paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
+        // Same [Q][K][V][O][outBias] layout (no projection bias => the source's q/k/v bias blocks are empty).
+        paged.SetParameters(gqa.GetParameters());
+
+        if (gqa.PositionalEncoding != PositionalEncodingType.None)
+        {
+            paged.ConfigurePositionalEncoding(
+                gqa.PositionalEncoding, ropeTheta: gqa.RoPETheta, maxSequenceLength: seqLen);
+        }
+        else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                 _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+        {
+            paged.ConfigurePositionalEncoding(
+                _config.PositionalEncoding, ropeTheta: _config.RoPETheta, maxSequenceLength: seqLen);
+        }
+
+        return paged;
     }
 
     private bool ApplyWeightOnlyQuantization(NeuralNetworkBase<T> model)
@@ -792,8 +886,8 @@ internal class InferenceOptimizer<T>
                     }
 
                     var replacement = dense.VectorActivation != null
-                        ? new QuantizedDenseLayer(dense, dense.VectorActivation)
-                        : new QuantizedDenseLayer(dense);
+                        ? new QuantizedDenseLayer(dense, dense.VectorActivation, mode)
+                        : new QuantizedDenseLayer(dense, mode);
 
                     if (replacement is ILayer<T> typedReplacement)
                     {
@@ -859,9 +953,9 @@ internal class InferenceOptimizer<T>
                 }
 
                 any |= TryQuantizeBlockFfn(
-                    quantEncBlock.FfnUpLayer, quantEncBlock.HiddenSize, quantEncBlock.ReplaceFfnUp);
+                    quantEncBlock.FfnUpLayer, quantEncBlock.HiddenSize, quantEncBlock.ReplaceFfnUp, mode);
                 any |= TryQuantizeBlockFfn(
-                    quantEncBlock.FfnDownLayer, quantEncBlock.FfnDim, quantEncBlock.ReplaceFfnDown);
+                    quantEncBlock.FfnDownLayer, quantEncBlock.FfnDim, quantEncBlock.ReplaceFfnDown, mode);
             }
             // Quantize the sublayers hosted inside a composite decoder block. The
             // CROSS-attention slot is intentionally left untouched: its two-input
@@ -891,9 +985,9 @@ internal class InferenceOptimizer<T>
                 }
 
                 any |= TryQuantizeBlockFfn(
-                    quantDecBlock.FfnUpLayer, quantDecBlock.HiddenSize, quantDecBlock.ReplaceFfnUp);
+                    quantDecBlock.FfnUpLayer, quantDecBlock.HiddenSize, quantDecBlock.ReplaceFfnUp, mode);
                 any |= TryQuantizeBlockFfn(
-                    quantDecBlock.FfnDownLayer, quantDecBlock.FfnDim, quantDecBlock.ReplaceFfnDown);
+                    quantDecBlock.FfnDownLayer, quantDecBlock.FfnDim, quantDecBlock.ReplaceFfnDown, mode);
             }
             // Quantize GroupedQueryAttentionLayer (supports INT8, FP8, NF4)
             else if (model.Layers[i] is GroupedQueryAttentionLayer<float> gqa)
@@ -932,7 +1026,8 @@ internal class InferenceOptimizer<T>
     private static bool TryQuantizeBlockFfn(
         LayerBase<float> ffn,
         int inputDim,
-        Action<LayerBase<float>> replace)
+        Action<LayerBase<float>> replace,
+        InferenceQuantizationMode mode)
     {
         if (ffn is not DenseLayer<float> denseFfn)
             return false; // already quantized (idempotent re-run) or custom sublayer
@@ -943,8 +1038,8 @@ internal class InferenceOptimizer<T>
                 denseFfn.ResolveFromShape(new[] { 1, inputDim });
 
             var replacement = denseFfn.VectorActivation != null
-                ? new QuantizedDenseLayer(denseFfn, denseFfn.VectorActivation)
-                : new QuantizedDenseLayer(denseFfn);
+                ? new QuantizedDenseLayer(denseFfn, denseFfn.VectorActivation, mode)
+                : new QuantizedDenseLayer(denseFfn, mode);
 
             if (replacement is LayerBase<float> typedReplacement)
             {
@@ -980,6 +1075,10 @@ internal class InferenceOptimizer<T>
                 yield return decoderBlock.SelfAttentionLayer;
                 yield return decoderBlock.CrossAttentionLayer;
             }
+            // LLaMA / GGUF decoders host their (grouped-query) attention inside PreLNTransformerBlock, so every
+            // KV-cache / detection / quantization scan must reach it too — not just the top-level layer.
+            else if (layer is PreLNTransformerBlock<T> preLnBlock)
+                yield return preLnBlock.AttentionLayer;
         }
     }
 
@@ -1203,7 +1302,7 @@ internal class InferenceOptimizer<T>
         // Default to causal when the user enables generation-oriented inference features.
         // This matches industry-standard expectations for autoregressive decoding and avoids
         // relying on users to set TaskType explicitly.
-        if (_config.EnableKVCache || _config.EnableSpeculativeDecoding)
+        if (_config.EnableKVCache || _config.SpeculativeDecoding.Enabled)
             return true;
 
         // Otherwise, keep heuristics conservative to avoid changing semantics for non-generative models.
@@ -1272,36 +1371,23 @@ internal class InferenceOptimizer<T>
     private bool InitializeSpeculativeDecoding(NeuralNetworkBase<T> model)
     {
         // Facade-friendly behavior: speculative decoding configuration must never crash inference.
-        // If a requested draft model is unavailable, fall back to an N-gram draft model and record diagnostics.
+        // If no draft model is available, fall back to an N-gram draft model and record diagnostics.
         try
         {
-            // For Custom draft models, an internal caller can provide one via SetCustomDraftModel().
-            if (_config.DraftModelType == DraftModelType.Custom)
+            // A user-supplied draft (builder ConfigureSpeculativeDecoding, flowed in via SetCustomDraftModel)
+            // takes precedence; otherwise the zero-cost N-gram/prompt-lookup draft is used by default.
+            if (_draftModel != null)
             {
-                if (_draftModel != null)
-                {
-                    InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: true, reason: "CustomProvided");
-                    return true;
-                }
-
-                _draftModel = CreateNGramDraftModel();
-                InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: _draftModel != null, reason: "CustomNotProvided_FallbackToNGram");
-                return _draftModel != null;
+                InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: true, reason: "CustomProvided");
+                return true;
             }
 
-            IDraftModel<T>? draftModel = _config.DraftModelType switch
-            {
-                DraftModelType.NGram => CreateNGramDraftModel(),
-                DraftModelType.SmallNeural => CreateNeuralDraftModel(model),
-                _ => CreateNGramDraftModel()
-            };
-
-            _draftModel = draftModel ?? CreateNGramDraftModel();
+            _draftModel = CreateNGramDraftModel();
             InferenceDiagnostics.RecordDecision(
                 "InferenceOptimizer",
                 "SpeculativeDraftModel",
                 enabled: _draftModel != null,
-                reason: draftModel != null ? _config.DraftModelType.ToString() : $"Unavailable({_config.DraftModelType})_FallbackToNGram");
+                reason: "DefaultNGram");
 
             return _draftModel != null;
         }
@@ -1330,25 +1416,6 @@ internal class InferenceOptimizer<T>
     {
         // NGram draft model with default settings
         return new NGramDraftModel<T>(ngramSize: 3);
-    }
-
-    /// <summary>
-    /// Creates a small neural network draft model.
-    /// </summary>
-    /// <remarks>
-    /// SmallNeural draft models require a pre-trained companion model that is smaller
-    /// and faster than the target model but trained on similar data. This cannot be
-    /// automatically generated from the target model.
-    /// </remarks>
-    /// <exception cref="NotSupportedException">
-    /// Always thrown because SmallNeural draft models require external pre-trained models.
-    /// </exception>
-    private IDraftModel<T>? CreateNeuralDraftModel(NeuralNetworkBase<T> model)
-    {
-        // SmallNeural draft models require a separate pre-trained smaller model. We do not expose
-        // draft model wiring via the public facade in the MVP, so treat this as unavailable.
-        InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: false, reason: "SmallNeuralUnavailable_FallbackToNGram");
-        return null;
     }
 
     /// <summary>
@@ -1467,7 +1534,7 @@ internal class InferenceOptimizer<T>
         {
             ["IsInitialized"] = _isInitialized,
             ["KVCacheEnabled"] = _config.EnableKVCache,
-            ["SpeculativeDecodingEnabled"] = _config.EnableSpeculativeDecoding,
+            ["SpeculativeDecodingEnabled"] = _config.SpeculativeDecoding.Enabled,
             ["BatchingEnabled"] = _config.EnableBatching,
             ["PagedKVCacheInitialized"] = _pagedKVCache != null,
             ["PagedAttentionLayerCount"] = _pagedAttentionLayers?.Count ?? 0,
@@ -1486,8 +1553,8 @@ internal class InferenceOptimizer<T>
 
         if (_speculativeDecoder != null)
         {
-            stats["SpeculationDepth"] = _config.SpeculationDepth;
-            stats["DraftModelType"] = _config.DraftModelType.ToString();
+            stats["SpeculationDepth"] = _config.SpeculativeDecoding.SpeculationDepth;
+            stats["DraftModel"] = _draftModel?.GetType().Name ?? "None";
         }
 
         return stats;
@@ -1510,8 +1577,8 @@ internal class InferenceOptimizer<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Use this method when you have your own draft model implementation.
     ///
-    /// This is required when using DraftModelType.Custom or when you want to replace the
-    /// default NGram draft model with a more sophisticated model.
+    /// Use this when you want to replace the default NGram draft model with a more
+    /// sophisticated model (this is what the builder's ConfigureSpeculativeDecoding flows in).
     ///
     /// Your custom draft model must implement IDraftModel&lt;T&gt; and provide:
     /// - Draft token generation
@@ -1553,20 +1620,21 @@ internal class InferenceOptimizer<T>
     /// </remarks>
     public SpeculativeDecoder<T>? CreateSpeculativeDecoder(Func<Vector<int>, Matrix<T>> targetForward)
     {
-        if (_draftModel == null || !_config.EnableSpeculativeDecoding)
+        var spec = _config.SpeculativeDecoding;
+        if (_draftModel == null || !spec.Enabled)
         {
             return null;
         }
 
         var speculativeConfig = new SpeculativeDecodingConfig<T>
         {
-            NumDraftTokens = _config.SpeculationDepth,
-            UseTreeSpeculation = _config.UseTreeSpeculation ||
-                                _config.SpeculativeMethod == SpeculativeMethod.Medusa ||
-                                _config.SpeculativeMethod == SpeculativeMethod.Eagle,
-            AdaptiveDraftLength = _config.SpeculationPolicy == SpeculationPolicy.Auto,
-            TreeBranchFactor = _config.SpeculativeMethod == SpeculativeMethod.Medusa ? 4 : 2,
-            MaxTreeDepth = Math.Max(1, _config.SpeculationDepth),
+            NumDraftTokens = spec.SpeculationDepth,
+            UseTreeSpeculation = spec.UseTreeSpeculation ||
+                                spec.SpeculativeMethod == SpeculativeMethod.Medusa ||
+                                spec.SpeculativeMethod == SpeculativeMethod.Eagle,
+            AdaptiveDraftLength = spec.SpeculationPolicy == SpeculationPolicy.Auto,
+            TreeBranchFactor = spec.SpeculativeMethod == SpeculativeMethod.Medusa ? 4 : 2,
+            MaxTreeDepth = Math.Max(1, spec.SpeculationDepth),
             MinAcceptanceRate = MathHelper.GetNumericOperations<T>().FromDouble(0.5)
         };
 

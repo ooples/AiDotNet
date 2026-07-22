@@ -610,9 +610,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// {
     ///     EnableKVCache = true,
     ///     MaxBatchSize = 64,
-    ///     EnableSpeculativeDecoding = true
+    ///     SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
     /// };
-    /// 
+    ///
     /// var result = await builder
     ///     .ConfigureInferenceOptimizations(config)
     ///     .BuildAsync();
@@ -623,6 +623,183 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         _inferenceOptimizationConfig = config ?? AiDotNet.Configuration.InferenceOptimizationConfig.Default;
         return this;
+    }
+
+    /// <summary>
+    /// Enables and configures speculative decoding using an explicit draft model. The serving engine verifies
+    /// this draft's guessed tokens against the target model, accelerating generation beyond the built-in N-gram
+    /// prompt-lookup draft — with no change to the output.
+    /// </summary>
+    /// <param name="draftModel">The "guesser" implementing <see cref="AiDotNet.Inference.SpeculativeDecoding.IDraftModel{T}"/>.
+    /// Use the ready-made <see cref="AiDotNet.Inference.SpeculativeDecoding.NGramDraftModel{T}"/> (zero-cost, no model)
+    /// or <see cref="AiDotNet.Inference.SpeculativeDecoding.NeuralDraftModel{T}"/> (wraps a smaller model's forward),
+    /// or supply your own implementation for full control.</param>
+    /// <param name="options">Optional tuning (speculation depth, policy, method, tree speculation). When omitted, the
+    /// existing/default tuning is used. Calling this method turns speculative decoding on regardless.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// The draft model is a live object, so it applies to in-process serving only (it is not serialized with the
+    /// model artifact).
+    /// </para>
+    /// <para><b>For Beginners:</b> Speculative decoding uses a small, fast "guesser" to propose the next few
+    /// tokens, which the big model checks all at once — often 1.5–3× faster with identical output. This overload
+    /// lets you plug in your own guesser instead of the default word-pattern (N-gram) one. If you just want the
+    /// speedup with no extra model, call the tuning-only overload — it uses the free N-gram guesser.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSpeculativeDecoding(
+        AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T> draftModel,
+        AiDotNet.Configuration.SpeculativeDecodingOptions? options = null)
+    {
+        _servingDraftModel = draftModel ?? throw new ArgumentNullException(nameof(draftModel));
+        ApplySpeculativeDecodingOptions(options);
+        return this;
+    }
+
+    /// <summary>
+    /// Enables and configures speculative decoding using one of <i>your own models</i> as the draft "guesser".
+    /// This is a convenience over the <see cref="AiDotNet.Inference.SpeculativeDecoding.IDraftModel{T}"/> overload:
+    /// the model you built or loaded (e.g. via <c>ConfigureModel</c> on a smaller/faster network, or an ONNX import)
+    /// is wrapped as the draft. The serving engine verifies its guesses against the target model, so the output is
+    /// unchanged.
+    /// </summary>
+    /// <param name="draftModel">A smaller/faster token-generation model whose <c>Predict</c> maps a
+    /// <c>[1, sequenceLength]</c> token tensor to next-token logits (an
+    /// <see cref="IFullModel{T, TInput, TOutput}"/> over <c>Tensor&lt;T&gt;</c> that also implements
+    /// <see cref="Interfaces.IModelShape"/> so the vocabulary size can be read).</param>
+    /// <param name="options">Optional tuning (speculation depth, policy, method, tree speculation). When omitted, the
+    /// existing/default tuning is used. Calling this method turns speculative decoding on regardless.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// The wrapped draft is a live object, so it applies to in-process serving only. For draft models that are not
+    /// token→logits tensor models, wrap them yourself in a
+    /// <see cref="AiDotNet.Inference.SpeculativeDecoding.NeuralDraftModel{T}"/> and use the
+    /// <see cref="AiDotNet.Inference.SpeculativeDecoding.IDraftModel{T}"/> overload.
+    /// </para>
+    /// <para><b>For Beginners:</b> Because AiDotNet lets you train or load your own models, you can use a small,
+    /// cheap model of your own as the "guesser" for a bigger one. Pass that smaller model here and it becomes the
+    /// draft — the big model still checks every guess, so quality is identical, just faster.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSpeculativeDecoding(
+        IFullModel<T, TInput, TOutput> draftModel,
+        AiDotNet.Configuration.SpeculativeDecodingOptions? options = null)
+    {
+        if (draftModel is null)
+        {
+            throw new ArgumentNullException(nameof(draftModel));
+        }
+        _servingDraftModel = WrapModelAsDraftModel(draftModel, options);
+        ApplySpeculativeDecodingOptions(options);
+        return this;
+    }
+
+    /// <summary>
+    /// Enables and tunes speculative decoding using the built-in, zero-cost N-gram / prompt-lookup draft (no extra
+    /// model required). The serving engine verifies its guesses against the target model, so the output is identical
+    /// — just faster for repetitive text.
+    /// </summary>
+    /// <param name="options">Tuning for speculation (depth, policy, method, tree speculation). Calling this method
+    /// turns speculative decoding on.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the simplest way to get the speculative-decoding speedup: no second model,
+    /// just the free word-pattern guesser. To use a smarter guesser instead, use one of the other
+    /// <c>ConfigureSpeculativeDecoding</c> overloads that take a draft model.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSpeculativeDecoding(
+        AiDotNet.Configuration.SpeculativeDecodingOptions options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+        ApplySpeculativeDecodingOptions(options);
+        return this;
+    }
+
+    /// <summary>
+    /// Applies speculative-decoding tuning onto the builder's inference config and turns speculation on. Passing a
+    /// non-null <paramref name="options"/> replaces the whole tuning block; a null keeps the existing tuning. The act
+    /// of calling any <c>ConfigureSpeculativeDecoding</c> overload is treated as an explicit opt-in, so the enable
+    /// flag is set here.
+    /// </summary>
+    private void ApplySpeculativeDecodingOptions(AiDotNet.Configuration.SpeculativeDecodingOptions? options)
+    {
+        _inferenceOptimizationConfig ??= AiDotNet.Configuration.InferenceOptimizationConfig.Default;
+        if (options is not null)
+        {
+            _inferenceOptimizationConfig.SpeculativeDecoding = options;
+        }
+        else if (_inferenceOptimizationConfig.SpeculativeDecoding is null)
+        {
+            _inferenceOptimizationConfig.SpeculativeDecoding = new AiDotNet.Configuration.SpeculativeDecodingOptions();
+        }
+        _inferenceOptimizationConfig.SpeculativeDecoding.Enabled = true;
+    }
+
+    /// <summary>
+    /// Bridges a token-generation model into an <see cref="AiDotNet.Inference.SpeculativeDecoding.IDraftModel{T}"/>
+    /// by wrapping its <c>Predict</c> (token ids -&gt; next-token logits) in a
+    /// <see cref="AiDotNet.Inference.SpeculativeDecoding.NeuralDraftModel{T}"/>. The model must be a
+    /// <c>Tensor&lt;T&gt; -&gt; Tensor&lt;T&gt;</c> model that also implements <see cref="Interfaces.IModelShape"/>
+    /// so the vocabulary size (the output's last dimension) is known.
+    /// </summary>
+    private AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T> WrapModelAsDraftModel(
+        IFullModel<T, TInput, TOutput> draftModel,
+        AiDotNet.Configuration.SpeculativeDecodingOptions? options)
+    {
+        if (draftModel is not IFullModel<T, Tensor<T>, Tensor<T>> tensorDraft ||
+            draftModel is not Interfaces.IModelShape shape)
+        {
+            throw new NotSupportedException(
+                "ConfigureSpeculativeDecoding(IFullModel, ...) requires a token-generation model whose Predict maps a " +
+                "[1, sequenceLength] token tensor to next-token logits (an IFullModel<T, Tensor<T>, Tensor<T>> that also " +
+                "implements IModelShape). For other draft shapes, wrap your model in a NeuralDraftModel<T> and use the " +
+                "ConfigureSpeculativeDecoding(IDraftModel<T>, ...) overload.");
+        }
+
+        int[] outputShape = shape.GetOutputShape();
+        int vocabSize = outputShape is { Length: > 0 } ? outputShape[outputShape.Length - 1] : 0;
+        if (vocabSize <= 0)
+        {
+            throw new NotSupportedException(
+                "The draft model's output shape does not expose a vocabulary size (a positive last dimension). Wrap it in " +
+                "a NeuralDraftModel<T> with an explicit vocabSize and use the ConfigureSpeculativeDecoding(IDraftModel<T>, ...) " +
+                "overload instead.");
+        }
+
+        int maxDraftTokens = options is { SpeculationDepth: > 0 } ? options.SpeculationDepth : 5;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // token ids -> next-token logits, mirroring the exact tensor contract the serving engine feeds the target
+        // model: pack tokens into a [1, sequenceLength] tensor, run Predict, and read the LAST position's logit row.
+        Func<Vector<int>, Vector<T>> forward = tokenIds =>
+        {
+            var input = new Tensor<T>(new[] { 1, tokenIds.Length });
+            for (int i = 0; i < tokenIds.Length; i++)
+            {
+                input[0, i] = numOps.FromDouble(tokenIds[i]);
+            }
+
+            var output = tensorDraft.Predict(input);
+            int rank = output.Shape.Length;
+            int runtimeVocab = rank >= 1 ? output.Shape[rank - 1] : 0;
+            int lastPos = rank > 2 ? output.Shape[rank - 2] - 1 : 0;
+
+            var logits = new Vector<T>(vocabSize);
+            int copy = Math.Min(vocabSize, runtimeVocab);
+            for (int v = 0; v < copy; v++)
+            {
+                logits[v] = rank > 2 ? output[new[] { 0, lastPos, v }] : output[new[] { 0, v }];
+            }
+            return logits;
+        };
+
+        return new AiDotNet.Inference.SpeculativeDecoding.NeuralDraftModel<T>(forward, vocabSize, maxDraftTokens);
     }
 
     /// <summary>

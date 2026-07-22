@@ -46,7 +46,7 @@ public class InferenceOptimizationConfig
     {
         EnableKVCache = true,
         EnableBatching = true,
-        EnableSpeculativeDecoding = false
+        SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = false }
     };
 
     /// <summary>
@@ -64,8 +64,7 @@ public class InferenceOptimizationConfig
         KVCacheMaxSizeMB = 2048,
         EnableBatching = true,
         MaxBatchSize = 64,
-        EnableSpeculativeDecoding = true,
-        SpeculationDepth = 5
+        SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true, SpeculationDepth = 5 }
     };
 
     #region KV Cache Settings
@@ -375,10 +374,16 @@ public class InferenceOptimizationConfig
                 $"BatchTimeoutMs must be non-negative. Got: {BatchTimeoutMs}");
         }
 
-        if (SpeculationDepth < 0)
+        if (SpeculativeDecoding.SpeculationDepth < 0)
         {
             throw new InvalidOperationException(
-                $"SpeculationDepth must be non-negative. Got: {SpeculationDepth}");
+                $"SpeculativeDecoding.SpeculationDepth must be non-negative. Got: {SpeculativeDecoding.SpeculationDepth}");
+        }
+
+        if (TensorParallelSize < 1)
+        {
+            throw new InvalidOperationException(
+                $"TensorParallelSize must be at least 1 (1 = no tensor parallelism). Got: {TensorParallelSize}");
         }
 
         if (UseSlidingWindowKVCache && KVCacheWindowSize <= 0)
@@ -392,6 +397,14 @@ public class InferenceOptimizationConfig
             throw new InvalidOperationException(
                 $"PagedKVCacheBlockSize must be positive when EnablePagedKVCache is enabled. Got: {PagedKVCacheBlockSize}");
         }
+
+        // Documented domain is 0 (disabled) or a positive token count. A negative value is invalid — reject
+        // it rather than letting downstream code silently treat it as disabled.
+        if (MaxPrefillChunkTokens < 0)
+        {
+            throw new InvalidOperationException(
+                $"MaxPrefillChunkTokens must be 0 (disabled) or a positive token count. Got: {MaxPrefillChunkTokens}");
+        }
     }
 
     #endregion
@@ -399,105 +412,34 @@ public class InferenceOptimizationConfig
     #region Speculative Decoding Settings
 
     /// <summary>
-    /// Gets or sets whether speculative decoding is enabled.
-    /// </summary>
-    /// <value>True to enable speculative decoding (default: false).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Speculative decoding speeds up autoregressive generation (GPT-style).
-    ///
-    /// How it works:
-    /// 1. A small "draft" model quickly generates candidate tokens
-    /// 2. The main model verifies all candidates in one pass
-    /// 3. Accepted tokens are kept, rejected ones are regenerated
-    ///
-    /// Benefits:
-    /// - 1.5-3x faster generation for LLMs
-    /// - No quality loss (verification ensures correctness)
-    ///
-    /// Requirements:
-    /// - Autoregressive model (generates tokens sequentially)
-    /// - Draft model must be available (NGram or smaller neural network)
-    ///
-    /// When to disable:
-    /// - Non-autoregressive models
-    /// - Single-pass predictions
-    /// - When draft model overhead exceeds benefit
-    /// </para>
-    /// </remarks>
-    public bool EnableSpeculativeDecoding { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets the type of draft model to use for speculative decoding.
-    /// </summary>
-    /// <value>Draft model type (default: NGram).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The draft model generates candidate tokens quickly.
-    ///
-    /// Options:
-    /// - <b>NGram:</b> Simple statistical model (fast, no GPU needed)
-    /// - <b>SmallNeural:</b> Smaller companion model (more accurate drafts)
-    ///
-    /// NGram is usually sufficient and has near-zero overhead.
-    ///
-    /// <para>
-    /// <b>Note:</b> Small neural draft models require an external companion model. In the MVP, the library
-    /// falls back to <see cref="DraftModelType.NGram"/> when a companion draft model is not available.
-    /// </para>
-    /// </para>
-    /// </remarks>
-    public DraftModelType DraftModelType { get; set; } = DraftModelType.NGram;
-
-    /// <summary>
-    /// Gets or sets the speculation depth (number of tokens to draft ahead).
-    /// </summary>
-    /// <value>Speculation depth (default: 4).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many tokens the draft model predicts at once.
-    ///
-    /// Guidelines:
-    /// - 3-4: Conservative, high acceptance rate
-    /// - 5-6: Balanced (default: 4)
-    /// - 7+: Aggressive, may have more rejections
-    ///
-    /// Higher depth = more speedup potential but more wasted work on rejections.
-    /// </para>
-    /// </remarks>
-    public int SpeculationDepth { get; set; } = 4;
-
-    /// <summary>
-    /// Gets or sets whether to use tree-structured speculation.
-    /// </summary>
-    /// <value>True to enable tree speculation (default: false).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tree speculation generates multiple candidate sequences in parallel.
-    ///
-    /// Instead of one sequence of draft tokens, generates a tree of possibilities.
-    /// Can improve acceptance rate but uses more memory.
-    /// </para>
-    /// </remarks>
-    public bool UseTreeSpeculation { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets the policy for when speculative decoding should run.
+    /// Gets or sets the speculative-decoding tuning options (enable flag, speculation depth, policy, method,
+    /// tree speculation). <i>Which</i> draft model does the guessing is configured separately via the builder's
+    /// <c>ConfigureSpeculativeDecoding</c> overloads; these options control <i>how</i> speculation runs.
     /// </summary>
     /// <remarks>
-    /// Auto is recommended: it can back off speculative decoding under high load (e.g., large batches)
-    /// to avoid throughput regressions, while still enabling it for latency-sensitive scenarios.
+    /// <para><b>For Beginners:</b> Speculative decoding speeds up text generation by having a small "guesser"
+    /// model propose the next few tokens while the big model verifies them all at once — no quality loss, often
+    /// 1.5–3× faster. This object bundles the tuning knobs for that feature. Turn it on with
+    /// <c>SpeculativeDecoding.Enabled = true</c>; the defaults use a zero-cost N-gram guesser so you don't need a
+    /// second model to start benefiting. See <see cref="SpeculativeDecodingOptions"/> for each knob.</para>
     /// </remarks>
-    public SpeculationPolicy SpeculationPolicy { get; set; } = SpeculationPolicy.Auto;
+    public SpeculativeDecodingOptions SpeculativeDecoding { get; set; } = new SpeculativeDecodingOptions();
 
     /// <summary>
-    /// Gets or sets the speculative decoding method.
+    /// Gets or sets the maximum number of prompt tokens to prefill per scheduler step (chunked prefill).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The default <see cref="SpeculativeMethod.Auto"/> currently selects <see cref="SpeculativeMethod.ClassicDraftModel"/>.
+    /// When &gt; 0, a long prompt's prefill is split into chunks of at most this many tokens so decode steps
+    /// for other in-flight requests are interleaved with it, keeping inter-token latency low under mixed load
+    /// (vLLM-style chunked prefill). 0 disables chunking (each prompt prefills in a single step).
     /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This chooses the "style" of speculative decoding.
+    /// <para><b>For Beginners:</b> Without this, one very long prompt can hog the engine while everyone else
+    /// waits. Chunked prefill feeds the long prompt in bite-sized pieces so other users' words keep streaming.
+    /// A value like 512 is a good starting point; 0 turns it off.
     /// </para>
     /// </remarks>
-    public SpeculativeMethod SpeculativeMethod { get; set; } = SpeculativeMethod.Auto;
+    public int MaxPrefillChunkTokens { get; set; } = 0;
 
     #endregion
 
@@ -570,6 +512,47 @@ public class InferenceOptimizationConfig
     public bool EnableLayerFusion { get; set; } = true;
 
     #endregion
+
+    #region Tensor Parallelism (Advanced)
+
+    /// <summary>
+    /// Gets or sets the number of tensor-parallel ranks (shards) the model is split across for serving.
+    /// </summary>
+    /// <value>Tensor-parallel world size (default: 1 = no tensor parallelism).</value>
+    /// <remarks>
+    /// <para>
+    /// When &gt; 1, a compatible transformer's attention heads and feed-forward hidden units are partitioned
+    /// across this many ranks (Megatron-LM style): each rank holds a shard of every layer's Q/K/V/O and FFN
+    /// weights and its own slice of the paged KV cache, and the per-rank partial outputs are all-reduced so the
+    /// generated tokens are identical to the un-sharded model. On a multi-GPU engine the ranks run on separate
+    /// devices for higher throughput / larger models; on CPU the ranks run sequentially (correct, but for
+    /// verification rather than speedup). Serving falls back to the normal single-model path (with a logged
+    /// reason) when the model is not a recognized tensor-parallelizable transformer.
+    /// </para>
+    /// <para>
+    /// <c>NumHeads</c> and the FFN hidden size must both be divisible by this value.
+    /// </para>
+    /// <para><b>For Beginners:</b> A very large language model may not fit — or run fast enough — on one GPU.
+    /// Tensor parallelism splits each layer's math across several GPUs that work together on every token, so a
+    /// model too big for one card can still be served. Leave this at 1 unless you have multiple GPUs and a large
+    /// model; the output is exactly the same either way, it's purely about fitting and speed.</para>
+    /// </remarks>
+    public int TensorParallelSize { get; set; } = 1;
+
+    #endregion
+
+    /// <summary>
+    /// Returns a shallow copy of this configuration. Used when a consumer (e.g. the serving layer) needs to
+    /// override a few settings for its own context without mutating the caller's shared config instance.
+    /// </summary>
+    public InferenceOptimizationConfig Clone()
+    {
+        var clone = (InferenceOptimizationConfig)MemberwiseClone();
+        // Deep-copy the nested speculation options so mutating one config's SpeculativeDecoding does not
+        // bleed into the other (MemberwiseClone copies the reference, not the object).
+        clone.SpeculativeDecoding = SpeculativeDecoding.Clone();
+        return clone;
+    }
 }
 
 /// <summary>
@@ -640,19 +623,6 @@ public enum CacheEvictionPolicy
     FIFO,
     /// <summary>Least Frequently Used - evicts entries with lowest access count.</summary>
     LFU
-}
-
-/// <summary>
-/// Types of draft models for speculative decoding.
-/// </summary>
-public enum DraftModelType
-{
-    /// <summary>N-gram based statistical model (fast, no GPU).</summary>
-    NGram,
-    /// <summary>Small neural network model (more accurate, uses GPU).</summary>
-    SmallNeural,
-    /// <summary>Custom draft model (internal/serving integration).</summary>
-    Custom
 }
 
 /// <summary>

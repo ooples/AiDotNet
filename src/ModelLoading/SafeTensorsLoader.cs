@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
+using AiDotNet.Agentic.Models.Local;
 using AiDotNet.Interfaces;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.ModelLoading;
 
@@ -66,70 +65,35 @@ public class SafeTensorsLoader<T>
         if (!File.Exists(path))
             throw new FileNotFoundException($"SafeTensors file not found: {path}", path);
 
+        // Delegate framing/header parsing to the single shared safetensors reader
+        // (bounds- and alignment-validated); this loader only maps dtype -> Tensor<T>.
         using var stream = File.OpenRead(path);
-        using var reader = new BinaryReader(stream);
-
-        // Read header length (8 bytes, little-endian)
-        var headerLength = reader.ReadInt64();
-        if (headerLength <= 0 || headerLength > 100_000_000) // Sanity check: max 100MB header
-        {
-            throw new InvalidDataException($"Invalid header length: {headerLength}");
-        }
-
-        // Read JSON header
-        var headerBytes = reader.ReadBytes((int)headerLength);
-        var headerJson = System.Text.Encoding.UTF8.GetString(headerBytes);
-
-        // Parse header as JSON
-        var header = JObject.Parse(headerJson);
-        if (header == null)
-        {
-            throw new InvalidDataException("Failed to parse SafeTensors header.");
-        }
+        var file = SafetensorsReader.Read(stream);
 
         var tensors = new Dictionary<string, Tensor<T>>();
-        var headerDataOffset = 8 + headerLength; // Skip header length + header itself
-
-        foreach (var prop in header.Properties())
+        foreach (var descriptor in file.Tensors)
         {
-            var name = prop.Name;
-
-            // Skip metadata entry
-            if (name == "__metadata__")
-                continue;
-
-            var meta = prop.Value;
-            if (meta == null)
-                continue;
-
-            var offsetsArray = meta["data_offsets"];
-            var dtypeToken = meta["dtype"];
-            var shapeArray = meta["shape"];
-
-            if (offsetsArray == null || dtypeToken == null || shapeArray == null)
-                continue;
-
-            var offsets = offsetsArray.ToObject<long[]>();
-            var dtype = dtypeToken.ToString();
-            var shape = shapeArray.ToObject<int[]>();
-
-            if (offsets == null || offsets.Length < 2 || shape == null)
-                continue;
-
-            var dataStart = offsets[0];
-            var dataEnd = offsets[1];
-            var dataLength = (int)(dataEnd - dataStart);
-
-            // Seek to tensor data
-            stream.Seek(headerDataOffset + dataStart, SeekOrigin.Begin);
-            var data = reader.ReadBytes(dataLength);
-
-            // Convert to Tensor<T>
-            var tensor = CreateTensor(data, dtype, shape);
-            tensors[name] = tensor;
+            var data = file.GetRawBytes(descriptor.Name);
+            var shape = ToIntShape(descriptor.Shape);
+            tensors[descriptor.Name] = CreateTensor(data, descriptor.DataType, shape);
         }
 
         return tensors;
+    }
+
+    /// <summary>
+    /// Converts a safetensors <see cref="long"/> shape to the <see cref="int"/> shape
+    /// <see cref="Tensor{T}"/> uses, guarding against dimensions that overflow int.
+    /// </summary>
+    private static int[] ToIntShape(IReadOnlyList<long> shape)
+    {
+        var result = new int[shape.Count];
+        for (int i = 0; i < shape.Count; i++)
+        {
+            result[i] = checked((int)shape[i]);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -161,46 +125,17 @@ public class SafeTensorsLoader<T>
             throw new FileNotFoundException($"SafeTensors file not found: {path}", path);
 
         using var stream = File.OpenRead(path);
-        using var reader = new BinaryReader(stream);
-
-        var headerLength = reader.ReadInt64();
-        var headerBytes = reader.ReadBytes((int)headerLength);
-        var headerJson = System.Text.Encoding.UTF8.GetString(headerBytes);
-        var header = JObject.Parse(headerJson);
+        var file = SafetensorsReader.Read(stream);
 
         var result = new List<TensorMetadata>();
-
-        if (header == null)
-            return result;
-
-        foreach (var prop in header.Properties())
+        foreach (var descriptor in file.Tensors)
         {
-            if (prop.Name == "__metadata__")
-                continue;
-
-            var meta = prop.Value;
-            if (meta == null)
-                continue;
-
-            var dtypeToken = meta["dtype"];
-            var shapeArray = meta["shape"];
-            var offsetsArray = meta["data_offsets"];
-
-            if (dtypeToken == null || shapeArray == null)
-                continue;
-
-            var shape = shapeArray.ToObject<int[]>() ?? Array.Empty<int>();
-            var offsets = offsetsArray?.ToObject<long[]>();
-            var dataSize = (offsets != null && offsets.Length >= 2)
-                ? offsets[1] - offsets[0]
-                : 0;
-
             result.Add(new TensorMetadata
             {
-                Name = prop.Name,
-                DataType = dtypeToken.ToString(),
-                Shape = shape,
-                DataSizeBytes = dataSize
+                Name = descriptor.Name,
+                DataType = descriptor.DataType,
+                Shape = ToIntShape(descriptor.Shape),
+                DataSizeBytes = descriptor.ByteLength
             });
         }
 

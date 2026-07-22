@@ -141,6 +141,10 @@ public static class YamlDocsGenerator
                 case "Pipeline":
                     GeneratePipelineDocs(sb, section);
                     break;
+                case "RagComposite":
+                case "ActionParams":
+                    GenerateInterfaceSectionDocs(sb, section);
+                    break;
                 case "Poco" when !section.IsHandWritten:
                     GeneratePocoFromMetadataDocs(sb, section);
                     break;

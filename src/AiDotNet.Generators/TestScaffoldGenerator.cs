@@ -1440,6 +1440,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             foreach (var model in untestedModels)
             {
+                // The ONNX-inference wrapper AiDotNet.VisionLanguage.Document.LayoutLMv3 shares its simple
+                // class name with the trainable AiDotNet.Document.LayoutAware.LayoutLMv3. Only one model can
+                // own the generated "LayoutLMv3Tests" class, and the wrapper's public API is ONNX-file-based
+                // (not a from-scratch trainable model that satisfies the training invariants), so it is
+                // skipped here and the trainable namesake is scaffolded instead.
+                if (model.FullyQualifiedName.IndexOf(
+                        "AiDotNet.VisionLanguage.Document.LayoutLMv3", System.StringComparison.Ordinal) >= 0)
+                {
+                    continue;
+                }
+
                 var family = ResolveTestBaseClass(model);
                 if (family is null)
                     continue;
@@ -3166,12 +3177,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "LayoutLMv3" && model.TypeParameterCount == 1)
             {
-                // LayoutLMv3 (Huang et al. 2022) native default is BERT-base scale — 768-wide, 12
-                // transformer layers, vocab 50265, 224px ViT patch embedding. Each CPU training iteration
-                // is multiple seconds so the heavier invariants time out. Build the IDENTICAL unified
-                // text-image architecture (word embeddings + ViT patch embeddings -> shared multimodal
-                // transformer, run via the modality-robust RunModalityForward) at CI-smoke
+                // AiDotNet.Document.LayoutAware.LayoutLMv3 (Huang et al. 2022) native default is BERT-base
+                // scale — 768-wide, 12 transformer layers, vocab 50265, 224px ViT patch embedding. Each CPU
+                // training iteration is multiple seconds so the heavier invariants time out. Build the
+                // IDENTICAL unified text-image architecture (word embeddings + ViT patch embeddings -> shared
+                // multimodal transformer, run via the modality-robust RunModalityForward) at CI-smoke
                 // width/depth/vocab. Token-ID InputShape [16] is emitted by the token-based document branch.
+                // NOTE: the ONNX-inference-wrapper namesake AiDotNet.VisionLanguage.Document.LayoutLMv3 is
+                // excluded from scaffolding (see the collection filter) so this trainable model is the one tested.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +

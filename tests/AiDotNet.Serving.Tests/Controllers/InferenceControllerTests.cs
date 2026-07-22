@@ -95,7 +95,7 @@ public sealed class InferenceControllerTests
             modelRepository: new FakeModelRepository(modelInfo: null),
             requestBatcher: new FakeRequestBatcher(Vector<double>.CreateDefault(1, 0d)));
 
-        var result = controller.GenerateWithSpeculativeDecoding("missing", new SpeculativeDecodingRequest
+        var result = await controller.GenerateWithSpeculativeDecoding("missing", new SpeculativeDecodingRequest
         {
             InputTokens = [1, 2, 3],
             MaxNewTokens = 4
@@ -116,7 +116,7 @@ public sealed class InferenceControllerTests
                 nonGenerative),
             requestBatcher: new FakeRequestBatcher(Vector<double>.CreateDefault(1, 0d)));
 
-        var result = controller.GenerateWithSpeculativeDecoding("m", new SpeculativeDecodingRequest
+        var result = await controller.GenerateWithSpeculativeDecoding("m", new SpeculativeDecodingRequest
         {
             InputTokens = [1, 2, 3],
             MaxNewTokens = 4
@@ -155,7 +155,7 @@ public sealed class InferenceControllerTests
                 generative),
             requestBatcher: new FakeRequestBatcher(Vector<double>.CreateDefault(1, 0d)));
 
-        var result = controller.GenerateWithSpeculativeDecoding("lm", new SpeculativeDecodingRequest
+        var result = await controller.GenerateWithSpeculativeDecoding("lm", new SpeculativeDecodingRequest
         {
             InputTokens = [1, 5],
             MaxNewTokens = 3,

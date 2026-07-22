@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
@@ -178,5 +180,19 @@ public class StubGenerator<T> : IGenerator<T>
             Citations = citations,
             ConfidenceScore = confidenceScore
         };
+    }
+
+    /// <inheritdoc/>
+    public Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Generate(prompt));
+    }
+
+    /// <inheritdoc/>
+    public Task<GroundedAnswer<T>> GenerateGroundedAsync(string query, IEnumerable<Document<T>> context, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GenerateGrounded(query, context));
     }
 }

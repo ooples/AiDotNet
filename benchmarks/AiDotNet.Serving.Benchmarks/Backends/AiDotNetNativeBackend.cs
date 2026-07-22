@@ -48,7 +48,10 @@ public sealed class AiDotNetNativeBackend : IServingBackend
             {
                 ["inputTokens"] = spec.PromptTokenIds ?? Array.Empty<int>(),
                 ["maxNewTokens"] = spec.MaxTokens,
-                ["temperature"] = _o.Temperature <= 0 ? 1.0 : _o.Temperature, // native requires temperature > 0
+                // Pass the requested temperature through unchanged. The native endpoint requires > 0; the
+                // unsupported greedy (temperature 0) case is rejected up front in BenchmarkOptions.Parse
+                // rather than silently substituted here (which would benchmark different semantics).
+                ["temperature"] = _o.Temperature,
             };
             string json = JsonSerializer.Serialize(body);
 

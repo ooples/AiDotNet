@@ -2124,6 +2124,14 @@ public static class DeserializationHelper
                     $"{genericDef.Name} divisibility violation: embeddingDimension ({embDim}) " +
                     $"must be a multiple of numHeads ({numHeads}). Serialized metadata is corrupt.");
             }
+            // Restore the remaining shape/behaviour ctor arguments (added so clones stay functionally
+            // identical): custom head dimension (Gemma), causal mask, Q/K/V projection bias (Qwen2), and the
+            // attention logit soft-cap (Gemma-2). Missing => the pre-metadata default, preserving old payloads.
+            int? headDimG = TryGetInt(additionalParams, "HeadDimension");
+            bool useCausalMaskG = TryGetBool(additionalParams, "UseCausalMask") ?? false;
+            bool useProjBiasG = TryGetBool(additionalParams, "UseProjectionBias") ?? false;
+            double softcapG = TryGetDouble(additionalParams, "AttnLogitSoftcap") ?? 0.0;
+
             var ctorG = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psG = ctorG.GetParameters();
             var argsG = new object?[psG.Length];
@@ -2137,6 +2145,10 @@ public static class DeserializationHelper
                     (Type t, _) when t == typeof(int) && n == "embeddingdimension" => embDim,
                     (Type t, _) when t == typeof(int) && n == "numheads" => numHeads,
                     (Type t, _) when t == typeof(int) && n == "numkvheads" => numKVHeads,
+                    (Type t, _) when t == typeof(int?) && n == "headdimension" => headDimG,
+                    (Type t, _) when t == typeof(bool) && n == "usecausalmask" => useCausalMaskG,
+                    (Type t, _) when t == typeof(bool) && n == "useprojectionbias" => useProjBiasG,
+                    (Type t, _) when t == typeof(double) && n == "attnlogitsoftcap" => softcapG,
                     (Type t, _) when t == typeof(int) && n.Contains("layerindex") => 0,
                     (Type t, _) when t == typeof(int) => 1,
                     (Type t, _) when t == typeof(bool) => p.HasDefaultValue ? p.DefaultValue : false,
@@ -2144,6 +2156,63 @@ public static class DeserializationHelper
                 };
             }
             instance = ctorG.Invoke(argsG);
+
+            // Reconstruct RoPE / ALiBi. Both GQA layers configure positional encoding AFTER construction (it is
+            // not a ctor argument), so a clone that skipped this lost RoPE entirely and diverged. Configure it
+            // from the persisted type + theta via the layer's public method.
+            var posEncStrG = additionalParams != null && additionalParams.TryGetValue("PositionalEncoding", out var peObj)
+                ? peObj?.ToString() : null;
+            if (!string.IsNullOrEmpty(posEncStrG) && posEncStrG != "None"
+                && Enum.TryParse<Enums.PositionalEncodingType>(posEncStrG, out var peG)
+                && peG != Enums.PositionalEncodingType.None)
+            {
+                double ropeThetaG = TryGetDouble(additionalParams, "RoPETheta") ?? 10000.0;
+                var cfgMethod = type.GetMethod("ConfigurePositionalEncoding");
+                cfgMethod?.Invoke(instance, new object[] { peG, ropeThetaG, seqLen });
+            }
+        }
+        else if (genericDef.Name == "PreLNTransformerBlock`1")
+        {
+            // (int hiddenSize, int ffnDim, LayerBase<T> attention, IActivationFunction<T>? ffnActivation, bool gated).
+            // The ctor rebuilds the RMSNorms + FFN from hiddenSize/ffnDim/gated/ffnActivation; only the injected
+            // (polymorphic) attention sublayer must round-trip, so PreLNTransformerBlock.GetMetadata persists it
+            // as an "Attn."-prefixed sub-blob (type + its own metadata + shapes) which we rebuild recursively.
+            int hsPln = TryGetInt(additionalParams, "HiddenSize")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'HiddenSize' metadata.");
+            int ffPln = TryGetInt(additionalParams, "FfnDim")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
+            bool gatedPln = TryGetBool(additionalParams, "Gated")
+                ?? TryGetBool(additionalParams, "UseGatedSwiGLU")
+                ?? false;
+            var activationFuncTypePln = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? ffnActivationPln = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncTypePln);
+
+            string? attnTypePlnRaw = additionalParams != null && additionalParams.TryGetValue("Attn.LayerType", out var atObj)
+                ? atObj?.ToString() : null;
+            if (attnTypePlnRaw is null || attnTypePlnRaw.Length == 0)
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'Attn.LayerType' metadata to rebuild its attention sublayer.");
+            string attnTypePln = attnTypePlnRaw;
+            int[] attnInPln = TryGetIntArray(additionalParams, "Attn.InputShape") ?? inputShape;
+            int[] attnOutPln = TryGetIntArray(additionalParams, "Attn.OutputShape") ?? outputShape;
+            var attnParamsPln = new Dictionary<string, object>();
+            if (additionalParams != null)
+            {
+                foreach (var kv in additionalParams)
+                {
+                    if (kv.Key.Length > 5 && kv.Key.StartsWith("Attn.", StringComparison.Ordinal)
+                        && kv.Key != "Attn.LayerType" && kv.Key != "Attn.InputShape" && kv.Key != "Attn.OutputShape")
+                    {
+                        attnParamsPln[kv.Key.Substring(5)] = kv.Value;
+                    }
+                }
+            }
+            var attnLayerPln = CreateLayerFromType<T>(attnTypePln, attnInPln, attnOutPln, attnParamsPln) as LayerBase<T>
+                ?? throw new InvalidOperationException(
+                    $"{genericDef.Name}: rebuilt attention '{attnTypePln}' is not a LayerBase<T>.");
+
+            instance = new NeuralNetworks.Layers.PreLNTransformerBlock<T>(
+                hsPln, ffPln, attnLayerPln, (IActivationFunction<T>?)ffnActivationPln, gatedPln);
         }
         else if (genericDef.Name == "MesaNetLayer`1")
         {
@@ -3012,7 +3081,9 @@ public static class DeserializationHelper
         }
 
         int ffnDim = TryGetInt(additionalParams, "FfnDim") ?? (hiddenSize * 4);
-        bool useGatedSwiGLU = TryGetBool(additionalParams, "UseGatedSwiGLU") ?? false;
+        bool useGatedSwiGLU = TryGetBool(additionalParams, "Gated")
+            ?? TryGetBool(additionalParams, "UseGatedSwiGLU")
+            ?? false;
 
         // Rebuild the injected attention variant used by the model factory. VideoLLaMA2/Mistral
         // uses GQA; the earlier implementation only accepted MHA and therefore made Clone fail.

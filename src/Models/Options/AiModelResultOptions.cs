@@ -392,6 +392,21 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </remarks>
     public IEnumerable<IQueryProcessor>? QueryProcessors { get; set; }
 
+    /// <summary>
+    /// Gets or sets the chunking strategy used to split source documents into passages before embedding/indexing.
+    /// </summary>
+    public IChunkingStrategy? ChunkingStrategy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the context compressor used to shrink retrieved passages before generation.
+    /// </summary>
+    public IContextCompressor<T>? ContextCompressor { get; set; }
+
+    /// <summary>
+    /// Gets or sets the document store backing vector retrieval.
+    /// </summary>
+    public IDocumentStore<T>? DocumentStore { get; set; }
+
     // ============================================================================
     // Graph RAG Properties
     // ============================================================================
@@ -682,6 +697,24 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </para>
     /// </remarks>
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
+
+    /// <summary>
+    /// Optional user-supplied draft model for speculative decoding during serving, set via the builder's
+    /// <c>ConfigureSpeculativeDecoding</c> overloads. When set, the serving engine verifies this draft's guesses
+    /// instead of the built-in N-gram prompt-lookup draft. This is a live object, so it is not serialized and only
+    /// applies to in-process serving.
+    /// </summary>
+    /// <value>
+    /// An <see cref="AiDotNet.Inference.SpeculativeDecoding.IDraftModel{T}"/> instance, or <c>null</c> (the
+    /// default) to use the built-in N-gram prompt-lookup draft.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Speculative decoding uses a small, fast "draft" model to guess several tokens
+    /// ahead, which the main model then verifies in one pass — accepted guesses make generation faster with
+    /// identical output. Leave this null to use the built-in guesser; set it only if you have a small companion
+    /// model that predicts the same vocabulary and want the engine to use it instead.</para>
+    /// </remarks>
+    public AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? ServingDraftModel { get; set; }
 
     /// <summary>
     /// JIT compilation configuration applied on every Predict call.

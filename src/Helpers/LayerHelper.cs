@@ -25220,7 +25220,7 @@ public static class LayerHelper<T>
                 decoderFfnDim,
                 attention,
                 new SiLUActivation<T>(),
-                useGatedSwiGLU: true);
+                gated: true);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -34051,7 +34051,7 @@ public static class LayerHelper<T>
             attn.UseCausalMask = true;
             yield return new PreLNTransformerBlock<T>(
                 hiddenSize: firstStageDim, ffnDim: firstFfn, attention: attn,
-                ffnActivation: silu, useGatedSwiGLU: true);
+                ffnActivation: silu, gated: true);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         yield return new RMSNormalizationLayer<T>();
@@ -34073,7 +34073,7 @@ public static class LayerHelper<T>
             // Non-causal: the second stage attends over the whole first-two-hierarchy sequence.
             yield return new PreLNTransformerBlock<T>(
                 hiddenSize: secondStageDim, ffnDim: secondFfn, attention: attn,
-                ffnActivation: silu, useGatedSwiGLU: true);
+                ffnActivation: silu, gated: true);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         yield return new RMSNormalizationLayer<T>();

@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Construction;
 
@@ -19,8 +22,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Construction;
 /// 3. <b>Extract Relations:</b> Detect relations via co-occurrence and proximity-based patterns
 /// 4. <b>Entity Resolution:</b> Merge similar entity names to reduce duplicates
 ///
-/// This implementation works without an external LLM (purely heuristic), providing a baseline
-/// that can be extended or replaced with LLM-based extraction.
+/// When an <see cref="IGenerator{T}"/> LLM text generator is injected, construction instead prompts
+/// the model to extract entities and relations as structured JSON (Microsoft GraphRAG parity),
+/// parsing the result with Newtonsoft.Json. If no generator is injected, or if the LLM returns
+/// malformed JSON, construction transparently falls back to the regex/heuristic path documented above
+/// (an explicit offline fallback — never silent pretending).
 /// </para>
 /// <para><b>For Beginners:</b> This class reads text and automatically builds a knowledge graph.
 ///
@@ -39,6 +45,35 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Construction;
 [PipelineStage(PipelineStage.DataIngestion)]
 public class KGConstructor<T>
 {
+    /// <summary>
+    /// Optional LLM text generator used for structured entity/relation extraction.
+    /// When null, extraction uses the regex/heuristic fallback.
+    /// </summary>
+    private readonly IGenerator<T>? _generator;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KGConstructor{T}"/> class using only the
+    /// regex/heuristic (offline, no-LLM) extraction path.
+    /// </summary>
+    public KGConstructor()
+    {
+        _generator = null;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KGConstructor{T}"/> class with an optional
+    /// LLM text generator. When <paramref name="generator"/> is non-null (and LLM extraction is
+    /// enabled in the options), entities and relations are extracted by prompting the model for
+    /// structured JSON; otherwise the regex/heuristic fallback is used.
+    /// </summary>
+    /// <param name="generator">
+    /// The LLM text generator to drive extraction, or null to use the regex/heuristic fallback.
+    /// </param>
+    public KGConstructor(IGenerator<T>? generator)
+    {
+        _generator = generator;
+    }
+
     // Matches capitalized phrases including:
     // - Multi-word names: "Albert Einstein", "New York City"
     // - Names with connectors: "University of Cambridge", "Ludwig van Beethoven"
@@ -121,13 +156,32 @@ public class KGConstructor<T>
         // Step 2 & 3: Extract entities and relations from each chunk
         var allEntities = new List<ExtractedEntity>();
         var allRelations = new List<ExtractedRelation>();
+        var allClaims = new List<ExtractedClaim>();
+
+        bool useLlm = _generator != null && opts.GetEffectiveUseLlmExtraction();
+        bool extractClaims = useLlm && opts.GetEffectiveExtractClaims();
 
         foreach (var chunk in chunks)
         {
-            var entities = ExtractEntities(chunk, opts.GetEffectiveEntityConfidenceThreshold());
-            allEntities.AddRange(entities);
+            List<ExtractedEntity> entities;
+            List<ExtractedRelation> relations;
 
-            var relations = ExtractRelations(chunk, entities, opts.GetEffectiveMaxEntitiesPerSentence());
+            // LLM-based extraction path (Microsoft GraphRAG parity), with a transparent
+            // degrade-to-regex fallback whenever the model output cannot be parsed.
+            if (useLlm &&
+                TryExtractWithLlm(chunk, extractClaims, out var llmEntities, out var llmRelations, out var llmClaims))
+            {
+                entities = llmEntities;
+                relations = llmRelations;
+                allClaims.AddRange(llmClaims);
+            }
+            else
+            {
+                entities = ExtractEntities(chunk, opts.GetEffectiveEntityConfidenceThreshold());
+                relations = ExtractRelations(chunk, entities, opts.GetEffectiveMaxEntitiesPerSentence());
+            }
+
+            allEntities.AddRange(entities);
             allRelations.AddRange(relations);
         }
 
@@ -141,6 +195,10 @@ public class KGConstructor<T>
 
         // Step 5: Add to graph
         AddToGraph(graph, allEntities, allRelations);
+
+        // Step 6: Attach extracted claims (covariates) to their subject nodes, if any.
+        if (allClaims.Count > 0)
+            AttachClaims(graph, allClaims);
 
         return graph;
     }
@@ -292,6 +350,332 @@ public class KGConstructor<T>
         return relations;
     }
 
+    #region LLM-based extraction (Microsoft GraphRAG parity)
+
+    /// <summary>
+    /// Attempts LLM-driven structured extraction of entities and relations (and optionally claims)
+    /// from a text chunk. Returns false — signaling the caller to use the regex/heuristic
+    /// fallback — when the generator is unavailable, throws, returns empty text, or emits JSON that
+    /// cannot be parsed into at least one entity.
+    /// </summary>
+    /// <param name="chunk">The text chunk to extract from.</param>
+    /// <param name="includeClaims">Whether to request claim/covariate extraction.</param>
+    /// <param name="entities">The parsed entities on success; empty otherwise.</param>
+    /// <param name="relations">The parsed relations on success; empty otherwise.</param>
+    /// <param name="claims">The parsed claims on success; empty otherwise.</param>
+    /// <returns>True if extraction succeeded and yielded at least one entity; otherwise false.</returns>
+    private bool TryExtractWithLlm(
+        string chunk,
+        bool includeClaims,
+        out List<ExtractedEntity> entities,
+        out List<ExtractedRelation> relations,
+        out List<ExtractedClaim> claims)
+    {
+        entities = new List<ExtractedEntity>();
+        relations = new List<ExtractedRelation>();
+        claims = new List<ExtractedClaim>();
+
+        if (_generator == null)
+            return false;
+
+        string response;
+        try
+        {
+            response = _generator.Generate(BuildExtractionPrompt(chunk, includeClaims));
+        }
+        catch (Exception ex)
+        {
+            // Any generator failure degrades to the regex/heuristic fallback rather than throwing.
+            System.Diagnostics.Trace.TraceWarning(
+                $"KGConstructor: LLM extraction generator threw ({ex.GetType().Name}); using regex fallback.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(response))
+            return false;
+
+        if (!TryParseExtractionJson(response, includeClaims, out entities, out relations, out claims))
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "KGConstructor: LLM extraction returned malformed JSON; using regex fallback.");
+            return false;
+        }
+
+        // A successful parse must yield at least one entity to be usable; otherwise fall back so
+        // the graph is not silently left empty for a chunk that clearly contains content.
+        if (entities.Count == 0)
+            return false;
+
+        // Ensure every relation endpoint exists as an entity node so no edges are silently dropped.
+        EnsureRelationEndpointsExist(entities, relations);
+        return true;
+    }
+
+    /// <summary>
+    /// Builds the extraction prompt sent to the LLM. Requests strict JSON in a fixed schema.
+    /// </summary>
+    internal static string BuildExtractionPrompt(string chunk, bool includeClaims)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("You are an information-extraction system that builds knowledge graphs.");
+        sb.AppendLine("Extract the named entities and the relationships between them from the TEXT below.");
+        sb.AppendLine();
+        sb.AppendLine("Respond with ONLY a single JSON object (no markdown, no code fences, no commentary)");
+        sb.AppendLine("using EXACTLY this schema:");
+        sb.AppendLine("{");
+        sb.AppendLine("  \"entities\": [");
+        sb.AppendLine("    { \"name\": \"<entity name>\", \"type\": \"<PERSON|ORGANIZATION|LOCATION|EVENT|CONCEPT|PRODUCT|OTHER>\", \"description\": \"<one sentence>\" }");
+        sb.AppendLine("  ],");
+        sb.AppendLine("  \"relations\": [");
+        sb.AppendLine("    { \"source\": \"<entity name>\", \"relation\": \"<RELATION_TYPE>\", \"target\": \"<entity name>\", \"description\": \"<one sentence>\" }");
+        if (includeClaims)
+        {
+            sb.AppendLine("  ],");
+            sb.AppendLine("  \"claims\": [");
+            sb.AppendLine("    { \"subject\": \"<entity name>\", \"object\": \"<entity name or NONE>\", \"type\": \"<claim type>\", \"description\": \"<one sentence>\", \"status\": \"<TRUE|FALSE|SUSPECTED>\" }");
+            sb.AppendLine("  ]");
+        }
+        else
+        {
+            sb.AppendLine("  ]");
+        }
+        sb.AppendLine("}");
+        sb.AppendLine();
+        sb.AppendLine("Rules:");
+        sb.AppendLine("- Use the entity's exact surface name. Relation source/target MUST match an entity name.");
+        sb.AppendLine("- RELATION_TYPE should be a short UPPER_SNAKE_CASE verb phrase (e.g., WORKS_AT, BORN_IN, FOUNDED).");
+        sb.AppendLine("- If there are no entities, return {\"entities\": [], \"relations\": []}.");
+        sb.AppendLine();
+        sb.AppendLine("TEXT:");
+        sb.AppendLine("\"\"\"");
+        sb.AppendLine(chunk);
+        sb.AppendLine("\"\"\"");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Parses the LLM JSON response into entities, relations, and (optionally) claims.
+    /// Tolerates surrounding prose or markdown code fences by isolating the outermost JSON object.
+    /// Returns false on any parse failure so the caller can degrade to the regex fallback.
+    /// </summary>
+    internal static bool TryParseExtractionJson(
+        string response,
+        bool includeClaims,
+        out List<ExtractedEntity> entities,
+        out List<ExtractedRelation> relations,
+        out List<ExtractedClaim> claims)
+    {
+        entities = new List<ExtractedEntity>();
+        relations = new List<ExtractedRelation>();
+        claims = new List<ExtractedClaim>();
+
+        var json = ExtractJsonObject(response);
+        if (json == null)
+            return false;
+
+        JObject root;
+        try
+        {
+            root = JObject.Parse(json);
+        }
+        catch (Exception)
+        {
+            // Newtonsoft throws JsonReaderException/JsonException on malformed input; treat any
+            // failure as malformed and degrade to the fallback.
+            return false;
+        }
+
+        try
+        {
+            if (root["entities"] is JArray entityArray)
+            {
+                foreach (var item in entityArray)
+                {
+                    var name = GetString(item, "name");
+                    if (string.IsNullOrWhiteSpace(name))
+                        continue;
+
+                    var type = GetString(item, "type");
+                    entities.Add(new ExtractedEntity
+                    {
+                        Name = name.Trim(),
+                        Label = NormalizeLabel(type),
+                        Description = GetString(item, "description").Trim(),
+                        Confidence = 0.9,
+                        StartOffset = 0,
+                        EndOffset = 0
+                    });
+                }
+            }
+
+            if (root["relations"] is JArray relationArray)
+            {
+                foreach (var item in relationArray)
+                {
+                    var source = GetString(item, "source");
+                    var target = GetString(item, "target");
+                    if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(target))
+                        continue;
+
+                    var relationType = NormalizeRelationType(GetString(item, "relation"));
+                    relations.Add(new ExtractedRelation
+                    {
+                        SourceEntity = source.Trim(),
+                        TargetEntity = target.Trim(),
+                        RelationType = relationType,
+                        Description = GetString(item, "description").Trim(),
+                        Confidence = 0.9
+                    });
+                }
+            }
+
+            if (includeClaims && root["claims"] is JArray claimArray)
+            {
+                foreach (var item in claimArray)
+                {
+                    var subject = GetString(item, "subject");
+                    if (string.IsNullOrWhiteSpace(subject))
+                        continue;
+
+                    claims.Add(new ExtractedClaim
+                    {
+                        Subject = subject.Trim(),
+                        Object = GetString(item, "object").Trim(),
+                        ClaimType = GetString(item, "type").Trim(),
+                        Description = GetString(item, "description").Trim(),
+                        Status = GetString(item, "status").Trim()
+                    });
+                }
+            }
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        // A response whose JSON parsed but contained neither an "entities" nor a "relations"
+        // array is treated as malformed so we fall back.
+        return root["entities"] != null || root["relations"] != null;
+    }
+
+    /// <summary>
+    /// Isolates the outermost JSON object (from the first '{' to the last '}') within an LLM
+    /// response, discarding any surrounding prose or markdown fences. Returns null if none found.
+    /// </summary>
+    private static string? ExtractJsonObject(string response)
+    {
+        if (string.IsNullOrEmpty(response))
+            return null;
+
+        int start = response.IndexOf('{');
+        int end = response.LastIndexOf('}');
+        if (start < 0 || end <= start)
+            return null;
+
+        return response.Substring(start, end - start + 1);
+    }
+
+    private static string GetString(JToken? token, string key)
+    {
+        if (token == null)
+            return string.Empty;
+        var value = token[key];
+        if (value == null || value.Type == JTokenType.Null)
+            return string.Empty;
+        return value.ToString();
+    }
+
+    private static string NormalizeLabel(string type)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+            return "ENTITY";
+        return type.Trim().ToUpperInvariant();
+    }
+
+    private static string NormalizeRelationType(string relation)
+    {
+        if (string.IsNullOrWhiteSpace(relation))
+            return "RELATED_TO";
+
+        var cleaned = relation.Trim().ToUpperInvariant();
+        var sb = new StringBuilder(cleaned.Length);
+        foreach (var ch in cleaned)
+        {
+            if (char.IsLetterOrDigit(ch))
+                sb.Append(ch);
+            else if (ch == ' ' || ch == '-' || ch == '_')
+                sb.Append('_');
+            // drop other punctuation
+        }
+
+        var result = sb.ToString().Trim('_');
+        return result.Length == 0 ? "RELATED_TO" : result;
+    }
+
+    /// <summary>
+    /// Adds a minimal entity for any relation endpoint that was not itself extracted as an entity,
+    /// so LLM-declared edges are not dropped during graph construction.
+    /// </summary>
+    private static void EnsureRelationEndpointsExist(
+        List<ExtractedEntity> entities,
+        List<ExtractedRelation> relations)
+    {
+        var known = new HashSet<string>(entities.Select(e => e.Name), StringComparer.OrdinalIgnoreCase);
+        foreach (var relation in relations)
+        {
+            AddMissingEndpoint(entities, known, relation.SourceEntity);
+            AddMissingEndpoint(entities, known, relation.TargetEntity);
+        }
+    }
+
+    private static void AddMissingEndpoint(
+        List<ExtractedEntity> entities,
+        HashSet<string> known,
+        string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || known.Contains(name))
+            return;
+
+        known.Add(name);
+        entities.Add(new ExtractedEntity
+        {
+            Name = name,
+            Label = "ENTITY",
+            Confidence = 0.7,
+            StartOffset = 0,
+            EndOffset = 0
+        });
+    }
+
+    /// <summary>
+    /// Attaches extracted claims to their subject nodes under the "claims" property (as a list of
+    /// descriptions). Claims whose subject is not present in the graph are ignored.
+    /// </summary>
+    private static void AttachClaims(KnowledgeGraph<T> graph, List<ExtractedClaim> claims)
+    {
+        foreach (var claim in claims)
+        {
+            if (string.IsNullOrWhiteSpace(claim.Subject))
+                continue;
+
+            string nodeId = claim.Subject.ToLowerInvariant().Replace(' ', '_');
+            var node = graph.GetNode(nodeId);
+            if (node == null)
+                continue;
+
+            var existing = node.GetProperty<List<string>>("claims") ?? new List<string>();
+            var text = string.IsNullOrWhiteSpace(claim.ClaimType)
+                ? claim.Description
+                : $"[{claim.ClaimType}] {claim.Description}";
+            if (!string.IsNullOrWhiteSpace(claim.Status))
+                text += $" (status: {claim.Status})";
+            existing.Add(text.Trim());
+            node.SetProperty("claims", existing);
+        }
+    }
+
+    #endregion
+
     private static List<string> ChunkText(string text, int maxChunkSize, int overlap)
     {
         if (maxChunkSize <= 0)
@@ -377,6 +761,7 @@ public class KGConstructor<T>
                 Name = canonicalName,
                 Label = entity.Label,
                 Confidence = entity.Confidence,
+                Description = entity.Description,
                 StartOffset = entity.StartOffset,
                 EndOffset = entity.EndOffset
             });
@@ -393,6 +778,7 @@ public class KGConstructor<T>
             SourceEntity = resolvedMap.TryGetValue(r.SourceEntity, out var s) ? s : r.SourceEntity,
             TargetEntity = resolvedMap.TryGetValue(r.TargetEntity, out var t) ? t : r.TargetEntity,
             RelationType = r.RelationType,
+            Description = r.Description,
             Confidence = r.Confidence
         })
         .Where(r => r.SourceEntity != r.TargetEntity) // Remove self-loops from resolution
@@ -414,6 +800,8 @@ public class KGConstructor<T>
             var node = new GraphNode<T>(nodeId, entity.Label);
             node.SetProperty("name", entity.Name);
             node.SetProperty("confidence", entity.Confidence);
+            if (!string.IsNullOrWhiteSpace(entity.Description))
+                node.SetProperty("description", entity.Description);
             graph.AddNode(node);
         }
 
@@ -429,6 +817,8 @@ public class KGConstructor<T>
             {
                 var edge = new GraphEdge<T>(sourceId, targetId, relation.RelationType,
                     Math.Max(0.0, Math.Min(1.0, relation.Confidence)));
+                if (!string.IsNullOrWhiteSpace(relation.Description))
+                    edge.SetProperty("description", relation.Description);
                 graph.AddEdge(edge);
             }
             catch (InvalidOperationException ex)

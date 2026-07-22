@@ -62,6 +62,8 @@
     <ProjectReference Include="..\..\src\AiDotNet.Serving\AiDotNet.Serving.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Postgres\AiDotNet.Storage.Postgres.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Redis\AiDotNet.Storage.Redis.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Storage.Neo4j\AiDotNet.Storage.Neo4j.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Storage.Elasticsearch\AiDotNet.Storage.Elasticsearch.csproj" />
   </ItemGroup>
 
   <ItemGroup>

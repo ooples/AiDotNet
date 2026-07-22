@@ -4,7 +4,9 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
 /// <summary>
-/// A simple n-gram based draft model for testing and baselines.
+/// A simple n-gram based draft model for speculative decoding. It is the zero-cost default "guesser": it
+/// predicts the next token from the statistics of which tokens typically follow the recent ones, needing no
+/// second neural network and no GPU.
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> This is a very simple model that predicts
@@ -13,11 +15,14 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// For example, if "the" is often followed by "quick" in training data,
 /// then when we see "the", this model might predict "quick".
 ///
-/// It's not as good as a neural network, but it's very fast!
+/// It's not as good as a neural network, but it's very fast! Speculative decoding uses it as the default
+/// "guesser" — you can pass one to the builder's <c>ConfigureSpeculativeDecoding</c> if you want to control its
+/// order/seed, or supply your own <see cref="IDraftModel{T}"/> (for example a
+/// <see cref="NeuralDraftModel{T}"/> wrapping a smaller model) for smarter guesses.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-internal class NGramDraftModel<T> : IDraftModel<T>
+public class NGramDraftModel<T> : IDraftModel<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

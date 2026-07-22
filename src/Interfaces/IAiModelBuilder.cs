@@ -277,6 +277,35 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
+    /// Configures the model from a pretrained checkpoint (Hugging Face hub id or local safetensors
+    /// directory), reconstructing the architecture and loading its weights automatically.
+    /// </summary>
+    /// <param name="source">The pretrained-source descriptor (see
+    /// <see cref="AiDotNet.ModelLoading.Pretrained.PretrainedSource"/>), e.g.
+    /// <c>PretrainedSource.HuggingFace("meta-llama/Llama-3.1-8B-Instruct")</c>.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Instead of building a model layer by layer or training from scratch, hand
+    /// the builder a pretrained model's name and it downloads, reconstructs, and loads it for you — ready
+    /// to serve, fine-tune, or export like any other configured model. The builder's input/output types
+    /// must be <c>Tensor&lt;T&gt;</c> for decoder language models.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModel(AiDotNet.ModelLoading.Pretrained.PretrainedSource source);
+
+    /// <summary>
+    /// Configures the model from a pretrained checkpoint and places it on the given device — the common
+    /// "load this model straight onto my GPU" case. Equivalent to
+    /// <c>ConfigureModel(source)</c> followed by moving the model with
+    /// <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.To(AiDotNet.Tensors.DeviceInfo)"/>.
+    /// </summary>
+    /// <param name="source">The pretrained-source descriptor.</param>
+    /// <param name="device">The target device, e.g. <c>DeviceInfo.Cuda(0)</c> or <c>DeviceInfo.OpenCL()</c>.
+    /// Type-safe (enum-based) — no device strings.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModel(
+        AiDotNet.ModelLoading.Pretrained.PretrainedSource source, AiDotNet.Tensors.DeviceInfo device);
+
+    /// <summary>
     /// Configures the optimization algorithm for the model.
     /// </summary>
     /// <remarks>
@@ -687,7 +716,10 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
     /// <param name="graphStore">Optional graph storage backend for Graph RAG (e.g., MemoryGraphStore, FileGraphStore).</param>
     /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
-    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
+    /// <param name="documentStore">Optional document store. Folded into a hybrid retriever when a knowledge graph is
+    /// also present; otherwise (with no explicit <paramref name="retriever"/>) a default dense vector retriever is built over it.</param>
+    /// <param name="chunkingStrategy">Optional chunking strategy used to split source documents into passages before indexing/embedding.</param>
+    /// <param name="contextCompressor">Optional context compressor used to shrink retrieved passages before they reach the generator.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
@@ -696,7 +728,9 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         IGraphStore<T>? graphStore = null,
         KnowledgeGraph<T>? knowledgeGraph = null,
-        IDocumentStore<T>? documentStore = null);
+        IDocumentStore<T>? documentStore = null,
+        IChunkingStrategy? chunkingStrategy = null,
+        IContextCompressor<T>? contextCompressor = null);
 
     /// <summary>
     /// Configures advanced knowledge graph capabilities including embeddings, community detection,
@@ -1351,7 +1385,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// {
     ///     EnableKVCache = true,
     ///     MaxBatchSize = 64,
-    ///     EnableSpeculativeDecoding = true
+    ///     SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
     /// };
     ///
     /// var result = await builder
@@ -1361,6 +1395,63 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
+
+    /// <summary>
+    /// Enables and configures speculative decoding using an explicit draft "guesser" model. The serving engine
+    /// verifies this draft's guessed tokens against the target model, accelerating generation beyond the built-in
+    /// N-gram prompt-lookup draft — with no change to the output.
+    /// </summary>
+    /// <param name="draftModel">The guesser implementing <see cref="AiDotNet.Inference.SpeculativeDecoding.IDraftModel{T}"/>
+    /// (e.g. <see cref="AiDotNet.Inference.SpeculativeDecoding.NGramDraftModel{T}"/> or
+    /// <see cref="AiDotNet.Inference.SpeculativeDecoding.NeuralDraftModel{T}"/>).</param>
+    /// <param name="options">Optional speculation tuning; when omitted the existing/default tuning is used. Calling
+    /// this method turns speculative decoding on regardless.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Speculative decoding uses a small, fast "guesser" model to propose the next
+    /// few tokens for the big model to verify — often 1.5–3× faster with identical output. This lets you plug in
+    /// your own guesser. The draft is a live object, so it applies to in-process serving only.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSpeculativeDecoding(
+        AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T> draftModel,
+        AiDotNet.Configuration.SpeculativeDecodingOptions? options = null);
+
+    /// <summary>
+    /// Enables and configures speculative decoding using one of your own token-generation models as the draft
+    /// "guesser" (built via <c>ConfigureModel</c> or loaded, e.g. from ONNX). It is wrapped as the draft and its
+    /// guesses are verified against the target model, so the output is unchanged.
+    /// </summary>
+    /// <param name="draftModel">A smaller/faster token-generation model whose <c>Predict</c> maps a
+    /// <c>[1, sequenceLength]</c> token tensor to next-token logits (an <see cref="IFullModel{T, TInput, TOutput}"/>
+    /// over <c>Tensor&lt;T&gt;</c> that also implements <see cref="IModelShape"/>).</param>
+    /// <param name="options">Optional speculation tuning; when omitted the existing/default tuning is used. Calling
+    /// this method turns speculative decoding on regardless.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Because AiDotNet lets you train or load your own models, you can use a small, cheap
+    /// model of your own as the guesser for a bigger one. Pass that smaller model here and it becomes the draft — the
+    /// big model still checks every guess, so quality is identical, just faster.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSpeculativeDecoding(
+        IFullModel<T, TInput, TOutput> draftModel,
+        AiDotNet.Configuration.SpeculativeDecodingOptions? options = null);
+
+    /// <summary>
+    /// Enables and tunes speculative decoding using the built-in, zero-cost N-gram / prompt-lookup draft (no extra
+    /// model required). The serving engine verifies its guesses against the target model, so the output is identical.
+    /// </summary>
+    /// <param name="options">Tuning for speculation (depth, policy, method, tree speculation). Calling this method
+    /// turns speculative decoding on.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The simplest way to get the speculative-decoding speedup: no second model, just
+    /// the free word-pattern guesser. Use one of the draft-model overloads for a smarter guesser.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSpeculativeDecoding(
+        AiDotNet.Configuration.SpeculativeDecodingOptions options);
 
     /// <summary>
     /// Enables JIT (Just-In-Time) compilation for the built model's forward-pass
@@ -2393,5 +2484,63 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="metric">The similarity metric implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureSimilarityMetric(RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T> metric);
+
+    /// <summary>
+    /// Configures a vector document store as the RAG backend, building a default dense retriever over it.
+    /// </summary>
+    /// <param name="store">The document store to retrieve from.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureVectorStore(IDocumentStore<T> store, int defaultTopK = 5);
+
+    /// <summary>
+    /// Configures an in-memory vector index (Flat / HNSW / IVF / LSH) with a similarity metric and builds
+    /// a dense retriever over it.
+    /// </summary>
+    /// <param name="indexKind">Which in-memory index to build.</param>
+    /// <param name="vectorDimension">The embedding dimension (0 = inferred on first add).</param>
+    /// <param name="metric">The similarity metric; when null the configured metric (or cosine) is used.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureVectorIndex(
+        AiDotNet.Enums.VectorIndexKind indexKind = AiDotNet.Enums.VectorIndexKind.Flat,
+        int vectorDimension = 0,
+        RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? metric = null,
+        int defaultTopK = 5);
+
+    /// <summary>
+    /// Configures a dependency-free native ANN index (Flat / IVF / PQ / IVFPQ) implemented on the AiDotNet
+    /// Tensors fused-kernel stack, adapts it into a document store, and builds a dense retriever over it. This
+    /// is the self-contained replacement for the external FaissNet backend — no FAISS / MKL native dependency —
+    /// and dispatches to the GPU ANN kernels across all supported backends when <paramref name="useGpu"/> is set.
+    /// </summary>
+    /// <param name="indexType">Which native ANN structure to build (default exact Flat).</param>
+    /// <param name="vectorDimension">The embedding dimension (0 = inferred on first add).</param>
+    /// <param name="metric">Distance metric (default cosine).</param>
+    /// <param name="nlist">IVF coarse lists (IVF/IVFPQ only).</param>
+    /// <param name="nprobe">IVF lists probed per query (IVF/IVFPQ only).</param>
+    /// <param name="m">PQ subspaces (PQ/IVFPQ only; must divide the dimension).</param>
+    /// <param name="ksub">PQ sub-centroids per subspace (PQ/IVFPQ only).</param>
+    /// <param name="useGpu">When true, attaches the best available GPU backend so ANN ops use the fused kernels.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureNativeAnnIndex(
+        RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorIndexType indexType = RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorIndexType.Flat,
+        int vectorDimension = 0,
+        RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorMetric metric = RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorMetric.Cosine,
+        int nlist = 64,
+        int nprobe = 8,
+        int m = 8,
+        int ksub = 256,
+        bool useGpu = false,
+        int defaultTopK = 5);
+
+    /// <summary>
+    /// Materializes a declarative RAG configuration into the builder's RAG components (chunking, embedding,
+    /// document store + retriever, reranking, context compression).
+    /// </summary>
+    /// <param name="config">The RAG configuration to apply.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRAG(RetrievalAugmentedGeneration.Configuration.RAGConfiguration<T> config);
 
 }

@@ -1,0 +1,1083 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using AiDotNet.ModelLoading.Pretrained;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization.Models;
+using Xunit;
+
+namespace AiDotNet.Tests.ModelLoading
+{
+    /// <summary>
+    /// End-to-end tests for GGUF import: synthesize a tiny llama.cpp-format GGUF in memory, then load it
+    /// through the full facade path (<see cref="PretrainedLoader{T}"/> / <see cref="GgufModelSource"/>) and
+    /// run a forward pass. Exercises metadata→config, GGUF→Hugging Face name remapping, tie-detection, and a
+    /// non-llama-named (qwen2) architecture.
+    /// </summary>
+    public class GgufEndToEndTests
+    {
+        /// <summary>
+        /// Parity check: the tokenizer built from a real SmolLM2 GGUF must produce byte-for-byte the same
+        /// token ids as llama.cpp for the same text (ground truth captured from llama.cpp's /tokenize on
+        /// SmolLM2-135M-Instruct-Q8_0). Gated on the model file being present locally (set
+        /// AIDOTNET_SMOLLM2_GGUF), since the multi-hundred-MB checkpoint is not committed.
+        /// </summary>
+        [Fact]
+        public void Gguf_Tokenizer_MatchesLlamaCpp_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return; // local-only: requires the real SmolLM2 GGUF checkpoint.
+            }
+
+            using var src = GgufModelSource.Open(path);
+            var tokenizer = src.BuildTokenizer();
+            var opts = new EncodingOptions { AddSpecialTokens = false };
+
+            Assert.Equal(
+                new[] { 19556, 905 },
+                tokenizer.Encode("Hello world", opts).TokenIds.ToArray());
+            Assert.Equal(
+                new[] { 504, 2365, 6354, 16438, 27003, 690, 260, 23790, 2767, 30 },
+                tokenizer.Encode("The quick brown fox jumps over the lazy dog.", opts).TokenIds.ToArray());
+            Assert.Equal(
+                new[] { 1604, 3987, 46477, 24, 94, 727 },
+                tokenizer.Encode("def fibonacci(n):", opts).TokenIds.ToArray());
+
+            // Round-trip: ids -> exact original text (byte-level BPE is lossless).
+            Assert.Equal("Hello world", tokenizer.Decode(new List<int> { 19556, 905 }, skipSpecialTokens: true));
+        }
+
+        /// <summary>
+        /// End-to-end generation parity: load the real SmolLM2 GGUF (decoder + tokenizer), encode a prompt
+        /// with no added special tokens, and assert (a) the token ids match llama.cpp and (b) the greedy
+        /// next token is the one llama.cpp predicts (" Paris", id 7042, for "The capital of France is").
+        /// This is the generation-correctness check the shape-only GGUF tests never had. Gated on the model
+        /// file (set AIDOTNET_SMOLLM2_GGUF).
+        /// </summary>
+        [Fact]
+        public void Gguf_Generation_MatchesLlamaCpp_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return;
+            }
+
+            var (model, tokenizer) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+
+            // Tokenization must match llama.cpp exactly first (isolates tokenizer vs forward).
+            var ids = tokenizer.Encode(
+                "The capital of France is", new EncodingOptions { AddSpecialTokens = false }).TokenIds;
+            Assert.Equal(new[] { 504, 3575, 282, 4649, 314 }, ids.ToArray());
+
+            // Single-token forward is RoPE-independent (position 0 => rotation angle 0), so this isolates the
+            // non-positional path (embedding/attention/FFN/norm/dequant) from RoPE. llama.cpp greedy next
+            // token for "Hello" (id 19556) is '\n' (id 198).
+            Assert.Equal(198, GreedyNext(model, new[] { 19556 }));
+
+            // Full prompt: llama.cpp greedy next is " Paris" (id 7042).
+            Assert.Equal(7042, GreedyNext(model, ids.ToArray()));
+        }
+
+        private static int GreedyNext(NeuralNetworkBase<float> model, int[] tokenIds)
+        {
+            int seq = tokenIds.Length;
+            var input = new Tensor<float>(new[] { 1, seq });
+            for (int i = 0; i < seq; i++) input[0, i] = tokenIds[i];
+
+            var logits = model.Predict(input); // [1, seq, vocab]
+            int vocab = logits.Shape[2];
+            int best = 0;
+            float bestVal = float.NegativeInfinity;
+            for (int v = 0; v < vocab; v++)
+            {
+                float x = Convert.ToSingle(logits[0, seq - 1, v]);
+                if (x > bestVal) { bestVal = x; best = v; }
+            }
+
+            return best;
+        }
+
+        /// <summary>
+        /// Device-model placement: instead of relying on the "GPU engine uploads everything" path, explicitly
+        /// place the whole model on the GPU with <c>model.To(DeviceInfo.OpenCL())</c> and confirm the forward
+        /// still produces llama.cpp's greedy token (7042 " Paris"). Proves the PyTorch-style placement API
+        /// drives correct GPU execution. Gated on the real SmolLM2 GGUF + a GPU being present.
+        /// </summary>
+        [Fact]
+        public void Gguf_ModelToOpenCL_Placement_Runs7042_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+
+            // Use the production wiring: AutoDetectAndConfigureGpu sets BOTH the dispatcher (Current) AND the
+            // global backend registry that Tensor.To(device) uses, so placement and execution share one backend.
+            // (A manually-constructed engine wires Current only, and To() then can't find a backend.) Skip when
+            // no GPU is wired in this environment.
+            if (!AiDotNet.Tensors.Engines.AiDotNetEngine.AutoDetectAndConfigureGpu()) return;
+            try
+            {
+                var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+                var net = (NeuralNetworkBase<float>)model;
+
+                // The device-model UX: move the whole model (weights + buffers) onto the GPU explicitly.
+                net.To(AiDotNet.Tensors.DeviceInfo.OpenCL());
+
+                int next = GreedyNext(net, new[] { 504, 3575, 282, 4649, 314 });
+                Assert.Equal(7042, next);
+            }
+            finally
+            {
+                AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            }
+        }
+
+        /// <summary>
+        /// Phase-2 transparent-fusion feasibility: run the WHOLE decoder forward inside a deferred scope
+        /// (BeginDeferredScope), which records the eager op stream into an execution graph, optimizes it, and
+        /// replays the fused graph on Execute() — the torch.compile-class lever. Confirms the deferred/fusion
+        /// path produces llama.cpp's greedy token (7042) for a real decoder, i.e. that transparent fusion is
+        /// viable before wiring it into Predict. Falls back to eager when the backend has no deferred support.
+        /// Gated on the real SmolLM2 GGUF + a GPU.
+        /// </summary>
+        /// <remarks>
+        /// KNOWN GAP (Phase 2 WIP): today the deferred/graph path returns token 0 (all-zero logits) for the
+        /// decoder — the captured graph does not materialize the correct output. Transparent fusion needs the
+        /// graph capture/replay (output binding + the decoder op set: RoPE/GQA-SDPA/RMSNorm) debugged before it
+        /// can wrap Predict. Skipped until that lands; this test is the acceptance check for it.
+        /// </remarks>
+        [Fact(Skip = "Phase-2 WIP: DeferredScope graph capture/replay returns token 0 for the decoder (output " +
+                     "not materialized); transparent fusion needs the graph path fixed for the decoder op set.")]
+        public void Gguf_DeferredScopeFusion_Runs7042_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+
+            bool gpuOk;
+            using (var probe = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine()) gpuOk = probe.IsGpuAvailable;
+            if (!gpuOk) return;
+
+            var gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+            try
+            {
+                var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+                var net = (NeuralNetworkBase<float>)model;
+                var ids = new[] { 504, 3575, 282, 4649, 314 };
+                var input = new Tensor<float>(new[] { 1, ids.Length });
+                for (int i = 0; i < ids.Length; i++) input[0, i] = ids[i];
+
+                int next;
+                var scope = gpuEngine.BeginDeferredScope();
+                if (scope is null)
+                {
+                    next = ArgmaxLast(net.Predict(input)); // deferred not supported: eager
+                }
+                else
+                {
+                    using (scope)
+                    {
+                        var logits = net.Predict(input); // ops record into the execution graph
+                        scope.Execute();                 // optimize + replay the fused graph
+                        next = ArgmaxLast(logits);
+                    }
+                }
+                Assert.Equal(7042, next);
+            }
+            finally
+            {
+                AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                gpuEngine.Dispose();
+            }
+        }
+
+        private static int ArgmaxLast(Tensor<float> logits) // [1, seq, vocab] -> argmax over the last position
+        {
+            int seq = logits.Shape[1], vocab = logits.Shape[2], best = 0;
+            float bestVal = float.NegativeInfinity;
+            for (int v = 0; v < vocab; v++)
+            {
+                float x = Convert.ToSingle(logits[0, seq - 1, v]);
+                if (x > bestVal) { bestVal = x; best = v; }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Per-layer OpenCL-vs-CPU decoder guard: runs the whole forward on the GPU engine and on the CPU
+        /// engine and reports each layer's max abs diff. Asserts (a) no layer diverges at CORRUPTION scale —
+        /// the stale-persistent-weight bug (a model built while a DirectGpuTensorEngine is Current, fixed by
+        /// AiDotNet.Tensors #821) diverged by thousands at every transformer block — and (b) the FINAL lm_head
+        /// logits agree within 1e-2. Intermediate activations legitimately differ by fp32-reduction-order
+        /// rounding (block 12's SwiGLU amplifies it to ~2e-2) without moving the argmax, so this does NOT flag
+        /// small per-layer drift; Gguf_Generation separately asserts the greedy token is llama.cpp's 7042.
+        /// Gated on the real GGUF + a GPU being present.
+        /// </summary>
+        [Fact]
+        public void Gguf_LayerDiff_CpuVsGpu_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return;
+            }
+
+            using var gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+            if (!gpuEngine.IsGpuAvailable)
+            {
+                return;
+            }
+
+            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+            var net = (NeuralNetwork<float>)model;
+
+            var ids = new[] { 504, 3575, 282, 4649, 314 };
+            static Tensor<float> MakeInput(int[] tok)
+            {
+                var t = new Tensor<float>(new[] { 1, tok.Length });
+                for (int i = 0; i < tok.Length; i++) t[0, i] = tok[i];
+                return t;
+            }
+            static Tensor<float> Clone(Tensor<float> t)
+                => new Tensor<float>(t.Contiguous().AsSpan().ToArray(), t.Shape.ToArray());
+
+            // Run the whole chain on GPU (no mid-run engine toggle — toggling invalidates the OpenCL
+            // context), capturing each layer's materialized output; then the same on CPU. The first layer
+            // whose chained GPU output diverges from CPU is the one whose GPU op is wrong.
+            var gpuOuts = new System.Collections.Generic.List<float[]>();
+            var shapes = new System.Collections.Generic.List<int[]>();
+            var names = new System.Collections.Generic.List<string>();
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+            try
+            {
+                var xg = MakeInput(ids);
+                foreach (var layer in net.Layers)
+                {
+                    xg = layer.Forward(xg);
+                    var mat = xg.Contiguous();
+                    gpuOuts.Add(mat.AsSpan().ToArray());
+                    shapes.Add(xg.Shape.ToArray());
+                    names.Add(layer.GetType().Name);
+                    xg = mat;
+                }
+            }
+            finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
+
+            var cpuOuts = new System.Collections.Generic.List<float[]>();
+            {
+                var xc = MakeInput(ids);
+                foreach (var layer in net.Layers)
+                {
+                    xc = layer.Forward(xc);
+                    var mat = xc.Contiguous();
+                    cpuOuts.Add(mat.AsSpan().ToArray());
+                    xc = mat;
+                }
+            }
+
+            var report = new StringBuilder();
+            int grosslyDiverging = -1; // a layer diverging at CORRUPTION scale (stale-weight class), not fp32 rounding
+            float finalLayerDiff = 0f;
+            for (int li = 0; li < cpuOuts.Count; li++)
+            {
+                var c = cpuOuts[li];
+                var g = gpuOuts[li];
+                float maxAbs = 0f;
+                int n = Math.Min(c.Length, g.Length);
+                for (int i = 0; i < n; i++) maxAbs = MathF.Max(maxAbs, MathF.Abs(c[i] - g[i]));
+                report.AppendLine($"layer {li} {names[li]}: maxAbsDiff={maxAbs:E3} shape=[{string.Join(",", shapes[li])}]");
+                // Intermediate activations legitimately differ between fp32 CPU and fp32 GPU (different reduction
+                // orders): block 12's SwiGLU amplifies the ~1e-6 GEMM rounding into ~2e-2 that rides the residual
+                // but does NOT change the argmax. Only flag CORRUPTION-scale divergence — the stale-weight bug
+                // (a model built under the GPU engine) diverged by thousands at every block.
+                if (grosslyDiverging < 0 && maxAbs > 1.0f) grosslyDiverging = li;
+                if (li == cpuOuts.Count - 1) finalLayerDiff = maxAbs; // lm_head logits: the correctness-relevant metric
+            }
+
+            // Correctness gate: no gross (stale-weight) corruption anywhere, and the FINAL logits agree closely
+            // (the benign intermediate rounding compresses back to ~1e-4 through the final norm + lm_head, so the
+            // greedy token is stable — Gguf_Generation asserts it is llama.cpp's 7042).
+            Assert.True(grosslyDiverging < 0 && finalLayerDiff <= 1e-2f,
+                $"grosslyDivergingLayer={grosslyDiverging} finalLogitsDiff={finalLayerDiff:E3}\n{report}");
+        }
+
+        /// <summary>
+        /// Localizes the block-12 OpenCL divergence to a single sub-op: feeds an identical (CPU-reference)
+        /// block input through each PreLNTransformerBlock sub-op (Norm1, attention, residual add, Norm2,
+        /// FFN gate/up, gate*up, FFN down, residual add) on GPU and on CPU, and reports the per-sub-op max
+        /// abs diff. Gated on the model + a GPU; runs the whole GPU chain then the CPU chain (no mid-run
+        /// engine toggle, which invalidates the OpenCL context).
+        /// </summary>
+        [Fact]
+        public void Gguf_Block12_SubOpDiff_CpuVsGpu_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return;
+            }
+            using var gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+            if (!gpuEngine.IsGpuAvailable)
+            {
+                return;
+            }
+
+            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+            var net = (NeuralNetwork<float>)model;
+            var ids = new[] { 504, 3575, 282, 4649, 314 };
+            static Tensor<float> Clone(Tensor<float> t)
+                => new Tensor<float>(t.Contiguous().AsSpan().ToArray(), t.Shape.ToArray());
+
+            // block-12 input = the CPU-reference output of layers 0..11.
+            Tensor<float> blkInput;
+            {
+                var xc = new Tensor<float>(new[] { 1, ids.Length });
+                for (int i = 0; i < ids.Length; i++) xc[0, i] = ids[i];
+                for (int li = 0; li < 12; li++) xc = net.Layers[li].Forward(xc).Contiguous();
+                blkInput = Clone(xc);
+            }
+            var blk = (AiDotNet.NeuralNetworks.Layers.PreLNTransformerBlock<float>)net.Layers[12];
+
+            System.Collections.Generic.List<(string Name, float[] Data)> RunSubOps()
+            {
+                var eng = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+                var steps = new System.Collections.Generic.List<(string, float[])>();
+                void Cap(string n, Tensor<float> t) => steps.Add((n, t.Contiguous().AsSpan().ToArray()));
+
+                var normed1 = blk.Norm1.Forward(Clone(blkInput)); Cap("norm1", normed1);
+                var attnOut = blk.AttentionLayer.Forward(normed1); Cap("attn", attnOut);
+                var afterAttn = eng.TensorAdd(Clone(blkInput), attnOut); Cap("residual1", afterAttn);
+                var normed2 = blk.Norm2.Forward(afterAttn); Cap("norm2", normed2);
+                int rank = afterAttn.Shape.Length, featureDim = afterAttn.Shape[rank - 1], flatN = 1;
+                for (int i = 0; i < rank - 1; i++) flatN *= afterAttn.Shape[i];
+                var normed2Flat = eng.Reshape(normed2, new[] { flatN, featureDim });
+                var gateOut = blk.FfnGate!.Forward(normed2Flat); Cap("ffnGate", gateOut);
+                var upOut = blk.FfnUp.Forward(normed2Flat); Cap("ffnUp", upOut);
+                var ffnHidden = eng.TensorMultiply(gateOut, upOut); Cap("gate*up", ffnHidden);
+                var ffnDownOut = blk.FfnDown.Forward(ffnHidden); Cap("ffnDown", ffnDownOut);
+                var ffnReshaped = eng.Reshape(ffnDownOut, afterAttn.Shape.ToArray());
+                var output = eng.TensorAdd(afterAttn, ffnReshaped); Cap("residual2", output);
+                return steps;
+            }
+
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+            System.Collections.Generic.List<(string Name, float[] Data)> gpu;
+            try { gpu = RunSubOps(); } finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
+            var cpu = RunSubOps();
+
+            var report = new StringBuilder();
+            string? grosslyBad = null;
+            for (int i = 0; i < cpu.Count; i++)
+            {
+                float maxAbs = 0f;
+                int n = Math.Min(cpu[i].Data.Length, gpu[i].Data.Length);
+                for (int j = 0; j < n; j++) maxAbs = MathF.Max(maxAbs, MathF.Abs(cpu[i].Data[j] - gpu[i].Data[j]));
+                report.AppendLine($"{cpu[i].Name}: maxAbsDiff={maxAbs:E3}");
+                // Given IDENTICAL (CPU-reference) input, each sub-op's GPU-vs-CPU diff is its own fp32
+                // reduction-order rounding: the SwiGLU FFN (ffnDown, K=1536, ~O(10) values) legitimately reaches
+                // ~2e-2 without changing the model's output token. Only a CORRUPTION-scale gap (the stale-weight
+                // bug diverged by thousands) is a real defect here.
+                if (grosslyBad is null && maxAbs > 1.0f) grosslyBad = cpu[i].Name;
+            }
+            Assert.True(grosslyBad is null, $"Grossly diverging block-12 sub-op: {grosslyBad}\n{report}");
+        }
+
+#if NET10_0_OR_GREATER
+        /// <summary>
+        /// Drives the actual ContinuousBatcher (the live serving path, which the direct-Forward checks
+        /// bypass) on CPU vs GPU, with speculative decoding off and on, and asserts the greedy first token
+        /// is llama.cpp's (7042 " Paris") in every combination. Reproduces the GPU-serving garbage in a unit
+        /// test and isolates whether it is the batcher path itself or speculation. Gated on the model + a GPU.
+        /// </summary>
+        [Fact]
+        public void Gguf_Batcher_CpuVsGpu_SmolLM2()
+        {
+            string? path = Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_GGUF");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return;
+            }
+
+            // AutoDetectAndConfigureGpu() does not wire the GPU in this test process, but a
+            // DirectGpuTensorEngine constructs and reports availability (the Tensors op tests use it), so set
+            // it as the current engine directly to actually exercise the GPU path.
+            bool gpuOk;
+            using (var probe = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine()) gpuOk = probe.IsGpuAvailable;
+            if (!gpuOk)
+            {
+                return;
+            }
+
+            var ids = new[] { 504, 3575, 282, 4649, 314 };
+
+            int RunBatcher(bool onGpu, bool speculation)
+            {
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine = null;
+                if (onGpu)
+                {
+                    gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+                    AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+                }
+                else
+                {
+                    AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                }
+                try
+                {
+                    var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+                    var net = (NeuralNetwork<float>)model;
+                    var wrapper = new AiDotNet.Serving.Models.ServableModelWrapper<float>(
+                        "m", (AiDotNet.Interfaces.IFullModel<float, Tensor<float>, Tensor<float>>)net,
+                        new[] { 1 }, enableSpeculativeDecoding: false, generationForward: net.Predict);
+                    var config = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig
+                    {
+                        AutoStart = false,
+                        EosTokenId = 2,
+                        EnableSpeculativeDecoding = speculation
+                    };
+                    using var batcher = new AiDotNet.Serving.ContinuousBatching.ContinuousBatcher<float>(
+                        config, tokens => wrapper.Forward(tokens));
+                    var req = new AiDotNet.Serving.ContinuousBatching.GenerationRequest<float>
+                    {
+                        PromptTokenIds = ids.ToList(),
+                        MaxNewTokens = 1,
+                        Temperature = 0f,
+                        EosTokenId = 2
+                    };
+                    var task = batcher.GenerateAsync(req);
+                    int guard = 40;
+                    while (!task.IsCompleted && guard-- > 0) batcher.Step();
+                    var result = task.GetAwaiter().GetResult();
+                    return result.GeneratedTokens.Count > 0 ? result.GeneratedTokens[0] : -1;
+                }
+                finally
+                {
+                    AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                    gpuEngine?.Dispose();
+                }
+            }
+
+            // Direct (non-batcher) greedy on the same engine: does model.Predict / wrapper.Forward already
+            // diverge on GPU, or only the batcher path?
+            (int model, int wrapper) RunDirect(bool onGpu)
+            {
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine = null;
+                if (onGpu)
+                {
+                    gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+                    AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
+                }
+                else { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
+                try
+                {
+                    var (m, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
+                    var net = (NeuralNetwork<float>)m;
+                    var wrap = new AiDotNet.Serving.Models.ServableModelWrapper<float>(
+                        "m", (AiDotNet.Interfaces.IFullModel<float, Tensor<float>, Tensor<float>>)net,
+                        new[] { 1 }, enableSpeculativeDecoding: false, generationForward: net.Predict);
+                    var inp = new Tensor<float>(new[] { 1, ids.Length });
+                    for (int i = 0; i < ids.Length; i++) inp[0, i] = ids[i];
+                    int Arg(Tensor<float> lg)
+                    {
+                        var s = lg.Contiguous().AsSpan();
+                        int v = lg.Shape[2], baseI = (lg.Shape[1] - 1) * v, best = 0; float bv = float.NegativeInfinity;
+                        for (int i = 0; i < v; i++) { float xi = s[baseI + i]; if (xi > bv) { bv = xi; best = i; } }
+                        return best;
+                    }
+                    int aModel = Arg(net.Predict(new Tensor<float>(inp.Contiguous().AsSpan().ToArray(), inp.Shape.ToArray())));
+                    int aWrap = Arg(wrap.Forward(new Tensor<float>(inp.Contiguous().AsSpan().ToArray(), inp.Shape.ToArray())));
+                    return (aModel, aWrap);
+                }
+                finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); gpuEngine?.Dispose(); }
+            }
+
+            var cpuDirect = RunDirect(false);
+            var gpuDirect = RunDirect(true);
+            int cpuNoSpec = RunBatcher(false, false);
+            int gpuNoSpec = RunBatcher(true, false);
+            int gpuSpec = RunBatcher(true, true);
+
+            Assert.True(cpuDirect.model == 7042 && cpuDirect.wrapper == 7042
+                        && gpuDirect.model == 7042 && gpuDirect.wrapper == 7042
+                        && cpuNoSpec == 7042 && gpuNoSpec == 7042 && gpuSpec == 7042,
+                $"greedy first token (expect 7042 ' Paris'): " +
+                $"CPU model={cpuDirect.model} wrapper={cpuDirect.wrapper} batcher={cpuNoSpec}; " +
+                $"GPU model={gpuDirect.model} wrapper={gpuDirect.wrapper} batcher(noSpec)={gpuNoSpec} batcher(spec)={gpuSpec}");
+        }
+#endif
+
+        [Fact]
+        public void Gguf_EndToEnd_Llama_TiedHead_BuildsAndForwards()
+        {
+            string path = WriteTempGguf("llama", includeOutput: false);
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal(8, src.Config.HiddenSize);
+                    Assert.Equal(1, src.Config.NumHiddenLayers);
+                    Assert.Equal(2, src.Config.NumAttentionHeads);
+                    Assert.Equal(1, src.Config.NumKeyValueHeads);
+                    Assert.Equal(6, src.Config.VocabSize);
+                    Assert.True(src.Config.TieWordEmbeddings); // no output.weight -> tied
+                    Assert.Contains("model.embed_tokens.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.self_attn.q_proj.weight", src.TensorNames);
+                    Assert.DoesNotContain("lm_head.weight", src.TensorNames); // tied
+                }
+
+                // Full facade resolution: GGUF -> config -> registry -> builder -> weight-loaded decoder.
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                Assert.Equal(4, net.Layers.Count); // embed + 1 block + final norm + lm head
+
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                var logits = net.Predict(tokens);
+                Assert.Equal(new[] { 1, 3, 6 }, logits.Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Gguf_EndToEnd_UntiedHead_LoadsSeparateLmHead()
+        {
+            string path = WriteTempGguf("llama", includeOutput: true);
+            try
+            {
+                using var src = GgufModelSource.Open(path);
+                Assert.False(src.Config.TieWordEmbeddings);
+                Assert.Contains("lm_head.weight", src.TensorNames);
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                Assert.NotNull(model);
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Gguf_EndToEnd_NonLlamaArch_Qwen2_Resolves()
+        {
+            // A GGUF whose general.architecture is "qwen2" (same llama-family layer stack) loads through the
+            // SAME registry + builder — proving non-llama-named families are supported.
+            string path = WriteTempGguf("qwen2", includeOutput: false);
+            try
+            {
+                using var src = GgufModelSource.Open(path);
+                Assert.Equal("qwen2", src.Config.ModelType);
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                var tokens = new Tensor<double>(new[] { 1, 2 });
+                tokens[0, 0] = 0; tokens[0, 1] = 3;
+                Assert.Equal(new[] { 1, 2, 6 }, net.Predict(tokens).Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Gguf_EndToEnd_Gemma2_SandwichNorms_HeadDim_Softcap()
+        {
+            // Gemma-2 exercises the family-specific pieces the generic llama map cannot: four sandwiched
+            // norms (attn_norm/attn_post_norm/ffn_norm/ffn_post_norm), an explicit head_dim (key_length)
+            // that differs from hidden/heads, and both logit soft-caps read from GGUF metadata.
+            string path = WriteGemma2Gguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("gemma2", src.Config.ModelType);
+                    Assert.Equal(6, src.Config.HeadDim);                 // from gemma2.attention.key_length
+                    Assert.Equal(50.0, src.Config.AttnLogitSoftcapping);
+                    Assert.Equal(30.0, src.Config.FinalLogitSoftcapping);
+                    // The GGUF ffn_norm must map to the PRE-feedforward norm, not post-attention.
+                    Assert.Contains("model.layers.0.pre_feedforward_layernorm.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.post_attention_layernorm.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.post_feedforward_layernorm.weight", src.TensorNames);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                // embed + block + final norm + lm head + final-logit soft-cap = 5.
+                Assert.Equal(5, net.Layers.Count);
+
+                // The attention soft-cap threaded from GGUF metadata into the layer.
+                var attn = Assert.IsType<GroupedQueryAttentionLayer<double>>(
+                    Assert.IsType<Gemma2DecoderBlock<double>>(net.Layers[1]).AttentionLayer);
+                Assert.Equal(50.0, attn.AttnLogitSoftcap);
+                Assert.Equal(6, attn.HeadDimension);
+
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                var logits = net.Predict(tokens);
+                Assert.Equal(new[] { 1, 3, 6 }, logits.Shape.ToArray());
+                for (int s = 0; s < 3; s++)
+                    for (int v = 0; v < 6; v++)
+                        Assert.True(Math.Abs(logits[0, s, v]) < 30.0); // final soft-cap bounds
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Gguf_EndToEnd_StarCoder2_BiasedLayerNorm_NonGatedMlp()
+        {
+            // StarCoder2 exercises biased LayerNorm (weight + bias), a non-gated c_fc/c_proj MLP mapped from
+            // ffn_up/ffn_down, biased attention, and the plain layer_norm_epsilon key (not the rms variant).
+            string path = WriteStarCoder2Gguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("starcoder2", src.Config.ModelType);
+                    Assert.Contains("model.layers.0.input_layernorm.bias", src.TensorNames);
+                    Assert.Contains("model.layers.0.post_attention_layernorm.bias", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.c_fc.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.c_proj.bias", src.TensorNames);
+                    Assert.Contains("model.norm.bias", src.TensorNames);
+                    // Non-gated MLP: the gated gate_proj name must NOT be produced.
+                    Assert.DoesNotContain("model.layers.0.mlp.gate_proj.weight", src.TensorNames);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                Assert.Equal(new[] { 1, 3, 6 }, net.Predict(tokens).Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Gguf_EndToEnd_Mixtral_StackedExperts_SlicedPerExpert()
+        {
+            // Mixtral ships under the generic "llama" arch with expert_count > 0; the loader must normalize
+            // model_type to mixtral, expose the router (ffn_gate_inp) and slice each expert out of the stacked
+            // ffn_*_exps tensors under the Mixtral block_sparse_moe.experts.{e}.w1/w3/w2 names.
+            string path = WriteMixtralGguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("mixtral", src.Config.ModelType);
+                    Assert.Equal(4, src.Config.NumLocalExperts);
+                    Assert.Equal(2, src.Config.NumExpertsPerTok);
+                    Assert.Contains("model.layers.0.block_sparse_moe.gate.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.block_sparse_moe.experts.0.w1.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.block_sparse_moe.experts.3.w2.weight", src.TensorNames);
+                    // Each expert slice is a distinct quarter of the stacked tensor.
+                    var e0 = src.ReadAsDouble("model.layers.0.block_sparse_moe.experts.0.w1.weight");
+                    var e1 = src.ReadAsDouble("model.layers.0.block_sparse_moe.experts.1.w1.weight");
+                    Assert.Equal(16 * 8, e0.Length); // ffn(16) * hidden(8)
+                    Assert.NotEqual(e0, e1);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                Assert.Equal(new[] { 1, 3, 6 }, net.Predict(tokens).Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Gguf_EndToEnd_Qwen2Moe_SharedExpert_BiasedAttention()
+        {
+            // Qwen2-MoE (GGUF arch "qwen2moe") normalizes to qwen2_moe, shares the stacked-expert slicing under
+            // the mlp.experts.{e}.gate_proj/up_proj/down_proj names, and adds an always-on shared expert plus
+            // q/k/v attention biases.
+            string path = WriteQwen2MoeGguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("qwen2_moe", src.Config.ModelType);
+                    Assert.Equal(4, src.Config.NumLocalExperts);
+                    Assert.Contains("model.layers.0.mlp.gate.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.experts.0.gate_proj.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.shared_expert.gate_proj.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.shared_expert_gate.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.self_attn.q_proj.bias", src.TensorNames);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                Assert.Equal(new[] { 1, 3, 6 }, net.Predict(tokens).Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Gguf_EndToEnd_Dbrx_FusedQkv_StackedExperts_LayerNorm()
+        {
+            // DBRX uses its own nested config schema, a fused Wqkv, LayerNorm norms, and stacked experts. The
+            // loader must emit the DBRX-shaped config, present standard HF names (so DbrxModelBuilder skips its
+            // safetensors DbrxTensorSource translation), split the fused qkv, and slice each expert.
+            string path = WriteDbrxGguf();
+            try
+            {
+                using (var src = GgufModelSource.Open(path))
+                {
+                    Assert.Equal("dbrx", src.Config.ModelType);
+                    Assert.Equal(4, src.Config.NumLocalExperts);
+                    Assert.Equal(2, src.Config.NumExpertsPerTok);
+                    Assert.Contains("model.layers.0.self_attn.qkv_proj.weight", src.TensorNames); // fused Wqkv
+                    Assert.Contains("model.layers.0.mlp.gate.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.mlp.experts.0.gate_proj.weight", src.TensorNames);
+                    Assert.Contains("model.layers.0.input_layernorm.weight", src.TensorNames);
+                }
+
+                var model = PretrainedLoader<double>.Load(PretrainedSource.Gguf(path));
+                var net = Assert.IsType<NeuralNetwork<double>>(model);
+                var tokens = new Tensor<double>(new[] { 1, 3 });
+                tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;
+                Assert.Equal(new[] { 1, 3, 6 }, net.Predict(tokens).Shape.ToArray());
+            }
+            finally { File.Delete(path); }
+        }
+
+        // ---- family-specific GGUF writers (F32) ----
+
+        private static string WriteGemma2Gguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 1, headDim = 6, ffn = 16, vocab = 6;
+            int qDim = heads * headDim;   // 12
+            int kvDim = kvHeads * headDim; // 6
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.attn_post_norm.weight", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 4)),
+                ("blk.0.ffn_post_norm.weight", new long[] { hidden }, Seq(hidden, 5)),
+                ("blk.0.attn_q.weight", new long[] { hidden, qDim }, Seq(qDim * hidden, 6)),
+                ("blk.0.attn_k.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 7)),
+                ("blk.0.attn_v.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 8)),
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 9)),
+                ("blk.0.ffn_gate.weight", new long[] { hidden, ffn }, Seq(ffn * hidden, 10)),
+                ("blk.0.ffn_up.weight", new long[] { hidden, ffn }, Seq(ffn * hidden, 11)),
+                ("blk.0.ffn_down.weight", new long[] { ffn, hidden }, Seq(hidden * ffn, 12)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 13)),
+            };
+            const string a = "gemma2";
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.attention.key_length", 4u, (uint)headDim),
+                ($"{a}.feed_forward_length", 4u, (uint)ffn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.attention.layer_norm_rms_epsilon", 6u, 1e-5f),
+                ($"{a}.rope.freq_base", 6u, 10000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+                ($"{a}.attn_logit_softcapping", 6u, 50.0f),
+                ($"{a}.final_logit_softcapping", 6u, 30.0f),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
+        private static string WriteStarCoder2Gguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 1, headDim = 4, ffn = 16, vocab = 6;
+            int qDim = heads * headDim;   // 8
+            int kvDim = kvHeads * headDim; // 4
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.attn_norm.bias", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 4)),
+                ("blk.0.ffn_norm.bias", new long[] { hidden }, Seq(hidden, 5)),
+                ("blk.0.attn_q.weight", new long[] { hidden, qDim }, Seq(qDim * hidden, 6)),
+                ("blk.0.attn_q.bias", new long[] { qDim }, Seq(qDim, 7)),
+                ("blk.0.attn_k.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 8)),
+                ("blk.0.attn_k.bias", new long[] { kvDim }, Seq(kvDim, 9)),
+                ("blk.0.attn_v.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 10)),
+                ("blk.0.attn_v.bias", new long[] { kvDim }, Seq(kvDim, 11)),
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 12)),
+                ("blk.0.attn_output.bias", new long[] { hidden }, Seq(hidden, 13)),
+                ("blk.0.ffn_up.weight", new long[] { hidden, ffn }, Seq(ffn * hidden, 14)),   // -> c_fc
+                ("blk.0.ffn_up.bias", new long[] { ffn }, Seq(ffn, 15)),
+                ("blk.0.ffn_down.weight", new long[] { ffn, hidden }, Seq(hidden * ffn, 16)), // -> c_proj
+                ("blk.0.ffn_down.bias", new long[] { hidden }, Seq(hidden, 17)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 18)),
+                ("output_norm.bias", new long[] { hidden }, Seq(hidden, 19)),
+            };
+            const string a = "starcoder2";
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.feed_forward_length", 4u, (uint)ffn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.attention.layer_norm_epsilon", 6u, 1e-5f), // plain LayerNorm eps (not rms)
+                ($"{a}.rope.freq_base", 6u, 10000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
+        private static string WriteMixtralGguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 2, headDim = 4, ffn = 16, nExp = 4, vocab = 6;
+            int qDim = heads * headDim;      // 8
+            int kvDim = kvHeads * headDim;   // 8
+            int expElems = ffn * hidden;     // 128 per expert (each of gate/up/down)
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.attn_q.weight", new long[] { hidden, qDim }, Seq(qDim * hidden, 4)),
+                ("blk.0.attn_k.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 5)),
+                ("blk.0.attn_v.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 6)),
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 7)),
+                // Router [n_expert, hidden] and the three stacked expert tensors ne = [in, out, n_expert].
+                ("blk.0.ffn_gate_inp.weight", new long[] { hidden, nExp }, Seq(nExp * hidden, 8)),
+                ("blk.0.ffn_gate_exps.weight", new long[] { hidden, ffn, nExp }, Seq(expElems * nExp, 9)),
+                ("blk.0.ffn_up_exps.weight", new long[] { hidden, ffn, nExp }, Seq(expElems * nExp, 10)),
+                ("blk.0.ffn_down_exps.weight", new long[] { ffn, hidden, nExp }, Seq(expElems * nExp, 11)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 12)),
+            };
+            const string a = "llama"; // GGUF ships Mixtral under the generic llama arch
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.feed_forward_length", 4u, (uint)ffn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.attention.layer_norm_rms_epsilon", 6u, 1e-5f),
+                ($"{a}.rope.freq_base", 6u, 10000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+                ($"{a}.expert_count", 4u, (uint)nExp),
+                ($"{a}.expert_used_count", 4u, 2u),
+                ($"{a}.expert_feed_forward_length", 4u, (uint)ffn),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
+        private static string WriteQwen2MoeGguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 2, headDim = 4, routedFfn = 16, sharedFfn = 16, nExp = 4, vocab = 6;
+            int qDim = heads * headDim;      // 8
+            int kvDim = kvHeads * headDim;   // 8
+            int expElems = routedFfn * hidden; // 128
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.attn_q.weight", new long[] { hidden, qDim }, Seq(qDim * hidden, 4)),
+                ("blk.0.attn_q.bias", new long[] { qDim }, Seq(qDim, 5)),        // Qwen2 biases q/k/v
+                ("blk.0.attn_k.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 6)),
+                ("blk.0.attn_k.bias", new long[] { kvDim }, Seq(kvDim, 7)),
+                ("blk.0.attn_v.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 8)),
+                ("blk.0.attn_v.bias", new long[] { kvDim }, Seq(kvDim, 9)),
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 10)),
+                ("blk.0.ffn_gate_inp.weight", new long[] { hidden, nExp }, Seq(nExp * hidden, 11)),
+                ("blk.0.ffn_gate_exps.weight", new long[] { hidden, routedFfn, nExp }, Seq(expElems * nExp, 12)),
+                ("blk.0.ffn_up_exps.weight", new long[] { hidden, routedFfn, nExp }, Seq(expElems * nExp, 13)),
+                ("blk.0.ffn_down_exps.weight", new long[] { routedFfn, hidden, nExp }, Seq(expElems * nExp, 14)),
+                // Always-on shared expert + its sigmoid gate logit ([1, hidden]).
+                ("blk.0.ffn_gate_shexp.weight", new long[] { hidden, sharedFfn }, Seq(sharedFfn * hidden, 15)),
+                ("blk.0.ffn_up_shexp.weight", new long[] { hidden, sharedFfn }, Seq(sharedFfn * hidden, 16)),
+                ("blk.0.ffn_down_shexp.weight", new long[] { sharedFfn, hidden }, Seq(hidden * sharedFfn, 17)),
+                ("blk.0.ffn_gate_inp_shexp.weight", new long[] { hidden, 1 }, Seq(hidden, 18)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 19)),
+            };
+            const string a = "qwen2moe";
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.feed_forward_length", 4u, (uint)routedFfn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.attention.layer_norm_rms_epsilon", 6u, 1e-5f),
+                ($"{a}.rope.freq_base", 6u, 10000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+                ($"{a}.expert_count", 4u, (uint)nExp),
+                ($"{a}.expert_used_count", 4u, 2u),
+                ($"{a}.expert_feed_forward_length", 4u, (uint)routedFfn),
+                ($"{a}.expert_shared_feed_forward_length", 4u, (uint)sharedFfn),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
+        private static string WriteDbrxGguf()
+        {
+            const int hidden = 8, heads = 2, kvHeads = 2, headDim = 4, ffn = 16, nExp = 4, vocab = 6;
+            int qDim = heads * headDim;      // 8
+            int kvDim = kvHeads * headDim;   // 8
+            int qkvRows = qDim + 2 * kvDim;  // 24 (fused Q;K;V)
+            int expElems = ffn * hidden;     // 128
+            var tensors = new List<(string, long[], float[])>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 3)),
+                ("blk.0.attn_qkv.weight", new long[] { hidden, qkvRows }, Seq(qkvRows * hidden, 4)), // fused Wqkv
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 5)),
+                ("blk.0.ffn_gate_inp.weight", new long[] { hidden, nExp }, Seq(nExp * hidden, 6)),
+                ("blk.0.ffn_gate_exps.weight", new long[] { hidden, ffn, nExp }, Seq(expElems * nExp, 7)),
+                ("blk.0.ffn_up_exps.weight", new long[] { hidden, ffn, nExp }, Seq(expElems * nExp, 8)),
+                ("blk.0.ffn_down_exps.weight", new long[] { ffn, hidden, nExp }, Seq(expElems * nExp, 9)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 10)),
+            };
+            const string a = "dbrx";
+            var meta = new List<(string, uint, object)>
+            {
+                ("general.architecture", 8u, a),
+                ("general.alignment", 4u, 32u),
+                ($"{a}.embedding_length", 4u, (uint)hidden),
+                ($"{a}.block_count", 4u, 1u),
+                ($"{a}.attention.head_count", 4u, (uint)heads),
+                ($"{a}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{a}.feed_forward_length", 4u, (uint)ffn),
+                ($"{a}.context_length", 4u, 64u),
+                ($"{a}.rope.freq_base", 6u, 500000.0f),
+                ($"{a}.vocab_size", 4u, (uint)vocab),
+                ($"{a}.expert_count", 4u, (uint)nExp),
+                ($"{a}.expert_used_count", 4u, 2u),
+            };
+            return SerializeGguf(tensors, meta);
+        }
+
+        // ---- minimal GGUF writer (F32) for a tiny GQA llama-family decoder ----
+
+        private static string WriteTempGguf(string arch, bool includeOutput)
+        {
+            const int hidden = 8, heads = 2, kvHeads = 1, ffn = 16, vocab = 6, layers = 1;
+            int headDim = hidden / heads;      // 4
+            int qDim = heads * headDim;        // 8
+            int kvDim = kvHeads * headDim;     // 4
+
+            // GGUF tensor: (name, dims as ne[] with ne[0] fastest, F32 data). Data order is the raw sequential
+            // bytes GgufFile returns; the builder handles the [out,in]->[in,out] transpose itself.
+            var tensors = new List<(string name, long[] dims, float[] data)>
+            {
+                ("token_embd.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 1)),
+                ("blk.0.attn_norm.weight", new long[] { hidden }, Seq(hidden, 2)),
+                ("blk.0.attn_q.weight", new long[] { hidden, qDim }, Seq(qDim * hidden, 3)),
+                ("blk.0.attn_k.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 4)),
+                ("blk.0.attn_v.weight", new long[] { hidden, kvDim }, Seq(kvDim * hidden, 5)),
+                ("blk.0.attn_output.weight", new long[] { qDim, hidden }, Seq(hidden * qDim, 6)),
+                ("blk.0.ffn_norm.weight", new long[] { hidden }, Seq(hidden, 7)),
+                ("blk.0.ffn_gate.weight", new long[] { hidden, ffn }, Seq(ffn * hidden, 8)),
+                ("blk.0.ffn_up.weight", new long[] { hidden, ffn }, Seq(ffn * hidden, 9)),
+                ("blk.0.ffn_down.weight", new long[] { ffn, hidden }, Seq(hidden * ffn, 10)),
+                ("output_norm.weight", new long[] { hidden }, Seq(hidden, 11)),
+            };
+            if (includeOutput)
+                tensors.Add(("output.weight", new long[] { hidden, vocab }, Seq(vocab * hidden, 12)));
+
+            var meta = new List<(string key, uint type, object val)>
+            {
+                ("general.architecture", 8u, arch),
+                ("general.alignment", 4u, 32u),
+                ($"{arch}.embedding_length", 4u, (uint)hidden),
+                ($"{arch}.block_count", 4u, (uint)layers),
+                ($"{arch}.attention.head_count", 4u, (uint)heads),
+                ($"{arch}.attention.head_count_kv", 4u, (uint)kvHeads),
+                ($"{arch}.feed_forward_length", 4u, (uint)ffn),
+                ($"{arch}.context_length", 4u, 64u),
+                ($"{arch}.attention.layer_norm_rms_epsilon", 6u, 1e-5f),
+                ($"{arch}.rope.freq_base", 6u, 10000.0f),
+                ($"{arch}.vocab_size", 4u, (uint)vocab),
+            };
+
+            return SerializeGguf(tensors, meta);
+        }
+
+        // Serializes a GGUF v3 file (F32 tensors) from tensor + metadata lists. Metadata value types:
+        // 4u = uint32, 6u = float32, 8u = string.
+        private static string SerializeGguf(
+            List<(string name, long[] dims, float[] data)> tensors,
+            List<(string key, uint type, object val)> meta)
+        {
+            using var ms = new MemoryStream();
+            using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
+            {
+                w.Write(0x46554747u);              // "GGUF"
+                w.Write(3u);                       // version
+                w.Write((ulong)tensors.Count);
+                w.Write((ulong)meta.Count);
+
+                foreach (var (key, type, val) in meta)
+                {
+                    WriteString(w, key);
+                    w.Write(type);
+                    switch (type)
+                    {
+                        case 8u: WriteString(w, (string)val); break;
+                        case 4u: w.Write((uint)val); break;
+                        case 6u: w.Write((float)val); break;
+                        default: throw new InvalidOperationException($"unhandled meta type {type}");
+                    }
+                }
+
+                // Tensor infos with contiguous data-section offsets.
+                ulong offset = 0;
+                foreach (var (name, dims, data) in tensors)
+                {
+                    WriteString(w, name);
+                    w.Write((uint)dims.Length);
+                    foreach (var d in dims) w.Write((ulong)d);
+                    w.Write(0u);          // ggml type F32
+                    w.Write(offset);
+                    offset += (ulong)data.Length * 4u;
+                }
+
+                w.Flush();
+                long pos = ms.Position;
+                int pad = (int)((32 - (pos % 32)) % 32);
+                for (int i = 0; i < pad; i++) w.Write((byte)0);
+
+                foreach (var (_, _, data) in tensors)
+                    foreach (var v in data) w.Write(v);
+            }
+
+            string path = Path.Combine(Path.GetTempPath(), "adn_gguf_" + Guid.NewGuid().ToString("N") + ".gguf");
+            File.WriteAllBytes(path, ms.ToArray());
+            return path;
+        }
+
+        private static void WriteString(BinaryWriter w, string s)
+        {
+            var bytes = Encoding.UTF8.GetBytes(s);
+            w.Write((ulong)bytes.Length);
+            w.Write(bytes);
+        }
+
+        private static float[] Seq(int n, int seed)
+        {
+            var a = new float[n];
+            for (int i = 0; i < n; i++) a[i] = (((i + seed) % 11) - 5) * 0.02f;
+            return a;
+        }
+    }
+}

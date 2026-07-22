@@ -250,53 +250,35 @@
          run against the fixed engine. 0.113.0 is PUBLISHED to NuGet and is a superset of 0.112.0 (also
          carries #765 compiled-ReduceMax axis fill), so all rationale above is retained.
 
-         Bumped 0.113.0 -> 0.114.0: brings AiDotNet.Tensors #772 — the DepthwiseConv1D engine primitive
-         (DepthwiseConv1D + DepthwiseConv1DBackwardInput/Kernel on IEngine / CpuEngine /
-         DirectGpuTensorEngine), the time-channel-separable temporal stage of NVIDIA Citrinet consumed
-         by CitrinetBlockLayer. 0.114.0 = 0.113.0 + the additive DepthwiseConv1D methods (strict
-         superset), so it retains master's #763/#765 fixes. All AiDotNet.Native packages coreleased in
-         lockstep at 0.114.0.
+         Bumped 0.116.0 -> 0.117.0: brings AiDotNet.Tensors #816 — the optional attention-logit
+         soft-cap on ScaledDotProductAttention (softcap*tanh(scaledScore/softcap) before softmax)
+         implemented across the CPU backend and all six GPU backend kernels. Activates the Gemma-2
+         attn_logit_softcapping path: GroupedQueryAttentionLayer now forwards its soft-cap into the
+         fused SDPA primitive, and Gemma2ModelBuilder wires config.attn_logit_softcapping into it.
+         Default 0 leaves every other SDPA caller byte-identical.
 
-         Bumped 0.114.0 -> 0.114.1: brings AiDotNet.Tensors #779 (this repo's #1856) — the Engine.IRFFT
-         guard against a degenerate length-1 transform (nFft = 0 -> empty inverse -> ArgumentOutOfRange
-         from the RFFT autodiff backward at TFC's n=1 frequency axis). 0.114.1 = 0.114.0 + the additive
-         IRFFT nFft clamp (strict superset). With it published, TFC's StopGradient workaround around the
-         DFT is removed (below) so the frequency branch trains end-to-end.
+         Bumped 0.117.0 -> 0.117.2: brings AiDotNet.Tensors #821 — the persistent GPU weight-buffer
+         version gate. RegisterPersistentTensor uploads a weight to a persistent GPU buffer at
+         construction (random init) keyed by the host backing array; SetParameters then loads the real
+         weights IN PLACE (same array, so same key) and bumps the tensor Version. The persistent-buffer
+         read is now version-gated (re-uploads on a stamp mismatch), so a model built while a
+         DirectGpuTensorEngine is Current no longer runs its forward against the stale construction-time
+         weights. Fixes real GGUF-decoder-under-GPU serving (greedy first token 7042 " Paris" was 32084);
+         pairs with this branch's LlamaModelBuilder.WriteGamma routing gamma through SetParameters so its
+         persistent buffer refreshes too.
 
-         Bumped 0.114.1 -> 0.114.2: brings AiDotNet.Tensors #780 (this repo's #1789) — DeformableConv2D-
-         Grouped now supports groups < deformGroups by keying the deform group on the INPUT CHANNEL
-         (ic/(inChannels/deformGroups)) instead of the output group, and validates inChannels %
-         deformGroups == 0 instead of groups % deformGroups. 0.114.2 = 0.114.1 + that additive fix
-         (strict superset). It unblocks BasicVSR++'s flow-guided deformable alignment (groups=1,
-         deformGroups=8), which previously threw "deformGroups 8 must divide groups 1".
+         Bumped 0.117.2 -> 0.118.0: brings AiDotNet.Tensors #824 — the native fused ANN kernel stack
+         (IAnnBackend + AnnPrimitives + AnnIndex: Flat/IVF/PQ/IVFPQ across all 7 backends). This is the
+         gating dependency for the dependency-free NativeAnn vector index (AnnVectorIndex<T>) that
+         replaces the broken external FaissNet IVF/PQ path.
 
-         Bumped Tensors 0.114.2 -> 0.114.3: brings AiDotNet.Tensors #782 — the compiled-replay autotune
-         hot-path fixes (stat-validated in-memory memo over AutotuneCache.Lookup, FrozenWeightRegistry
-         pre-packed matmul B in CompiledInferencePlan, and an in-memory _blockMemo for
-         AutotuneDispatcher.Decide's block-size lookup). These remove the per-GEMM filesystem touches that
-         regressed the Integration "Serial Perf" shard (compiled Transformer replay 2.82 -> 1.50 ms/step).
-         0.114.3 = 0.114.2 + those additive internal-only perf changes (strict superset). Native packages
-         are left at 0.114.0 (unchanged binaries; only the managed Tensors package carries the fix).
-
-         Bumped Tensors 0.114.3 -> 0.116.0 and Native 0.114.0 -> 0.116.0 (latest published, coreleased in
-         lockstep): picks up AiDotNet.Tensors #808 from the Tensors side. 0.116.0 is a strict superset of
-         0.114.x/0.115.x. (This entry continues from the last documented managed version, 0.114.3 above;
-         there was no separately documented 0.114.4/0.114.5 pin.)
-
-         Bumped Tensors + Native 0.116.0 -> 0.117.0 (latest published, coreleased in lockstep): picks up
-         AiDotNet.Tensors #780 (DeformableConv2DGrouped now supports groups < deformGroups by keying the
-         deform group on the INPUT channel, matching torchvision DeformConv2d / BasicVSR++'s flow-guided
-         alignment groups=1/deformGroups=8). 0.116.0's DeformableConv2DGrouped rejected that config with
-         "deformGroups (8) must divide groups (1)", failing BasicVSR++ and Qwen2Audio; 0.117.0 fixes it.
-         0.117.0 is a strict superset of 0.116.x.
-
-         Merged with master (#1789): AiDotNet.Tensors and all native backends now use the current
-         coreleased 0.118.0 set. This strict superset retains every Tensors fix documented above —
-         #772/#779/#780/#782/#808 — while keeping the managed and native package versions aligned. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.118.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.118.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.118.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.118.0" />
+         Bumped 0.118.0 -> 0.119.0: replaces the unpublished 0.118.10-q8 development pin with the
+         released package containing the serving branch's required Tensors APIs. Managed and native
+         packages are coreleased in lockstep. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.119.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
@@ -351,6 +333,9 @@
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Infrastructure -->
     <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.4.2" />
+    <PackageVersion Include="Neo4j.Driver" Version="5.28.4" />
+    <!-- Managed FAISS wrapper (native ANN: Flat/IVF/HNSW/PQ). Consumed only by the opt-in
+         AiDotNet.Storage.Faiss metapackage; ships a net6.0 lib + win-x64 native runtime. -->
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
     <PackageVersion Include="Stripe.net" Version="52.1.1" />

@@ -263,6 +263,16 @@ public class ModelStartupService : IHostedService
     {
         using var _ = Helpers.ModelPersistenceGuard.InternalOperation();
 
+        // Thread the operator's startup paged-KV settings into the InferenceOptimizationConfig that the
+        // unified continuous-batching engine consumes. Block size flows straight through; the incremental
+        // KV-cached build additionally forces the settings it strictly requires (see
+        // ServableModelWrapper.BuildIncrementalModel).
+        var servingConfig = new AiDotNet.Configuration.InferenceOptimizationConfig
+        {
+            EnablePagedKVCache = enablePagedKvCache,
+            PagedKVCacheBlockSize = pagedKvCacheBlockSize,
+        };
+
         var servableModel = ServableModelWrapper<T>.LoadServable(
             path,
             name,
@@ -272,8 +282,7 @@ public class ModelStartupService : IHostedService
             decryptionToken: null,
             enableTextGeneration: true,
             quantizeKvCacheWeights: quantizeKvCacheWeights,
-            enablePagedKvCache: enablePagedKvCache,
-            pagedKvCacheBlockSize: pagedKvCacheBlockSize);
+            servingInferenceConfig: servingConfig);
 
         var success = _modelRepository.LoadModel(name, servableModel, path);
         if (!success)

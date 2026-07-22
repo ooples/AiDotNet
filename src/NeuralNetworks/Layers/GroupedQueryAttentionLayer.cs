@@ -79,6 +79,29 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     private Tensor<T> _outputWeights;
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _outputBias;
+    // Optional projection biases (StarCoder2-style attention). Zero-length when unused, so the parameter
+    // layout is byte-identical to the bias-free default; Optional=true also omits them from the
+    // source-generated trainable-parameter set when zero-sized.
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Optional = true)]
+    private Tensor<T> _queryBias;
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Optional = true)]
+    private Tensor<T> _keyBias;
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Optional = true)]
+    private Tensor<T> _valueBias;
+    private readonly bool _useProjectionBias;
+
+    // Attention-logit soft-cap (Gemma-2 attn_logit_softcapping): when > 0, each scaled Q·Kᵀ score is
+    // passed through softcap·tanh(score / softcap) before the softmax. 0 disables it (standard SDPA).
+    private readonly double _attnLogitSoftcap;
+
+    // Causal masking: when true, position i attends only to positions <= i (decoder / autoregressive LM).
+    // Without it the attention is bidirectional, which silently corrupts every multi-token forward of a
+    // causal decoder while leaving single-token forwards (one position, no future) correct.
+    private readonly bool _useCausalMask;
+
+    // Shape-keyed cache of the flat causal row-pattern (see GetCausalMask): the [seqQ*seqKV] boolean plane
+    // is computed once per (seqQ, seqKV) and block-replicated across batch*heads on demand.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(int, int), bool[]> _causalPatternCache = new();
 
     // Positional encoding
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
@@ -117,9 +140,22 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     public int NumKVHeads => _numKVHeads;
 
     /// <summary>
+    /// Gets whether this layer adds separate learned biases to the Q/K/V projections (e.g. Qwen2-style).
+    /// Standard LLaMA-family models leave this off.
+    /// </summary>
+    public bool UsesProjectionBias => _useProjectionBias;
+
+    /// <summary>
     /// Gets the dimension of each attention head.
     /// </summary>
     public int HeadDimension => _headDimension;
+
+    /// <summary>
+    /// Gets the attention-logit soft-cap magnitude (Gemma-2 <c>attn_logit_softcapping</c>);
+    /// 0 when disabled. When positive, each scaled Q·Kᵀ score is passed through
+    /// <c>softcap·tanh(score / softcap)</c> before the softmax.
+    /// </summary>
+    public double AttnLogitSoftcap => _attnLogitSoftcap;
 
     /// <summary>
     /// Gets the number of query heads per KV head group.
@@ -161,8 +197,12 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
               + 2L * _embeddingDimension * (_numKVHeads * _headDimension)     // K + V
               + (long)(_numHeads * _headDimension) * _embeddingDimension      // output
               + _embeddingDimension                                          // output bias
+              + (_useProjectionBias                                          // optional q/k/v biases
+                  ? (long)_numHeads * _headDimension + 2L * _numKVHeads * _headDimension
+                  : 0L)
             : _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-              _outputWeights.Length + _outputBias.Length;
+              _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
+              _outputBias.Length;
 
     /// <summary>
     /// Creates a new Grouped-Query Attention layer.
@@ -179,16 +219,27 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         int numKVHeads,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null,
-        bool deferAllocation = false)
+        bool deferAllocation = false,
+        int? headDimension = null,
+        bool useProjectionBias = false,
+        double attnLogitSoftcap = 0.0,
+        bool useCausalMask = false)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
-        if (embeddingDimension % numHeads != 0)
+        // With an explicit head dimension the projection widths are numHeads*headDim (which may differ
+        // from embeddingDimension, e.g. Gemma-style decoders), so embeddingDimension need not be divisible
+        // by numHeads. Only the default (headDim = embeddingDimension/numHeads) requires that divisibility.
+        if (headDimension is null && embeddingDimension % numHeads != 0)
         {
             throw new ArgumentException(
                 $"Embedding dimension ({embeddingDimension}) must be divisible by numHeads ({numHeads}).");
+        }
+        if (headDimension is { } hd && hd <= 0)
+        {
+            throw new ArgumentException($"headDimension ({hd}) must be positive.", nameof(headDimension));
         }
 
         if (numHeads % numKVHeads != 0)
@@ -199,9 +250,18 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
 
         _numHeads = numHeads;
         _numKVHeads = numKVHeads;
-        _headDimension = embeddingDimension / numHeads;
+        _headDimension = headDimension ?? (embeddingDimension / numHeads);
         _embeddingDimension = embeddingDimension;
         _headsPerGroup = numHeads / numKVHeads;
+        _useProjectionBias = useProjectionBias;
+        if (attnLogitSoftcap < 0.0)
+        {
+            throw new ArgumentException(
+                $"attnLogitSoftcap ({attnLogitSoftcap}) must be non-negative (0 disables the cap).",
+                nameof(attnLogitSoftcap));
+        }
+        _attnLogitSoftcap = attnLogitSoftcap;
+        _useCausalMask = useCausalMask;
 
         InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         _weightsDeferred = deferAllocation;
@@ -217,6 +277,9 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             _valueWeights = new Tensor<T>([0]);
             _outputWeights = new Tensor<T>([0]);
             _outputBias = new Tensor<T>([0]);
+            _queryBias = new Tensor<T>([0]);
+            _keyBias = new Tensor<T>([0]);
+            _valueBias = new Tensor<T>([0]);
         }
         else
         {
@@ -228,6 +291,10 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             // Output projection: [numHeads * headDim, embDim]
             _outputWeights = new Tensor<T>([numHeads * _headDimension, embeddingDimension]);
             _outputBias = new Tensor<T>([embeddingDimension]);
+            // Projection biases: zero-length unless enabled (StarCoder2-style).
+            _queryBias = new Tensor<T>([useProjectionBias ? numHeads * _headDimension : 0]);
+            _keyBias = new Tensor<T>([useProjectionBias ? numKVHeads * _headDimension : 0]);
+            _valueBias = new Tensor<T>([useProjectionBias ? numKVHeads * _headDimension : 0]);
 
             InitializeParameters();
         }
@@ -252,6 +319,9 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             _valueWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
             _outputWeights = new Tensor<T>([_numHeads * _headDimension, _embeddingDimension]);
             _outputBias = new Tensor<T>([_embeddingDimension]);
+            _queryBias = new Tensor<T>([_useProjectionBias ? _numHeads * _headDimension : 0]);
+            _keyBias = new Tensor<T>([_useProjectionBias ? _numKVHeads * _headDimension : 0]);
+            _valueBias = new Tensor<T>([_useProjectionBias ? _numKVHeads * _headDimension : 0]);
             InitializeParameters();
             // Flip the flag LAST (volatile release): a concurrent reader either sees true and
             // blocks on the lock above, or sees false with every tensor allocated + initialized —
@@ -350,6 +420,14 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
         var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
 
+        // Optional projection biases (StarCoder2). Broadcast [outDim] over the flattened [N, outDim] projection.
+        if (_queryBias.Length > 0)
+        {
+            Q_flat = Engine.TensorBroadcastAdd(Q_flat, Engine.Reshape(_queryBias, new[] { 1, _numHeads * _headDimension }));
+            K_flat = Engine.TensorBroadcastAdd(K_flat, Engine.Reshape(_keyBias, new[] { 1, _numKVHeads * _headDimension }));
+            V_flat = Engine.TensorBroadcastAdd(V_flat, Engine.Reshape(_valueBias, new[] { 1, _numKVHeads * _headDimension }));
+        }
+
         // Reshape Q: [batch, seq, numHeads, headDim] -> [batch, numHeads, seq, headDim]
         var queries = Engine.TensorPermute(
             Engine.Reshape(Q_flat, new[] { batchSize, seqLen, _numHeads, _headDimension }),
@@ -363,29 +441,73 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             Engine.Reshape(V_flat, new[] { batchSize, seqLen, _numKVHeads, _headDimension }),
             new[] { 0, 2, 1, 3 });
 
-        // Apply RoPE to Q and K (before KV head expansion)
-        if (_ropeLayer != null)
+        Tensor<T> context;
+        if (!cacheBwd && _alibiLayer == null)
         {
-            (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
+            // ── Inference fast path ──────────────────────────────────────────────
+            // Fused interleaved RoPE + GQA-aware scaled-dot-product attention, both
+            // dispatched to the device engine (float-specialized CPU / GPU kernels).
+            // This eliminates the two dominant CPU self-time costs on the decoder
+            // forward: the managed RoPE rotate loop (RotateTensor) and the scalar
+            // ExpandKVHeads copy. The SDPA kernel broadcasts the shared KV heads
+            // internally, so no expanded [batch, numHeads, seq, headDim] K/V is ever
+            // materialized. Numerically identical to the training path below:
+            //   - ApplyRoPEInterleaved matches RotateTensor exactly (GPT-J/GGML 2i,2i+1)
+            //   - ScaledDotProductAttentionGqa uses scale = 1/sqrt(headDim), the same
+            //     causal offset (key j visible to query i iff j <= i + (seqK - seqQ)),
+            //     and the same attn-logit soft-cap.
+            // Only taken outside training (no backward caches / no tape) and without
+            // ALiBi (which needs the additive-bias FlashAttention path).
+            if (_ropeLayer != null)
+            {
+                var (cosCache, sinCache) = _ropeLayer.GetInterleavedCaches(seqLen);
+                queries = Engine.ApplyRoPEInterleaved(queries, cosCache, sinCache, startPosition: 0);
+                keys = Engine.ApplyRoPEInterleaved(keys, cosCache, sinCache, startPosition: 0);
+            }
+
+            context = Engine.ScaledDotProductAttentionGqa(
+                queries, keys, values,
+                scale: 1.0 / Math.Sqrt(_headDimension),
+                isCausal: _useCausalMask,
+                softcap: _attnLogitSoftcap);
         }
+        else
+        {
+            // ── Training / ALiBi path (tape-recorded, manual-backward caches) ─────
+            // Apply RoPE to Q and K (before KV head expansion)
+            if (_ropeLayer != null)
+            {
+                (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
+            }
 
-        _lastProjectedQueries = cacheBwd ? queries : null;
-        _lastProjectedKeys = cacheBwd ? keys : null;
-        _lastProjectedValues = cacheBwd ? values : null;
+            _lastProjectedQueries = cacheBwd ? queries : null;
+            _lastProjectedKeys = cacheBwd ? keys : null;
+            _lastProjectedValues = cacheBwd ? values : null;
 
-        // Expand K/V heads to match Q heads via repeat
-        var expandedKeys = ExpandKVHeads(keys, batchSize, seqLen);
-        var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
+            // Expand K/V heads to match Q heads via repeat
+            var expandedKeys = ExpandKVHeads(keys, batchSize, seqLen);
+            var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
 
-        _lastExpandedKeys = cacheBwd ? expandedKeys : null;
-        _lastExpandedValues = cacheBwd ? expandedValues : null;
+            _lastExpandedKeys = cacheBwd ? expandedKeys : null;
+            _lastExpandedValues = cacheBwd ? expandedValues : null;
 
-        // Compute attention with weights caching: [batch, numHeads, seqQ, seqKV]
-        var (context, attentionWeights) = _alibiLayer != null
-            ? ComputeALiBiAttention(queries, expandedKeys, expandedValues, seqLen, batchSize)
-            : ComputeStandardAttentionWithWeights(queries, expandedKeys, expandedValues);
+            // Compute attention with weights caching: [batch, numHeads, seqQ, seqKV]
+            // The attention-logit soft-cap flows only through the standard fused SDPA path; the ALiBi
+            // FlashAttention path has no soft-cap parameter, so reject the (never-faithful) combination
+            // rather than silently dropping the cap.
+            if (_alibiLayer != null && _attnLogitSoftcap > 0.0)
+            {
+                throw new InvalidOperationException(
+                    "attnLogitSoftcap is not supported together with ALiBi positional bias; " +
+                    "the soft-cap applies only to the standard scaled dot-product attention path.");
+            }
+            var (ctx, attentionWeights) = _alibiLayer != null
+                ? ComputeALiBiAttention(queries, expandedKeys, expandedValues, seqLen, batchSize)
+                : ComputeStandardAttentionWithWeights(queries, expandedKeys, expandedValues);
 
-        _lastAttentionWeights = cacheBwd ? attentionWeights : null;
+            _lastAttentionWeights = cacheBwd ? attentionWeights : null;
+            context = ctx;
+        }
 
         // Reshape back: [batch, numHeads, seq, headDim] -> [batch, seq, embDim]
         var contextPermuted = Engine.TensorPermute(context, new[] { 0, 2, 1, 3 });
@@ -473,6 +595,22 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     private (Tensor<T> Context, Tensor<T> AttentionWeights) ComputeStandardAttentionWithWeights(
         Tensor<T> queries, Tensor<T> keys, Tensor<T> values)
     {
+        // Causal decoder without a soft-cap: use FlashAttention's causal mask (softcap-free path), the same
+        // mechanism the stateless paged fallback uses. Soft-capped causal attention (Gemma-2) falls through
+        // to the Engine SDPA path below, which applies an additive causal mask so the cap and mask compose.
+        if (_useCausalMask && _attnLogitSoftcap <= 0.0)
+        {
+            var flashConfig = new FlashAttentionConfig { ReturnAttentionWeights = true, UseCausalMask = true };
+            var (flashOutput, flashWeights) = FlashAttention<T>.Forward(
+                queries.Contiguous(), keys.Contiguous(), values.Contiguous(), flashConfig);
+            if (flashWeights is null)
+            {
+                throw new InvalidOperationException(
+                    "FlashAttention returned null attention weights despite ReturnAttentionWeights=true.");
+            }
+            return (flashOutput, flashWeights);
+        }
+
         var context = ComputeStandardAttention(queries, keys, values, out var attentionWeights);
         return (context, attentionWeights);
     }
@@ -487,11 +625,50 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         // and attn·V into one kernel call (and gives a SIMD/GPU dispatch when
         // available).
         int headDim = queries.Shape[3];
+        // Causal decoders pass a boolean mask (true = a query may attend to that key, i.e. key <= query),
+        // so future keys are excluded before the softmax. Non-causal (encoder) attention passes no mask.
+        Tensor<bool>? mask = _useCausalMask
+            ? GetCausalMask(queries.Shape[0], queries.Shape[1], queries.Shape[2], keys.Shape[2])
+            : null;
         return Engine.ScaledDotProductAttention(
             queries, keys, values,
-            mask: null,
+            mask,
             scale: 1.0 / Math.Sqrt(headDim),
-            out attentionWeightsOut);
+            out attentionWeightsOut,
+            softcap: _attnLogitSoftcap);
+    }
+
+    // Materializes the [batch, heads, seqQ, seqKV] boolean causal mask the fused SDPA kernel consumes (it
+    // does not broadcast the batch/head dims). The per-(seqQ,seqKV) row plane is computed ONCE with a flat
+    // fill and cached; each forward only block-copies that plane across batch*heads (no scalar indexer, no
+    // O(seq^2) recompute). The masked attention itself stays in the fused Engine kernel (SIMD/GPU).
+    private Tensor<bool> GetCausalMask(int batch, int heads, int seqQ, int seqKV)
+    {
+        var plane = _causalPatternCache.GetOrAdd((seqQ, seqKV), static key =>
+        {
+            var (sq, skv) = key;
+            var p = new bool[sq * skv];
+            // A query at position i (over the last sq keys) attends to keys [0 .. keyOffset + i].
+            int keyOffset = skv - sq;
+            for (int i = 0; i < sq; i++)
+            {
+                int lastAllowed = Math.Min(keyOffset + i, skv - 1);
+                int rowBase = i * skv;
+                for (int j = 0; j <= lastAllowed; j++)
+                {
+                    p[rowBase + j] = true;
+                }
+            }
+            return p;
+        });
+
+        int planeLen = seqQ * seqKV;
+        var data = new bool[batch * heads * planeLen];
+        for (int k = 0; k < batch * heads; k++)
+        {
+            Array.Copy(plane, 0, data, k * planeLen, planeLen);
+        }
+        return new Tensor<bool>(data, new[] { batch, heads, seqQ, seqKV });
     }
 
     /// <summary>
@@ -552,11 +729,14 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     {
         EnsureWeightsMaterialized();
         int totalParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-                          _outputWeights.Length + _outputBias.Length;
+                          _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
+                          _outputBias.Length;
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias })
+        // Order: Q/K/V/O weights, optional q/k/v biases (zero-length when unused → layout unchanged),
+        // then the output bias LAST (the tensor-parallel partitioner reads it tail-wise).
+        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias })
         {
             for (int i = 0; i < tensor.Length; i++)
                 parameters[index++] = tensor[i];
@@ -568,8 +748,8 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         EnsureWeightsMaterialized();
-        var gradTensors = new[] { _queryWeightsGradient, _keyWeightsGradient, _valueWeightsGradient, _outputWeightsGradient, _outputBiasGradient };
-        var weightTensors = new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias };
+        var gradTensors = new[] { _queryWeightsGradient, _keyWeightsGradient, _valueWeightsGradient, _outputWeightsGradient, null, null, null, _outputBiasGradient };
+        var weightTensors = new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias };
         int totalParams = weightTensors.Sum(w => w.Length);
         var result = new Vector<T>(totalParams);
         int index = 0;
@@ -605,12 +785,13 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     {
         EnsureWeightsMaterialized();
         int expectedParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-                             _outputWeights.Length + _outputBias.Length;
+                             _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
+                             _outputBias.Length;
         if (parameters.Length != expectedParams)
             throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
 
         int index = 0;
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias })
+        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias })
         {
             for (int i = 0; i < tensor.Length; i++)
                 tensor[i] = parameters[index++];
@@ -645,6 +826,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         // SequenceLength + EmbeddingDimension here, the deser path would fall
         // back to inputShape[0]/[1] (correct for rank-2 [seq, dim] payloads)
         // or to hardcoded 16/64 if the shape is degenerate — issue #1239.
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
         metadata["SequenceLength"] = InputShape[0].ToString();
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
         metadata["NumHeads"] = _numHeads.ToString();
@@ -652,6 +834,15 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         metadata["HeadsPerGroup"] = _headsPerGroup.ToString();
         metadata["Variant"] = Variant.ToString();
         metadata["PositionalEncoding"] = PositionalEncoding.ToString();
+        // Persist the remaining shape/behaviour-affecting ctor arguments so a deserialized (cloned) layer is
+        // functionally identical. Without these a clone silently lost its causal mask, custom head dimension
+        // (Gemma), Q/K/V projection bias (Qwen2), attention logit soft-cap (Gemma-2), and RoPE — producing
+        // wrong outputs on the cloned model (e.g. the paged incremental-serving clone of a GGUF decoder).
+        metadata["HeadDimension"] = _headDimension.ToString(ci);
+        metadata["UseCausalMask"] = _useCausalMask.ToString();
+        metadata["UseProjectionBias"] = _useProjectionBias.ToString();
+        metadata["AttnLogitSoftcap"] = _attnLogitSoftcap.ToString(ci);
+        metadata["RoPETheta"] = RoPETheta.ToString(ci);
         return metadata;
     }
 

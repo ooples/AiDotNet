@@ -42,6 +42,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         // Mock generator for entity extraction
         private class EntityExtractionMockGenerator : IGenerator<double>
         {
+
+        public System.Threading.Tasks.Task<string> GenerateAsync(string prompt, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(Generate(prompt)); }
+        public System.Threading.Tasks.Task<GroundedAnswer<double>> GenerateGroundedAsync(string query, IEnumerable<Document<double>> context, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GenerateGrounded(query, context)); }
             private readonly string _entityExtractionResponse;
             public List<string> GeneratePrompts { get; } = new List<string>();
 

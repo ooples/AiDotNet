@@ -94,12 +94,30 @@ public sealed class OpenAiBackend : IServingBackend
                 }
             }
 
-            result.OutputTokens = usageCompletion ?? contentChunks;
-            if (usagePrompt.HasValue) result.PromptTokens = usagePrompt.Value;
+            // Trust ONLY authoritative server usage for token counts. SSE content-chunk counts are NOT token
+            // counts (a chunk may carry several tokens, and some decoded tokens produce no text), so
+            // substituting them would corrupt token-throughput / TPOT. When usage is absent, mark token
+            // metrics UNAVAILABLE (excluded from token aggregates) instead of back-filling with chunk counts.
             result.TtftMs = result.TokenArrivalsMs.Count > 0 ? result.TokenArrivalsMs[0] : null;
-            result.Success = result.OutputTokens > 0;
-            if (!result.Success) result.Error = "no tokens returned";
             result.EndMs = dispatchMs + sw.Elapsed.TotalMilliseconds;
+
+            if (usageCompletion.HasValue)
+            {
+                result.OutputTokens = usageCompletion.Value;
+                if (usagePrompt.HasValue) result.PromptTokens = usagePrompt.Value;
+                result.Success = result.OutputTokens > 0 || contentChunks > 0;
+                if (!result.Success) result.Error = "no tokens returned";
+            }
+            else
+            {
+                // Endpoint emitted no usage object: the request may have produced text (contentChunks),
+                // but exact token counts are unknown. Flag it so aggregation excludes it from token metrics.
+                result.TokenMetricsUnavailable = true;
+                result.Success = contentChunks > 0;
+                result.Error = result.Success
+                    ? "token usage unavailable (no usage object emitted); token metrics excluded for this request"
+                    : "no tokens returned";
+            }
             return result;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

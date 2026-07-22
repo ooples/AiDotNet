@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using System.Globalization;
+using AiDotNet.Inference;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -52,7 +53,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// You can switch between tasks at runtime, and each task only trains its specific LoRA weights!
 /// </para>
 /// </remarks>
-public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
+public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLayer<T>
 {
     /// <summary>
     /// Dictionary mapping task names to their specific LoRA layers.
@@ -347,6 +348,95 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
+    }
+
+    /// <summary>
+    /// Inference forward that resolves the active task PER REQUEST from <paramref name="ctx"/> instead of the
+    /// mutable <see cref="CurrentTask"/> field, so concurrent generation requests over one shared base model
+    /// never overwrite each other's adapter. In a batched forward, batch row <c>b</c> uses
+    /// <c>ctx.LoraTasks[b]</c>, letting sequences that requested different adapters co-batch in a single
+    /// forward. Must not mutate shared layer state.
+    /// </summary>
+    /// <param name="input">Input tensor; features are on the last axis, all leading axes are batch-like.</param>
+    /// <param name="ctx">The per-call inference context carrying the LoRA task selection.</param>
+    /// <returns><c>base(input) + selected_task_lora(input)</c>, with each row's own adapter applied.</returns>
+    Tensor<T> IContextAwareInferenceLayer<T>.ForwardWithContext(Tensor<T> input, InferenceForwardContext ctx)
+    {
+        Guard.NotNull(input);
+        Guard.NotNull(ctx);
+
+        // The base layer is adapter-independent, so it always co-batches (this is the expensive part).
+        Tensor<T> baseOutput = _baseLayer.Forward(input);
+
+        int batch = input.Shape.Length > 0 ? input.Shape[0] : 1;
+        var perRow = ctx.LoraTasks;
+
+        // Uniform selection (single-sequence, or a batch that all requested the same adapter, or per-row
+        // info absent / shape-mismatched): one adapter over the whole input, no shared-state mutation.
+        if (perRow is null || perRow.Length != batch || AllSame(perRow))
+        {
+            string task = ResolveTask(perRow is { Length: > 0 } ? (perRow[0] ?? ctx.LoraTask) : ctx.LoraTask);
+            Tensor<T> loraOutput = _taskAdapters[task].Forward(input);
+            return Engine.TensorAdd(baseOutput, loraOutput);
+        }
+
+        // Heterogeneous batch: compute each DISTINCT task's delta over the full batch once (the low-rank
+        // adapters are cheap), then gather row b from the delta of that row's resolved task. All deltas
+        // share input/output shape, so this is a per-row block copy along the leading (batch) axis.
+        var deltaByTask = new Dictionary<string, Tensor<T>>();
+        var rowTask = new string[batch];
+        for (int b = 0; b < batch; b++)
+        {
+            string task = ResolveTask(perRow[b] ?? ctx.LoraTask);
+            rowTask[b] = task;
+            if (!deltaByTask.ContainsKey(task))
+            {
+                deltaByTask[task] = _taskAdapters[task].Forward(input);
+            }
+        }
+
+        var refShape = deltaByTask[rowTask[0]].Shape;
+        var shapeDims = new int[refShape.Length];
+        for (int d = 0; d < refShape.Length; d++) shapeDims[d] = refShape[d];
+        var loraCombined = new Tensor<T>(shapeDims);
+        var dst = loraCombined.AsWritableSpan();
+        int rowLen = dst.Length / batch; // every delta has identical shape, so rows are equal-size blocks
+        for (int b = 0; b < batch; b++)
+        {
+            var src = deltaByTask[rowTask[b]].AsSpan();
+            src.Slice(b * rowLen, rowLen).CopyTo(dst.Slice(b * rowLen, rowLen));
+        }
+
+        return Engine.TensorAdd(baseOutput, loraCombined);
+    }
+
+    // Resolves a requested task name to an existing adapter, falling back to the current default task when
+    // the request left it unspecified (null/empty). An explicitly-named unknown task is a caller error.
+    private string ResolveTask(string? requested)
+    {
+        if (string.IsNullOrEmpty(requested))
+        {
+            return _currentTask;
+        }
+        if (!_taskAdapters.ContainsKey(requested!))
+        {
+            throw new ArgumentException(
+                $"LoRA task '{requested}' has not been added. Available tasks: {string.Join(", ", _taskAdapters.Keys)}",
+                nameof(requested));
+        }
+        return requested!;
+    }
+
+    private static bool AllSame(string?[] tasks)
+    {
+        for (int i = 1; i < tasks.Length; i++)
+        {
+            if (!string.Equals(tasks[i], tasks[0], System.StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>
