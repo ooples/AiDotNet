@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for speaker recognition/verification models. Inherits audio NN invariants
 /// and adds speaker-specific: embedding similarity for same input and bounded embeddings.
 /// </summary>
-public abstract class SpeakerRecognitionTestBase : AudioNNModelTestBase
+public abstract class SpeakerRecognitionTestBase<T> : AudioNNModelTestBase<T>
 {
     [Fact(Timeout = 60000)]
     public async Task SameInput_SameEmbedding()
@@ -42,11 +42,17 @@ public abstract class SpeakerRecognitionTestBase : AudioNNModelTestBase
         double normSq = 0;
         for (int i = 0; i < embedding.Length; i++)
         {
-            Assert.False(double.IsNaN(embedding[i]),
+            double value = ConvertToDouble(embedding[i]);
+            Assert.False(double.IsNaN(value),
                 $"Speaker embedding[{i}] is NaN.");
-            normSq += embedding[i] * embedding[i];
+            normSq += value * value;
         }
         Assert.True(Math.Sqrt(normSq) < 1e4,
             $"Speaker embedding norm = {Math.Sqrt(normSq):E4} is unbounded.");
     }
 }
+
+/// <summary>
+/// Backward-compatible double-precision speaker-recognition scaffold.
+/// </summary>
+public abstract class SpeakerRecognitionTestBase : SpeakerRecognitionTestBase<double> { }

@@ -238,6 +238,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <inheritdoc />
     public virtual async Task InitializeAsync()
     {
+        WriteCiTestTrace("test-start");
+
         // #1706/#1305: heavy models serialize so their (single-threaded-BLAS) forward/backward runs
         // uncontended and fits the per-test timeout. Acquired before the determinism setup so the
         // entire test body is covered; released in DisposeAsync.
@@ -349,6 +351,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
         finally
         {
+            WriteCiTestTrace("test-end");
+
             // Release the heavy gate if this test acquired it, so the next heavy test can run.
             if (_heavyGateAcquired)
             {
@@ -357,6 +361,30 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             }
         }
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Emits an opt-in class/precision marker for serialized CI shards before model construction.
+    /// The workflow tails this file beside its memory sampler, so a runner-level OOM remains
+    /// attributable even when VSTest cannot flush its normal completion output or TRX file.
+    /// </summary>
+    private void WriteCiTestTrace(string phase)
+    {
+        string? tracePath = Environment.GetEnvironmentVariable("AIDOTNET_TEST_TRACE_FILE");
+        if (string.IsNullOrWhiteSpace(tracePath)) return;
+
+        try
+        {
+            File.AppendAllText(
+                tracePath,
+                $"{DateTimeOffset.UtcNow:O} [{phase}] {GetType().FullName} precision={typeof(T).FullName}{Environment.NewLine}");
+        }
+        catch (Exception ex)
+        {
+            // Diagnostics must never turn a passing test into a failure. The console warning still
+            // explains why an OOM marker may be absent if the runner filesystem becomes unavailable.
+            Console.Error.WriteLine($"[test-trace-warning] {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <summary>
