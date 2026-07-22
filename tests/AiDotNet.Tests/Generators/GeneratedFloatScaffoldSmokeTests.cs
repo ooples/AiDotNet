@@ -74,6 +74,7 @@ public class GeneratedFloatScaffoldSmokeTests
         // no manual scaffold (so it IS auto-generated). LayoutGraph is a stable auto-generated J-M model,
         // outside the resource-bound A-I/N-Z shard ranges and not in any explicit float roster, so it remains
         // the double control. If either precision route silently regresses, this test fails.
+        Assert.Contains(floatScaffolds, t => t.Name == "ABINetTests");
         Assert.Contains(floatScaffolds, t => t.Name == "WhisperLargeV3Tests");
         Assert.Contains(floatScaffolds, t => t.Name == "CIFEncoderTests");
         Assert.Contains(floatScaffolds, t => t.Name == "BasicVSRTests");
