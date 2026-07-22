@@ -90,6 +90,19 @@ public class VectorRetrieverTests
     /// </summary>
     private class MockDocumentStore : IDocumentStore<double>
     {
+
+            public System.Threading.Tasks.Task AddAsync(VectorDocument<double> vectorDocument, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); Add(vectorDocument); return System.Threading.Tasks.Task.CompletedTask; }
+            public System.Threading.Tasks.Task AddBatchAsync(IEnumerable<VectorDocument<double>> vectorDocuments, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); AddBatch(vectorDocuments); return System.Threading.Tasks.Task.CompletedTask; }
+            public System.Threading.Tasks.Task<IEnumerable<Document<double>>> GetSimilarAsync(Vector<double> queryVector, int topK, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilar(queryVector, topK)); }
+            public System.Threading.Tasks.Task<IEnumerable<Document<double>>> GetSimilarWithFiltersAsync(Vector<double> queryVector, int topK, Dictionary<string, object> metadataFilters, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilarWithFilters(queryVector, topK, metadataFilters)); }
+
+            public IEnumerable<Document<double>> GetSimilarWithFilter(Vector<double> queryVector, AiDotNet.RetrievalAugmentedGeneration.Filtering.MetadataFilter filter, int topK) { var __r = new List<Document<double>>(); foreach (var __d in GetSimilar(queryVector, topK * 10)) { if (filter == null || filter.Matches(__d.Metadata)) { __r.Add(__d); if (__r.Count >= topK) break; } } return __r; }
+
+            public System.Threading.Tasks.Task<IEnumerable<Document<double>>> GetSimilarWithFilterAsync(Vector<double> queryVector, AiDotNet.RetrievalAugmentedGeneration.Filtering.MetadataFilter filter, int topK, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilarWithFilter(queryVector, filter, topK)); }
+            public System.Threading.Tasks.Task<Document<double>?> GetByIdAsync(string documentId, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetById(documentId)); }
+            public System.Threading.Tasks.Task<bool> RemoveAsync(string documentId, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(Remove(documentId)); }
+            public System.Threading.Tasks.Task ClearAsync(System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); Clear(); return System.Threading.Tasks.Task.CompletedTask; }
+            public System.Threading.Tasks.Task<IEnumerable<Document<double>>> GetAllAsync(System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetAll()); }
         private readonly List<(Document<double> Doc, Vector<double> Embedding)> _documents = new();
 
         public int DocumentCount => _documents.Count;

@@ -108,6 +108,26 @@ public class CrossEncoderReranker<T> : RerankerBase<T>
     }
 
     /// <summary>
+    /// Initializes a new instance of the CrossEncoderReranker class backed by a real ONNX cross-encoder model.
+    /// </summary>
+    /// <param name="onnxReranker">A configured <see cref="OnnxCrossEncoderReranker{T}"/> used to score (query, document) pairs.</param>
+    /// <param name="maxPairsToScore">Maximum number of query-document pairs to score (default: 20).</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the convenient, works-out-of-the-box path.
+    ///
+    /// Instead of writing your own scoring function, hand this constructor an
+    /// <see cref="OnnxCrossEncoderReranker{T}"/> pointing at a real cross-encoder model
+    /// (e.g. BGE-reranker or ms-marco-MiniLM) and it will use that model to score pairs.
+    /// </para>
+    /// </remarks>
+    public CrossEncoderReranker(OnnxCrossEncoderReranker<T> onnxReranker, int maxPairsToScore = 20)
+        : this(
+            (onnxReranker ?? throw new ArgumentNullException(nameof(onnxReranker))).ScorePair,
+            maxPairsToScore)
+    {
+    }
+
+    /// <summary>
     /// Reranks documents using the cross-encoder model.
     /// </summary>
     /// <param name="query">The search query.</param>

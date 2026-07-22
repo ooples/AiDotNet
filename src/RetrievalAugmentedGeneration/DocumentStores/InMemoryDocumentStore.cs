@@ -229,8 +229,9 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
         bool hasFilters = metadataFilters.Count > 0;
 
         // Use HNSW for O(log n) approximate nearest neighbor search
-        // If there are metadata filters, over-fetch candidates to account for filtering
-        int fetchCount = hasFilters ? Math.Min(topK * 10, _store.Count) : topK;
+        // Filtering happens after ANN search. For correctness we must inspect every candidate when filters are
+        // present: a fixed topK multiplier can return zero results for a small tenant in a heavily shared store.
+        int fetchCount = hasFilters ? _store.Count : topK;
 
         if (_hnswIndex.Count == 0)
             return Enumerable.Empty<Document<T>>();

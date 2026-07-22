@@ -355,6 +355,31 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
 
     /// <summary>
+    /// Gets the chunking strategy configured for the RAG pipeline, or null if none was configured.
+    /// </summary>
+    /// <value>An <see cref="IChunkingStrategy"/> used to split documents into passages, or null.</value>
+    public IChunkingStrategy? ChunkingStrategy { get; private set; }
+
+    /// <summary>
+    /// Gets the context compressor configured for the RAG pipeline, or null if none was configured.
+    /// </summary>
+    /// <value>An <see cref="IContextCompressor{T}"/> used to shrink retrieved context, or null.</value>
+    public IContextCompressor<T>? ContextCompressor { get; private set; }
+
+    /// <summary>
+    /// Gets the document store backing vector retrieval, or null if none was configured.
+    /// </summary>
+    /// <value>An <see cref="IDocumentStore{T}"/> holding vectorized documents, or null.</value>
+    /// <remarks>
+    /// <para>
+    /// This property is excluded from JSON serialization because it represents runtime storage
+    /// infrastructure that must be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public IDocumentStore<T>? DocumentStore { get; private set; }
+
+    /// <summary>
     /// Gets or sets the knowledge graph for graph-enhanced retrieval.
     /// </summary>
     /// <value>A knowledge graph containing entities and relationships, or null if Graph RAG is not configured.</value>
@@ -1622,6 +1647,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         RagReranker = options.RagReranker;
         RagGenerator = options.RagGenerator;
         QueryProcessors = options.QueryProcessors;
+        ChunkingStrategy = options.ChunkingStrategy;
+        ContextCompressor = options.ContextCompressor;
+        DocumentStore = options.DocumentStore;
 
         // Graph RAG
         KnowledgeGraph = options.KnowledgeGraph;
@@ -3712,6 +3740,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             RagReranker = RagReranker,
             RagGenerator = RagGenerator,
             QueryProcessors = QueryProcessors,
+            ChunkingStrategy = ChunkingStrategy,
+            ContextCompressor = ContextCompressor,
+            DocumentStore = DocumentStore,
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
@@ -5461,6 +5492,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             RagReranker = RagReranker,
             RagGenerator = RagGenerator,
             QueryProcessors = QueryProcessors,
+            ChunkingStrategy = ChunkingStrategy,
+            ContextCompressor = ContextCompressor,
+            DocumentStore = DocumentStore,
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
@@ -5674,6 +5708,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 RagReranker = deserializedObject.RagReranker;
                 RagGenerator = deserializedObject.RagGenerator;
                 QueryProcessors = deserializedObject.QueryProcessors;
+                ChunkingStrategy = deserializedObject.ChunkingStrategy;
+                ContextCompressor = deserializedObject.ContextCompressor;
+                DocumentStore = deserializedObject.DocumentStore;
                 LoRAConfiguration = deserializedObject.LoRAConfiguration;
                 CrossValidationResult = deserializedObject.CrossValidationResult;
                 AutoMLSummary = deserializedObject.AutoMLSummary;

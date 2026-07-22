@@ -230,6 +230,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IReranker<T>? _ragReranker;
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
+    private IChunkingStrategy? _chunkingStrategy;
+    private IContextCompressor<T>? _contextCompressor;
+    private IDocumentStore<T>? _ragDocumentStore;
 
     // Graph RAG components for knowledge graph-enhanced retrieval
     private KnowledgeGraph<T>? _knowledgeGraph;

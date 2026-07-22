@@ -31,6 +31,12 @@ public class ExtractedEntity
     public double Confidence { get; set; }
 
     /// <summary>
+    /// Optional natural-language description of the entity (populated by LLM extraction;
+    /// empty for the regex/heuristic path).
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>
     /// Start character offset in the source text.
     /// </summary>
     public int StartOffset { get; set; }

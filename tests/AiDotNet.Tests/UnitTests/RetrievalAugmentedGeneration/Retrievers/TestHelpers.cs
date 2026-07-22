@@ -141,6 +141,19 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             ).ToList();
         }
 
+        public System.Threading.Tasks.Task AddAsync(VectorDocument<T> vectorDocument, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); Add(vectorDocument); return System.Threading.Tasks.Task.CompletedTask; }
+        public System.Threading.Tasks.Task AddBatchAsync(IEnumerable<VectorDocument<T>> vectorDocuments, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); AddBatch(vectorDocuments); return System.Threading.Tasks.Task.CompletedTask; }
+        public System.Threading.Tasks.Task<IEnumerable<Document<T>>> GetSimilarAsync(Vector<T> queryVector, int topK, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilar(queryVector, topK)); }
+        public System.Threading.Tasks.Task<IEnumerable<Document<T>>> GetSimilarWithFiltersAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilarWithFilters(queryVector, topK, metadataFilters)); }
+
+        public IEnumerable<Document<T>> GetSimilarWithFilter(Vector<T> queryVector, AiDotNet.RetrievalAugmentedGeneration.Filtering.MetadataFilter filter, int topK) { var __r = new List<Document<T>>(); foreach (var __d in GetSimilar(queryVector, topK * 10)) { if (filter == null || filter.Matches(__d.Metadata)) { __r.Add(__d); if (__r.Count >= topK) break; } } return __r; }
+
+        public System.Threading.Tasks.Task<IEnumerable<Document<T>>> GetSimilarWithFilterAsync(Vector<T> queryVector, AiDotNet.RetrievalAugmentedGeneration.Filtering.MetadataFilter filter, int topK, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetSimilarWithFilter(queryVector, filter, topK)); }
+        public System.Threading.Tasks.Task<Document<T>?> GetByIdAsync(string documentId, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetById(documentId)); }
+        public System.Threading.Tasks.Task<bool> RemoveAsync(string documentId, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(Remove(documentId)); }
+        public System.Threading.Tasks.Task ClearAsync(System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); Clear(); return System.Threading.Tasks.Task.CompletedTask; }
+        public System.Threading.Tasks.Task<IEnumerable<Document<T>>> GetAllAsync(System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(GetAll()); }
+
         private bool MatchesFilters(VectorDocument<T> document, Dictionary<string, object> filters)
         {
             if (filters == null || filters.Count == 0)

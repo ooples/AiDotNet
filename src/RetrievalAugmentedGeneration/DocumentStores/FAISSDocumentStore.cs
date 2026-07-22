@@ -10,9 +10,19 @@ using AiDotNet.RetrievalAugmentedGeneration.Models;
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 {
     /// <summary>
-    /// FAISS-inspired document store with indexed vectors for efficient similarity search.
+    /// In-memory, brute-force document store that mimics FAISS-style integer indexing. This is NOT
+    /// the native FAISS library.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// <b>Looking for real FAISS?</b> This type is a dependency-free, pure-managed <i>simulation</i>:
+    /// every query is an exact O(n) brute-force cosine scan, so it does not deliver FAISS-level ANN
+    /// throughput. For a genuine native FAISS backend with IVF / HNSW / PQ indexes, reference the opt-in
+    /// <c>AiDotNet.Storage.Faiss</c> package and use
+    /// <c>AiDotNet.RetrievalAugmentedGeneration.DocumentStores.FaissDocumentStore&lt;T&gt;</c>
+    /// (note the Pascal-cased name). This in-memory type is retained for tests, prototyping, and
+    /// environments where the native FAISS runtime is unavailable.
+    /// </para>
     /// <para>
     /// This implementation provides an in-memory simulation of Facebook AI Similarity Search (FAISS),
     /// using integer-based indexing for fast vector lookup. It maintains both document storage and

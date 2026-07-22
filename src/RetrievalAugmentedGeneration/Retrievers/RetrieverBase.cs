@@ -1,4 +1,6 @@
 
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -88,6 +90,32 @@ public abstract class RetrieverBase<T> : IRetriever<T>
     }
 
     /// <summary>
+    /// Asynchronously retrieves relevant documents, honoring cancellation.
+    /// </summary>
+    /// <param name="query">The query text.</param>
+    /// <param name="topK">The number of documents to retrieve.</param>
+    /// <param name="metadataFilters">Optional metadata filters. When null, no filtering is applied.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the relevant documents ordered by relevance.</returns>
+    public virtual async Task<IEnumerable<Document<T>>> RetrieveAsync(
+        string query,
+        int topK,
+        Dictionary<string, object>? metadataFilters = null,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateQuery(query);
+        ValidateTopK(topK);
+        var filters = metadataFilters ?? new Dictionary<string, object>();
+        ValidateMetadataFilters(filters);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var results = await RetrieveCoreAsync(query, topK, filters, cancellationToken).ConfigureAwait(false);
+
+        return PostProcessResults(results, topK);
+    }
+
+    /// <summary>
     /// Core retrieval logic to be implemented by derived classes.
     /// </summary>
     /// <param name="query">The validated query text.</param>
@@ -107,6 +135,26 @@ public abstract class RetrieverBase<T> : IRetriever<T>
     /// </para>
     /// </remarks>
     protected abstract IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters);
+
+    /// <summary>
+    /// Core asynchronous retrieval logic. The default implementation wraps the synchronous
+    /// <see cref="RetrieveCore"/>, which is appropriate for CPU-bound retrievers. I/O-bound retrievers
+    /// (network embedding models, remote stores) should override this to perform genuine non-blocking work.
+    /// </summary>
+    /// <param name="query">The validated query text.</param>
+    /// <param name="topK">The validated number of documents to retrieve.</param>
+    /// <param name="metadataFilters">The validated metadata filters.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the relevant documents ordered by relevance.</returns>
+    protected virtual Task<IEnumerable<Document<T>>> RetrieveCoreAsync(
+        string query,
+        int topK,
+        Dictionary<string, object> metadataFilters,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(RetrieveCore(query, topK, metadataFilters));
+    }
 
     /// <summary>
     /// Validates the query string.

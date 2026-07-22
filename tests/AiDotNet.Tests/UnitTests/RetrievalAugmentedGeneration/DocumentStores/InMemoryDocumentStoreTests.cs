@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -292,6 +293,93 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             // Assert
             Assert.Equal(100, store.DocumentCount);
+        }
+
+        #endregion
+
+        #region Rich MetadataFilter (end-to-end)
+
+        private static VectorDocument<float> RichDoc(string id, float[] vector, Dictionary<string, object> metadata)
+            => new VectorDocument<float>
+            {
+                Document = new Document<float>(id, id + "-content", metadata),
+                Embedding = new Vector<float>(vector)
+            };
+
+        private static InMemoryDocumentStore<float> BuildRichStore()
+        {
+            var store = new InMemoryDocumentStore<float>(vectorDimension: 3);
+            store.AddBatch(new List<VectorDocument<float>>
+            {
+                RichDoc("d1", new float[] { 1, 0, 0 }, new Dictionary<string, object> { ["category"] = "science", ["year"] = 2022, ["archived"] = false }),
+                RichDoc("d2", new float[] { 0.9f, 0.1f, 0 }, new Dictionary<string, object> { ["category"] = "science", ["year"] = 2015, ["author"] = "A", ["archived"] = false }),
+                RichDoc("d3", new float[] { 0.8f, 0.2f, 0 }, new Dictionary<string, object> { ["category"] = "science", ["year"] = 2023, ["archived"] = true }),
+                RichDoc("d4", new float[] { 0.7f, 0.3f, 0 }, new Dictionary<string, object> { ["category"] = "food", ["year"] = 2024, ["archived"] = false }),
+                RichDoc("d5", new float[] { 0.6f, 0.4f, 0 }, new Dictionary<string, object> { ["category"] = "science", ["year"] = 2010, ["author"] = "Z", ["archived"] = false }),
+            });
+            return store;
+        }
+
+        [Fact]
+        public void GetSimilarWithFilter_And_Range_ReturnsOnlyMatching()
+        {
+            var store = BuildRichStore();
+            // category == science AND year >= 2020 AND NOT archived
+            var filter = MetadataFilter.Eq("category", "science")
+                .And(MetadataFilter.Gte("year", 2020))
+                .And(MetadataFilter.Eq("archived", true).Not());
+
+            var results = store.GetSimilarWithFilter(new Vector<float>(new float[] { 1, 0, 0 }), filter, topK: 10).ToList();
+
+            var ids = results.Select(r => r.Id).OrderBy(x => x).ToList();
+            Assert.Equal(new[] { "d1" }, ids);
+        }
+
+        [Fact]
+        public void GetSimilarWithFilter_OrAndIn_ReturnsUnion()
+        {
+            var store = BuildRichStore();
+            // category == science AND (year >= 2020 OR author in [A])
+            var filter = MetadataFilter.Eq("category", "science")
+                .And(MetadataFilter.Gte("year", 2020).Or(MetadataFilter.In("author", new object[] { "A" })));
+
+            var results = store.GetSimilarWithFilter(new Vector<float>(new float[] { 1, 0, 0 }), filter, topK: 10).ToList();
+
+            var ids = results.Select(r => r.Id).OrderBy(x => x).ToList();
+            // d1 (2022), d2 (author A), d3 (2023) - all science; d4 is food, d5 is 2010/author Z.
+            Assert.Equal(new[] { "d1", "d2", "d3" }, ids);
+        }
+
+        [Fact]
+        public void GetSimilarWithFilter_Exists_And_TopKHonoured()
+        {
+            var store = BuildRichStore();
+            var filter = MetadataFilter.Exists("author");
+
+            var results = store.GetSimilarWithFilter(new Vector<float>(new float[] { 1, 0, 0 }), filter, topK: 1).ToList();
+
+            Assert.Single(results);
+            Assert.Contains(results[0].Id, new[] { "d2", "d5" });
+            Assert.True(results[0].HasRelevanceScore);
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task GetSimilarWithFilterAsync_MatchesSyncResult()
+        {
+            var store = BuildRichStore();
+            var filter = MetadataFilter.Ne("category", "science");
+
+            var results = (await store.GetSimilarWithFilterAsync(new Vector<float>(new float[] { 1, 0, 0 }), filter, topK: 10)).ToList();
+
+            Assert.Equal(new[] { "d4" }, results.Select(r => r.Id).ToList());
+        }
+
+        [Fact]
+        public void GetSimilarWithFilter_NullFilter_BehavesLikeGetSimilar()
+        {
+            var store = BuildRichStore();
+            var results = store.GetSimilarWithFilter(new Vector<float>(new float[] { 1, 0, 0 }), null!, topK: 3).ToList();
+            Assert.Equal(3, results.Count);
         }
 
         #endregion

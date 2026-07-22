@@ -274,9 +274,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private int _q8Out;
 
     // The quantized forward is only faster than the fp32 BLAS when the CPU can do the int8 dot in one VNNI
-    // instruction (vpdpbusd). Detected once at startup; false on AVX2-only CPUs and on net471 (no intrinsics),
-    // where the fp32 path is used instead.
-#if NET5_0_OR_GREATER
+    // instruction (vpdpbusd). Detected once at startup; false on AVX2-only CPUs, net8 (where AvxVnni is
+    // still marked as a preview API), and net471 (no intrinsics), where the fp32 path is used instead.
+#if NET9_0_OR_GREATER
     private static readonly bool Q8SpeedFavorable =
         System.Runtime.Intrinsics.X86.AvxVnni.IsSupported
         || System.Runtime.Intrinsics.X86.Avx512BW.IsSupported;

@@ -85,9 +85,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// 3. Image Features → Projection Head → Image Embedding (512D)
 /// 
 /// Both paths output embeddings in the same 512-dimensional space, enabling direct comparison.
-/// 
-/// Current implementation uses ONNX for text encoding and simulated image encoding.
-/// Production should use full CLIP ONNX model with both encoders.
+///
+/// Current implementation uses ONNX for text encoding only. The image path
+/// (<see cref="EmbedImage"/>) is not implemented and throws <see cref="NotSupportedException"/>
+/// rather than fabricating a vector; a full CLIP ONNX vision encoder must be connected for it.
 /// </para>
 /// <para><b>Benefits:</b>
 /// - Cross-modal search - Find images with text, text with images
@@ -97,7 +98,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// - Pre-trained - No custom training needed for basic use cases
 /// </para>
 /// <para><b>Limitations:</b>
-/// - Image encoding currently simulated (hash-based) - needs real CLIP encoder
+/// - Image encoding is NOT implemented (EmbedImage throws NotSupportedException) - needs real CLIP encoder
 /// - Model file size can be large (1-4GB for CLIP variants)
 /// - Image processing slower than text (convolutional layers are compute-intensive)
 /// - Works best with natural images (struggles with abstract diagrams, charts)
@@ -152,31 +153,28 @@ public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
     }
 
     /// <summary>
-    /// Generates image embeddings from file path.
+    /// Generates image embeddings from a file path.
     /// </summary>
     /// <param name="imagePath">Path to the image file.</param>
     /// <returns>The embedding vector for the image.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="imagePath"/> is null or whitespace.</exception>
+    /// <exception cref="NotSupportedException">
+    /// Always thrown: real image encoding (a CLIP-style vision encoder) is not yet wired up
+    /// for this model. Previously this path returned a hash of the file path/size, which is
+    /// NOT a semantic embedding and would silently corrupt any cross-modal similarity search.
+    /// </exception>
     public Vector<T> EmbedImage(string imagePath)
     {
         if (string.IsNullOrWhiteSpace(imagePath))
             throw new ArgumentException("Image path cannot be null or whitespace", nameof(imagePath));
 
-        if (!File.Exists(imagePath))
-            throw new FileNotFoundException($"Image file not found: {imagePath}");
-
-        // Generate embedding using image path hash
-        // In production, this would use CLIP's image encoder with convolutional layers
-        var values = new T[_dimension];
-        var hash = GetImageHash(imagePath);
-
-        for (int i = 0; i < _dimension; i++)
-        {
-            var val = NumOps.FromDouble(Math.Sin((double)hash * (i + 1) * 0.003));
-            values[i] = val;
-        }
-
-        var embedding = new Vector<T>(values);
-        return _normalizeEmbeddings ? embedding.Normalize() : embedding;
+        // Do NOT fabricate an embedding from a file-path/size hash. A hash carries no visual
+        // semantics, so it cannot be compared against text embeddings in a shared space.
+        // Throw loudly until a real vision encoder is connected.
+        throw new NotSupportedException(
+            "Image embedding is not supported by MultiModalEmbeddingModel: a real CLIP-style " +
+            "vision encoder is not wired up. Use a dedicated vision/CLIP encoder to embed images " +
+            "rather than relying on this model, which only produces genuine embeddings for text.");
     }
 
     /// <summary>
@@ -184,31 +182,14 @@ public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
     /// </summary>
     /// <param name="imagePaths">Paths to image files.</param>
     /// <returns>Embedding vectors for all images.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="imagePaths"/> is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when enumerated: see <see cref="EmbedImage"/>.</exception>
     public IEnumerable<Vector<T>> EmbedImageBatch(IEnumerable<string> imagePaths)
     {
         if (imagePaths == null)
             throw new ArgumentNullException(nameof(imagePaths));
 
         return imagePaths.Select(path => EmbedImage(path));
-    }
-
-    private int GetImageHash(string imagePath)
-    {
-        // Simple hash based on file path and length
-        // In production, would hash image content after preprocessing
-        unchecked
-        {
-            int hash = 17;
-            hash = (hash * 31) + imagePath.GetHashCode();
-
-            if (File.Exists(imagePath))
-            {
-                var fileInfo = new FileInfo(imagePath);
-                hash = (hash * 31) + fileInfo.Length.GetHashCode();
-            }
-
-            return hash;
-        }
     }
 }
 
