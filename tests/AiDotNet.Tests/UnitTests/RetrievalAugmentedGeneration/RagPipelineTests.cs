@@ -9,6 +9,7 @@ using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration;
@@ -100,5 +101,42 @@ public class RagPipelineTests
         var all = store.GetAll().ToList();
         Assert.Single(all);
         Assert.Equal("acme", all[0].Metadata[RagPipeline<double>.TenantMetadataKey]);
+    }
+
+    [Fact]
+    public async Task Tenants_SharingStoreAndDocumentId_DoNotOverwriteEachOther()
+    {
+        var embedding = new StubEmbeddingModel<double>(Dim);
+        var store = new InMemoryDocumentStore<double>(Dim);
+        var acme = new RagPipeline<double>(embedding, store, new DenseRetriever<double>(store, embedding), tenant: "acme");
+        var globex = new RagPipeline<double>(embedding, store, new DenseRetriever<double>(store, embedding), tenant: "globex");
+
+        await acme.IngestAsync("policy", "acme policy");
+        await globex.IngestAsync("policy", "globex policy");
+
+        Assert.Equal(2, store.DocumentCount);
+        var acmeResult = await acme.QueryAsync("policy", topK: 1);
+        var globexResult = await globex.QueryAsync("policy", topK: 1);
+        Assert.Equal("policy", Assert.Single(acmeResult.Contexts).Id);
+        Assert.Equal("acme policy", acmeResult.Contexts[0].Content);
+        Assert.Equal("policy", Assert.Single(globexResult.Contexts).Id);
+        Assert.Equal("globex policy", globexResult.Contexts[0].Content);
+    }
+
+    [Fact]
+    public async Task TenantFilter_FindsMinorityTenantBeyondFormerOverfetchWindow()
+    {
+        var embedding = new StubEmbeddingModel<double>(Dim);
+        var store = new InMemoryDocumentStore<double>(Dim);
+        var majority = new RagPipeline<double>(embedding, store, new DenseRetriever<double>(store, embedding), tenant: "majority");
+        var minority = new RagPipeline<double>(embedding, store, new DenseRetriever<double>(store, embedding), tenant: "minority");
+
+        for (int i = 0; i < 25; i++)
+            await majority.IngestAsync($"majority-{i}", "identical searchable text");
+        await minority.IngestAsync("minority-doc", "different minority content");
+
+        var result = await minority.QueryAsync("identical searchable text", topK: 1);
+
+        Assert.Equal("minority-doc", Assert.Single(result.Contexts).Id);
     }
 }
