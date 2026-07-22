@@ -36118,7 +36118,7 @@ public static class LayerHelper<T>
             yield return layer;
         }
 
-        yield return new ActivationLayer<T>(new SigmoidActivation<T>());
+        yield return new ActivationLayer<T>((IActivationFunction<T>)new SigmoidActivation<T>());
     }
 
     #endregion
