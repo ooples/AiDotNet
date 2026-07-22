@@ -311,5 +311,22 @@ public enum NeuralNetworkTaskType
     /// experimental purposes that combine aspects of different task types or implement entirely new approaches.
     /// </para>
     /// </remarks>
-    Custom
+    Custom = 22,
+
+    /// <summary>
+    /// Representation-learning task that maps inputs to continuous embedding vectors.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Embedding models turn an input into a compact vector whose
+    /// geometry carries meaning: similar inputs should be close together and different
+    /// inputs should be farther apart. Unlike classification, each output position is a
+    /// continuous feature rather than a class probability.
+    /// </para>
+    /// <para>
+    /// This value is appended after the original enum members so their serialized numeric
+    /// values remain unchanged.
+    /// </para>
+    /// </remarks>
+    Embedding = 23
 }

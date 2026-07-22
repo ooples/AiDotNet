@@ -579,6 +579,7 @@ public static class LayerHelper<T>
         IActivationFunction<T> outputActivation = architecture.TaskType switch
         {
             NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
+            NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
             NeuralNetworkTaskType.BinaryClassification => new SigmoidActivation<T>(),
             NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
             NeuralNetworkTaskType.MultiClassClassification => outputSize > 1
@@ -2081,6 +2082,7 @@ public static class LayerHelper<T>
                 break;
 
             case NeuralNetworkTaskType.Regression:
+            case NeuralNetworkTaskType.Embedding:
                 yield return new ActivationLayer<T>(new IdentityActivation<T>() as IActivationFunction<T>);
                 break;
 
@@ -3219,6 +3221,7 @@ public static class LayerHelper<T>
             NeuralNetworkTaskType.MultiClassClassification => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.SequenceClassification => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
             _ => null // Regression and other task types default to linear outputs
         };
 
@@ -7161,29 +7164,42 @@ public static class LayerHelper<T>
         int maxFrames = 1001,
         double dropoutRate = 0.2)
     {
+        if (numMels <= 0) throw new ArgumentOutOfRangeException(nameof(numMels));
+        if (baseChannels <= 0) throw new ArgumentOutOfRangeException(nameof(baseChannels));
+        if (numBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numBlocks));
+        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));
+        if (numClasses <= 0) throw new ArgumentOutOfRangeException(nameof(numClasses));
+        if (dropoutRate < 0.0 || dropoutRate >= 1.0) throw new ArgumentOutOfRangeException(nameof(dropoutRate));
+
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // CNN14: 6 blocks of (Conv -> BN -> ReLU -> Conv -> BN -> ReLU -> AvgPool)
-        int inputDim = numMels;
+        // CNN14: each paper block is Conv(3x3) -> BN -> ReLU ->
+        // Conv(3x3) -> BN -> ReLU -> AvgPool(2x2). The public width/depth
+        // options scale that same topology; their defaults reproduce the
+        // published 64,128,256,512,1024,2048 progression exactly.
         int channels = baseChannels;
-
         for (int block = 0; block < numBlocks; block++)
         {
-            yield return new DenseLayer<T>(channels, reluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(channels, reluActivation);
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-
-            inputDim = channels;
+            yield return new ConvolutionalLayer<T>(
+                outputDepth: channels, kernelSize: 3, stride: 1, padding: 1);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(reluActivation);
+            yield return new ConvolutionalLayer<T>(
+                outputDepth: channels, kernelSize: 3, stride: 1, padding: 1);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(reluActivation);
+            yield return new PoolingLayer<T>(poolSize: 2, stride: 2, type: PoolingType.Average);
+            if (dropoutRate > 0.0) yield return new DropoutLayer<T>(dropoutRate);
             channels = Math.Min(channels * 2, embeddingDim);
         }
 
-        // Classification head
+        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
         yield return new DenseLayer<T>(embeddingDim, reluActivation);
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        if (dropoutRate > 0.0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Return logits during training so BCE-with-logits is numerically
+        // stable. PANNs.PredictCore applies the paper's sigmoid exactly once.
         yield return new DenseLayer<T>(numClasses, identityActivation);
     }
 
@@ -11032,7 +11048,14 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
 
-        yield return new ConvolutionalLayer<T>(hiddenDim, 16, 16, 0);
+        // MATCHA is built on Pix2Struct's ViT-style image encoder: non-overlapping
+        // 16x16 image patches are projected to hiddenDim and flattened into a
+        // [batch, patches, hiddenDim] token sequence before attention. A plain
+        // ConvolutionalLayer leaves the result channel-first as
+        // [batch, hiddenDim, patchRows, patchColumns], causing attention to treat
+        // patchColumns as the embedding dimension. PatchEmbeddingLayer performs
+        // both the paper's learned patch projection and the required tokenization.
+        yield return new PatchEmbeddingLayer<T>(16, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
         yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
 
@@ -17174,6 +17197,7 @@ public static class LayerHelper<T>
             NeuralNetworkTaskType.SequenceClassification => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
             NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
+            NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
             _ => new IdentityActivation<T>()
         };
 
@@ -20741,9 +20765,12 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
 
-        // Feature encoder
-        yield return new DenseLayer<T>(hiddenDim, geluActivation);
+        // WavLM's convolutional feature encoder produces featureEncoderDim channels, followed by
+        // a projection into the Transformer hidden width. Keeping both widths explicit makes the
+        // public FeatureEncoderDim and HiddenDim controls effective.
+        yield return new DenseLayer<T>(featureEncoderDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(hiddenDim, identityActivation);
 
         // WavLM Transformer encoder (Chen et al. 2022): each block is a pre-norm RESIDUAL transformer
         // layer (z' = z + MHA(LN(z)); z = z' + FFN(LN(z'))). The residual skips are LOAD-BEARING —
@@ -20757,15 +20784,11 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Emotion classification head. The final layer applies SOFTMAX as its activation so the emotion
-        // probability distribution (single-label; Chen et al. 2022) is produced INSIDE the forward graph —
-        // i.e. the SAME nonlinearity runs during training and inference. Applying softmax only at inference
-        // (PostprocessOutput) instead makes the trained objective (on raw logits) inconsistent with the
-        // predicted output: a normalized distribution can't match an arbitrary target, so the measured
-        // Predict-space loss floors and "training reduced loss" reads false even while the model learns.
-        // Vector activation → normalization is across the class axis.
+        // Emit raw classification logits. WavLMSER uses cross-entropy-with-logits for training and
+        // applies softmax only at public inference, so cloning never depends on serializing an
+        // activation embedded in the final DenseLayer.
         yield return new DenseLayer<T>(hiddenDim, geluActivation);
-        yield return new DenseLayer<T>(numClasses, new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        yield return new DenseLayer<T>(numClasses, identityActivation);
     }
 
     #endregion
@@ -26758,13 +26781,13 @@ public static class LayerHelper<T>
     // Replaces the earlier hand-rolled full-width-3×3 conv stack (1536→1536 3×3 = 21M-param convs).
     public static IEnumerable<ILayer<T>> CreateOneFormerEncoderLayers(
         int inputHeight = 512, int inputWidth = 512,
-        int[]? channelDims = null, int[]? depths = null, double dropPathRate = 0.3)
+        int[]? channelDims = null, int[]? depths = null, double dropPathRate = 0.3,
+        int[]? numHeads = null, int windowSize = 7, int patchSize = 4, int mlpRatio = 4)
     {
         channelDims ??= [192, 384, 768, 1536]; // Swin-L stage embed dims
         depths ??= [2, 2, 18, 2];
         int embedDim = channelDims[0];
-        int[] numHeads = [6, 12, 24, 48];       // Swin-L heads per stage (embedDim/32)
-        const int windowSize = 7, patchSize = 4, mlpRatio = 4;
+        numHeads ??= [6, 12, 24, 48];           // Swin-L heads per stage (embedDim/32)
 
         // Stochastic depth: linearly increasing drop-path rate from 0 (first block) to dropPathRate
         // (last block) across the whole backbone, exactly as the Swin reference does
@@ -26790,8 +26813,9 @@ public static class LayerHelper<T>
         // Adapter: the Swin backbone emits token features [B, L, C] (L = fH·fW at /32 stride); the
         // OneFormer decoder is conv-based and expects [B, C, fH, fW]. Reshape tokens to spatial then
         // move channels to the front. patchEmbed (/4) + 3 merges (/2³) = /32.
-        int fH = System.Math.Max(1, inputHeight / 32);
-        int fW = System.Math.Max(1, inputWidth / 32);
+        int totalStride = patchSize * 8;
+        int fH = System.Math.Max(1, inputHeight / totalStride);
+        int fW = System.Math.Max(1, inputWidth / totalStride);
         yield return new ReshapeLayer<T>(new[] { fH, fW, currentDim }); // [B, L, C] -> [B, fH, fW, C]
         yield return new TransposeLayer<T>(new[] { 2, 0, 1 });          // [B, fH, fW, C] -> [B, C, fH, fW]
     }
@@ -36111,6 +36135,7 @@ public static class LayerHelper<T>
     /// <param name="audioEncoderHeads">Attention heads per block (paper §3.1 HTSAT-S: 12).</param>
     /// <param name="swinWindowSize">W-MSA / SW-MSA window size (Liu 2021 §3.2: 7).</param>
     /// <param name="projectionDim">Shared embedding-space dimension (CLAP §3.2: 512).</param>
+    /// <param name="audioPatchSize">HTSAT log-mel patch size (paper §3.1: 4).</param>
     /// <remarks>
     /// Alternating W-MSA / SW-MSA layers per Swin paper §3.2 — even-indexed
     /// blocks use regular windowed attention, odd-indexed blocks use the
@@ -36121,8 +36146,15 @@ public static class LayerHelper<T>
         int audioEncoderLayers,
         int audioEncoderHeads,
         int swinWindowSize,
-        int projectionDim)
+        int projectionDim,
+        int audioPatchSize = 4)
     {
+        // HTSAT begins by dividing the log-mel image into learned 2-D patches.
+        // This converts [B, 1, frames, melBins] into [B, patchCount, hiddenDim],
+        // the token layout consumed by SwinTransformerBlockLayer. Keeping the
+        // patch size explicit also makes CLAPModelOptions.AudioPatchSize effective.
+        yield return new PatchEmbeddingLayer<T>(audioPatchSize, audioHiddenDim);
+
         // Stack of Swin blocks. Each pair alternates W-MSA (shift=0) and
         // SW-MSA (shift=windowSize/2) per Liu 2021 §3.2.
         for (int i = 0; i < audioEncoderLayers; i++)

@@ -31,6 +31,35 @@ namespace AiDotNet.LossFunctions;
 [LossProperty(IsNonNegative = true, ZeroForIdentical = false, RequiresProbabilityInputs = false, TestInputFormat = LossTestInputFormat.RawLogits, ExpectedOutput = OutputType.Logits)]
 public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 {
+    private readonly int? _classAxis;
+
+    /// <summary>
+    /// Initializes cross-entropy with automatic class-axis inference.
+    /// </summary>
+    public CrossEntropyWithLogitsLoss()
+    {
+    }
+
+    /// <summary>
+    /// Initializes cross-entropy with an explicit class axis.
+    /// </summary>
+    /// <param name="classAxis">
+    /// The class dimension. Negative values are resolved from the end of the prediction shape,
+    /// matching the usual tensor-axis convention.
+    /// </param>
+    /// <remarks>
+    /// Use this overload when the model has a defined layout such as NCHW segmentation. Automatic
+    /// inference remains the parameterless default for sequence and classification callers whose
+    /// logits conventionally place classes on the final axis.
+    /// </remarks>
+    public CrossEntropyWithLogitsLoss(int classAxis)
+    {
+        _classAxis = classAxis;
+    }
+
+    /// <summary>Gets the explicitly configured class axis, or null when inference is enabled.</summary>
+    public int? ClassAxis => _classAxis;
+
     /// <summary>
     /// Calculates the Cross-Entropy loss from raw logits using log-sum-exp for stability.
     /// </summary>
@@ -209,6 +238,22 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     private int ResolveClassAxis(Tensor<T> predicted, Tensor<T> target)
     {
         int rank = predicted.Shape.Length;
+        if (rank == 0)
+            throw new ArgumentException("Cross-entropy logits must have at least one dimension.", nameof(predicted));
+
+        if (_classAxis.HasValue)
+        {
+            int explicitAxis = _classAxis.Value < 0 ? rank + _classAxis.Value : _classAxis.Value;
+            if (explicitAxis < 0 || explicitAxis >= rank)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(_classAxis),
+                    _classAxis.Value,
+                    $"Class axis {_classAxis.Value} is outside logits rank {rank}.");
+            }
+            return explicitAxis;
+        }
+
         int defaultAxis = rank - 1;
 
         if (target.Shape.Length == rank - 1)

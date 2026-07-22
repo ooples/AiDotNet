@@ -599,8 +599,30 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         var clonedOutput = cloned.Predict(input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
+        double maxDiff = 0.0;
+        double maxAllowed = 0.0;
+        int maxDiffIndex = 0;
         for (int i = 0; i < original.Length; i++)
-            AssertClose(ToDouble(original[i]), ToDouble(clonedOutput[i]));
+        {
+            double expected = ToDouble(original[i]);
+            double actual = ToDouble(clonedOutput[i]);
+            (double rtol, double atol) = typeof(TNum) == typeof(float)
+                ? (1.3e-6, 1e-5)
+                : (1e-7, 1e-7);
+            double allowed = atol + rtol * Math.Abs(expected);
+            double diff = Math.Abs(actual - expected);
+            if (i == 0 || diff > maxDiff)
+            {
+                maxDiff = diff;
+                maxAllowed = allowed;
+                maxDiffIndex = i;
+            }
+        }
+        Assert.True(maxDiff <= maxAllowed,
+            $"Clone output differs for {model.GetType().FullName} at index {maxDiffIndex}: " +
+            $"expected={ToDouble(original[maxDiffIndex])}, actual={ToDouble(clonedOutput[maxDiffIndex])}, " +
+            $"max |diff|={maxDiff}, allowed={maxAllowed}, precision={typeof(TNum).FullName}, " +
+            $"length={original.Length}.");
     }
 
     [Fact(Timeout = 120000)]

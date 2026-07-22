@@ -7891,8 +7891,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     {
                         if (trainable is null) continue;
                         var lyrType = trainable.GetType();
-                        var attr = (Attributes.LayerCategoryAttribute?)Attribute
-                            .GetCustomAttribute(lyrType, typeof(Attributes.LayerCategoryAttribute));
+                        // LayerCategoryAttribute intentionally allows multiple
+                        // declarations (for example Transformer + Attention).
+                        // GetCustomAttribute throws AmbiguousMatchException in
+                        // that valid case, which used to make PerStep diagnostics
+                        // crash precisely when detailed CI evidence was needed.
+                        var attr = Attribute
+                            .GetCustomAttributes(lyrType, typeof(Attributes.LayerCategoryAttribute))
+                            .OfType<Attributes.LayerCategoryAttribute>()
+                            .FirstOrDefault();
                         var cat = attr?.Category ?? Interfaces.LayerCategory.Other;
                         string name = lyrType.Name;
                         foreach (var p in trainable.GetTrainableParameters())
@@ -8090,8 +8097,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected, double learningRate)
     {
-        // Use the default optimizer (which respects configured LR) rather than creating a throwaway one
-        TrainWithTape(input, expected, optimizer: null);
+        if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), learningRate,
+                "Learning rate must be finite and positive.");
+
+        // A builder-supplied optimizer is the most explicit user choice and retains precedence.
+        // Otherwise create the model's persistent default Adam at the requested rate. The previous
+        // implementation discarded this argument and silently trained at Adam's global 1e-3 default;
+        // SpikingNeuralNetwork therefore ignored ReadoutLearningRate=5e-4 and drifted after longer
+        // training. Retaining the optimizer preserves Adam moments and the compiled fused path.
+        if (_baseTrainOptimizer is null ||
+            (!_baseTrainOptimizerExplicitlyConfigured &&
+             (_baseTrainOptimizerLearningRate is null ||
+              _baseTrainOptimizerLearningRate.Value != learningRate)))
+        {
+            _baseTrainOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = learningRate,
+                    UseAMSGrad = false,
+                });
+            _baseTrainOptimizerLearningRate = learningRate;
+        }
+
+        TrainWithTape(input, expected, _baseTrainOptimizer);
     }
 
     /// <summary>
@@ -9332,6 +9362,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
+        _baseTrainOptimizerLearningRate = null;
     }
 
     /// <summary>
@@ -9339,6 +9370,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Lazily initialized on first use (Adam with default settings).
     /// </summary>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTrainOptimizer;
+
+    /// <summary>
+    /// Requested rate used to create the persistent optimizer for the learning-rate overload.
+    /// Null for the normal default path and for an explicitly configured user optimizer.
+    /// </summary>
+    private double? _baseTrainOptimizerLearningRate;
 
     /// <summary>
     /// True when the base-train optimizer was supplied explicitly via

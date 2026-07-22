@@ -3,11 +3,11 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Audio.Classification;
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -66,7 +66,7 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     #region Constructors
 
     public WavLMSER(NeuralNetworkArchitecture<T> architecture, string modelPath, WavLMSEROptions? options = null)
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WavLMSEROptions();
         _useNativeMode = false;
@@ -78,35 +78,41 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 
     public WavLMSER(NeuralNetworkArchitecture<T> architecture, WavLMSEROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WavLMSEROptions();
         _useNativeMode = true;
-        // WavLM fine-tunes its deep (12-layer, 768-d) transformer with LR WARMUP (Chen et al. 2022,
-        // following wav2vec2 / the Noam schedule): the LR ramps from ~0 over the first steps instead of
-        // hitting full magnitude on step 1. Without it, AdamW's first updates overshoot the sharp
-        // post-LN encoder landscape and the loss SPIKES before recovering (memorization over 100 steps
-        // still converges, but the shorter Training_ShouldReduceLoss window catches the transient rise).
-        // Restore the paper's warmup so the loss descends monotonically from the first step. Peak LR is
-        // the conservative SER fine-tuning value (5e-4). base(...) defaults maxGradNorm to 1.0, so the
-        // eager TrainWithTape path also clips the gradient norm before each step.
-        // Conservative fine-tuning LR with warmup. WavLM SER fine-tunes at a small peak LR (~1e-4;
-        // the sibling grounding-VLM GLaMM uses 5e-5) — the framework AdamW default (1e-3) is 1-2 orders
-        // of magnitude too aggressive for this deep (12-layer, 768-d) post-LN encoder and the loss
-        // steadily RISES over the first ~30 steps before it would recover. Ramp the LR 1e-5 -> 1e-4 over
-        // the first 10 steps and hold at 1e-4 (WarmupThenEpoch stops per-batch stepping once warmup
-        // completes; there are no epochs here). InitialLearningRate matches the warmup floor so the very
-        // first optimizer step is gentle whether the eager path syncs the schedule before or after it.
+        ValidateOptions(_options);
+        // Train raw logits with the classifier objective and honor the public optimization options.
+        // A caller-supplied optimizer remains the full-customization path for alternate schedules.
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 1e-5,
-                LearningRateScheduler = new LinearWarmupScheduler(
-                    baseLearningRate: 1e-4, warmupSteps: 10, warmupInitLr: 1e-5),
-                SchedulerStepMode = SchedulerStepMode.WarmupThenEpoch,
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
             });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
+    }
+
+    private static void ValidateOptions(WavLMSEROptions options)
+    {
+        if (options.HiddenDim <= 0) throw new ArgumentOutOfRangeException(nameof(options.HiddenDim));
+        if (options.NumLayers <= 0) throw new ArgumentOutOfRangeException(nameof(options.NumLayers));
+        if (options.NumAttentionHeads <= 0) throw new ArgumentOutOfRangeException(nameof(options.NumAttentionHeads));
+        if (options.HiddenDim % options.NumAttentionHeads != 0)
+            throw new ArgumentException("HiddenDim must be divisible by NumAttentionHeads.", nameof(options));
+        if (options.FeedForwardDim <= 0) throw new ArgumentOutOfRangeException(nameof(options.FeedForwardDim));
+        if (options.FeatureEncoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(options.FeatureEncoderDim));
+        if (options.NumClasses <= 0) throw new ArgumentOutOfRangeException(nameof(options.NumClasses));
+        if (options.EmotionLabels is null || options.EmotionLabels.Length != options.NumClasses)
+            throw new ArgumentException("EmotionLabels must contain exactly NumClasses labels.", nameof(options));
+        if (options.LearningRate <= 0 || double.IsNaN(options.LearningRate) || double.IsInfinity(options.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(options.LearningRate));
+        if (options.WeightDecay < 0 || double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(options.WeightDecay));
+        if (options.DropoutRate < 0 || options.DropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(options.DropoutRate));
     }
 
     internal static async Task<WavLMSER<T>> CreateAsync(WavLMSEROptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
@@ -278,20 +284,38 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return PostprocessOutput(OnnxEncoder.Run(input));
-        // Force inference mode (dropout off) and run the softmax head via PostprocessOutput: WavLM-SER
-        // (Chen et al. 2022) is a single-label emotion classifier, so its public output is a probability
-        // distribution over the emotion classes (non-negative, sums to 1). Without this the head returned
-        // raw logits, so Predict produced negative "class scores" (ClassOutput_ShouldBeNonNegative).
+        // Public inference returns a probability distribution; training uses RunLayersRaw directly so
+        // CrossEntropyWithLogitsLoss applies its stable softmax exactly once.
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
         try
         {
-            var c = input; foreach (var l in Layers) c = l.Forward(c); return PostprocessOutput(c);
+            return PostprocessOutput(RunLayersRaw(input));
         }
         finally
         {
             if (wasTraining) SetTrainingMode(true);
         }
+    }
+
+    /// <summary>Runs the WavLM encoder and emotion head without inference softmax.</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunLayersRaw(input);
+
+    private Tensor<T> RunLayersRaw(Tensor<T> input)
+    {
+        var output = input;
+        foreach (var layer in Layers) output = layer.Forward(output);
+
+        // WavLM downstream classification pools frame representations into one utterance-level
+        // prediction. Reduce every leading axis while preserving the final class axis.
+        if (output.Shape.Length >= 2)
+        {
+            int classAxis = output.Shape.Length - 1;
+            int[] poolAxes = Enumerable.Range(0, classAxis).ToArray();
+            output = Engine.ReduceMean(output, poolAxes, keepDims: false);
+        }
+
+        return output;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -300,8 +324,6 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            // Pass WavLMSER's own warmup-scheduled optimizer (see ctor) instead of the shared base
-            // optimizer, so the eager tape path advances the linear-warmup LR schedule each step.
             TrainWithTape(input, expected, _optimizer);
         }
         finally
@@ -322,11 +344,7 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         return rawAudio;
     }
 
-    // The softmax that turns the head's logits into a single-label emotion probability distribution
-    // (Chen et al. 2022) now lives in the final head layer (see CreateDefaultWavLMSERLayers), so it runs
-    // in BOTH the training and inference forward passes — keeping the trained objective consistent with
-    // the predicted output. PredictCore therefore just returns the already-normalized distribution.
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => Engine.Softmax(o, axis: -1);
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -363,9 +381,10 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var copiedOptions = new WavLMSEROptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new WavLMSER<T>(Architecture, mp, _options);
-        return new WavLMSER<T>(Architecture, _options);
+            return new WavLMSER<T>(Architecture, mp, copiedOptions);
+        return new WavLMSER<T>(Architecture, copiedOptions);
     }
 
     #endregion

@@ -1,6 +1,9 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
@@ -66,4 +69,76 @@ public class SpikingNeuralNetworkTests : NeuralNetworkModelTestBase<float>
     // spike, stepping the loss discontinuously). A gradcheck is therefore inapplicable to surrogate-
     // gradient training; the SNN's learning is exercised by its convergence invariants instead.
     protected override bool GradientCheckApplicable => false;
+
+    [Fact]
+    public void ReadoutLearningRate_ShouldControlTrainingStep()
+    {
+        using var slow = CreateWithLearningRate(5e-5);
+        using var fast = CreateWithLearningRate(5e-3);
+        var input = new Tensor<float>([128]);
+        for (int i = 0; i < input.Length; i++)
+            input[i] = (i + 1) / 128f;
+        var target = new Tensor<float>([1]);
+        target[0] = 0.75f;
+
+        var initialSlow = slow.GetParameters();
+        var initialFast = fast.GetParameters();
+        Assert.Equal(initialSlow.Length, initialFast.Length);
+        for (int i = 0; i < initialSlow.Length; i++)
+            Assert.Equal(initialSlow[i], initialFast[i]);
+
+        slow.Train(input, target);
+        fast.Train(input, target);
+
+        var trainedSlow = slow.GetParameters();
+        var trainedFast = fast.GetParameters();
+        double slowDeltaSq = 0.0;
+        double fastDeltaSq = 0.0;
+        for (int i = 0; i < initialSlow.Length; i++)
+        {
+            double slowDelta = trainedSlow[i] - initialSlow[i];
+            double fastDelta = trainedFast[i] - initialFast[i];
+            slowDeltaSq += slowDelta * slowDelta;
+            fastDeltaSq += fastDelta * fastDelta;
+        }
+
+        double slowDeltaNorm = Math.Sqrt(slowDeltaSq);
+        double fastDeltaNorm = Math.Sqrt(fastDeltaSq);
+        Assert.True(fastDeltaNorm > slowDeltaNorm * 10.0,
+            $"ReadoutLearningRate was not reflected in the optimizer step: " +
+            $"slow delta L2={slowDeltaNorm:R}, fast delta L2={fastDeltaNorm:R}.");
+    }
+
+    [Fact]
+    public void Clone_ShouldPreserveReadoutLearningRate()
+    {
+        const double configuredRate = 1.25e-4;
+        using var original = CreateWithLearningRate(configuredRate);
+        using var clone = (SpikingNeuralNetwork<float>)original.Clone();
+
+        var clonedOptions = Assert.IsType<SpikingNeuralNetworkOptions>(clone.GetOptions());
+        Assert.Equal(configuredRate, clonedOptions.ReadoutLearningRate);
+    }
+
+    private static SpikingNeuralNetwork<float> CreateWithLearningRate(double learningRate)
+    {
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1);
+        var previousSeed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
+        try
+        {
+            return new SpikingNeuralNetwork<float>(
+                architecture,
+                vectorActivation: (IVectorActivationFunction<float>?)null,
+                options: new SpikingNeuralNetworkOptions { ReadoutLearningRate = learningRate });
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousSeed;
+        }
+    }
 }

@@ -123,13 +123,13 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             seed: null);
-        // Sub-model Clone()s re-init/round-trip weights, landing each a few ULPs off; the diffusion
-        // sampler then COMPOUNDS those per-weight ULP diffs across its denoising steps into a ~2-3e-5
-        // output divergence that straddles the Clone_ShouldProduceIdenticalOutput tolerance (flaky:
-        // passes or fails depending on FP-reduction order). Copy this instance's EXACT parameter vector
-        // into the rebuilt clone so its weights are bit-identical (the fast COW path above is already
-        // bit-exact; this makes the rebuild path match it), giving a deterministic identical output.
-        rebuilt.SetParameters(GetParameters());
+        // The cloned sub-models now have the same materialized structure as the source, so take the
+        // same bit-exact COW path used by StableVITON and the other custom diffusion clones. A flat
+        // SetParameters copy preserves values but creates different weight storage/packing state; on
+        // CI that changed the float reduction order enough for DDIM's repeated steps to amplify the
+        // ULP drift past the clone tolerance. Keep the exact-copy fallback for any future structure
+        // that cannot be shared safely.
+        if (!rebuilt.TryShareParametersFrom(this)) rebuilt.SetParameters(GetParameters());
         return rebuilt;
     }
 

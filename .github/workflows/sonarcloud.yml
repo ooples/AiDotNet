@@ -184,20 +184,10 @@ jobs:
         run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
 
       - name: Perform CodeQL Analysis
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250 }}
         uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
         with:
           category: "/language:csharp"
           upload: always
-
-      # The CodeQL action validates `upload` before step expressions are resolved, so the input
-      # must be a literal. Keep the large-PR heuristic as a mutually exclusive analysis step.
-      - name: Perform CodeQL Analysis without upload
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.changed_files > 250 }}
-        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
-        with:
-          category: "/language:csharp"
-          upload: never
 
   # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
   build:

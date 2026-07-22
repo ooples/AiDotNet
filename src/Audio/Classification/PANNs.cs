@@ -4,6 +4,7 @@ using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -76,7 +77,7 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region Constructors
 
     public PANNs(NeuralNetworkArchitecture<T> architecture, string modelPath, PANNsOptions? options = null)
-        : base(architecture)
+        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -91,11 +92,22 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         InitializeLayers();
     }
 
-    public PANNs(NeuralNetworkArchitecture<T> architecture, PANNsOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+    public PANNs(
+        NeuralNetworkArchitecture<T> architecture,
+        PANNsOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PANNsOptions(); _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        if (_options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), "PANNs learning rate must be positive.");
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
@@ -188,7 +200,7 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -225,8 +237,8 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new PANNs<T>(Architecture, mp, _options);
-        return new PANNs<T>(Architecture, _options);
+            return new PANNs<T>(Architecture, mp, new PANNsOptions(_options));
+        return new PANNs<T>(Architecture, new PANNsOptions(_options), lossFunction: LossFunction);
     }
 
     #endregion

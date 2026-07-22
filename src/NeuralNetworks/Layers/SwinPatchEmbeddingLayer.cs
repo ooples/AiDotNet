@@ -138,6 +138,13 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 
         _projection.ResolveFromShape(new[] { inChannels, inH, inW });
         _projection.SetTrainingMode(IsTrainingMode);
+        // Resolve the inner normalization before replaying a serialized flat
+        // parameter vector. Otherwise its ParameterCount is still zero, so
+        // SetParameters consumes only the projection weights and silently
+        // drops the trained gamma/beta values; the first Forward then creates
+        // fresh normalization parameters and a clone immediately diverges.
+        _norm.ResolveFromShape(new[] { _embedDim });
+        _norm.SetTrainingMode(IsTrainingMode);
 
         ResolveShapes(
             new[] { inChannels, inH, inW },
@@ -171,23 +178,11 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         int patchW = projected.Shape[3];
         int numPatches = patchH * patchW;
 
-        // Reshape to sequence: [batch, numPatches, embedDim]
-        var sequence = new Tensor<T>([batch, numPatches, _embedDim]);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < patchH; h++)
-            {
-                for (int w = 0; w < patchW; w++)
-                {
-                    int seqIdx = h * patchW + w;
-                    for (int c = 0; c < _embedDim; c++)
-                    {
-                        sequence[b, seqIdx, c] = projected[b, c, h, w];
-                    }
-                }
-            }
-        }
+        // NCHW -> NHWC -> [batch, numPatches, embedDim]. Keep this conversion
+        // on Engine operations so the compiled training graph retains the edge
+        // from the normalized sequence back to the convolutional projection.
+        var channelsLast = Engine.TensorPermute(projected, [0, 2, 3, 1]);
+        var sequence = Engine.Reshape(channelsLast, [batch, numPatches, _embedDim]);
 
         // Apply layer normalization
         var normalized = _norm.Forward(sequence);

@@ -1171,9 +1171,33 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Assert.False(double.IsNaN(lossShort) || double.IsNaN(lossLong),
             $"Loss became NaN during training: short={lossShort}, long={lossLong}. " +
             "This indicates gradient explosion or numerical instability in the optimizer path.");
-        Assert.True(lossLong <= lossShort + MoreDataTolerance,
-            $"{longIters} iterations loss ({lossLong:F6}) > {shortIters} iterations loss ({lossShort:F6}). " +
-            "Optimizer may be diverging with more training.");
+        if (lossLong > lossShort + MoreDataTolerance)
+        {
+            var shortParams = network1.GetParameters();
+            var longParams = network2.GetParameters();
+            double shortParamNormSq = 0.0;
+            double longParamNormSq = 0.0;
+            int shortNonFinite = 0;
+            int longNonFinite = 0;
+            for (int i = 0; i < shortParams.Length; i++)
+            {
+                double value = NumOps.ToDouble(shortParams[i]);
+                if (!double.IsFinite(value)) shortNonFinite++;
+                else shortParamNormSq += value * value;
+            }
+            for (int i = 0; i < longParams.Length; i++)
+            {
+                double value = NumOps.ToDouble(longParams[i]);
+                if (!double.IsFinite(value)) longNonFinite++;
+                else longParamNormSq += value * value;
+            }
+            Assert.Fail(
+                $"{network1.GetType().FullName} more-data invariant failed at precision {typeof(T).FullName}: " +
+                $"{longIters} iterations loss ({lossLong:R}) > {shortIters} iterations loss ({lossShort:R}) " +
+                $"+ tolerance ({MoreDataTolerance:R}). Parameter diagnostics: " +
+                $"short count={shortParams.Length}, L2={Math.Sqrt(shortParamNormSq):R}, nonfinite={shortNonFinite}; " +
+                $"long count={longParams.Length}, L2={Math.Sqrt(longParamNormSq):R}, nonfinite={longNonFinite}.");
+        }
     }
 
     // =====================================================

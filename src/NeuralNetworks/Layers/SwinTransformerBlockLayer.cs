@@ -72,7 +72,6 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
     private Tensor<T>? _cachedResidual1;
     private Tensor<T>? _cachedNorm2Output;
     private Tensor<T>? _cachedQkv; // [numWindows, windowArea, 3*dim]
-    private T[,,,]? _cachedAttnProbs; // [numWindows, numHeads, windowArea, windowArea]
     private int _cachedNumWindows;
     private int _cachedWindowArea;
     private int _cachedH;
@@ -140,6 +139,7 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         int biasTableSize = (2 * windowSize - 1) * (2 * windowSize - 1);
         _relativePositionBiasTable = new Tensor<T>([biasTableSize, numHeads]);
         InitializeRelativePositionBias();
+        RegisterTrainableParameter(_relativePositionBiasTable, PersistentTensorRole.Weights);
 
         // Compute relative position index for windows
         _relativePositionIndex = ComputeRelativePositionIndex(windowSize);
@@ -256,115 +256,67 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
     {
         int seqLen = x.Shape[1];
 
-        // Reshape to spatial: [B, H, W, C]
-        var spatial = ReshapeToSpatial(x, batch, h, w, _dim);
+        int effectiveShift = h <= _windowSize || w <= _windowSize
+            ? 0
+            : Math.Min(_shiftSize, _windowSize - 1);
+
+        // Work in sequence form throughout. The gather-based rearrangements
+        // below preserve the autodiff edge while expressing the same spatial
+        // window layout as [B,H,W,C].
+        var shifted = x;
 
         // Apply cyclic shift if needed
-        if (_shiftSize > 0)
+        if (effectiveShift > 0)
         {
-            spatial = CyclicShift(spatial, -_shiftSize);
+            shifted = CyclicShift(shifted, h, w, -effectiveShift);
         }
 
         // Partition into windows: [numWindows*B, windowSize*windowSize, C]
-        var (windows, numWindowsH, numWindowsW) = WindowPartition(spatial);
+        var (windows, numWindowsH, numWindowsW) = WindowPartition(shifted, h, w);
 
         // Apply attention within each window
-        var attnOut = WindowedSelfAttention(windows);
+        var attnOut = WindowedSelfAttention(
+            windows, batch, h, w, numWindowsH, numWindowsW, effectiveShift);
 
-        // Merge windows back: [B, H, W, C]
+        // Merge windows back: [B, H*W, C]
         var merged = WindowReverse(attnOut, numWindowsH, numWindowsW, batch, h, w);
 
         // Reverse cyclic shift if applied
-        if (_shiftSize > 0)
+        if (effectiveShift > 0)
         {
-            merged = CyclicShift(merged, _shiftSize);
+            merged = CyclicShift(merged, h, w, effectiveShift);
         }
 
-        // Reshape back to sequence: [B, H*W, C]
-        return ReshapeToSequence(merged);
+        return merged;
     }
 
-    private Tensor<T> ReshapeToSpatial(Tensor<T> x, int batch, int h, int w, int c)
+    private static Tensor<int> CreateIndices(int[] values)
     {
-        var spatial = new Tensor<T>([batch, h, w, c]);
-        for (int b = 0; b < batch; b++)
+        var indices = new Tensor<int>([values.Length]);
+        for (int i = 0; i < values.Length; i++) indices[i] = values[i];
+        return indices;
+    }
+
+    private Tensor<T> CyclicShift(Tensor<T> x, int h, int w, int shift)
+    {
+        var order = new int[h * w];
+        for (int i = 0; i < h; i++)
         {
-            for (int i = 0; i < h; i++)
+            for (int j = 0; j < w; j++)
             {
-                for (int j = 0; j < w; j++)
-                {
-                    int seqIdx = i * w + j;
-                    for (int d = 0; d < c; d++)
-                    {
-                        spatial[b, i, j, d] = x[b, seqIdx, d];
-                    }
-                }
+                int srcI = (i - shift % h + h) % h;
+                int srcJ = (j - shift % w + w) % w;
+                order[i * w + j] = srcI * w + srcJ;
             }
         }
-        return spatial;
+        return Engine.TensorGather(x, CreateIndices(order), axis: 1);
     }
 
-    private Tensor<T> ReshapeToSequence(Tensor<T> spatial)
-    {
-        int batch = spatial.Shape[0];
-        int h = spatial.Shape[1];
-        int w = spatial.Shape[2];
-        int c = spatial.Shape[3];
-
-        var seq = new Tensor<T>([batch, h * w, c]);
-        for (int b = 0; b < batch; b++)
-        {
-            for (int i = 0; i < h; i++)
-            {
-                for (int j = 0; j < w; j++)
-                {
-                    int seqIdx = i * w + j;
-                    for (int d = 0; d < c; d++)
-                    {
-                        seq[b, seqIdx, d] = spatial[b, i, j, d];
-                    }
-                }
-            }
-        }
-        return seq;
-    }
-
-    private Tensor<T> CyclicShift(Tensor<T> x, int shift)
+    private (Tensor<T> windows, int numWindowsH, int numWindowsW) WindowPartition(
+        Tensor<T> x, int h, int w)
     {
         int batch = x.Shape[0];
-        int h = x.Shape[1];
-        int w = x.Shape[2];
-        int c = x.Shape[3];
-
-        var shifted = new Tensor<T>(x._shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int i = 0; i < h; i++)
-            {
-                for (int j = 0; j < w; j++)
-                {
-                    // Compute source indices with cyclic wrapping
-                    int srcI = (i - shift % h + h) % h;
-                    int srcJ = (j - shift % w + w) % w;
-
-                    for (int d = 0; d < c; d++)
-                    {
-                        shifted[b, i, j, d] = x[b, srcI, srcJ, d];
-                    }
-                }
-            }
-        }
-
-        return shifted;
-    }
-
-    private (Tensor<T> windows, int numWindowsH, int numWindowsW) WindowPartition(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int h = x.Shape[1];
-        int w = x.Shape[2];
-        int c = x.Shape[3];
+        int c = x.Shape[2];
 
         // Pad if necessary to make dimensions divisible by window size
         int padH = (_windowSize - h % _windowSize) % _windowSize;
@@ -372,30 +324,17 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         int paddedH = h + padH;
         int paddedW = w + padW;
 
-        Tensor<T> padded;
+        Tensor<T> source;
         if (padH > 0 || padW > 0)
         {
-            padded = new Tensor<T>([batch, paddedH, paddedW, c]);
-            for (int b = 0; b < batch; b++)
-            {
-                for (int i = 0; i < paddedH; i++)
-                {
-                    for (int j = 0; j < paddedW; j++)
-                    {
-                        for (int d = 0; d < c; d++)
-                        {
-                            if (i < h && j < w)
-                                padded[b, i, j, d] = x[b, i, j, d];
-                            else
-                                padded[b, i, j, d] = NumOps.Zero;
-                        }
-                    }
-                }
-            }
+            // Append one zero token and point every padded position at it.
+            // The constant pad has no gradient; valid gathers remain connected.
+            source = Engine.TensorConcatenate(
+                [x, new Tensor<T>([batch, 1, c])], axis: 1);
         }
         else
         {
-            padded = x;
+            source = x;
         }
 
         int numWindowsH = paddedH / _windowSize;
@@ -403,33 +342,29 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         int numWindows = numWindowsH * numWindowsW;
         int windowArea = _windowSize * _windowSize;
 
-        var windows = new Tensor<T>([batch * numWindows, windowArea, c]);
-
-        for (int b = 0; b < batch; b++)
+        var order = new int[paddedH * paddedW];
+        int destination = 0;
+        int padIndex = h * w;
+        for (int wh = 0; wh < numWindowsH; wh++)
         {
-            for (int wh = 0; wh < numWindowsH; wh++)
+            for (int ww = 0; ww < numWindowsW; ww++)
             {
-                for (int ww = 0; ww < numWindowsW; ww++)
+                for (int i = 0; i < _windowSize; i++)
                 {
-                    int windowIdx = b * numWindows + wh * numWindowsW + ww;
-                    int startH = wh * _windowSize;
-                    int startW = ww * _windowSize;
-
-                    for (int i = 0; i < _windowSize; i++)
+                    for (int j = 0; j < _windowSize; j++)
                     {
-                        for (int j = 0; j < _windowSize; j++)
-                        {
-                            int tokenIdx = i * _windowSize + j;
-                            for (int d = 0; d < c; d++)
-                            {
-                                windows[windowIdx, tokenIdx, d] = padded[b, startH + i, startW + j, d];
-                            }
-                        }
+                        int row = wh * _windowSize + i;
+                        int col = ww * _windowSize + j;
+                        order[destination++] = row < h && col < w
+                            ? row * w + col
+                            : padIndex;
                     }
                 }
             }
         }
 
+        var gathered = Engine.TensorGather(source, CreateIndices(order), axis: 1);
+        var windows = Engine.Reshape(gathered, [batch * numWindows, windowArea, c]);
         return (windows, numWindowsH, numWindowsW);
     }
 
@@ -438,7 +373,115 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         int numWindows = numWindowsH * numWindowsW;
         int c = windows.Shape[2];
 
-        var spatial = new Tensor<T>([batch, h, w, c]);
+        var windowSequence = Engine.Reshape(
+            windows, [batch, numWindows * _windowSize * _windowSize, c]);
+        var order = new int[h * w];
+        for (int row = 0; row < h; row++)
+        {
+            for (int col = 0; col < w; col++)
+            {
+                int wh = row / _windowSize;
+                int ww = col / _windowSize;
+                int localRow = row % _windowSize;
+                int localCol = col % _windowSize;
+                int window = wh * numWindowsW + ww;
+                order[row * w + col] = window * _windowSize * _windowSize
+                    + localRow * _windowSize + localCol;
+            }
+        }
+        return Engine.TensorGather(windowSequence, CreateIndices(order), axis: 1);
+    }
+
+    private Tensor<T> WindowedSelfAttention(
+        Tensor<T> windows,
+        int batch,
+        int h,
+        int w,
+        int numWindowsH,
+        int numWindowsW,
+        int effectiveShift)
+    {
+        int numWindows = windows.Shape[0];
+        int windowArea = windows.Shape[1];
+        int c = windows.Shape[2];
+
+        // Project to Q, K, V for all windows (batched for correct backward)
+        var flatWindows = Engine.Reshape(windows, [numWindows * windowArea, c]);
+        var flatQkv = _qkvProj.Forward(flatWindows);
+        var qkv = Engine.Reshape(flatQkv, [numWindows, windowArea, 3 * c]);
+        _cachedQkv = qkv;
+        _cachedNumWindows = numWindows;
+        _cachedWindowArea = windowArea;
+
+        var qFlat = Engine.TensorSlice(qkv, [0, 0, 0], [numWindows, windowArea, c]);
+        var kFlat = Engine.TensorSlice(qkv, [0, 0, c], [numWindows, windowArea, c]);
+        var vFlat = Engine.TensorSlice(qkv, [0, 0, 2 * c], [numWindows, windowArea, c]);
+        var q = Engine.TensorPermute(
+            Engine.Reshape(qFlat, [numWindows, windowArea, _numHeads, _headDim]),
+            [0, 2, 1, 3]);
+        var k = Engine.TensorPermute(
+            Engine.Reshape(kFlat, [numWindows, windowArea, _numHeads, _headDim]),
+            [0, 2, 3, 1]);
+        var v = Engine.TensorPermute(
+            Engine.Reshape(vFlat, [numWindows, windowArea, _numHeads, _headDim]),
+            [0, 2, 1, 3]);
+
+        var scores = Engine.TensorMultiplyScalar(
+            Engine.BatchMatMul(q, k), NumOps.FromDouble(_scale));
+
+        // Gather the paper's learned relative-position bias table into
+        // [1, heads, windowArea, windowArea] and broadcast across windows.
+        var biasIndices = new int[windowArea * windowArea];
+        for (int i = 0; i < windowArea; i++)
+            for (int j = 0; j < windowArea; j++)
+                biasIndices[i * windowArea + j] = _relativePositionIndex[i, j];
+        var relativeBias = Engine.TensorGather(
+            _relativePositionBiasTable, CreateIndices(biasIndices), axis: 0);
+        relativeBias = Engine.Reshape(relativeBias, [windowArea, windowArea, _numHeads]);
+        relativeBias = Engine.TensorPermute(relativeBias, [2, 0, 1]);
+        relativeBias = Engine.Reshape(relativeBias, [1, _numHeads, windowArea, windowArea]);
+        scores = Engine.TensorBroadcastAdd(scores, relativeBias);
+
+        var mask = CreateAttentionMask(
+            batch, h, w, numWindowsH, numWindowsW, effectiveShift);
+        if (mask is not null)
+            scores = Engine.TensorBroadcastAdd(scores, mask);
+
+        var probabilities = Engine.Softmax(scores, axis: -1);
+        var context = Engine.BatchMatMul(probabilities, v);
+        context = Engine.TensorPermute(context, [0, 2, 1, 3]);
+        var output = Engine.Reshape(context, [numWindows * windowArea, c]);
+
+        // Batch output projection across ALL windows and tokens for correct backward
+        var flatProjOut = _outProj.Forward(output);
+        return Engine.Reshape(flatProjOut, [numWindows, windowArea, c]);
+    }
+
+    private Tensor<T>? CreateAttentionMask(
+        int batch,
+        int h,
+        int w,
+        int numWindowsH,
+        int numWindowsW,
+        int shift)
+    {
+        int paddedH = numWindowsH * _windowSize;
+        int paddedW = numWindowsW * _windowSize;
+        bool hasPadding = paddedH != h || paddedW != w;
+        if (shift == 0 && !hasPadding) return null;
+
+        int windowArea = _windowSize * _windowSize;
+        int windowsPerBatch = numWindowsH * numWindowsW;
+        var mask = new Tensor<T>([batch * windowsPerBatch, 1, windowArea, windowArea]);
+        T blocked = NumOps.FromDouble(-100.0);
+
+        static int Region(int coordinate, int length, int windowSize, int shiftSize)
+        {
+            if (shiftSize == 0) return 0;
+            if (coordinate < length - windowSize) return 0;
+            if (coordinate < length - shiftSize) return 1;
+            return 2;
+        }
 
         for (int b = 0; b < batch; b++)
         {
@@ -446,149 +489,28 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
             {
                 for (int ww = 0; ww < numWindowsW; ww++)
                 {
-                    int windowIdx = b * numWindows + wh * numWindowsW + ww;
-                    int startH = wh * _windowSize;
-                    int startW = ww * _windowSize;
-
-                    for (int i = 0; i < _windowSize; i++)
+                    int window = b * windowsPerBatch + wh * numWindowsW + ww;
+                    for (int query = 0; query < windowArea; query++)
                     {
-                        for (int j = 0; j < _windowSize; j++)
+                        int qi = wh * _windowSize + query / _windowSize;
+                        int qj = ww * _windowSize + query % _windowSize;
+                        int queryRegion = Region(qi, paddedH, _windowSize, shift) * 3
+                            + Region(qj, paddedW, _windowSize, shift);
+                        for (int key = 0; key < windowArea; key++)
                         {
-                            int outH = startH + i;
-                            int outW = startW + j;
-
-                            // Only copy if within original bounds
-                            if (outH < h && outW < w)
-                            {
-                                int tokenIdx = i * _windowSize + j;
-                                for (int d = 0; d < c; d++)
-                                {
-                                    spatial[b, outH, outW, d] = windows[windowIdx, tokenIdx, d];
-                                }
-                            }
+                            int ki = wh * _windowSize + key / _windowSize;
+                            int kj = ww * _windowSize + key % _windowSize;
+                            int keyRegion = Region(ki, paddedH, _windowSize, shift) * 3
+                                + Region(kj, paddedW, _windowSize, shift);
+                            if (queryRegion != keyRegion || ki >= h || kj >= w)
+                                mask[window, 0, query, key] = blocked;
                         }
                     }
                 }
             }
         }
 
-        return spatial;
-    }
-
-    private Tensor<T> WindowedSelfAttention(Tensor<T> windows)
-    {
-        int numWindows = windows.Shape[0];
-        int windowArea = windows.Shape[1];
-        int c = windows.Shape[2];
-
-        // Project to Q, K, V for all windows (batched for correct backward)
-        var flatWindows = windows.Reshape([numWindows * windowArea, c]);
-        var flatQkv = _qkvProj.Forward(flatWindows);
-        var qkv = flatQkv.Reshape([numWindows, windowArea, 3 * c]);
-        _cachedQkv = qkv;
-        _cachedNumWindows = numWindows;
-        _cachedWindowArea = windowArea;
-
-        // Compute attention per window
-        var output = TensorAllocator.Rent<T>([numWindows, windowArea, c]);
-
-        for (int win = 0; win < numWindows; win++)
-        {
-            // Compute attention scores for this window
-            var attnScores = new double[_numHeads, windowArea, windowArea];
-
-            for (int head = 0; head < _numHeads; head++)
-            {
-                int headOffset = head * _headDim;
-
-                for (int i = 0; i < windowArea; i++)
-                {
-                    for (int j = 0; j < windowArea; j++)
-                    {
-                        double score = 0;
-                        for (int d = 0; d < _headDim; d++)
-                        {
-                            double q = NumOps.ToDouble(qkv[win, i, headOffset + d]);
-                            double k = NumOps.ToDouble(qkv[win, j, c + headOffset + d]);
-                            score += q * k;
-                        }
-                        score *= _scale;
-
-                        // Add relative position bias
-                        int biasIdx = _relativePositionIndex[i, j];
-                        score += NumOps.ToDouble(_relativePositionBiasTable[biasIdx, head]);
-
-                        attnScores[head, i, j] = score;
-                    }
-                }
-            }
-
-            // Softmax per head per query
-            var attnProbs = new double[_numHeads, windowArea, windowArea];
-            for (int head = 0; head < _numHeads; head++)
-            {
-                for (int i = 0; i < windowArea; i++)
-                {
-                    double maxScore = double.NegativeInfinity;
-                    for (int j = 0; j < windowArea; j++)
-                    {
-                        if (attnScores[head, i, j] > maxScore)
-                            maxScore = attnScores[head, i, j];
-                    }
-
-                    double sumExp = 0;
-                    for (int j = 0; j < windowArea; j++)
-                    {
-                        attnProbs[head, i, j] = Math.Exp(attnScores[head, i, j] - maxScore);
-                        sumExp += attnProbs[head, i, j];
-                    }
-
-                    for (int j = 0; j < windowArea; j++)
-                    {
-                        attnProbs[head, i, j] /= sumExp;
-                    }
-                }
-            }
-
-            // Cache attention probs for backward
-            if (_cachedAttnProbs == null)
-                _cachedAttnProbs = new T[numWindows, _numHeads, windowArea, windowArea];
-            for (int head = 0; head < _numHeads; head++)
-                for (int i = 0; i < windowArea; i++)
-                    for (int j = 0; j < windowArea; j++)
-                        _cachedAttnProbs[win, head, i, j] = NumOps.FromDouble(attnProbs[head, i, j]);
-
-            // Apply attention to values and concatenate heads
-            var attnOut = new double[windowArea, c];
-            for (int head = 0; head < _numHeads; head++)
-            {
-                int headOffset = head * _headDim;
-                int vOffset = 2 * c + headOffset;
-
-                for (int i = 0; i < windowArea; i++)
-                {
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        double val = 0;
-                        for (int j = 0; j < windowArea; j++)
-                        {
-                            val += attnProbs[head, i, j] * NumOps.ToDouble(qkv[win, j, vOffset + d]);
-                        }
-                        attnOut[i, headOffset + d] = val;
-                    }
-                }
-            }
-
-            // Cache attention output in the output tensor for outProj batching
-            for (int t = 0; t < windowArea; t++)
-                for (int d = 0; d < c; d++)
-                    output[win, t, d] = NumOps.FromDouble(attnOut[t, d]);
-        }
-
-        // Batch output projection across ALL windows and tokens for correct backward
-        var flatAttnOut = output.Reshape([numWindows * windowArea, c]);
-        var flatProjOut = _outProj.Forward(flatAttnOut);
-        return flatProjOut.Reshape([numWindows, windowArea, c]);
+        return mask;
     }
 
     private Tensor<T> ApplyMLP(Tensor<T> x)

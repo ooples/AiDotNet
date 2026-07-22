@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -64,7 +65,13 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
     /// </summary>
     public ICALiNGAMAlgorithm(CausalDiscoveryOptions? options = null)
     {
-        if (options?.EdgeThreshold.HasValue == true) _threshold = options.EdgeThreshold.Value;
+        if (options?.EdgeThreshold.HasValue == true)
+        {
+            double threshold = options.EdgeThreshold.Value;
+            if (double.IsNaN(threshold) || double.IsInfinity(threshold) || threshold < 0)
+                throw new ArgumentException("EdgeThreshold must be a non-negative finite value.", nameof(options));
+            _threshold = threshold;
+        }
     }
 
     /// <inheritdoc/>
@@ -72,41 +79,114 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        var standardized = StandardizeData(data);
+        var centered = CenterData(data, n, d);
+        var (whitened, whiteningMatrix) = WhitenData(centered, n, d);
 
-        // Approximate ICA via FastICA-like deflation
-        // FastICA requires transcendental functions (tanh) in tight inner loops,
-        // so it operates on Matrix<T> but converts elements via NumOps as needed
-        var W = FastICA(standardized, n, d);
+        // FastICA estimates an orthogonal unmixing matrix in whitened coordinates.
+        // Transform it back to the centered observation coordinates: W = Q * V.
+        var whitenedUnmixing = FastICA(whitened, n, d);
+        var unmixing = whitenedUnmixing.Multiply(whiteningMatrix);
 
-        // Recover B = I - inv(W)
-        var invW = InvertMatrix(W, d);
-        if (invW == null) return new Matrix<T>(d, d);
+        // ICA determines components only up to row permutation. LiNGAM step 2 solves
+        // the linear assignment min sum_i 1 / |W[phi(i), i]|.
+        int[] rowForColumn = FindRowPermutation(unmixing, d);
 
+        // LiNGAM steps 3-4: normalize each assigned row to make the diagonal one,
+        // then recover the structural coefficient matrix B = I - W'. B[target, source]
+        // is converted to the repository's adjacency convention [source, target] below.
         var B = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                B[i, j] = NumOps.Subtract(
-                    i == j ? NumOps.One : NumOps.Zero,
-                    invW[i, j]);
-
-        // Find permutation to make B approximately lower triangular
-        var order = FindCausalOrder(B, d);
-
-        // Permute and threshold
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
         {
+            T diagonal = unmixing[rowForColumn[i], i];
+            if (Math.Abs(NumOps.ToDouble(diagonal)) < 1e-12)
+                return new Matrix<T>(d, d);
+
             for (int j = 0; j < d; j++)
             {
-                T val = B[order[i], order[j]];
+                T normalized = NumOps.Divide(unmixing[rowForColumn[i], j], diagonal);
+                B[i, j] = NumOps.Subtract(
+                    i == j ? NumOps.One : NumOps.Zero,
+                    normalized);
+            }
+        }
+
+        // LiNGAM step 5 / Algorithms B-C: prune the smallest estimates until B can
+        // be simultaneously row/column-permuted to strict lower triangular form.
+        var order = FindCausalOrder(B, d);
+
+        // Keep only coefficients allowed by the recovered order. This is the paper's
+        // DAG projection, not an arbitrary tie-break: later variables may depend on
+        // earlier variables, never the reverse.
+        var result = new Matrix<T>(d, d);
+        for (int targetPosition = 1; targetPosition < d; targetPosition++)
+        {
+            int target = order[targetPosition];
+            for (int sourcePosition = 0; sourcePosition < targetPosition; sourcePosition++)
+            {
+                int source = order[sourcePosition];
+                T val = B[target, source];
                 double valD = NumOps.ToDouble(val);
-                if (i != j && Math.Abs(valD) >= _threshold)
-                    result[order[i], order[j]] = val;
+                if (Math.Abs(valD) >= _threshold)
+                    result[source, target] = val;
             }
         }
 
         return result;
+    }
+
+    private Matrix<T> CenterData(Matrix<T> data, int n, int d)
+    {
+        var centered = new Matrix<T>(n, d);
+        T nT = NumOps.FromDouble(n);
+        for (int j = 0; j < d; j++)
+        {
+            T mean = NumOps.Zero;
+            for (int i = 0; i < n; i++) mean = NumOps.Add(mean, data[i, j]);
+            mean = NumOps.Divide(mean, nT);
+            for (int i = 0; i < n; i++) centered[i, j] = NumOps.Subtract(data[i, j], mean);
+        }
+        return centered;
+    }
+
+    private (Matrix<T> Whitened, Matrix<T> WhiteningMatrix) WhitenData(Matrix<T> centered, int n, int d)
+    {
+        var covariance = new Matrix<T>(d, d);
+        T invN = NumOps.FromDouble(1.0 / n);
+        for (int row = 0; row < d; row++)
+        {
+            for (int col = 0; col < d; col++)
+            {
+                T sum = NumOps.Zero;
+                for (int sample = 0; sample < n; sample++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(centered[sample, row], centered[sample, col]));
+                covariance[row, col] = NumOps.Multiply(sum, invN);
+            }
+        }
+
+        var eigen = new EigenDecomposition<T>(covariance, EigenAlgorithmType.Jacobi);
+        var whitening = new Matrix<T>(d, d);
+        for (int component = 0; component < d; component++)
+        {
+            double eigenvalue = NumOps.ToDouble(eigen.EigenValues[component]);
+            double inverseRoot = 1.0 / Math.Sqrt(Math.Max(eigenvalue, 1e-12));
+            T scale = NumOps.FromDouble(inverseRoot);
+            for (int feature = 0; feature < d; feature++)
+                whitening[component, feature] = NumOps.Multiply(eigen.EigenVectors[feature, component], scale);
+        }
+
+        var whitened = new Matrix<T>(n, d);
+        for (int sample = 0; sample < n; sample++)
+        {
+            for (int component = 0; component < d; component++)
+            {
+                T sum = NumOps.Zero;
+                for (int feature = 0; feature < d; feature++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(centered[sample, feature], whitening[component, feature]));
+                whitened[sample, component] = sum;
+            }
+        }
+
+        return (whitened, whitening);
     }
 
     private Matrix<T> FastICA(Matrix<T> data, int n, int d)
@@ -184,50 +264,135 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         return W;
     }
 
-    private int[] FindCausalOrder(Matrix<T> B, int d)
+    private int[] FindRowPermutation(Matrix<T> unmixing, int d)
     {
-        var rowSums = new double[d];
-        for (int i = 0; i < d; i++)
-            for (int j = i + 1; j < d; j++)
-                rowSums[i] += Math.Abs(NumOps.ToDouble(B[i, j]));
+        // Hungarian algorithm for the paper's O(d^3) linear-assignment formulation.
+        // Columns are observed variables; each receives exactly one ICA component row.
+        var u = new double[d + 1];
+        var v = new double[d + 1];
+        var p = new int[d + 1];
+        var way = new int[d + 1];
 
-        return Enumerable.Range(0, d).OrderBy(i => rowSums[i]).ToArray();
+        for (int row = 1; row <= d; row++)
+        {
+            p[0] = row;
+            int column0 = 0;
+            var minValue = Enumerable.Repeat(double.PositiveInfinity, d + 1).ToArray();
+            var used = new bool[d + 1];
+
+            do
+            {
+                used[column0] = true;
+                int row0 = p[column0];
+                double delta = double.PositiveInfinity;
+                int column1 = 0;
+                for (int column = 1; column <= d; column++)
+                {
+                    if (used[column]) continue;
+                    double magnitude = Math.Abs(NumOps.ToDouble(unmixing[row0 - 1, column - 1]));
+                    double cost = 1.0 / Math.Max(magnitude, 1e-12);
+                    double current = cost - u[row0] - v[column];
+                    if (current < minValue[column])
+                    {
+                        minValue[column] = current;
+                        way[column] = column0;
+                    }
+                    if (minValue[column] < delta)
+                    {
+                        delta = minValue[column];
+                        column1 = column;
+                    }
+                }
+
+                for (int column = 0; column <= d; column++)
+                {
+                    if (used[column])
+                    {
+                        u[p[column]] += delta;
+                        v[column] -= delta;
+                    }
+                    else
+                    {
+                        minValue[column] -= delta;
+                    }
+                }
+                column0 = column1;
+            }
+            while (p[column0] != 0);
+
+            do
+            {
+                int column1 = way[column0];
+                p[column0] = p[column1];
+                column0 = column1;
+            }
+            while (column0 != 0);
+        }
+
+        var rowForColumn = new int[d];
+        for (int column = 1; column <= d; column++) rowForColumn[column - 1] = p[column] - 1;
+        return rowForColumn;
     }
 
-    private Matrix<T>? InvertMatrix(Matrix<T> matrix, int d)
+    private int[] FindCausalOrder(Matrix<T> B, int d)
     {
-        // Build augmented matrix [M | I] using generic T
-        var aug = new Matrix<T>(d, 2 * d);
+        var pruned = new double[d, d];
+        var entries = new List<(double Magnitude, int Row, int Column)>(d * d);
         for (int i = 0; i < d; i++)
         {
-            for (int j = 0; j < d; j++) aug[i, j] = matrix[i, j];
-            aug[i, i + d] = NumOps.One;
+            for (int j = 0; j < d; j++)
+            {
+                double value = NumOps.ToDouble(B[i, j]);
+                pruned[i, j] = value;
+                entries.Add((Math.Abs(value), i, j));
+            }
         }
 
-        for (int col = 0; col < d; col++)
+        entries.Sort((left, right) => left.Magnitude.CompareTo(right.Magnitude));
+        int initiallyPruned = Math.Min(entries.Count, d * (d + 1) / 2);
+        int next = 0;
+        for (; next < initiallyPruned; next++)
+            pruned[entries[next].Row, entries[next].Column] = 0.0;
+
+        while (true)
         {
-            int maxRow = col;
-            for (int row = col + 1; row < d; row++)
-                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
-                    maxRow = row;
-            if (NumOps.LessThan(NumOps.Abs(aug[maxRow, col]), NumOps.FromDouble(1e-12))) return null;
-            if (maxRow != col)
-                for (int j = 0; j < 2 * d; j++)
-                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-            T pivot = aug[col, col];
-            for (int j = 0; j < 2 * d; j++) aug[col, j] = NumOps.Divide(aug[col, j], pivot);
-            for (int row = 0; row < d; row++)
-                if (row != col)
+            int[]? order = TryFindCausalOrder(pruned, d);
+            if (order is not null) return order;
+            if (next >= entries.Count) return Enumerable.Range(0, d).ToArray();
+            pruned[entries[next].Row, entries[next].Column] = 0.0;
+            next++;
+        }
+    }
+
+    private static int[]? TryFindCausalOrder(double[,] B, int d)
+    {
+        var remaining = new bool[d];
+        Array.Fill(remaining, true);
+        var order = new int[d];
+
+        for (int position = 0; position < d; position++)
+        {
+            int source = -1;
+            for (int row = 0; row < d && source < 0; row++)
+            {
+                if (!remaining[row]) continue;
+                bool hasIncomingEdge = false;
+                for (int column = 0; column < d; column++)
                 {
-                    T factor = aug[row, col];
-                    for (int j = 0; j < 2 * d; j++)
-                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
+                    if (remaining[column] && Math.Abs(B[row, column]) > 1e-12)
+                    {
+                        hasIncomingEdge = true;
+                        break;
+                    }
                 }
+                if (!hasIncomingEdge) source = row;
+            }
+
+            if (source < 0) return null;
+            order[position] = source;
+            remaining[source] = false;
         }
 
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++) result[i, j] = aug[i, j + d];
-        return result;
+        return order;
     }
 }
