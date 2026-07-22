@@ -1,3 +1,5 @@
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -83,6 +85,29 @@ public abstract class GeneratorBase<T> : IGenerator<T>
     }
 
     /// <summary>
+    /// Asynchronously generates a text response based on a prompt, honoring cancellation.
+    /// </summary>
+    /// <param name="prompt">The input prompt or question.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the generated text response.</returns>
+    public virtual async Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
+    {
+        if (prompt == null)
+        {
+            throw new ArgumentNullException(nameof(prompt), "Prompt cannot be null.");
+        }
+
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            throw new ArgumentException("Prompt cannot be empty or whitespace.", nameof(prompt));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return await GenerateCoreAsync(prompt, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Generates a grounded answer using provided context documents.
     /// </summary>
     /// <param name="query">The user's original query or question.</param>
@@ -131,11 +156,77 @@ public abstract class GeneratorBase<T> : IGenerator<T>
     }
 
     /// <summary>
+    /// Asynchronously generates a grounded answer using provided context documents, honoring cancellation.
+    /// </summary>
+    /// <param name="query">The user's original query or question.</param>
+    /// <param name="context">The retrieved documents providing context for the answer.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing a grounded answer with the generated text, source documents, and extracted citations.</returns>
+    public virtual async Task<GroundedAnswer<T>> GenerateGroundedAsync(
+        string query,
+        IEnumerable<Document<T>> context,
+        CancellationToken cancellationToken = default)
+    {
+        if (query == null)
+        {
+            throw new ArgumentNullException(nameof(query), "Query cannot be null.");
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            throw new ArgumentException("Query cannot be empty or whitespace.", nameof(query));
+        }
+
+        if (context == null)
+        {
+            throw new ArgumentNullException(nameof(context), "Context cannot be null.");
+        }
+
+        var contextList = context.ToList();
+        if (contextList.Count == 0)
+        {
+            throw new ArgumentException("Context must contain at least one document.", nameof(context));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Build the prompt with context
+        var prompt = BuildPromptWithContext(query, contextList);
+
+        // Generate the answer
+        var generatedText = await GenerateCoreAsync(prompt, cancellationToken).ConfigureAwait(false);
+
+        // Extract citations from the generated text
+        var citations = ExtractCitations(generatedText, contextList);
+
+        return new GroundedAnswer<T>
+        {
+            Answer = generatedText,
+            SourceDocuments = contextList.AsReadOnly(),
+            Citations = citations.Values.Select(d => d.Id).ToList().AsReadOnly()
+        };
+    }
+
+    /// <summary>
     /// Core generation logic to be implemented by derived classes.
     /// </summary>
     /// <param name="prompt">The validated prompt string.</param>
     /// <returns>The generated text response.</returns>
     protected abstract string GenerateCore(string prompt);
+
+    /// <summary>
+    /// Core asynchronous generation logic. The default implementation wraps the synchronous
+    /// <see cref="GenerateCore"/>, which is appropriate for local generators. Generators backed by a remote
+    /// chat model should override this to perform genuine non-blocking work.
+    /// </summary>
+    /// <param name="prompt">The validated prompt string.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the generated text response.</returns>
+    protected virtual Task<string> GenerateCoreAsync(string prompt, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GenerateCore(prompt));
+    }
 
     /// <summary>
     /// Builds a prompt that incorporates the query and retrieved context documents.

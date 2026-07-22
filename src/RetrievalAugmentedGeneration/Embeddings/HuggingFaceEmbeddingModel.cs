@@ -59,15 +59,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 
         protected override Vector<T> EmbedCore(string text)
         {
-            try
-            {
-                return EmbedAsync(text).ConfigureAwait(false).GetAwaiter().GetResult();
-            }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or AggregateException)
-            {
-                // API unavailable (e.g., unit tests with fake API key) - use deterministic fallback
-                return GenerateFallbackEmbedding(text);
-            }
+            // Surface API/transport failures instead of fabricating a fake vector.
+            // Returning a random/hash-based embedding here would silently poison the
+            // vector store with garbage that looks like a valid embedding.
+            return EmbedAsync(text).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         /// <summary>

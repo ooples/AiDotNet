@@ -687,7 +687,10 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
     /// <param name="graphStore">Optional graph storage backend for Graph RAG (e.g., MemoryGraphStore, FileGraphStore).</param>
     /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
-    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
+    /// <param name="documentStore">Optional document store. Folded into a hybrid retriever when a knowledge graph is
+    /// also present; otherwise (with no explicit <paramref name="retriever"/>) a default dense vector retriever is built over it.</param>
+    /// <param name="chunkingStrategy">Optional chunking strategy used to split source documents into passages before indexing/embedding.</param>
+    /// <param name="contextCompressor">Optional context compressor used to shrink retrieved passages before they reach the generator.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
@@ -696,7 +699,9 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         IGraphStore<T>? graphStore = null,
         KnowledgeGraph<T>? knowledgeGraph = null,
-        IDocumentStore<T>? documentStore = null);
+        IDocumentStore<T>? documentStore = null,
+        IChunkingStrategy? chunkingStrategy = null,
+        IContextCompressor<T>? contextCompressor = null);
 
     /// <summary>
     /// Configures advanced knowledge graph capabilities including embeddings, community detection,
@@ -2393,5 +2398,63 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="metric">The similarity metric implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureSimilarityMetric(RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T> metric);
+
+    /// <summary>
+    /// Configures a vector document store as the RAG backend, building a default dense retriever over it.
+    /// </summary>
+    /// <param name="store">The document store to retrieve from.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureVectorStore(IDocumentStore<T> store, int defaultTopK = 5);
+
+    /// <summary>
+    /// Configures an in-memory vector index (Flat / HNSW / IVF / LSH) with a similarity metric and builds
+    /// a dense retriever over it.
+    /// </summary>
+    /// <param name="indexKind">Which in-memory index to build.</param>
+    /// <param name="vectorDimension">The embedding dimension (0 = inferred on first add).</param>
+    /// <param name="metric">The similarity metric; when null the configured metric (or cosine) is used.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureVectorIndex(
+        AiDotNet.Enums.VectorIndexKind indexKind = AiDotNet.Enums.VectorIndexKind.Flat,
+        int vectorDimension = 0,
+        RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? metric = null,
+        int defaultTopK = 5);
+
+    /// <summary>
+    /// Configures a dependency-free native ANN index (Flat / IVF / PQ / IVFPQ) implemented on the AiDotNet
+    /// Tensors fused-kernel stack, adapts it into a document store, and builds a dense retriever over it. This
+    /// is the self-contained replacement for the external FaissNet backend — no FAISS / MKL native dependency —
+    /// and dispatches to the GPU ANN kernels across all supported backends when <paramref name="useGpu"/> is set.
+    /// </summary>
+    /// <param name="indexType">Which native ANN structure to build (default exact Flat).</param>
+    /// <param name="vectorDimension">The embedding dimension (0 = inferred on first add).</param>
+    /// <param name="metric">Distance metric (default cosine).</param>
+    /// <param name="nlist">IVF coarse lists (IVF/IVFPQ only).</param>
+    /// <param name="nprobe">IVF lists probed per query (IVF/IVFPQ only).</param>
+    /// <param name="m">PQ subspaces (PQ/IVFPQ only; must divide the dimension).</param>
+    /// <param name="ksub">PQ sub-centroids per subspace (PQ/IVFPQ only).</param>
+    /// <param name="useGpu">When true, attaches the best available GPU backend so ANN ops use the fused kernels.</param>
+    /// <param name="defaultTopK">Default number of documents the retriever returns per query.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureNativeAnnIndex(
+        RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorIndexType indexType = RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorIndexType.Flat,
+        int vectorDimension = 0,
+        RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorMetric metric = RetrievalAugmentedGeneration.VectorSearch.Indexes.AnnVectorMetric.Cosine,
+        int nlist = 64,
+        int nprobe = 8,
+        int m = 8,
+        int ksub = 256,
+        bool useGpu = false,
+        int defaultTopK = 5);
+
+    /// <summary>
+    /// Materializes a declarative RAG configuration into the builder's RAG components (chunking, embedding,
+    /// document store + retriever, reranking, context compression).
+    /// </summary>
+    /// <param name="config">The RAG configuration to apply.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRAG(RetrievalAugmentedGeneration.Configuration.RAGConfiguration<T> config);
 
 }

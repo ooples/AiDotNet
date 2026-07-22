@@ -1,3 +1,5 @@
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.Interfaces;
@@ -86,6 +88,32 @@ public interface IReranker<T>
     /// </para>
     /// </remarks>
     IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents, int topK);
+
+    /// <summary>
+    /// Asynchronously reranks a collection of documents based on their relevance to a query.
+    /// </summary>
+    /// <param name="query">The query text used to assess relevance.</param>
+    /// <param name="documents">The documents to rerank.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the documents reordered by relevance, with updated relevance scores.</returns>
+    /// <remarks>
+    /// <para>
+    /// Asynchronous counterpart to <see cref="Rerank(string, IEnumerable{Document{T}})"/>. LLM- or
+    /// cross-encoder-backed rerankers perform genuine non-blocking work here; lexical rerankers complete
+    /// synchronously.
+    /// </para>
+    /// </remarks>
+    Task<IEnumerable<Document<T>>> RerankAsync(string query, IEnumerable<Document<T>> documents, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asynchronously reranks documents and returns only the top-k highest scoring results.
+    /// </summary>
+    /// <param name="query">The query text used to assess relevance.</param>
+    /// <param name="documents">The documents to rerank.</param>
+    /// <param name="topK">The number of top-ranked documents to return.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the top-k documents ordered by relevance, with updated relevance scores.</returns>
+    Task<IEnumerable<Document<T>>> RerankAsync(string query, IEnumerable<Document<T>> documents, int topK, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets a value indicating whether this reranker modifies relevance scores.

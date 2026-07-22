@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -19,23 +20,31 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
         private readonly string _llmEndpoint;
         private readonly string _apiKey;
         private readonly double _compressionRatio;
+        private readonly ITextGenerator? _generator;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LLMContextCompressor{T}"/> class.
         /// </summary>
-        /// <param name="compressionRatio">The target compression ratio (0.0 to 1.0).</param>
-        /// <param name="llmEndpoint">The LLM API endpoint.</param>
-        /// <param name="apiKey">The API key for the LLM service.</param>
+        /// <param name="compressionRatio">The target compression ratio (0.0 to 1.0) for the extractive fallback.</param>
+        /// <param name="llmEndpoint">Optional LLM API endpoint (informational; the call goes through <paramref name="generator"/>).</param>
+        /// <param name="apiKey">Optional API key (informational; the call goes through <paramref name="generator"/>).</param>
+        /// <param name="generator">
+        /// Optional real text generator. When provided, each document is compressed by the LLM to only the
+        /// query-relevant content; when <c>null</c>, a query-overlap extractive sentence selection is used as
+        /// an offline fallback.
+        /// </param>
         public LLMContextCompressor(
             double compressionRatio = 0.5,
             string llmEndpoint = "",
-            string apiKey = "")
+            string apiKey = "",
+            ITextGenerator? generator = null)
         {
             _compressionRatio = compressionRatio >= 0 && compressionRatio <= 1
                 ? compressionRatio
                 : throw new ArgumentOutOfRangeException(nameof(compressionRatio), "Compression ratio must be between 0 and 1");
             _llmEndpoint = llmEndpoint;
             _apiKey = apiKey;
+            _generator = generator;
         }
 
         /// <summary>
@@ -72,6 +81,20 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
         public string CompressText(string query, string text)
         {
             if (string.IsNullOrEmpty(text)) return text;
+
+            if (_generator != null)
+            {
+                var prompt =
+                    $"Extract only the parts of the document that are relevant to answering the query. " +
+                    $"Preserve the original wording, drop everything irrelevant, and return only the compressed " +
+                    $"excerpt with no commentary.\n\nQuery: {query}\n\nDocument: {text}\n\nRelevant excerpt:";
+                var compressed = _generator.Generate(prompt);
+                if (!string.IsNullOrWhiteSpace(compressed))
+                {
+                    return compressed.Trim();
+                }
+                // Empty LLM reply: fall through to the extractive heuristic below.
+            }
 
             var sentences = SplitIntoSentences(text);
             var scoredSentences = new List<(string sentence, double score)>();

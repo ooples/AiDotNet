@@ -248,11 +248,16 @@
          PersistentInputRegistry}; the src/Training mirror classes stay as the consumer-side primitives
          (the fused-primitive centralization in #1847/#1848 wires every consumer through them) and now
          run against the fixed engine. 0.113.0 is PUBLISHED to NuGet and is a superset of 0.112.0 (also
-         carries #765 compiled-ReduceMax axis fill), so all rationale above is retained. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.118.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.118.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.118.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.118.0" />
+         carries #765 compiled-ReduceMax axis fill), so all rationale above is retained.
+
+          Bumped 0.114.0 -> 0.118.0: brings AiDotNet.Tensors #824 — the native fused ANN kernel stack
+          (IAnnBackend + AnnPrimitives + AnnIndex: Flat/IVF/PQ/IVFPQ across all 7 backends). This is the
+          GATING dependency for the dependency-free NativeAnn vector index (AnnVectorIndex<T>) that
+          replaces the broken external FaissNet IVF/PQ path. Requires publishing Tensors 0.118.0. -->
+     <PackageVersion Include="AiDotNet.Tensors" Version="0.118.0" />
+     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.118.0" />
+     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.118.0" />
+     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.118.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
@@ -307,6 +312,9 @@
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Infrastructure -->
     <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.4.2" />
+    <PackageVersion Include="Neo4j.Driver" Version="5.28.4" />
+    <!-- Managed FAISS wrapper (native ANN: Flat/IVF/HNSW/PQ). Consumed only by the opt-in
+         AiDotNet.Storage.Faiss metapackage; ships a net6.0 lib + win-x64 native runtime. -->
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
     <PackageVersion Include="Stripe.net" Version="52.1.1" />

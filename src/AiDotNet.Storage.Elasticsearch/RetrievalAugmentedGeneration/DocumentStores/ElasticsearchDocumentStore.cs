@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using Newtonsoft.Json.Linq;
 
@@ -118,6 +121,13 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     }
 
     protected override void AddCore(VectorDocument<T> vectorDocument)
+        => AddCoreImplAsync(vectorDocument, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task AddCoreAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+        => AddCoreImplAsync(vectorDocument, cancellationToken);
+
+    private async Task AddCoreImplAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
     {
         if (vectorDocument.Embedding.Length != _vectorDimension)
             throw new ArgumentException($"Document embedding dimension ({vectorDocument.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).");
@@ -137,7 +147,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             Encoding.UTF8,
             "application/json");
 
-        using var response = _httpClient.PutAsync($"/{_indexName}/_doc/{vectorDocument.Document.Id}", content).GetAwaiter().GetResult();
+        using var response = await _httpClient.PutAsync($"/{_indexName}/_doc/{vectorDocument.Document.Id}", content, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         _cache[vectorDocument.Document.Id] = vectorDocument;
@@ -145,6 +155,13 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     }
 
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+        => AddBatchCoreImplAsync(vectorDocuments, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task AddBatchCoreAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
+        => AddBatchCoreImplAsync(vectorDocuments, cancellationToken);
+
+    private async Task AddBatchCoreImplAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
     {
         if (vectorDocuments.Count == 0) return;
 
@@ -172,10 +189,10 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         }
 
         using var content = new StringContent(bulkBody.ToString(), Encoding.UTF8, "application/x-ndjson");
-        using var response = _httpClient.PostAsync($"/{_indexName}/_bulk", content).GetAwaiter().GetResult();
+        using var response = await _httpClient.PostAsync($"/{_indexName}/_bulk", content, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
-        var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var responseContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var result = Newtonsoft.Json.Linq.JObject.Parse(responseContent);
 
         if (result["errors"]?.Value<bool>() == true)
@@ -214,11 +231,25 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     }
 
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
-    {
-        var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
+        => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, CancellationToken.None).GetAwaiter().GetResult();
 
-        // Build the query with metadata filters
-        object queryClause;
+    /// <inheritdoc/>
+    protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+        => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
+
+    private Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+        => SearchImplAsync(queryVector, topK, BuildDictQueryClause(metadataFilters), cancellationToken);
+
+    /// <inheritdoc/>
+    protected override IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+        => SearchImplAsync(queryVector, topK, ElasticsearchVectorFilterBuilder.Build(filter), CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+        => SearchImplAsync(queryVector, topK, ElasticsearchVectorFilterBuilder.Build(filter), cancellationToken);
+
+    private static object BuildDictQueryClause(Dictionary<string, object> metadataFilters)
+    {
         if (metadataFilters != null && metadataFilters.Any())
         {
             var mustClauses = new List<object>();
@@ -232,7 +263,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
                     }
                 });
             }
-            queryClause = new
+            return new
             {
                 @bool = new
                 {
@@ -240,10 +271,13 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
                 }
             };
         }
-        else
-        {
-            queryClause = new { match_all = new { } };
-        }
+
+        return new { match_all = new { } };
+    }
+
+    private async Task<IEnumerable<Document<T>>> SearchImplAsync(Vector<T> queryVector, int topK, object queryClause, CancellationToken cancellationToken)
+    {
+        var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
 
         var query = new
         {
@@ -267,14 +301,14 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             Encoding.UTF8,
             "application/json");
 
-        using var response = _httpClient.PostAsync($"/{_indexName}/_search", content).GetAwaiter().GetResult();
+        using var response = await _httpClient.PostAsync($"/{_indexName}/_search", content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            var errorContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             throw new HttpRequestException($"Elasticsearch search failed with status {response.StatusCode}: {errorContent}");
         }
 
-        var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var responseContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var result = JObject.Parse(responseContent);
 
         var results = new List<Document<T>>();
@@ -305,22 +339,29 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     }
 
     protected override Document<T>? GetByIdCore(string documentId)
+        => GetByIdCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task<Document<T>?> GetByIdCoreAsync(string documentId, CancellationToken cancellationToken)
+        => GetByIdCoreImplAsync(documentId, cancellationToken);
+
+    private async Task<Document<T>?> GetByIdCoreImplAsync(string documentId, CancellationToken cancellationToken)
     {
         if (_cache.TryGetValue(documentId, out var vectorDoc))
             return vectorDoc.Document;
 
-        using var response = _httpClient.GetAsync($"/{_indexName}/_doc/{documentId}").GetAwaiter().GetResult();
+        using var response = await _httpClient.GetAsync($"/{_indexName}/_doc/{documentId}", cancellationToken).ConfigureAwait(false);
 
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             throw new HttpRequestException($"Failed to retrieve document '{documentId}' from Elasticsearch. Status: {response.StatusCode}, Error: {errorContent}");
         }
 
-        var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var responseContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var result = JObject.Parse(responseContent);
 
         if (result["found"]?.Value<bool>() != true)
@@ -362,8 +403,15 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// </para>
     /// </remarks>
     protected override bool RemoveCore(string documentId)
+        => RemoveCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task<bool> RemoveCoreAsync(string documentId, CancellationToken cancellationToken)
+        => RemoveCoreImplAsync(documentId, cancellationToken);
+
+    private async Task<bool> RemoveCoreImplAsync(string documentId, CancellationToken cancellationToken)
     {
-        using var response = _httpClient.DeleteAsync($"/{_indexName}/_doc/{documentId}").GetAwaiter().GetResult();
+        using var response = await _httpClient.DeleteAsync($"/{_indexName}/_doc/{documentId}", cancellationToken).ConfigureAwait(false);
         if (response.IsSuccessStatusCode && _documentCount > 0)
         {
             _cache.Remove(documentId);
@@ -410,9 +458,18 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// </para>
     /// </remarks>
     protected override IEnumerable<Document<T>> GetAllCore()
+        => GetAllCoreImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task<IEnumerable<Document<T>>> GetAllCoreAsync(CancellationToken cancellationToken)
+        => GetAllCoreImplAsync(cancellationToken);
+
+    private async Task<IEnumerable<Document<T>>> GetAllCoreImplAsync(CancellationToken cancellationToken)
     {
         const string scrollTimeout = "1m";
         const int batchSize = 1000;
+
+        var documents = new List<Document<T>>();
 
         // Initial scroll request
         var searchRequest = new
@@ -421,26 +478,27 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             query = new { match_all = new { } }
         };
 
-        var searchResponse = _httpClient.PostAsync(
+        using var searchResponse = await _httpClient.PostAsync(
             $"{_indexName}/_search?scroll={scrollTimeout}",
             new StringContent(
                 Newtonsoft.Json.JsonConvert.SerializeObject(searchRequest),
                 Encoding.UTF8,
                 "application/json"
-            )
-        ).Result;
+            ),
+            cancellationToken
+        ).ConfigureAwait(false);
 
         if (!searchResponse.IsSuccessStatusCode)
         {
-            var error = searchResponse.Content.ReadAsStringAsync().Result;
+            var error = await searchResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
             throw new InvalidOperationException($"Elasticsearch scroll initialization failed: {error}");
         }
 
-        var initialResult = JObject.Parse(searchResponse.Content.ReadAsStringAsync().Result);
+        var initialResult = JObject.Parse(await searchResponse.Content.ReadAsStringAsync().ConfigureAwait(false));
         var scrollId = initialResult["_scroll_id"]?.ToString();
 
         if (string.IsNullOrEmpty(scrollId))
-            yield break;
+            return documents;
 
         // Process initial batch
         var hits = initialResult["hits"]?["hits"] as JArray;
@@ -450,28 +508,30 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             {
                 var doc = ParseElasticsearchHit(hit as JObject);
                 if (doc != null)
-                    yield return doc;
+                    documents.Add(doc);
             }
         }
 
         // Continue scrolling until no more results
         while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var scrollRequest = new { scroll = scrollTimeout, scroll_id = scrollId };
 
-            var scrollResponse = _httpClient.PostAsync(
+            using var scrollResponse = await _httpClient.PostAsync(
                 "_search/scroll",
                 new StringContent(
                     Newtonsoft.Json.JsonConvert.SerializeObject(scrollRequest),
                     Encoding.UTF8,
                     "application/json"
-                )
-            ).Result;
+                ),
+                cancellationToken
+            ).ConfigureAwait(false);
 
             if (!scrollResponse.IsSuccessStatusCode)
                 break;
 
-            var scrollResult = JObject.Parse(scrollResponse.Content.ReadAsStringAsync().Result);
+            var scrollResult = JObject.Parse(await scrollResponse.Content.ReadAsStringAsync().ConfigureAwait(false));
             hits = scrollResult["hits"]?["hits"] as JArray;
 
             if (hits == null || hits.Count == 0)
@@ -481,7 +541,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             {
                 var doc = ParseElasticsearchHit(hit as JObject);
                 if (doc != null)
-                    yield return doc;
+                    documents.Add(doc);
             }
         }
 
@@ -501,13 +561,15 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
                 Content = deleteContent
             };
 
-            using var deleteResponse = _httpClient.SendAsync(request).GetAwaiter().GetResult();
+            using var deleteResponse = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
             deleteResponse.EnsureSuccessStatusCode();
         }
         catch
         {
             // Scroll context will expire automatically
         }
+
+        return documents;
     }
 
     private Document<T>? ParseElasticsearchHit(JObject? hit)
@@ -567,10 +629,17 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// </para>
     /// </remarks>
     public override void Clear()
+        => ClearImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    public override Task ClearAsync(CancellationToken cancellationToken = default)
+        => ClearImplAsync(cancellationToken);
+
+    private async Task ClearImplAsync(CancellationToken cancellationToken)
     {
         try
         {
-            using var response = _httpClient.DeleteAsync($"/{_indexName}").GetAwaiter().GetResult();
+            using var response = await _httpClient.DeleteAsync($"/{_indexName}", cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             _cache.Clear();

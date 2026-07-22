@@ -1,7 +1,10 @@
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Filtering;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
@@ -101,6 +104,100 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     }
 
     /// <summary>
+    /// Over-fetch multiplier used by the default in-memory filter evaluator: the base implementation
+    /// requests <c>topK * FilterOverFetchFactor</c> nearest neighbours (bounded by the store size)
+    /// before applying the <see cref="MetadataFilter"/>, so enough candidates survive filtering.
+    /// </summary>
+    protected virtual int FilterOverFetchFactor => 10;
+
+    /// <inheritdoc/>
+    public IEnumerable<Document<T>> GetSimilarWithFilter(Vector<T> queryVector, MetadataFilter filter, int topK)
+    {
+        ValidateQueryVector(queryVector);
+        ValidateTopK(topK);
+
+        if (filter == null)
+            return GetSimilar(queryVector, topK);
+
+        return GetSimilarWithFilterCore(queryVector, filter, topK);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IEnumerable<Document<T>>> GetSimilarWithFilterAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken = default)
+    {
+        ValidateQueryVector(queryVector);
+        ValidateTopK(topK);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (filter == null)
+            return await GetSimilarAsync(queryVector, topK, cancellationToken).ConfigureAwait(false);
+
+        return await GetSimilarWithFilterCoreAsync(queryVector, filter, topK, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Core rich-filter search. The default implementation over-fetches nearest neighbours (ignoring
+    /// metadata at the storage layer) and evaluates the <see cref="MetadataFilter"/> in memory via
+    /// <see cref="MetadataFilter.Matches(IReadOnlyDictionary{string, object})"/>. Stores with a native
+    /// filter language override this to push the translated filter down to the backend.
+    /// </summary>
+    /// <param name="queryVector">The validated query vector.</param>
+    /// <param name="filter">The non-null metadata filter expression.</param>
+    /// <param name="topK">The validated number of documents to return.</param>
+    /// <returns>Top-k similar documents that satisfy <paramref name="filter"/>.</returns>
+    protected virtual IEnumerable<Document<T>> GetSimilarWithFilterCore(Vector<T> queryVector, MetadataFilter filter, int topK)
+    {
+        var candidateK = ComputeCandidateFetchCount(topK);
+        var candidates = GetSimilarCore(queryVector, candidateK, new Dictionary<string, object>());
+        return ApplyFilter(candidates, filter, topK);
+    }
+
+    /// <summary>
+    /// Core asynchronous rich-filter search. The default over-fetches via <see cref="GetSimilarCoreAsync"/>
+    /// and evaluates the filter in memory. Override for true server-side rich filtering.
+    /// </summary>
+    protected virtual async Task<IEnumerable<Document<T>>> GetSimilarWithFilterCoreAsync(Vector<T> queryVector, MetadataFilter filter, int topK, CancellationToken cancellationToken)
+    {
+        var candidateK = ComputeCandidateFetchCount(topK);
+        var candidates = await GetSimilarCoreAsync(queryVector, candidateK, new Dictionary<string, object>(), cancellationToken).ConfigureAwait(false);
+        return ApplyFilter(candidates, filter, topK);
+    }
+
+    /// <summary>
+    /// Computes the over-fetch candidate count for the default in-memory evaluator, bounded by the
+    /// number of documents in the store when that count is known (positive).
+    /// </summary>
+    protected int ComputeCandidateFetchCount(int topK)
+    {
+        var factor = FilterOverFetchFactor < 1 ? 1 : FilterOverFetchFactor;
+        long desired = (long)topK * factor;
+        var docCount = DocumentCount;
+        if (docCount > 0 && desired > docCount)
+            desired = docCount;
+        if (desired > int.MaxValue)
+            desired = int.MaxValue;
+        if (desired < topK)
+            desired = topK;
+        return (int)desired;
+    }
+
+    private static IEnumerable<Document<T>> ApplyFilter(IEnumerable<Document<T>> candidates, MetadataFilter filter, int topK)
+    {
+        var results = new List<Document<T>>();
+        foreach (var document in candidates)
+        {
+            if (filter.Matches(document.Metadata))
+            {
+                results.Add(document);
+                if (results.Count >= topK)
+                    break;
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// Retrieves a document by its unique identifier.
     /// </summary>
     /// <param name="documentId">The unique identifier of the document to retrieve.</param>
@@ -134,6 +231,147 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     public IEnumerable<Document<T>> GetAll()
     {
         return GetAllCore();
+    }
+
+    // ------------------------------------------------------------------
+    // Asynchronous, cancellation-aware API. The default implementations
+    // validate identically to the synchronous methods and delegate to the
+    // *CoreAsync members, which by default wrap the synchronous cores.
+    // I/O-bound stores override the *CoreAsync members for true async.
+    // ------------------------------------------------------------------
+
+    /// <inheritdoc/>
+    public virtual async Task AddAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken = default)
+    {
+        ValidateVectorDocument(vectorDocument);
+        cancellationToken.ThrowIfCancellationRequested();
+        await AddCoreAsync(vectorDocument, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task AddBatchAsync(IEnumerable<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken = default)
+    {
+        if (vectorDocuments == null)
+            throw new ArgumentNullException(nameof(vectorDocuments));
+
+        var documentList = vectorDocuments.ToList();
+        if (documentList.Count == 0)
+            throw new ArgumentException("Vector document collection cannot be empty", nameof(vectorDocuments));
+
+        foreach (var vectorDocument in documentList)
+        {
+            ValidateVectorDocument(vectorDocument);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await AddBatchCoreAsync(documentList, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual Task<IEnumerable<Document<T>>> GetSimilarAsync(Vector<T> queryVector, int topK, CancellationToken cancellationToken = default)
+    {
+        return GetSimilarWithFiltersAsync(queryVector, topK, new Dictionary<string, object>(), cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IEnumerable<Document<T>>> GetSimilarWithFiltersAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken = default)
+    {
+        ValidateQueryVector(queryVector);
+        ValidateTopK(topK);
+        ValidateMetadataFilters(metadataFilters);
+        cancellationToken.ThrowIfCancellationRequested();
+        return await GetSimilarCoreAsync(queryVector, topK, metadataFilters, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<Document<T>?> GetByIdAsync(string documentId, CancellationToken cancellationToken = default)
+    {
+        ValidateDocumentId(documentId);
+        cancellationToken.ThrowIfCancellationRequested();
+        return await GetByIdCoreAsync(documentId, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> RemoveAsync(string documentId, CancellationToken cancellationToken = default)
+    {
+        ValidateDocumentId(documentId);
+        cancellationToken.ThrowIfCancellationRequested();
+        return await RemoveCoreAsync(documentId, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public virtual Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Clear();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IEnumerable<Document<T>>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return await GetAllCoreAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Core asynchronous logic for adding a single vector document. Default wraps <see cref="AddCore"/>.
+    /// Override in I/O-bound stores for true async.
+    /// </summary>
+    protected virtual Task AddCoreAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        AddCore(vectorDocument);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Core asynchronous logic for adding a batch of vector documents. Default awaits <see cref="AddCoreAsync"/>
+    /// per document; override for efficient bulk insertion.
+    /// </summary>
+    protected virtual async Task AddBatchCoreAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
+    {
+        foreach (var vectorDocument in vectorDocuments)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await AddCoreAsync(vectorDocument, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Core asynchronous similarity search. Default wraps <see cref="GetSimilarCore"/>. Override for true async.
+    /// </summary>
+    protected virtual Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetSimilarCore(queryVector, topK, metadataFilters));
+    }
+
+    /// <summary>
+    /// Core asynchronous lookup by ID. Default wraps <see cref="GetByIdCore"/>. Override for true async.
+    /// </summary>
+    protected virtual Task<Document<T>?> GetByIdCoreAsync(string documentId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetByIdCore(documentId));
+    }
+
+    /// <summary>
+    /// Core asynchronous removal by ID. Default wraps <see cref="RemoveCore"/>. Override for true async.
+    /// </summary>
+    protected virtual Task<bool> RemoveCoreAsync(string documentId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(RemoveCore(documentId));
+    }
+
+    /// <summary>
+    /// Core asynchronous retrieval of all documents. Default wraps <see cref="GetAllCore"/>. Override for true async.
+    /// </summary>
+    protected virtual Task<IEnumerable<Document<T>>> GetAllCoreAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetAllCore());
     }
 
     /// <summary>

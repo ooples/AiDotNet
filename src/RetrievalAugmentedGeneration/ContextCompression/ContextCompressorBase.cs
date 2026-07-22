@@ -1,4 +1,6 @@
 
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -53,6 +55,28 @@ public abstract class ContextCompressorBase<T> : IContextCompressor<T>
     }
 
     /// <summary>
+    /// Asynchronously compresses a collection of documents while preserving relevance to the query.
+    /// </summary>
+    public virtual async Task<List<Document<T>>> CompressAsync(
+        List<Document<T>> documents,
+        string query,
+        Dictionary<string, object>? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateQuery(query);
+        ValidateDocuments(documents);
+
+        if (documents.Count == 0)
+        {
+            return new List<Document<T>>();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return await CompressCoreAsync(documents, query, options, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Core compression logic to be implemented by derived classes.
     /// </summary>
     /// <param name="documents">The validated and non-empty list of documents.</param>
@@ -74,6 +98,26 @@ public abstract class ContextCompressorBase<T> : IContextCompressor<T>
         List<Document<T>> documents,
         string query,
         Dictionary<string, object>? options = null);
+
+    /// <summary>
+    /// Core asynchronous compression logic. The default implementation wraps the synchronous
+    /// <see cref="CompressCore"/>, which is appropriate for CPU-bound compressors. LLM-backed compressors
+    /// should override this to perform genuine non-blocking work.
+    /// </summary>
+    /// <param name="documents">The validated and non-empty list of documents.</param>
+    /// <param name="query">The validated query text.</param>
+    /// <param name="options">Optional compression parameters.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the compressed documents.</returns>
+    protected virtual Task<List<Document<T>>> CompressCoreAsync(
+        List<Document<T>> documents,
+        string query,
+        Dictionary<string, object>? options,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(CompressCore(documents, query, options));
+    }
 
     /// <summary>
     /// Validates the query string.

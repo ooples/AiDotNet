@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -73,6 +75,13 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     }
 
     protected override void AddCore(VectorDocument<T> vectorDocument)
+        => AddCoreImplAsync(vectorDocument, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task AddCoreAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
+        => AddCoreImplAsync(vectorDocument, cancellationToken);
+
+    private async Task AddCoreImplAsync(VectorDocument<T> vectorDocument, CancellationToken cancellationToken)
     {
         if (_vectorDimension == 0)
             _vectorDimension = vectorDocument.Embedding.Length;
@@ -94,7 +103,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             Encoding.UTF8,
             "application/json");
 
-        using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).GetAwaiter().GetResult();
+        using var response = await _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         _cache[vectorDocument.Document.Id] = vectorDocument;
@@ -102,6 +111,13 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     }
 
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+        => AddBatchCoreImplAsync(vectorDocuments, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task AddBatchCoreAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
+        => AddBatchCoreImplAsync(vectorDocuments, cancellationToken);
+
+    private async Task AddBatchCoreImplAsync(IList<VectorDocument<T>> vectorDocuments, CancellationToken cancellationToken)
     {
         if (vectorDocuments.Count == 0) return;
 
@@ -126,7 +142,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             Encoding.UTF8,
             "application/json");
 
-        using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).GetAwaiter().GetResult();
+        using var response = await _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         foreach (var vd in vectorDocuments)
@@ -135,6 +151,13 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     }
 
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+        => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task<IEnumerable<Document<T>>> GetSimilarCoreAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
+        => GetSimilarCoreImplAsync(queryVector, topK, metadataFilters, cancellationToken);
+
+    private async Task<IEnumerable<Document<T>>> GetSimilarCoreImplAsync(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters, CancellationToken cancellationToken)
     {
         var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToList();
 
@@ -149,9 +172,9 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             Encoding.UTF8,
             "application/json");
 
-        using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/query", content).GetAwaiter().GetResult();
+        using var response = await _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/query", content, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var responseContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var result = JObject.Parse(responseContent);
 
         var results = new List<Document<T>>();
@@ -214,6 +237,13 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     /// </para>
     /// </remarks>
     protected override bool RemoveCore(string documentId)
+        => RemoveCoreImplAsync(documentId, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    protected override Task<bool> RemoveCoreAsync(string documentId, CancellationToken cancellationToken)
+        => RemoveCoreImplAsync(documentId, cancellationToken);
+
+    private async Task<bool> RemoveCoreImplAsync(string documentId, CancellationToken cancellationToken)
     {
         var payload = new { ids = new[] { documentId } };
         using var content = new StringContent(
@@ -221,7 +251,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             Encoding.UTF8,
             "application/json");
 
-        using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/delete", content).GetAwaiter().GetResult();
+        using var response = await _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/delete", content, cancellationToken).ConfigureAwait(false);
         if (response.IsSuccessStatusCode && _documentCount > 0)
         {
             _cache.Remove(documentId);
@@ -297,10 +327,17 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     /// </para>
     /// </remarks>
     public override void Clear()
+        => ClearImplAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <inheritdoc/>
+    public override Task ClearAsync(CancellationToken cancellationToken = default)
+        => ClearImplAsync(cancellationToken);
+
+    private async Task ClearImplAsync(CancellationToken cancellationToken)
     {
         try
         {
-            using var response = _httpClient.DeleteAsync($"/api/v1/collections/{_collectionName}").GetAwaiter().GetResult();
+            using var response = await _httpClient.DeleteAsync($"/api/v1/collections/{_collectionName}", cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             _cache.Clear();

@@ -21,6 +21,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         /// </summary>
         private class MockRetriever : IRetriever<double>
         {
+
+        public System.Threading.Tasks.Task<IEnumerable<Document<double>>> RetrieveAsync(string query, int topK, Dictionary<string, object>? metadataFilters = null, System.Threading.CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return System.Threading.Tasks.Task.FromResult(metadataFilters == null ? Retrieve(query, topK) : Retrieve(query, topK, metadataFilters)); }
             private readonly List<Document<double>> _documents;
             private readonly Func<string, Document<double>, double>? _scoringFunction;
             private readonly List<string> _queriesReceived = new();
@@ -331,9 +333,11 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var results = retriever.Retrieve("test").ToList();
 
             // Assert
-            // Should have variations like "test variation 1", "test variation 2"
-            Assert.Contains(baseRetriever.QueriesReceived, q => q.Contains("variation 1"));
-            Assert.Contains(baseRetriever.QueriesReceived, q => q.Contains("variation 2"));
+            // MultiQuery now produces real query variations (LLM when a generator is supplied, deterministic
+            // template reformulations otherwise) rather than the old "{query} variation N" placeholder. The
+            // base retriever should see the original query plus additional distinct variations.
+            Assert.Contains("test", baseRetriever.QueriesReceived);
+            Assert.True(baseRetriever.QueriesReceived.Distinct().Count() >= 3);
         }
 
         [Fact(Timeout = 60000)]
@@ -696,11 +700,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var results = retriever.Retrieve("my query").ToList();
 
             // Assert
-            // Variations should start with original query
-            foreach (var query in baseRetriever.QueriesReceived.Skip(1))
-            {
-                Assert.StartsWith("my query", query);
-            }
+            // The original query is retrieved first; the remaining queries are distinct reformulations
+            // (which embed, but no longer necessarily start with, the original text).
+            Assert.Equal("my query", baseRetriever.QueriesReceived.First());
+            Assert.True(baseRetriever.QueriesReceived.Distinct().Count() >= 2);
         }
 
         #endregion

@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
@@ -17,6 +20,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     {
         private readonly string _llmEndpoint;
         private readonly string _apiKey;
+        private readonly ITextGenerator? _generator;
 
         /// <summary>
         /// Gets a value indicating whether this reranker modifies relevance scores.
@@ -26,12 +30,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         /// <summary>
         /// Initializes a new instance of the <see cref="LLMBasedReranker{T}"/> class.
         /// </summary>
-        /// <param name="llmEndpoint">The LLM API endpoint.</param>
-        /// <param name="apiKey">The API key for the LLM service.</param>
-        public LLMBasedReranker(string? llmEndpoint = null, string? apiKey = null)
+        /// <param name="llmEndpoint">Optional LLM API endpoint (informational; the call goes through <paramref name="generator"/>).</param>
+        /// <param name="apiKey">Optional API key (informational; the call goes through <paramref name="generator"/>).</param>
+        /// <param name="generator">
+        /// Optional real text generator. When provided, each document's relevance is scored by the LLM;
+        /// when <c>null</c>, a lexical relevance heuristic is used as an offline fallback.
+        /// </param>
+        public LLMBasedReranker(string? llmEndpoint = null, string? apiKey = null, ITextGenerator? generator = null)
         {
             _llmEndpoint = llmEndpoint ?? string.Empty;
             _apiKey = apiKey ?? string.Empty;
+            _generator = generator;
         }
 
         /// <summary>
@@ -71,6 +80,23 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
 
         private T AssessRelevance(string query, string document)
         {
+            document ??= string.Empty;
+            if (_generator != null)
+            {
+                var doc = document.Length > 2000 ? document.Substring(0, 2000) : document;
+                var prompt =
+                    $"On a scale of 0 to 10, how relevant is the document to the query? " +
+                    $"Reply with only a single number.\n\nQuery: {query}\n\nDocument: {doc}\n\nRelevance (0-10):";
+                var reply = _generator.Generate(prompt);
+                var match = Regex.Match(reply ?? string.Empty, @"\d+(\.\d+)?");
+                if (match.Success && double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double raw))
+                {
+                    var normalized = Math.Min(1.0, Math.Max(0.0, raw / 10.0));
+                    return NumOps.FromDouble(normalized);
+                }
+                // Unparseable reply: fall through to the lexical heuristic below.
+            }
+
             var queryWords = Tokenize(query);
             var docWords = Tokenize(document);
 

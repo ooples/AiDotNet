@@ -21,6 +21,7 @@ namespace AiDotNet.Interfaces;
 /// - Keyword extraction: Focus on important terms ("What is the capital of France?" → "capital France")
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("QueryProcessor")]
 public interface IQueryProcessor
 {
     /// <summary>

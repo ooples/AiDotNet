@@ -1,3 +1,5 @@
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.Interfaces;
@@ -109,4 +111,27 @@ public interface IRetriever<T>
     /// </para>
     /// </remarks>
     IEnumerable<Document<T>> Retrieve(string query, int topK, Dictionary<string, object> metadataFilters);
+
+    /// <summary>
+    /// Asynchronously retrieves relevant documents for a query, honoring cancellation.
+    /// </summary>
+    /// <param name="query">The query text.</param>
+    /// <param name="topK">The number of documents to retrieve.</param>
+    /// <param name="metadataFilters">Optional metadata filters to apply before retrieval. When null, no filtering is applied.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the relevant documents ordered by relevance (most relevant first).</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the asynchronous counterpart to <see cref="Retrieve(string, int, Dictionary{string, object})"/>.
+    /// I/O-bound retrievers (e.g. those backed by a network embedding model or a remote vector store)
+    /// perform genuine non-blocking work here; CPU-bound retrievers complete synchronously.
+    /// </para>
+    /// <para><b>For Beginners:</b> Same as <c>Retrieve</c>, but you can <c>await</c> it and cancel it
+    /// (for example, if the user navigates away before the search finishes).</para>
+    /// </remarks>
+    Task<IEnumerable<Document<T>>> RetrieveAsync(
+        string query,
+        int topK,
+        Dictionary<string, object>? metadataFilters = null,
+        CancellationToken cancellationToken = default);
 }

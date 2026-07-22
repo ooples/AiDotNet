@@ -155,7 +155,12 @@ public static class YamlJsonSchema
                     properties[yamlKey] = BuildPipelineSchema(section);
                     break;
 
+                case "RagComposite":
+                    properties[yamlKey] = BuildRagCompositeSchema(section);
+                    break;
+
                 default:
+                    // Covers "Interface"-shaped and "ActionParams" (type + params bag) sections.
                     properties[yamlKey] = BuildTypeSectionSchema(section);
                     break;
             }
@@ -182,6 +187,66 @@ public static class YamlJsonSchema
         };
 
         return schema;
+    }
+
+    /// <summary>
+    /// Builds the schema for the composite RAG section: each sub-component is a type+params object whose
+    /// <c>type</c> enum comes from that component's own registry section.
+    /// </summary>
+    private static JObject BuildRagCompositeSchema(YamlSectionMeta section)
+    {
+        JObject SubComponent(string registrySection) => new JObject
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["properties"] = new JObject
+            {
+                ["type"] = BuildTypePropertyWithEnum(registrySection),
+                ["params"] = new JObject
+                {
+                    ["type"] = "object",
+                    ["additionalProperties"] = true,
+                },
+            },
+        };
+
+        var props = new JObject
+        {
+            ["retriever"] = SubComponent("Retriever"),
+            ["reranker"] = SubComponent("Reranker"),
+            ["generator"] = SubComponent("Generator"),
+            ["queryProcessors"] = new JObject
+            {
+                ["type"] = "array",
+                ["items"] = SubComponent("QueryProcessor"),
+            },
+            ["documentStore"] = SubComponent("DocumentStore"),
+            ["graphStore"] = SubComponent("GraphStore"),
+            ["embeddingModel"] = SubComponent("EmbeddingModel"),
+            ["similarityMetric"] = SubComponent("SimilarityMetric"),
+            ["knowledgeGraph"] = new JObject
+            {
+                ["type"] = "object",
+                ["description"] = "Advanced knowledge-graph options applied via ConfigureKnowledgeGraph.",
+                ["additionalProperties"] = false,
+                ["properties"] = new JObject
+                {
+                    ["params"] = new JObject
+                    {
+                        ["type"] = "object",
+                        ["additionalProperties"] = true,
+                    },
+                },
+            },
+        };
+
+        return new JObject
+        {
+            ["type"] = "object",
+            ["description"] = "Composite retrieval-augmented generation pipeline. Each sub-component names a concrete implementation.",
+            ["additionalProperties"] = false,
+            ["properties"] = props,
+        };
     }
 
     private static JObject BuildTypePropertyWithEnum(string sectionName)

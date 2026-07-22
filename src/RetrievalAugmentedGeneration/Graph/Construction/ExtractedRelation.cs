@@ -33,4 +33,10 @@ public class ExtractedRelation
     /// Confidence score for this relation extraction (0.0 to 1.0).
     /// </summary>
     public double Confidence { get; set; }
+
+    /// <summary>
+    /// Optional natural-language description of the relation (populated by LLM extraction;
+    /// empty for the regex/heuristic path).
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
 }

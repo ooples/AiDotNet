@@ -1,3 +1,5 @@
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.Interfaces;
@@ -59,4 +61,24 @@ public interface IContextCompressor<T>
         List<Document<T>> documents,
         string query,
         Dictionary<string, object>? options = null);
+
+    /// <summary>
+    /// Asynchronously compresses a collection of documents while preserving relevance to the query.
+    /// </summary>
+    /// <param name="documents">The documents to compress.</param>
+    /// <param name="query">The query text used to determine relevance.</param>
+    /// <param name="options">Optional compression parameters.</param>
+    /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
+    /// <returns>A task producing the compressed documents with reduced content but maintained relevance.</returns>
+    /// <remarks>
+    /// <para>
+    /// Asynchronous counterpart to <see cref="Compress(List{Document{T}}, string, Dictionary{string, object})"/>.
+    /// LLM-backed compressors perform genuine non-blocking work here; extractive compressors complete synchronously.
+    /// </para>
+    /// </remarks>
+    Task<List<Document<T>>> CompressAsync(
+        List<Document<T>> documents,
+        string query,
+        Dictionary<string, object>? options = null,
+        CancellationToken cancellationToken = default);
 }

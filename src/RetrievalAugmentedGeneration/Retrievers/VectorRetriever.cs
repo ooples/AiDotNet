@@ -74,4 +74,27 @@ public class VectorRetriever<T> : RetrieverBase<T>
         // 2. Search document store for similar documents
         return _documentStore.GetSimilarWithFilters(queryVector, topK, metadataFilters);
     }
+
+    /// <summary>
+    /// Truly-async core retrieval: awaits the (possibly network-backed) embedding model and document
+    /// store instead of blocking, and flows the cancellation token end to end.
+    /// </summary>
+    protected override async System.Threading.Tasks.Task<IEnumerable<Document<T>>> RetrieveCoreAsync(
+        string query,
+        int topK,
+        Dictionary<string, object> metadataFilters,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // 1. Embed the query asynchronously
+        var queryVector = await _embeddingModel.EmbedAsync(query).ConfigureAwait(false);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // 2. Search document store for similar documents asynchronously
+        return await _documentStore
+            .GetSimilarWithFiltersAsync(queryVector, topK, metadataFilters, cancellationToken)
+            .ConfigureAwait(false);
+    }
 }

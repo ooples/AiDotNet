@@ -19,8 +19,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     {
         private readonly IRetriever<T> _baseRetriever;
         private readonly int _numQueries;
+        private readonly ITextGenerator? _generator;
 
-        public MultiQueryRetriever(IRetriever<T> baseRetriever, int numQueries = 3, int defaultTopK = 5) : base(defaultTopK)
+        /// <param name="baseRetriever">The underlying retriever run once per query variation.</param>
+        /// <param name="numQueries">Total number of queries (original + variations) to retrieve with.</param>
+        /// <param name="defaultTopK">Default number of documents to return.</param>
+        /// <param name="generator">
+        /// Optional real text generator. When provided, the query variations are LLM-generated; otherwise a
+        /// deterministic template fallback is used (never the old "{query} variation N" placeholder).
+        /// </param>
+        public MultiQueryRetriever(IRetriever<T> baseRetriever, int numQueries = 3, int defaultTopK = 5, ITextGenerator? generator = null) : base(defaultTopK)
         {
             if (baseRetriever == null)
                 throw new ArgumentNullException(nameof(baseRetriever));
@@ -29,6 +37,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
             _baseRetriever = baseRetriever;
             _numQueries = numQueries;
+            _generator = generator;
         }
 
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
@@ -70,14 +79,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
         private List<string> GenerateQueries(string originalQuery)
         {
-            var queries = new List<string> { originalQuery };
-
-            for (int i = 1; i < _numQueries; i++)
-            {
-                queries.Add($"{originalQuery} variation {i}");
-            }
-
-            return queries;
+            // Reuse the (de-stubbed) LLM query expander: real LLM variations when a generator is supplied,
+            // deterministic template variations otherwise. ExpandQuery prepends the original, so request
+            // (_numQueries - 1) expansions and cap the result at _numQueries.
+            var expander = new QueryExpansion.LLMQueryExpansion(
+                numExpansions: Math.Max(1, _numQueries - 1), generator: _generator);
+            return expander.ExpandQuery(originalQuery).Take(_numQueries).ToList();
         }
     }
 }

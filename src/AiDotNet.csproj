@@ -197,6 +197,10 @@
 	  <Compile Remove="AiDotNet.Storage.Redis\**\*.cs" />
 	  <EmbeddedResource Remove="AiDotNet.Storage.Redis\**\*" />
 	  <None Remove="AiDotNet.Storage.Redis\**\*" />
+	  <!-- Neo4j property-graph backend for GraphRAG lives in the opt-in AiDotNet.Storage.Neo4j metapackage. -->
+	  <Compile Remove="AiDotNet.Storage.Neo4j\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Storage.Neo4j\**\*" />
+	  <None Remove="AiDotNet.Storage.Neo4j\**\*" />
 	</ItemGroup>
 
 	<!-- Exclude the opt-in metapackages extracted in audit-2026-05 phase 2c (finding #14). -->
