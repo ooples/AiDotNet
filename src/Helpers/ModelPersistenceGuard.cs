@@ -64,12 +64,19 @@ internal static class ModelPersistenceGuard
     internal static IDisposable InternalOperation()
     {
         _internalOperationDepth.Value++;
-        // Acquire the tensor-side scope FIRST so a partial failure (the
-        // tensor scope acquisition throws) leaves the upstream depth
-        // counter consistent — the local InternalOperationScope will still
-        // decrement on dispose. Using a composite ensures the two scopes
-        // are released in LIFO order.
-        IDisposable tensorScope = TensorLicenseFlow.InternalOperation();
+        IDisposable tensorScope;
+        try
+        {
+            tensorScope = TensorLicenseFlow.InternalOperation();
+        }
+        catch
+        {
+            // Roll back the depth increment if acquiring the tensor-side scope throws. Otherwise this
+            // logical (AsyncLocal) context would be left permanently at depth > 0 — i.e. stuck in
+            // save/load bypass mode — because no InternalOperationScope was returned to decrement it.
+            _internalOperationDepth.Value--;
+            throw;
+        }
         return new InternalOperationScope(tensorScope);
     }
 
@@ -78,24 +85,29 @@ internal static class ModelPersistenceGuard
     /// Must be called at the start of every SaveModel() implementation.
     /// </summary>
     /// <remarks>
-    /// Save/Load are the user-facing persistence entry points and ALWAYS
-    /// enforce — they are not suppressed by an outer
-    /// <see cref="InternalOperation"/> scope. Only
-    /// <see cref="EnforceBeforeSerialize"/> and
-    /// <see cref="EnforceBeforeDeserialize"/> are suppressed when nested
-    /// inside <see cref="InternalOperation"/> (those are the byte-level
-    /// helpers that an already-guarded Save/Load may call into; suppressing
-    /// them avoids double-counting). Suppressing Save/Load itself would
-    /// bypass licensing entirely on every nested save chain.
+    /// Save is normally a user-facing entry point and counts against the trial,
+    /// but server-side infrastructure (the AiDotNet.Serving controllers, the
+    /// federated coordinator's per-round global-model checkpoints, model
+    /// registry writers) explicitly opens an <see cref="InternalOperation"/>
+    /// scope around its internal Save calls to declare "this is not a
+    /// user-driven save/load". When that scope is active, suppress trial
+    /// counting — otherwise infrastructure that persists many artifacts per
+    /// process (e.g. a federated run saving the aggregated model every round)
+    /// would exhaust the trial against itself even though no user persistence
+    /// happened. This mirrors <see cref="EnforceBeforeLoad"/> exactly.
+    ///
+    /// <see cref="InternalOperation"/> is an <c>internal</c> API — it is not
+    /// reachable from user code, so honoring it here does not let a user bypass
+    /// licensing. User-facing SaveModel/LoadModel calls run at depth 0 and
+    /// still count. The nested byte-level <see cref="EnforceBeforeSerialize"/>
+    /// an already-guarded Save invokes remains suppressed to avoid double-counting.
     /// </remarks>
     /// <exception cref="LicenseRequiredException">
     /// Thrown when the free trial has expired and no valid license is configured.
     /// </exception>
     internal static void EnforceBeforeSave()
     {
-        // Intentionally NOT short-circuiting on _internalOperationDepth.
-        // See the remarks above — the scope is for byte-level Serialize/
-        // Deserialize calls, not for user-facing Save/Load entry points.
+        if (_internalOperationDepth.Value > 0) return;
         EnforceCore(LicenseCapabilities.ModelSave);
     }
 

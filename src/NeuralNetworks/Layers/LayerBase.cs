@@ -3612,6 +3612,31 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
 
     /// <summary>
+    /// Moves this layer's parameters and buffers (and, recursively, every registered sub-layer) to the given
+    /// device — the layer-level equivalent of PyTorch's <c>module.to(device)</c>. Each persistent tensor is moved
+    /// in place via <see cref="Tensor{T}.To(AiDotNet.Tensors.DeviceInfo)"/>, so subsequent ops on those tensors
+    /// dispatch to that device. Deferred (zero-length, not-yet-materialized) parameters are skipped and move on
+    /// first use. Returns this layer for fluent chaining.
+    /// </summary>
+    /// <param name="device">The target device (e.g. <c>DeviceInfo.Cuda(0)</c>, <c>DeviceInfo.OpenCL()</c>, <c>DeviceInfo.CPU</c>).</param>
+    public virtual LayerBase<T> To(AiDotNet.Tensors.DeviceInfo device)
+    {
+        for (int i = 0; i < _registeredTensors.Count; i++)
+        {
+            var t = _registeredTensors[i];
+            if (t is not null && t.Length > 0) t.To(device);
+        }
+        for (int i = 0; i < _registeredBuffers.Count; i++)
+        {
+            var t = _registeredBuffers[i].Tensor;
+            if (t is not null && t.Length > 0) t.To(device);
+        }
+        for (int i = 0; i < _registeredSubLayers.Count; i++)
+            (_registeredSubLayers[i] as LayerBase<T>)?.To(device);
+        return this;
+    }
+
+    /// <summary>
     /// Registers a single custom autograd node on the active gradient tape for a layer whose
     /// <see cref="Forward"/> is a manual (non-Engine-op) computation but which can supply a
     /// hand-written backward. This is the layer-level analog of PyTorch's

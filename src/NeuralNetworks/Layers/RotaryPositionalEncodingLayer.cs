@@ -118,6 +118,18 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// <summary>
     /// Ensures the cache covers at least up to the specified sequence length.
     /// </summary>
+    /// <summary>
+    /// Ensures the cos/sin caches cover <paramref name="requiredLength"/> positions and returns them as
+    /// <c>[maxSeq, headDim/2]</c> tensors laid out for the fused interleaved-RoPE engine op
+    /// (<see cref="AiDotNet.Tensors.Engines.IEngine.ApplyRoPEInterleaved"/>). Lets a caller apply RoPE as a
+    /// single device-agnostic (and, on GPU, graph-recordable) op instead of this layer's managed rotation.
+    /// </summary>
+    public (Tensor<T> Cos, Tensor<T> Sin) GetInterleavedCaches(int requiredLength)
+    {
+        EnsureCacheLength(requiredLength);
+        return (_cosCache, _sinCache);
+    }
+
     private void EnsureCacheLength(int requiredLength)
     {
         if (requiredLength <= _maxSequenceLength)

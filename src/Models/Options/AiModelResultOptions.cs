@@ -699,6 +699,24 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
     /// <summary>
+    /// Optional user-supplied draft model for speculative decoding during serving, set via the builder's
+    /// <c>ConfigureSpeculativeDecoding</c> overloads. When set, the serving engine verifies this draft's guesses
+    /// instead of the built-in N-gram prompt-lookup draft. This is a live object, so it is not serialized and only
+    /// applies to in-process serving.
+    /// </summary>
+    /// <value>
+    /// An <see cref="AiDotNet.Inference.SpeculativeDecoding.IDraftModel{T}"/> instance, or <c>null</c> (the
+    /// default) to use the built-in N-gram prompt-lookup draft.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Speculative decoding uses a small, fast "draft" model to guess several tokens
+    /// ahead, which the main model then verifies in one pass — accepted guesses make generation faster with
+    /// identical output. Leave this null to use the built-in guesser; set it only if you have a small companion
+    /// model that predicts the same vocabulary and want the engine to use it instead.</para>
+    /// </remarks>
+    public AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? ServingDraftModel { get; set; }
+
+    /// <summary>
     /// JIT compilation configuration applied on every Predict call.
     /// </summary>
     public AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }

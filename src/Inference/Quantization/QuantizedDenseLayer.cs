@@ -1,21 +1,23 @@
 ﻿using AiDotNet.Autodiff;
+using AiDotNet.Configuration;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Inference.Quantization;
 
 /// <summary>
-/// Inference-only dense layer that uses weight-only INT8 quantization (per-output scaling).
+/// Inference-only dense layer with weight-only quantization. Supports INT8 (per-row), FP8 (E4M3, per-row),
+/// and NF4 (4-bit NormalFloat, per-group) via the shared <see cref="WeightOnlyProjection"/> engine, so a
+/// FFN/dense layer honors the same <see cref="InferenceQuantizationMode"/> the user selects for attention.
 /// </summary>
 internal sealed class QuantizedDenseLayer : LayerBase<float>
 {
     private readonly int _inputSize;
     private readonly int _outputSize;
-    private readonly sbyte[] _weightsInt8; // row-major [out, in]
-    private readonly float[] _rowScales; // per out
+    private readonly WeightOnlyProjection _proj;
     private readonly float[] _biases;
 
-    public QuantizedDenseLayer(DenseLayer<float> source)
+    public QuantizedDenseLayer(DenseLayer<float> source, InferenceQuantizationMode mode = InferenceQuantizationMode.WeightOnlyInt8)
         : base(
             inputShape: source.GetInputShape(),
             outputShape: source.GetOutputShape(),
@@ -32,16 +34,13 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         if (weights == null || biases == null)
             throw new ArgumentException("Dense layer must expose weights and biases.", nameof(source));
 
-        // DenseLayer uses [inputSize, outputSize] but we need [outputSize, inputSize] for row-major quantization
-        var transposedWeights = TransposeWeights(weights, _inputSize, _outputSize);
-        var q = Int8WeightOnlyQuantization.QuantizePerRow(transposedWeights, rows: _outputSize, cols: _inputSize);
-        _weightsInt8 = q.Weights;
-        _rowScales = q.Scales;
-
+        // DenseLayer stores weights [inputSize, outputSize]; the shared engine transposes to row-major
+        // [outputSize, inputSize] and quantizes in the selected format.
+        _proj = WeightOnlyProjection.Quantize(weights, outDim: _outputSize, inDim: _inputSize, format: mode);
         _biases = biases.ToArray();
     }
 
-    public QuantizedDenseLayer(DenseLayer<float> source, IVectorActivationFunction<float> vectorActivation)
+    public QuantizedDenseLayer(DenseLayer<float> source, IVectorActivationFunction<float> vectorActivation, InferenceQuantizationMode mode = InferenceQuantizationMode.WeightOnlyInt8)
         : base(
             inputShape: source.GetInputShape(),
             outputShape: source.GetOutputShape(),
@@ -55,27 +54,8 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         if (weights == null || biases == null)
             throw new ArgumentException("Dense layer must expose weights and biases.", nameof(source));
 
-        // DenseLayer uses [inputSize, outputSize] but we need [outputSize, inputSize] for row-major quantization
-        var transposedWeights = TransposeWeights(weights, _inputSize, _outputSize);
-        var q = Int8WeightOnlyQuantization.QuantizePerRow(transposedWeights, rows: _outputSize, cols: _inputSize);
-        _weightsInt8 = q.Weights;
-        _rowScales = q.Scales;
-
+        _proj = WeightOnlyProjection.Quantize(weights, outDim: _outputSize, inDim: _inputSize, format: mode);
         _biases = biases.ToArray();
-    }
-
-    private static float[] TransposeWeights(Tensor<float> weights, int inputSize, int outputSize)
-    {
-        // weights is [inputSize, outputSize], we need [outputSize, inputSize]
-        var transposed = new float[outputSize * inputSize];
-        for (int o = 0; o < outputSize; o++)
-        {
-            for (int i = 0; i < inputSize; i++)
-            {
-                transposed[o * inputSize + i] = weights[i, o];
-            }
-        }
-        return transposed;
     }
 
     public override bool SupportsTraining => false;
@@ -86,8 +66,11 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
 
     public override Tensor<float>? GetBiases() => null;
 
+    /// <summary>The weight-only quantization format this layer's weights are stored in.</summary>
+    internal InferenceQuantizationMode QuantizationFormat => _proj.Format;
+
     /// <summary>
-    /// Total INT8 weight count (rows * cols). Internal accessor used by
+    /// Total quantized weight count (rows * cols). Internal accessor used by
     /// <see cref="Int8InferenceModel"/> to compute artifact byte counts.
     /// </summary>
     internal long WeightCount => (long)_outputSize * _inputSize;
@@ -121,23 +104,9 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
 
         int batchSize = flat.Shape[0];
 
-        var output = new Tensor<float>(new[] { batchSize, _outputSize });
-
-        // INT8 weight-only matmul routed through AiDotNet.Tensors' tiled SGEMM
-        // + AVX2 dequant primitives. See Int8WeightOnlyMatMul for the layout
-        // contract and tile sizing strategy. Replaces the scalar dequant-on-fly
-        // loop the #1348 PR description called out as a follow-up; the SIMD
-        // wiring (originally #1363) lands in this branch so the wall-clock
-        // assertion below can tighten to a real perf target.
-        Int8WeightOnlyMatMul.MultiplyAddBias(
-            input: flat.AsSpan(),
-            weightsInt8: _weightsInt8,
-            rowScales: _rowScales,
-            biases: _biases,
-            output: output.AsWritableSpan(),
-            rows: batchSize,
-            inputSize: _inputSize,
-            outputSize: _outputSize);
+        // Weight-only dequant matmul in the layer's stored format (INT8 routes through AiDotNet.Tensors'
+        // tiled SGEMM + AVX2 dequant primitives; FP8/NF4 dequantize on the fly). The bias is folded in.
+        var output = _proj.MatMul(flat.AsSpan(), batchSize, _biases);
 
         var activated = ApplyActivation(output);
         if (inputWas1D)

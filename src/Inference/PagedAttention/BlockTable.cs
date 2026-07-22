@@ -406,6 +406,39 @@ internal class BlockTableManager<T>
     }
 
     /// <summary>
+    /// Sliding-window retention: releases the leading logical blocks of <paramref name="sequenceId"/> that lie
+    /// entirely below <paramref name="keepFromPosition"/> (block <c>L</c> is evictable iff <c>(L+1)*blockSize
+    /// &lt;= keepFromPosition</c>). The freed physical blocks are returned to the pool (ref-count aware, so a
+    /// block still shared via a fork/prefix keeps living), and the table's logical slot is set to a
+    /// <c>-1</c> sentinel — the list is NOT shortened, so absolute token→logical-block indexing for the
+    /// surviving positions is unchanged and no rebasing is needed. Idempotent: already-evicted slots (-1) are
+    /// skipped, so it is safe to call once per layer/step.
+    /// </summary>
+    /// <returns>The number of physical blocks released on this call.</returns>
+    public int EvictBelow(long sequenceId, int keepFromPosition)
+    {
+        lock (_lock)
+        {
+            if (keepFromPosition <= 0) return 0;
+            if (!_blockTables.TryGetValue(sequenceId, out var table)) return 0;
+
+            int evictCount = keepFromPosition / table.BlockSize; // logical blocks fully below the window
+            if (evictCount > table.NumLogicalBlocks) evictCount = table.NumLogicalBlocks;
+
+            int freed = 0;
+            for (int logical = 0; logical < evictCount; logical++)
+            {
+                int phys = table.GetPhysicalBlock(logical);
+                if (phys < 0) continue; // already evicted — keep this idempotent across per-layer calls
+                _blockManager.FreeBlock(phys); // ref-count aware; only frees when the last reference drops
+                table.ReplaceBlock(logical, -1);
+                freed++;
+            }
+            return freed;
+        }
+    }
+
+    /// <summary>
     /// Gets the physical block IDs for a sequence (for GPU transfer).
     /// </summary>
     public int[]? GetBlockTableArray(long sequenceId)

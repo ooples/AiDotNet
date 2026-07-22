@@ -23,6 +23,7 @@ namespace AiDotNet.Inference;
 internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInferenceLayer<T>
 {
     private readonly int _headCount;
+    private readonly int _kvHeadCount;
     private readonly int _headDimension;
     private readonly int _embeddingDimension;
     private readonly bool _useCausalMask;
@@ -53,6 +54,14 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
     private Int8WeightOnlyQuantization.QuantizedWeights? _cachedWVInt8;
     private Int8WeightOnlyQuantization.QuantizedWeights? _cachedWOInt8;
 
+    // Weight matrices as [inDim, outDim] tensors for the batched-GEMM projection path (Engine.TensorMatMul,
+    // which routes to the optimized BLAS/GPU kernels). Built lazily from the Matrix weights and invalidated
+    // alongside the float kernel-weight caches when the weights change.
+    private Tensor<T>? _wqTensor;
+    private Tensor<T>? _wkTensor;
+    private Tensor<T>? _wvTensor;
+    private Tensor<T>? _woTensor;
+
     internal bool EnableWeightOnlyQuantization { get; set; }
 
     /// <summary>
@@ -61,9 +70,16 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
     public override bool SupportsTraining => false;
 
     /// <summary>
-    /// Gets the number of attention heads.
+    /// Gets the number of query attention heads.
     /// </summary>
     public int HeadCount => _headCount;
+
+    /// <summary>
+    /// Gets the number of key/value attention heads. Equals <see cref="HeadCount"/> for standard multi-head
+    /// attention; under grouped-query attention it is smaller (each KV head is shared by
+    /// <c>HeadCount / KVHeadCount</c> query heads).
+    /// </summary>
+    public int KVHeadCount => _kvHeadCount;
 
     /// <summary>
     /// Gets the dimension of each attention head.
@@ -100,12 +116,18 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
 
+    /// <param name="kvHeadCount">
+    /// Number of key/value heads for grouped-query attention. 0 (the default) means "same as
+    /// <paramref name="headCount"/>" — standard multi-head attention. When smaller, K/V project to
+    /// <c>kvHeadCount * headDim</c> and each KV head is shared by <c>headCount / kvHeadCount</c> query heads.
+    /// </param>
     public PagedCachedMultiHeadAttention(
         int sequenceLength,
         int embeddingDimension,
         int headCount,
         bool useCausalMask,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        int kvHeadCount = 0)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
@@ -118,14 +140,25 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
                 nameof(headCount));
         }
 
+        int resolvedKvHeadCount = kvHeadCount > 0 ? kvHeadCount : headCount;
+        if (headCount % resolvedKvHeadCount != 0)
+        {
+            throw new ArgumentException(
+                $"Query head count ({headCount}) must be divisible by KV head count ({resolvedKvHeadCount}) for grouped-query attention.",
+                nameof(kvHeadCount));
+        }
+
         _embeddingDimension = embeddingDimension;
         _headCount = headCount;
+        _kvHeadCount = resolvedKvHeadCount;
         _headDimension = embeddingDimension / headCount;
         _useCausalMask = useCausalMask;
 
+        // K/V project to the (possibly fewer) KV heads; Q/O span the full query heads. Weights are [inDim, outDim].
+        int kvProjDim = _kvHeadCount * _headDimension;
         _queryWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _keyWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
-        _valueWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
+        _keyWeights = new Matrix<T>(embeddingDimension, kvProjDim);
+        _valueWeights = new Matrix<T>(embeddingDimension, kvProjDim);
         _outputWeights = new Matrix<T>(embeddingDimension, embeddingDimension);
         _outputBias = new Vector<T>(embeddingDimension);
 
@@ -178,7 +211,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         }
 
         // Single-sequence legacy path: use the instance's SequenceId/position and advance it.
-        var legacyOutput = ComputePagedAttention(input, SequenceId, _currentPosition);
+        var legacyOutput = ComputePagedAttention(input, new[] { SequenceId }, new[] { _currentPosition }, rowLengths: null);
         _currentPosition += input.Shape[1];
         _lastOutput = legacyOutput;
         return legacyOutput;
@@ -196,13 +229,21 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         // Concurrency-safe: sequence id + start position come from the per-call context; no shared
         // instance fields are mutated (no _currentPosition/_lastInput/_lastOutput writes), so many
         // sequences can drive one shared layer + KV cache at once, isolated by sequence id.
-        return ComputePagedAttention(input, ctx.SequenceId, ctx.Position);
+        // Batched context: batch row b belongs to SequenceIds[b] at Positions[b] (one batched decode step
+        // across many sequences); otherwise a single sequence occupies the whole (batch=1) input.
+        if (ctx.SequenceIds is { } batchSeqIds && ctx.Positions is { } batchPositions)
+        {
+            return ComputePagedAttention(input, batchSeqIds, batchPositions, ctx.RowLengths);
+        }
+        return ComputePagedAttention(input, new[] { ctx.SequenceId }, new[] { ctx.Position }, rowLengths: null);
     }
 
-    private Tensor<T> ComputePagedAttention(Tensor<T> input, long sequenceId, int startPosition)
+    private Tensor<T> ComputePagedAttention(Tensor<T> input, long[] seqIds, int[] basePositions, int[]? rowLengths)
     {
-        // Inference mode: update cache and compute attention token-by-token.
-        // This supports both prefill (seqLen>1) and decode (seqLen==1) by iterating tokens.
+        // Inference mode: update cache and compute attention token-by-token. Supports both prefill
+        // (seqLen>1 for one sequence) and BATCHED decode: batch row b belongs to seqIds[b] starting at
+        // basePositions[b], so ONE forward serves many independent sequences over the shared paged cache
+        // (the continuous-batching throughput win). Each row is isolated by its own sequence id.
         if (input.Shape.Length < 3)
         {
             throw new ArgumentException("Expected input shape [batch, seqLen, embeddingDim].", nameof(input));
@@ -217,11 +258,15 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
             throw new ArgumentException($"Expected embeddingDim={_embeddingDimension}, got {embDim}.", nameof(input));
         }
 
-        if (batchSize != 1)
+        if (seqIds.Length != batchSize || basePositions.Length != batchSize)
         {
-            // PagedAttentionKernel supports batched attention, but this layer's state model is per-sequence.
-            // Keep it strict for now to avoid cache mixing.
-            throw new NotSupportedException("PagedCachedMultiHeadAttention currently supports batchSize==1 per sequence.");
+            throw new ArgumentException(
+                $"seqIds/basePositions length must equal batch size {batchSize} (got {seqIds.Length}/{basePositions.Length}).");
+        }
+        if (rowLengths is not null && rowLengths.Length != batchSize)
+        {
+            throw new ArgumentException(
+                $"rowLengths length must equal batch size {batchSize} (got {rowLengths.Length}).");
         }
 
         var output = new Tensor<T>([batchSize, seqLen, embDim]);
@@ -235,6 +280,23 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         var activation = ScalarActivation
             ?? throw new InvalidOperationException(
                 $"{nameof(PagedCachedMultiHeadAttention<T>)}: ScalarActivation not initialized.");
+
+        // Non-quantized models take the batched-GEMM projection path: Q/K/V/O for the whole
+        // [batch, seqLen] block are projected in ONE matmul each (routed to the optimized GEMM kernels)
+        // instead of a per-token matrix x vector. This is the continuous-batching compute win — a batched
+        // decode of N sequences becomes one [N, embDim] x [embDim, projDim] GEMM rather than N mat-vecs.
+        // Int8 weight-only quantized models keep the per-token fused kernel path below (its dequant-on-read
+        // mat-vec has no batched-GEMM equivalent here yet).
+        EnsureKernelWeightCache();
+        bool useQuantizedPath = EnableWeightOnlyQuantization && typeof(T) == typeof(float)
+            && _cachedWQInt8.HasValue && _cachedWKInt8.HasValue && _cachedWVInt8.HasValue && _cachedWOInt8.HasValue;
+        // Batched-GEMM projection pays off only with more than one row (batched decode of several sequences,
+        // or a multi-token prefill). A single-token single-sequence decode has one row, where the GEMM
+        // dispatch/reshape overhead exceeds a direct mat-vec, so that case keeps the per-token path below.
+        if (!useQuantizedPath && batchSize * seqLen > 1)
+        {
+            return ComputePagedAttentionBatched(input, seqIds, basePositions, rowLengths, kernel, activation);
+        }
 
         // Materialize weights to float spans for the paged kernel.
         // Note: This is intentionally conservative and prioritizes correctness.
@@ -293,28 +355,35 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
                 }
             }
 
-            int projDim = _headCount * _headDimension;
+            int projDim = _headCount * _headDimension;       // query/output projection width
+            int kvProjDim = _kvHeadCount * _headDimension;    // key/value projection width (fewer heads under GQA)
             var queryBuf = pool.Rent(projDim);
-            var keyBuf = pool.Rent(projDim);
-            var valueBuf = pool.Rent(projDim);
+            var keyBuf = pool.Rent(kvProjDim);
+            var valueBuf = pool.Rent(kvProjDim);
             var attnBuf = pool.Rent(projDim);
 
             try
             {
                 var querySpan = queryBuf.AsSpan(0, projDim);
-                var keySpan = keyBuf.AsSpan(0, projDim);
-                var valueSpan = valueBuf.AsSpan(0, projDim);
+                var keySpan = keyBuf.AsSpan(0, kvProjDim);
+                var valueSpan = valueBuf.AsSpan(0, kvProjDim);
                 var attnOutput = attnBuf.AsSpan(0, projDim);
 
-                // Position advances locally from the supplied start; the instance _currentPosition
-                // is NOT touched here, so concurrent sequences (each with their own context) do not
-                // collide on position state.
-                int position = startPosition;
-                for (int t = 0; t < seqLen; t++)
+                // Each batch row is an INDEPENDENT sequence (seqIds[b]) at its own start position
+                // (basePositions[b]); position advances locally per row, and the instance _currentPosition
+                // is NOT touched here, so concurrent sequences do not collide on position state.
+                for (int b = 0; b < batchSize; b++)
+                {
+                long sequenceId = seqIds[b];
+                int position = basePositions[b];
+                // Right-padded batched prefill: process only this row's valid tokens; the padded tail
+                // (t >= rowLen) is skipped — no KV written, output stays zero, and its logits are unread.
+                int rowLen = rowLengths is not null ? rowLengths[b] : seqLen;
+                for (int t = 0; t < rowLen; t++)
                 {
                     for (int d = 0; d < embDim; d++)
                     {
-                        hidden[d] = Convert.ToSingle(input[0, t, d]);
+                        hidden[d] = Convert.ToSingle(input[b, t, d]);
                     }
 
                     if (_ropeLayer != null || _alibiLayer != null)
@@ -330,15 +399,15 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
                         else
                         {
                             MatVecMul(hidden, wQ, querySpan, embDim, projDim);
-                            MatVecMul(hidden, wK, keySpan, embDim, projDim);
-                            MatVecMul(hidden, wV, valueSpan, embDim, projDim);
+                            MatVecMul(hidden, wK, keySpan, embDim, kvProjDim);
+                            MatVecMul(hidden, wV, valueSpan, embDim, kvProjDim);
                         }
 
-                        // Step 2: Apply RoPE to Q and K
+                        // Step 2: Apply RoPE to Q (query heads) and K (KV heads)
                         if (_ropeLayer != null)
                         {
-                            ApplyRoPEToSpan(querySpan, position);
-                            ApplyRoPEToSpan(keySpan, position);
+                            ApplyRoPEToSpan(querySpan, position, _headCount);
+                            ApplyRoPEToSpan(keySpan, position, _kvHeadCount);
                         }
 
                         // Step 3: Update cache and compute attention via kernel
@@ -390,12 +459,13 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
                     {
                         T value = NumOps.FromDouble(tokenOut[d]);
                         value = NumOps.Add(value, _outputBias[d]);
-                        output[0, t, d] = activation.Activate(value);
+                        output[b, t, d] = activation.Activate(value);
                     }
 
                     // Advance the LOCAL position (the per-call context owns position now). The legacy
                     // Forward path advances the instance _currentPosition itself after this returns.
                     position++;
+                }
                 }
             }
             finally
@@ -415,6 +485,252 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         return output;
     }
 
+    /// <summary>
+    /// Batched-GEMM paged attention for non-quantized models: projects Q/K/V for the whole
+    /// [batch, seqLen] block in one matmul each, then walks each row's valid tokens in causal order to
+    /// update the paged KV cache and read paged attention, and finally projects the output in one matmul.
+    /// Numerically equivalent to the per-token path (same weights) but replaces batchSize x seqLen
+    /// per-token mat-vecs with four batched GEMMs — the continuous-batching throughput win.
+    /// </summary>
+    private Tensor<T> ComputePagedAttentionBatched(
+        Tensor<T> input, long[] seqIds, int[] basePositions, int[]? rowLengths,
+        PagedAttentionKernel<T> kernel, IActivationFunction<T> activation)
+    {
+        int batchSize = input.Shape[0];
+        int seqLen = input.Shape[1];
+        int embDim = input.Shape[2];
+        int projDim = _headCount * _headDimension;       // query/output width
+        int kvProjDim = _kvHeadCount * _headDimension;    // key/value width (fewer heads under GQA)
+        int rows = batchSize * seqLen;
+        float scale = 1.0f / MathF.Sqrt(_headDimension);
+
+        // Batched projections: ONE Engine GEMM each over the flattened [rows, embDim] block, routed to the
+        // optimized BLAS/GPU kernels (NOT the generic-T Tensor.Multiply, which is a per-element NumOps loop).
+        EnsureProjectionWeightTensors();
+        var input2D = Engine.Reshape(input, new[] { rows, embDim });
+        var q2D = Engine.TensorMatMul(input2D, _wqTensor!); // [rows, projDim]
+        var k2D = Engine.TensorMatMul(input2D, _wkTensor!); // [rows, kvProjDim]
+        var v2D = Engine.TensorMatMul(input2D, _wvTensor!); // [rows, kvProjDim]
+        // Materialize the projected Q/K/V to flat row-major spans once so the causal per-token loop reads
+        // them without per-element Tensor indexing (which would round-trip a GPU-resident GEMM result).
+        var qFlat = q2D.AsSpan();
+        var kFlat = k2D.AsSpan();
+        var vFlat = v2D.AsSpan();
+
+        // Pre-compute ALiBi slopes per head (unchanged from the per-token path).
+        float[]? alibiSlopes = null;
+        if (_alibiLayer != null)
+        {
+            alibiSlopes = new float[_headCount];
+            for (int h = 0; h < _headCount; h++)
+            {
+                double exponent = -8.0 * (h + 1) / _headCount;
+                alibiSlopes[h] = (float)Math.Pow(2.0, exponent);
+            }
+        }
+
+        // Attention output accumulates into a flat [rows, projDim] buffer fed to the batched output GEMM.
+        var attnData = new T[rows * projDim];
+        var pool = ArrayPool<float>.Shared;
+        var qBuf = pool.Rent(projDim);
+        var kBuf = pool.Rent(kvProjDim);
+        var vBuf = pool.Rent(kvProjDim);
+        var aBuf = pool.Rent(projDim);
+        try
+        {
+            var q = qBuf.AsSpan(0, projDim);
+            var k = kBuf.AsSpan(0, kvProjDim);
+            var v = vBuf.AsSpan(0, kvProjDim);
+            var a = aBuf.AsSpan(0, projDim);
+
+            // Each batch row is an INDEPENDENT sequence (seqIds[b]) starting at basePositions[b]. Tokens are
+            // walked in causal order so the KV cache grows before each token's attention read; the padded
+            // tail (t >= rowLen) is skipped (no KV written, its attn output stays zero).
+            for (int b = 0; b < batchSize; b++)
+            {
+                long sequenceId = seqIds[b];
+                int position = basePositions[b];
+                int rowLen = rowLengths is not null ? rowLengths[b] : seqLen;
+
+                // Fast prefill: a fresh multi-token sequence (starts at position 0) with no sliding window
+                // computes causal attention directly over the contiguous projected Q/K/V — no per-token
+                // round-trip through the paged cache. Sliding-window models and continuation prefills
+                // (position > 0: chunked prefill or a prefix-cache hit that leaves prior KV in the cache)
+                // keep the per-token paged path below, which reads prior cached KV and evicts window blocks.
+                if (rowLen > 1 && position == 0 && kernel.Config.WindowSize == 0)
+                {
+                    PrefillRowContiguous(b, sequenceId, seqLen, rowLen, projDim, kvProjDim, scale,
+                        qFlat, kFlat, vFlat, attnData, alibiSlopes, kernel);
+                    continue;
+                }
+
+                for (int t = 0; t < rowLen; t++)
+                {
+                    int qRowBase = (b * seqLen + t) * projDim;    // Q/output row (query heads)
+                    int kvRowBase = (b * seqLen + t) * kvProjDim; // K/V row (KV heads)
+                    for (int d = 0; d < projDim; d++)
+                    {
+                        q[d] = Convert.ToSingle(qFlat[qRowBase + d]);
+                    }
+                    for (int d = 0; d < kvProjDim; d++)
+                    {
+                        k[d] = Convert.ToSingle(kFlat[kvRowBase + d]);
+                        v[d] = Convert.ToSingle(vFlat[kvRowBase + d]);
+                    }
+
+                    if (_ropeLayer != null)
+                    {
+                        ApplyRoPEToSpan(q, position, _headCount);
+                        ApplyRoPEToSpan(k, position, _kvHeadCount);
+                    }
+
+                    kernel.UpdateCache(k, v, sequenceId, position, LayerIndex);
+                    kernel.ComputeTiledPagedAttention(q, sequenceId, LayerIndex, a, scale,
+                        alibiSlopes: alibiSlopes, queryPosition: position);
+
+                    for (int d = 0; d < projDim; d++)
+                    {
+                        attnData[qRowBase + d] = NumOps.FromDouble(a[d]);
+                    }
+
+                    position++;
+                }
+            }
+        }
+        finally
+        {
+            pool.Return(qBuf);
+            pool.Return(kBuf);
+            pool.Return(vBuf);
+            pool.Return(aBuf);
+        }
+
+        // Batched output projection (one Engine GEMM) + bias + activation.
+        var attn2D = new Tensor<T>(attnData, new[] { rows, projDim });
+        var o2D = Engine.TensorMatMul(attn2D, _woTensor!); // [rows, embDim]
+        var oFlat = o2D.AsSpan();
+        var output = new Tensor<T>([batchSize, seqLen, embDim]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            int rowLen = rowLengths is not null ? rowLengths[b] : seqLen;
+            for (int t = 0; t < rowLen; t++)
+            {
+                int rowBase = (b * seqLen + t) * embDim;
+                for (int d = 0; d < embDim; d++)
+                {
+                    T value = NumOps.Add(oFlat[rowBase + d], _outputBias[d]);
+                    output[b, t, d] = activation.Activate(value);
+                }
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Fast prefill for one fresh sequence: copies the row's already-projected Q/K/V out of the flattened
+    /// GEMM result into contiguous per-position buffers, applies RoPE, persists K/V to the paged cache for
+    /// the decode continuation, then computes causal attention over the contiguous buffers in one pass
+    /// (<see cref="PagedAttentionKernel{T}.ComputeContiguousCausalPrefill"/>) instead of round-tripping every
+    /// query through the paged cache. Numerically equivalent to the per-token paged path (same weights, same
+    /// RoPE, same online-softmax order) but avoids O(seqLen^2) paged block-table reads plus per-token allocs.
+    /// </summary>
+    private void PrefillRowContiguous(
+        int b, long sequenceId, int seqLen, int rowLen, int projDim, int kvProjDim, float scale,
+        ReadOnlySpan<T> qFlat, ReadOnlySpan<T> kFlat, ReadOnlySpan<T> vFlat,
+        T[] attnData, float[]? alibiSlopes, PagedAttentionKernel<T> kernel)
+    {
+        int qRowStart = b * seqLen * projDim;     // Q/output rows (query heads)
+        int kvRowStart = b * seqLen * kvProjDim;  // K/V rows (KV heads)
+        int qn = rowLen * projDim;
+        int kvn = rowLen * kvProjDim;
+        var pool = ArrayPool<float>.Shared;
+        var qRoped = pool.Rent(qn);
+        var kRoped = pool.Rent(kvn);
+        var vLocal = pool.Rent(kvn);
+        var attnLocal = pool.Rent(qn);
+        try
+        {
+            for (int t = 0; t < rowLen; t++)
+            {
+                int qSrc = qRowStart + t * projDim;
+                int kvSrc = kvRowStart + t * kvProjDim;
+                var qSpan = qRoped.AsSpan(t * projDim, projDim);
+                var kSpan = kRoped.AsSpan(t * kvProjDim, kvProjDim);
+                var vSpan = vLocal.AsSpan(t * kvProjDim, kvProjDim);
+                for (int d = 0; d < projDim; d++)
+                {
+                    qSpan[d] = Convert.ToSingle(qFlat[qSrc + d]);
+                }
+                for (int d = 0; d < kvProjDim; d++)
+                {
+                    kSpan[d] = Convert.ToSingle(kFlat[kvSrc + d]);
+                    vSpan[d] = Convert.ToSingle(vFlat[kvSrc + d]);
+                }
+
+                if (_ropeLayer != null)
+                {
+                    ApplyRoPEToSpan(qSpan, t, _headCount);
+                    ApplyRoPEToSpan(kSpan, t, _kvHeadCount);
+                }
+
+                // Persist RoPE-applied K/V so the decode continuation reads keys consistent with this prefill.
+                kernel.UpdateCache(kSpan, vSpan, sequenceId, t, LayerIndex);
+            }
+
+            kernel.ComputeContiguousCausalPrefill(
+                qRoped.AsSpan(0, qn), kRoped.AsSpan(0, kvn), vLocal.AsSpan(0, kvn),
+                rowLen, attnLocal.AsSpan(0, qn), scale, alibiSlopes);
+
+            for (int t = 0; t < rowLen; t++)
+            {
+                int dst = (b * seqLen + t) * projDim;
+                int lo = t * projDim;
+                for (int d = 0; d < projDim; d++)
+                {
+                    attnData[dst + d] = NumOps.FromDouble(attnLocal[lo + d]);
+                }
+            }
+        }
+        finally
+        {
+            pool.Return(qRoped);
+            pool.Return(kRoped);
+            pool.Return(vLocal);
+            pool.Return(attnLocal);
+        }
+    }
+
+    // Builds the [inDim, outDim] weight tensors used by the batched-GEMM projection path, once, from the
+    // Matrix weights. Invalidated with the float kernel-weight caches when the weights change.
+    private void EnsureProjectionWeightTensors()
+    {
+        if (_wqTensor is not null && _wkTensor is not null && _wvTensor is not null && _woTensor is not null)
+        {
+            return;
+        }
+        lock (_kernelWeightsLock)
+        {
+            _wqTensor ??= MatrixToTensor(_queryWeights);
+            _wkTensor ??= MatrixToTensor(_keyWeights);
+            _wvTensor ??= MatrixToTensor(_valueWeights);
+            _woTensor ??= MatrixToTensor(_outputWeights);
+        }
+    }
+
+    private static Tensor<T> MatrixToTensor(Matrix<T> m)
+    {
+        var t = new Tensor<T>([m.Rows, m.Columns]);
+        for (int i = 0; i < m.Rows; i++)
+        {
+            for (int j = 0; j < m.Columns; j++)
+            {
+                t[i, j] = m[i, j];
+            }
+        }
+        return t;
+    }
+
     private Tensor<T> ForwardStateless(Tensor<T> input)
     {
         var activation = ScalarActivation
@@ -425,10 +741,11 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         // Compute Q,K,V projections.
         var (q, k, v) = ComputeQkv(input);
 
-        // FlashAttention expects [B, H, S, D]
-        var qh = SplitHeads(q);
-        var kh = SplitHeads(k);
-        var vh = SplitHeads(v);
+        // FlashAttention expects [B, H, S, D]. Under GQA, K/V carry fewer heads: split them over the KV heads,
+        // then repeat each KV head across its query-head group (HF repeat_kv) so all three have headCount heads.
+        var qh = SplitHeads(q, _headCount);
+        var kh = RepeatKV(SplitHeads(k, _kvHeadCount));
+        var vh = RepeatKV(SplitHeads(v, _kvHeadCount));
 
         // Apply RoPE to Q and K if configured (position starts at 0 for standard forward)
         if (_ropeLayer != null)
@@ -476,65 +793,59 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         return (q, k, v);
     }
 
-    private Tensor<T> SplitHeads(Tensor<T> x)
+    private Tensor<T> SplitHeads(Tensor<T> x, int headCount)
     {
         int batchSize = x.Shape[0];
         int seqLen = x.Shape[1];
-        var reshaped = new Tensor<T>([batchSize, _headCount, seqLen, _headDimension]);
+        // [B, S, headCount*D] -> [B, S, headCount, D] -> [B, headCount, S, D] via vectorized reshape+transpose.
+        return x.Reshape(batchSize, seqLen, headCount, _headDimension).Transpose([0, 2, 1, 3]);
+    }
 
-        for (int b = 0; b < batchSize; b++)
+    /// <summary>
+    /// Repeats each KV head across its query-head group so a [B, kvHeadCount, S, D] tensor becomes
+    /// [B, headCount, S, D] (HF <c>repeat_kv</c>). Identity for standard multi-head attention. Uses a
+    /// vectorized gather on the head axis (index h -&gt; h / group) rather than a scalar copy loop.
+    /// </summary>
+    private Tensor<T> RepeatKV(Tensor<T> kv)
+    {
+        if (_kvHeadCount == _headCount)
         {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int h = 0; h < _headCount; h++)
-                {
-                    int baseOffset = h * _headDimension;
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        reshaped[b, h, s, d] = x[b, s, baseOffset + d];
-                    }
-                }
-            }
+            return kv;
         }
 
-        return reshaped;
+        int group = _headCount / _kvHeadCount;
+        // Tiny 1-D index vector (length = headCount): head h reads KV head h / group.
+        var idx = new int[_headCount];
+        for (int h = 0; h < _headCount; h++)
+        {
+            idx[h] = h / group;
+        }
+
+        var indices = new Tensor<int>(idx, new[] { _headCount });
+        return Engine.TensorGather(kv, indices, axis: 1); // [B, kvHeadCount, S, D] -> [B, headCount, S, D]
     }
 
     private Tensor<T> MergeHeads(Tensor<T> x)
     {
         int batchSize = x.Shape[0];
         int seqLen = x.Shape[2];
-        var merged = new Tensor<T>([batchSize, seqLen, _embeddingDimension]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int h = 0; h < _headCount; h++)
-                {
-                    int baseOffset = h * _headDimension;
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        merged[b, s, baseOffset + d] = x[b, h, s, d];
-                    }
-                }
-            }
-        }
-
-        return merged;
+        // [B, headCount, S, D] -> [B, S, headCount, D] -> [B, S, E] via vectorized transpose+reshape.
+        return x.Transpose([0, 2, 1, 3]).Reshape(batchSize, seqLen, _embeddingDimension);
     }
 
     /// <summary>
     /// Applies RoPE rotation to a projected Q or K span in-place.
-    /// The span contains [numHeads * headDim] floats, laid out as [head0_d0..head0_dH, head1_d0..head1_dH, ...].
+    /// The span contains [headCount * headDim] floats, laid out as [head0_d0..head0_dH, head1_d0..head1_dH, ...].
+    /// <paramref name="headCount"/> is the number of heads in this span — the query head count for Q, the
+    /// (possibly smaller) KV head count for K under grouped-query attention.
     /// </summary>
-    private void ApplyRoPEToSpan(Span<float> projected, int position)
+    private void ApplyRoPEToSpan(Span<float> projected, int position, int headCount)
     {
         if (_ropeLayer == null) return;
 
         double theta = _ropeLayer.Theta;
 
-        for (int h = 0; h < _headCount; h++)
+        for (int h = 0; h < headCount; h++)
         {
             int offset = h * _headDimension;
             for (int d = 0; d < _headDimension / 2; d++)
@@ -552,9 +863,40 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         }
     }
 
+    // Decode projection: output[outDim] = mat[outDim, inDim] · vec[inDim]. This runs 7× per layer per token
+    // (q/k/v/o + FFN) on the critical decode path, so the inner dot is vectorized with AVX2 FMA (8 lanes)
+    // instead of a scalar loop — the scalar version was the dominant decode cost. net471 uses the scalar tail.
+#if NET5_0_OR_GREATER
     private static void MatVecMul(ReadOnlySpan<float> vec, ReadOnlySpan<float> mat, Span<float> output, int inDim, int outDim)
     {
-        output.Clear();
+        int w = System.Numerics.Vector<float>.Count;
+        if (inDim < w)
+        {
+            MatVecMulScalar(vec, mat, output, inDim, outDim);
+            return;
+        }
+        for (int i = 0; i < outDim; i++)
+        {
+            var row = mat.Slice(i * inDim, inDim);
+            var acc = System.Numerics.Vector<float>.Zero;
+            int j = 0;
+            for (; j <= inDim - w; j += w)
+            {
+                acc += new System.Numerics.Vector<float>(vec.Slice(j, w))
+                     * new System.Numerics.Vector<float>(row.Slice(j, w));
+            }
+            float sum = System.Numerics.Vector.Dot(acc, System.Numerics.Vector<float>.One);
+            for (; j < inDim; j++) sum += vec[j] * row[j];
+            output[i] = sum;
+        }
+    }
+#else
+    private static void MatVecMul(ReadOnlySpan<float> vec, ReadOnlySpan<float> mat, Span<float> output, int inDim, int outDim)
+        => MatVecMulScalar(vec, mat, output, inDim, outDim);
+#endif
+
+    private static void MatVecMulScalar(ReadOnlySpan<float> vec, ReadOnlySpan<float> mat, Span<float> output, int inDim, int outDim)
+    {
         for (int i = 0; i < outDim; i++)
         {
             float sum = 0;
@@ -606,7 +948,13 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
 
     public override Vector<T> GetParameters()
     {
-        int totalParams = _queryWeights.Rows * _queryWeights.Columns * 4 + _outputBias.Length;
+        // Q/O are embDim x embDim; K/V are embDim x (kvHeadCount*headDim) — smaller under GQA. Sum actual sizes.
+        int totalParams =
+            _queryWeights.Rows * _queryWeights.Columns +
+            _keyWeights.Rows * _keyWeights.Columns +
+            _valueWeights.Rows * _valueWeights.Columns +
+            _outputWeights.Rows * _outputWeights.Columns +
+            _outputBias.Length;
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
@@ -631,7 +979,12 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedParams = _queryWeights.Rows * _queryWeights.Columns * 4 + _outputBias.Length;
+        int expectedParams =
+            _queryWeights.Rows * _queryWeights.Columns +
+            _keyWeights.Rows * _keyWeights.Columns +
+            _valueWeights.Rows * _valueWeights.Columns +
+            _outputWeights.Rows * _outputWeights.Columns +
+            _outputBias.Length;
         if (parameters.Length != expectedParams)
         {
             throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
@@ -709,6 +1062,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
         if (enableQuantization)
         {
             int projDim = _headCount * _headDimension;
+            int kvProjDim = _kvHeadCount * _headDimension; // K/V project to fewer heads under GQA
             int hiddenDim = _embeddingDimension;
 
             var wq = _cachedWQ ?? localWQ;
@@ -719,8 +1073,8 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
             if (wq != null && wk != null && wv != null && wo != null)
             {
                 localWQInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wq, projDim, hiddenDim);
-                localWKInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wk, projDim, hiddenDim);
-                localWVInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wv, projDim, hiddenDim);
+                localWKInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wk, kvProjDim, hiddenDim);
+                localWVInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wv, kvProjDim, hiddenDim);
                 localWOInt8 = Int8WeightOnlyQuantization.QuantizePerRow(wo, hiddenDim, projDim);
             }
         }
@@ -755,6 +1109,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
             _cachedWKInt8 = null;
             _cachedWVInt8 = null;
             _cachedWOInt8 = null;
+            _wqTensor = null;
+            _wkTensor = null;
+            _wvTensor = null;
+            _woTensor = null;
         }
     }
 

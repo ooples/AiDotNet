@@ -57,7 +57,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Gets the number of active sequences.
     /// </summary>
-    public int ActiveSequenceCount
+    public virtual int ActiveSequenceCount
     {
         get { lock (_lock) return _sequenceMetadata.Count; }
     }
@@ -130,7 +130,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <param name="sequenceId">The sequence ID.</param>
     /// <param name="initialTokens">Number of initial tokens (e.g., prompt length).</param>
     /// <returns>True if allocation succeeded.</returns>
-    public bool AllocateSequence(long sequenceId, int initialTokens)
+    public virtual bool AllocateSequence(long sequenceId, int initialTokens)
     {
         lock (_lock)
         {
@@ -163,7 +163,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <param name="sequenceId">The sequence ID.</param>
     /// <param name="additionalTokens">Number of additional tokens.</param>
     /// <returns>True if extension succeeded.</returns>
-    public bool ExtendSequence(long sequenceId, int additionalTokens)
+    public virtual bool ExtendSequence(long sequenceId, int additionalTokens)
     {
         lock (_lock)
         {
@@ -182,7 +182,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Frees all cache blocks for a sequence.
     /// </summary>
-    public void FreeSequence(long sequenceId)
+    public virtual void FreeSequence(long sequenceId)
     {
         lock (_lock)
         {
@@ -197,7 +197,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <param name="sourceSequenceId">The source sequence ID.</param>
     /// <param name="newSequenceId">The new sequence ID.</param>
     /// <returns>True if fork succeeded.</returns>
-    public bool ForkSequence(long sourceSequenceId, long newSequenceId)
+    public virtual bool ForkSequence(long sourceSequenceId, long newSequenceId)
     {
         lock (_lock)
         {
@@ -361,9 +361,47 @@ internal class PagedKVCache<T> : IDisposable
     }
 
     /// <summary>
+    /// Bulk-reads Key AND Value for a contiguous range of token positions [startPosition, startPosition+count)
+    /// for one layer, under a SINGLE lock, into contiguous per-position slices of <paramref name="keyDst"/>
+    /// and <paramref name="valueDst"/> (each laid out [count, NumHeads*HeadDimension]). Decode attention reads
+    /// the whole KV history every token; doing that as one locked bulk copy instead of a lock per position
+    /// removes O(seqLen) lock acquisitions per layer per token — the dominant decode cost (profiled at ~51%
+    /// of decode time as contended Monitor.Enter).
+    /// </summary>
+    public virtual void ReadKeyValueRange(
+        long sequenceId, int startPosition, int count, int layer, Span<T> keyDst, Span<T> valueDst)
+    {
+        int perPos = _config.NumHeads * _config.HeadDimension;
+        if (keyDst.Length < count * perPos || valueDst.Length < count * perPos)
+            throw new ArgumentException("Destination spans are too small for the requested range.");
+        lock (_lock)
+        {
+            var table = _blockTableManager.GetBlockTable(sequenceId);
+            if (table == null)
+                throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+            for (int i = 0; i < count; i++)
+            {
+                int pos = startPosition + i;
+                var (blockId, offset) = table.GetBlockAndOffset(pos);
+                var blockStorage = _kvBlocks[blockId];
+                int posBase = i * perPos;
+                for (int head = 0; head < _config.NumHeads; head++)
+                {
+                    int dataOffset = posBase + head * _config.HeadDimension;
+                    int kOff = GetBlockStorageOffset(layer, isValue: false, offset, head);
+                    int vOff = GetBlockStorageOffset(layer, isValue: true, offset, head);
+                    blockStorage.AsSpan(kOff, _config.HeadDimension).CopyTo(keyDst.Slice(dataOffset, _config.HeadDimension));
+                    blockStorage.AsSpan(vOff, _config.HeadDimension).CopyTo(valueDst.Slice(dataOffset, _config.HeadDimension));
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets the block table for a sequence (for paged attention kernel).
     /// </summary>
-    public int[]? GetBlockTable(long sequenceId)
+    public virtual int[]? GetBlockTable(long sequenceId)
     {
         // GetBlockTableArray returns a fresh copy; take the lock so the snapshot is consistent with a
         // concurrent allocator mutating the same sequence's block table.
@@ -388,7 +426,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <param name="sequenceId">The sequence to truncate.</param>
     /// <param name="newLength">The new logical length (0 ≤ newLength ≤ current length).</param>
     /// <returns>True if the sequence exists and was truncated; false if it is unknown.</returns>
-    public bool TruncateSequence(long sequenceId, int newLength)
+    public virtual bool TruncateSequence(long sequenceId, int newLength)
     {
         if (newLength < 0)
             throw new ArgumentOutOfRangeException(nameof(newLength), "New length must be non-negative.");
@@ -408,9 +446,29 @@ internal class PagedKVCache<T> : IDisposable
     }
 
     /// <summary>
+    /// Sliding-window KV retention: releases the leading KV blocks of <paramref name="sequenceId"/> that hold
+    /// only positions below <paramref name="keepFromPosition"/> (the window lower bound), returning their
+    /// memory to the pool so a long sequence's KV footprint stays bounded by the window rather than growing
+    /// without limit. The sequence's logical length and absolute token→block indexing for surviving positions
+    /// are unchanged (evicted slots become <c>-1</c> sentinels that the sliding-window attention never reads),
+    /// so no position rebasing is required. Idempotent.
+    /// </summary>
+    /// <param name="sequenceId">The sequence whose stale prefix blocks should be evicted.</param>
+    /// <param name="keepFromPosition">The lowest position still inside the attention window; blocks entirely
+    /// below it are freed.</param>
+    /// <returns>The number of physical blocks released on this call.</returns>
+    public virtual int EvictBlocksBelow(long sequenceId, int keepFromPosition)
+    {
+        lock (_lock)
+        {
+            return _blockTableManager.EvictBelow(sequenceId, keepFromPosition);
+        }
+    }
+
+    /// <summary>
     /// Gets the current length of a sequence.
     /// </summary>
-    public int GetSequenceLength(long sequenceId)
+    public virtual int GetSequenceLength(long sequenceId)
     {
         lock (_lock)
         {
@@ -421,7 +479,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Checks if more tokens can be added to a sequence without new allocation.
     /// </summary>
-    public bool HasCapacityFor(long sequenceId, int additionalTokens)
+    public virtual bool HasCapacityFor(long sequenceId, int additionalTokens)
     {
         lock (_lock)
         {
@@ -443,7 +501,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Gets statistics about the cache.
     /// </summary>
-    public PagedKVCacheStats GetStats()
+    public virtual PagedKVCacheStats GetStats()
     {
         lock (_lock)
         {
@@ -471,7 +529,7 @@ internal class PagedKVCache<T> : IDisposable
     /// <summary>
     /// Releases resources.
     /// </summary>
-    public void Dispose()
+    public virtual void Dispose()
     {
         if (_disposed) return;
         _disposed = true;

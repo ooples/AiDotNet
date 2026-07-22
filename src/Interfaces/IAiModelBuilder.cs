@@ -277,6 +277,35 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
+    /// Configures the model from a pretrained checkpoint (Hugging Face hub id or local safetensors
+    /// directory), reconstructing the architecture and loading its weights automatically.
+    /// </summary>
+    /// <param name="source">The pretrained-source descriptor (see
+    /// <see cref="AiDotNet.ModelLoading.Pretrained.PretrainedSource"/>), e.g.
+    /// <c>PretrainedSource.HuggingFace("meta-llama/Llama-3.1-8B-Instruct")</c>.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Instead of building a model layer by layer or training from scratch, hand
+    /// the builder a pretrained model's name and it downloads, reconstructs, and loads it for you — ready
+    /// to serve, fine-tune, or export like any other configured model. The builder's input/output types
+    /// must be <c>Tensor&lt;T&gt;</c> for decoder language models.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModel(AiDotNet.ModelLoading.Pretrained.PretrainedSource source);
+
+    /// <summary>
+    /// Configures the model from a pretrained checkpoint and places it on the given device — the common
+    /// "load this model straight onto my GPU" case. Equivalent to
+    /// <c>ConfigureModel(source)</c> followed by moving the model with
+    /// <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.To(AiDotNet.Tensors.DeviceInfo)"/>.
+    /// </summary>
+    /// <param name="source">The pretrained-source descriptor.</param>
+    /// <param name="device">The target device, e.g. <c>DeviceInfo.Cuda(0)</c> or <c>DeviceInfo.OpenCL()</c>.
+    /// Type-safe (enum-based) — no device strings.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModel(
+        AiDotNet.ModelLoading.Pretrained.PretrainedSource source, AiDotNet.Tensors.DeviceInfo device);
+
+    /// <summary>
     /// Configures the optimization algorithm for the model.
     /// </summary>
     /// <remarks>
@@ -1356,7 +1385,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// {
     ///     EnableKVCache = true,
     ///     MaxBatchSize = 64,
-    ///     EnableSpeculativeDecoding = true
+    ///     SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
     /// };
     ///
     /// var result = await builder
@@ -1366,6 +1395,63 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
+
+    /// <summary>
+    /// Enables and configures speculative decoding using an explicit draft "guesser" model. The serving engine
+    /// verifies this draft's guessed tokens against the target model, accelerating generation beyond the built-in
+    /// N-gram prompt-lookup draft — with no change to the output.
+    /// </summary>
+    /// <param name="draftModel">The guesser implementing <see cref="AiDotNet.Inference.SpeculativeDecoding.IDraftModel{T}"/>
+    /// (e.g. <see cref="AiDotNet.Inference.SpeculativeDecoding.NGramDraftModel{T}"/> or
+    /// <see cref="AiDotNet.Inference.SpeculativeDecoding.NeuralDraftModel{T}"/>).</param>
+    /// <param name="options">Optional speculation tuning; when omitted the existing/default tuning is used. Calling
+    /// this method turns speculative decoding on regardless.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Speculative decoding uses a small, fast "guesser" model to propose the next
+    /// few tokens for the big model to verify — often 1.5–3× faster with identical output. This lets you plug in
+    /// your own guesser. The draft is a live object, so it applies to in-process serving only.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSpeculativeDecoding(
+        AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T> draftModel,
+        AiDotNet.Configuration.SpeculativeDecodingOptions? options = null);
+
+    /// <summary>
+    /// Enables and configures speculative decoding using one of your own token-generation models as the draft
+    /// "guesser" (built via <c>ConfigureModel</c> or loaded, e.g. from ONNX). It is wrapped as the draft and its
+    /// guesses are verified against the target model, so the output is unchanged.
+    /// </summary>
+    /// <param name="draftModel">A smaller/faster token-generation model whose <c>Predict</c> maps a
+    /// <c>[1, sequenceLength]</c> token tensor to next-token logits (an <see cref="IFullModel{T, TInput, TOutput}"/>
+    /// over <c>Tensor&lt;T&gt;</c> that also implements <see cref="IModelShape"/>).</param>
+    /// <param name="options">Optional speculation tuning; when omitted the existing/default tuning is used. Calling
+    /// this method turns speculative decoding on regardless.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Because AiDotNet lets you train or load your own models, you can use a small, cheap
+    /// model of your own as the guesser for a bigger one. Pass that smaller model here and it becomes the draft — the
+    /// big model still checks every guess, so quality is identical, just faster.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSpeculativeDecoding(
+        IFullModel<T, TInput, TOutput> draftModel,
+        AiDotNet.Configuration.SpeculativeDecodingOptions? options = null);
+
+    /// <summary>
+    /// Enables and tunes speculative decoding using the built-in, zero-cost N-gram / prompt-lookup draft (no extra
+    /// model required). The serving engine verifies its guesses against the target model, so the output is identical.
+    /// </summary>
+    /// <param name="options">Tuning for speculation (depth, policy, method, tree speculation). Calling this method
+    /// turns speculative decoding on.</param>
+    /// <returns>The builder, for chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The simplest way to get the speculative-decoding speedup: no second model, just
+    /// the free word-pattern guesser. Use one of the draft-model overloads for a smarter guesser.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSpeculativeDecoding(
+        AiDotNet.Configuration.SpeculativeDecodingOptions options);
 
     /// <summary>
     /// Enables JIT (Just-In-Time) compilation for the built model's forward-pass

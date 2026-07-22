@@ -250,8 +250,7 @@ public class InferenceSessionIntegrationTests
                 EnableFlashAttention = false,
                 EnableKVCache = false,
                 EnablePagedKVCache = false,
-                EnableSpeculativeDecoding = true,
-                DraftModelType = DraftModelType.NGram,
+                SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true },
                 AttentionMasking = AttentionMaskingMode.Auto
             });
 
@@ -263,7 +262,7 @@ public class InferenceSessionIntegrationTests
         var stats = seq.GetInferenceStatistics();
         Assert.True(stats.TryGetValue("SpeculativeDecodingEnabled", out var enabled));
         Assert.True((bool)enabled);
-        Assert.False(stats.ContainsKey("DraftModelType"));
+        Assert.False(stats.ContainsKey("DraftModel"));
         Assert.False(stats.ContainsKey("SpeculationDepth"));
     }
 
@@ -322,7 +321,7 @@ public class InferenceSessionIntegrationTests
             EnableFlashAttention = false,
             EnableKVCache = false,
             EnablePagedKVCache = false,
-            EnableSpeculativeDecoding = false,
+            SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = false },
             EnableBatching = false
         };
 

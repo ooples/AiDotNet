@@ -280,8 +280,18 @@ public class ModelPersistenceGuardTests : IDisposable
     }
 
     [Fact(Timeout = 60000)]
-    public async Task InternalOperation_DoesNotSuppressSaveEnforcement()
+    public async Task InternalOperation_SuppressesSaveEnforcement()
     {
+        // Save IS suppressed inside an InternalOperation scope — symmetric with
+        // EnforceBeforeLoad. Server-side infrastructure (AiDotNet.Serving
+        // controllers, model registry writers, the federated coordinator's
+        // per-round global-model checkpoints) wraps its internal Save calls in
+        // InternalOperation to declare "not a user-driven save". Without this,
+        // a long-running federated run that persists the aggregated model every
+        // round would exhaust the 10-op trial against itself and throw
+        // LicenseRequiredException mid-training. InternalOperation is an
+        // internal API not reachable from user code, so user-facing SaveModel
+        // (which runs at depth 0) is unaffected — see the depth-0 assertion below.
         ClearAllLicenseSources();
 
         WithIsolatedTrial(() =>
@@ -292,25 +302,29 @@ public class ModelPersistenceGuardTests : IDisposable
                 manager.RecordOperationOrThrow();
             }
 
-            // InternalOperation does NOT suppress Save/Load — only Serialize/Deserialize
+            // Save is suppressed inside the scope — should NOT throw.
             using (ModelPersistenceGuard.InternalOperation())
             {
-                Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
+                ModelPersistenceGuard.EnforceBeforeSave();
             }
+
+            // Outside the scope (user-driven save, depth 0), Save throws normally.
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
         });
     }
 
     [Fact(Timeout = 60000)]
-    public async Task InternalOperation_SuppressesLoadEnforcement_ButNotSave()
+    public async Task InternalOperation_SuppressesBothSaveAndLoadEnforcement()
     {
-        // Load IS suppressed inside InternalOperation scope (the impl's
-        // documented rationale: AiDotNet.Serving controllers, model
-        // registry loaders, and federated coordinator round-trips load
-        // many models per process and would exhaust the 10-op trial
-        // against themselves otherwise). Save is NOT suppressed — see
-        // InternalOperation_DoesNotSuppressSaveEnforcement above.
-        // This test pins the asymmetric behavior so future refactors
-        // don't accidentally make Load symmetric with Save.
+        // Save and Load are BOTH suppressed inside an InternalOperation scope.
+        // This was previously asymmetric (Load suppressed, Save not); the
+        // asymmetry silently defeated the federated coordinator's
+        // InternalOperation-wrapped SaveModel (FederatedCoordinatorService), so
+        // per-round checkpoints counted against the operator's trial and a long
+        // run threw LicenseRequiredException mid-training. Save now honors the
+        // scope like Load. User-facing Save/Load still count at depth 0 (the
+        // out-of-scope assertions below), and InternalOperation is internal-only,
+        // so this does not let user code bypass licensing.
         ClearAllLicenseSources();
 
         WithIsolatedTrial(() =>
@@ -321,13 +335,15 @@ public class ModelPersistenceGuardTests : IDisposable
                 manager.RecordOperationOrThrow();
             }
 
-            // Load is suppressed inside the scope — should NOT throw.
+            // Both Save and Load are suppressed inside the scope — should NOT throw.
             using (ModelPersistenceGuard.InternalOperation())
             {
+                ModelPersistenceGuard.EnforceBeforeSave();
                 ModelPersistenceGuard.EnforceBeforeLoad();
             }
 
-            // Outside the scope, Load throws normally.
+            // Outside the scope, both throw normally (user-driven persistence).
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
             Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeLoad());
         });
     }
@@ -458,14 +474,16 @@ public class ModelPersistenceGuardTests : IDisposable
     }
 
     [Fact(Timeout = 60000)]
-    public async Task EnforceBeforeSave_AlwaysEnforces_EvenInInternalScope()
+    public async Task EnforceBeforeSave_InsideInternalScope_DoesNotCount()
     {
         ClearAllLicenseSources();
 
         WithIsolatedTrial(() =>
         {
-            // Save/Load always enforce, even within InternalOperation scope
-            // (only Serialize/Deserialize are suppressed)
+            // Save is suppressed within an InternalOperation scope (symmetric with
+            // Load and with Serialize/Deserialize). Infrastructure that wraps its
+            // own persistence — e.g. the federated coordinator's per-round global
+            // model checkpoint — must not tick the user's trial counter.
             int operationsBefore;
             {
                 var manager = new TrialStateManager(_trialFilePath);
@@ -480,7 +498,32 @@ public class ModelPersistenceGuardTests : IDisposable
             {
                 var manager = new TrialStateManager(_trialFilePath);
                 int operationsAfter = manager.GetStatus().OperationsUsed;
-                Assert.True(operationsAfter > operationsBefore, "EnforceBeforeSave should count even inside InternalOperation scope");
+                Assert.Equal(operationsBefore, operationsAfter);
+            }
+        });
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task EnforceBeforeSave_OutsideScope_CountsOperation()
+    {
+        ClearAllLicenseSources();
+
+        WithIsolatedTrial(() =>
+        {
+            // A user-driven save (depth 0, no InternalOperation scope) still counts
+            // against the trial — the licensing contract for end users is unchanged.
+            int operationsBefore;
+            {
+                var manager = new TrialStateManager(_trialFilePath);
+                operationsBefore = manager.GetStatus().OperationsUsed;
+            }
+
+            ModelPersistenceGuard.EnforceBeforeSave();
+
+            {
+                var manager = new TrialStateManager(_trialFilePath);
+                int operationsAfter = manager.GetStatus().OperationsUsed;
+                Assert.Equal(operationsBefore + 1, operationsAfter);
             }
         });
     }

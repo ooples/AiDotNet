@@ -45,6 +45,12 @@ public class SpeculativeDecodingRequest
     public int TopK { get; set; }
 
     /// <summary>
+    /// Gets or sets the min-p sampling threshold: drop tokens whose probability is below this fraction of the
+    /// top token's probability. 0 disables. Only applied by the streaming generation path.
+    /// </summary>
+    public double MinP { get; set; }
+
+    /// <summary>
     /// Gets or sets the end-of-sequence token ID. Generation stops when this token is produced.
     /// </summary>
     public int? EosTokenId { get; set; }
@@ -78,6 +84,43 @@ public class SpeculativeDecodingRequest
     /// </summary>
     public string? RequestId { get; set; }
 
+    /// <summary>
+    /// Gets or sets an optional RNG seed (OpenAI <c>seed</c>). When set, sampling is reproducible for the
+    /// same seed + parameters; null falls back to a per-request seed derived from <see cref="RequestId"/>.
+    /// </summary>
+    public int? Seed { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional structured-output constraint (JSON / regex / grammar / choice) that forces
+    /// the generated text to conform to a required format. Null = unconstrained. Built from an OpenAI
+    /// <c>response_format</c> by the controller. When set, speculative decoding is disabled for the request.
+    /// </summary>
+    public AiDotNet.Serving.StructuredOutput.ITokenConstraint? Constraint { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional per-token additive logit bias (OpenAI <c>logit_bias</c>): token id -&gt;
+    /// bias added before sampling. Null = none.
+    /// </summary>
+    public IReadOnlyDictionary<int, float>? LogitBias { get; set; }
+
+    /// <summary>Gets or sets the OpenAI <c>frequency_penalty</c> (default 0).</summary>
+    public double FrequencyPenalty { get; set; }
+
+    /// <summary>Gets or sets the OpenAI <c>presence_penalty</c> (default 0).</summary>
+    public double PresencePenalty { get; set; }
+
+    /// <summary>
+    /// Optional multi-LoRA adapter name to serve this request with (S-LoRA-style shared-base serving). Null
+    /// uses the base model. Typically parsed from the OpenAI <c>model</c> field as <c>base@adapter</c>.
+    /// </summary>
+    public string? AdapterId { get; set; }
+
+    /// <summary>Gets or sets whether to return per-token log-probabilities (OpenAI <c>logprobs</c>).</summary>
+    public bool Logprobs { get; set; }
+
+    /// <summary>Gets or sets how many top alternatives to return per token (OpenAI <c>top_logprobs</c>, 0-20).</summary>
+    public int TopLogprobs { get; set; }
+
     internal string? Validate()
     {
         if (InputTokens == null || InputTokens.Length == 0)
@@ -90,14 +133,57 @@ public class SpeculativeDecodingRequest
             return "MaxNewTokens must be greater than 0";
         }
 
-        if (Temperature <= 0.0)
+        // Temperature 0 is VALID: it selects greedy (argmax) decoding. Only negative / non-finite is invalid.
+        if (!double.IsFinite(Temperature) || Temperature < 0.0)
         {
-            return "Temperature must be greater than 0";
+            return "Temperature must be a finite value >= 0 (0 = greedy)";
         }
 
-        if (NumDraftTokens <= 0)
+        if (!double.IsFinite(TopP) || TopP <= 0.0 || TopP > 1.0)
         {
-            return "NumDraftTokens must be greater than 0";
+            return "TopP must be in the range (0, 1]";
+        }
+
+        if (TopK < 0)
+        {
+            return "TopK must be >= 0 (0 disables top-k)";
+        }
+
+        if (!double.IsFinite(MinP) || MinP < 0.0 || MinP > 1.0)
+        {
+            return "MinP must be in the range [0, 1]";
+        }
+
+        if (!double.IsFinite(FrequencyPenalty) || FrequencyPenalty < -2.0 || FrequencyPenalty > 2.0)
+        {
+            return "FrequencyPenalty must be a finite value in [-2, 2]";
+        }
+
+        if (!double.IsFinite(PresencePenalty) || PresencePenalty < -2.0 || PresencePenalty > 2.0)
+        {
+            return "PresencePenalty must be a finite value in [-2, 2]";
+        }
+
+        if (TopLogprobs < 0 || TopLogprobs > 20)
+        {
+            return "TopLogprobs must be in the range [0, 20]";
+        }
+
+        if (LogitBias is not null)
+        {
+            foreach (var kv in LogitBias)
+            {
+                if (!float.IsFinite(kv.Value))
+                {
+                    return $"LogitBias value for token {kv.Key} must be a finite number";
+                }
+            }
+        }
+
+        // NumDraftTokens 0 is VALID: it disables speculation for this request. Only negative is invalid.
+        if (NumDraftTokens < 0)
+        {
+            return "NumDraftTokens must be >= 0 (0 disables speculation)";
         }
 
         if (UseTreeSpeculation)

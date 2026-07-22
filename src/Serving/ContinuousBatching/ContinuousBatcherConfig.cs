@@ -36,6 +36,22 @@ public class ContinuousBatcherConfig
     public int MaxContextLength { get; set; } = 4096;
 
     /// <summary>
+    /// Maximum prompt tokens prefilled per step for CHUNKED prefill. When &gt; 0, a prompt longer than this
+    /// is prefilled in chunks across successive steps (interleaving with ongoing decode) instead of one
+    /// large forward, bounding the decode-latency spike a long prompt would otherwise cause. 0 (default)
+    /// prefills the whole prompt in one forward.
+    /// </summary>
+    public int MaxPrefillChunkTokens { get; set; } = 0;
+
+    /// <summary>
+    /// Whether the paged incremental model accepts a multi-token forward that yields per-position logits
+    /// (batched prefill / speculative verification). False for sequence-collapsing models (e.g. those
+    /// with a Flatten before the head), which MUST be prefilled one token at a time so a shape-dependent
+    /// head does not re-fit its weights to a varying flattened width. Default true.
+    /// </summary>
+    public bool SupportsBatchedPrefill { get; set; } = true;
+
+    /// <summary>
     /// Whether to enable speculative decoding.
     /// </summary>
     public bool EnableSpeculativeDecoding { get; set; } = false;

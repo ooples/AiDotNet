@@ -93,7 +93,7 @@ public class ConvBatchNormFoldTests
             EnableLayerFusion = true,
             EnableKVCache = false,
             EnableFlashAttention = false,
-            EnableSpeculativeDecoding = false,
+            SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = false },
             EnableWeightOnlyQuantization = false,
         };
         var optimizer = new InferenceOptimizer<float>(config);
@@ -122,7 +122,7 @@ public class ConvBatchNormFoldTests
             EnableLayerFusion = false,
             EnableKVCache = false,
             EnableFlashAttention = false,
-            EnableSpeculativeDecoding = false,
+            SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = false },
             EnableWeightOnlyQuantization = false,
         };
         var optimizer = new InferenceOptimizer<float>(config);
@@ -178,7 +178,7 @@ public class ConvBatchNormFoldTests
             EnableLayerFusion = true,
             EnableKVCache = false,
             EnableFlashAttention = false,
-            EnableSpeculativeDecoding = false,
+            SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = false },
             EnableWeightOnlyQuantization = false,
         };
         var (optimized, anyApplied) = new InferenceOptimizer<float>(config).OptimizeForInference(model, cloneModel: false);
@@ -217,7 +217,7 @@ public class ConvBatchNormFoldTests
             EnableLayerFusion = true,
             EnableKVCache = false,
             EnableFlashAttention = false,
-            EnableSpeculativeDecoding = false,
+            SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = false },
             EnableWeightOnlyQuantization = false,
         };
         var optimizer = new InferenceOptimizer<float>(config);

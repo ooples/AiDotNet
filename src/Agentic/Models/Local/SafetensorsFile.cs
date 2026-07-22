@@ -137,6 +137,22 @@ public sealed class SafetensorsFile : INamedTensorSource
                 return result;
             }
 
+            case "BF16":
+            {
+                // bfloat16 is the top 16 bits of an IEEE-754 float32; widening to
+                // float32 is a left shift by 16 (the low mantissa bits become zero).
+                var bytes = ReadTensorBytes(tensor, elementSize: 2);
+                var count = bytes.Length / 2;
+                var result = new double[count];
+                for (var i = 0; i < count; i++)
+                {
+                    var bits = BitConverter.ToUInt16(bytes, i * 2);
+                    result[i] = BFloat16ToFloat(bits);
+                }
+
+                return result;
+            }
+
             default:
                 throw new NotSupportedException(
                     $"Reading dtype '{tensor.DataType}' as double is not supported; use GetRawBytes for raw access.");
@@ -235,5 +251,14 @@ public sealed class SafetensorsFile : INamedTensorSource
         }
 
         return (float)(sign == 1 ? -value : value);
+    }
+
+    // bfloat16 (binary16-with-float32-exponent) to single-precision: the value is
+    // the top 16 bits of a float32, so re-widen by shifting the bits left by 16.
+    private static float BFloat16ToFloat(ushort bfloat16)
+    {
+        uint f32Bits = (uint)bfloat16 << 16;
+        // BitConverter.Int32BitsToSingle is unavailable on net471; go through bytes.
+        return BitConverter.ToSingle(BitConverter.GetBytes(f32Bits), 0);
     }
 }

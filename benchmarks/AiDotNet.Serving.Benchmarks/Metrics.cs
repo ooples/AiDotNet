@@ -31,8 +31,17 @@ public sealed class RequestResult
     /// <summary>Number of prompt tokens (from server usage, or the synthesized prompt length).</summary>
     public int PromptTokens { get; set; }
 
-    /// <summary>Number of generated tokens.</summary>
+    /// <summary>Number of generated tokens (authoritative, from server usage). Zero and meaningless when
+    /// <see cref="TokenMetricsUnavailable"/> is true.</summary>
     public int OutputTokens { get; set; }
+
+    /// <summary>
+    /// True when the endpoint returned no authoritative token usage, so token-count-derived metrics
+    /// (token throughput, TPOT, prompt/output totals) are UNKNOWN for this request. Such results are
+    /// excluded from those aggregates rather than being back-filled with SSE chunk counts (a chunk may
+    /// carry multiple tokens and some tokens decode to no text, so chunk counts corrupt token accounting).
+    /// </summary>
+    public bool TokenMetricsUnavailable { get; set; }
 
     /// <summary>Token arrival times relative to dispatch, in ms (streaming backends only).</summary>
     public List<double> TokenArrivalsMs { get; } = new();
@@ -74,7 +83,7 @@ public sealed class BenchmarkReport
     public Stat Itl { get; set; } = Stat.Empty;         // ms (all inter-token gaps)
     public Stat E2E { get; set; } = Stat.Empty;         // ms
 
-    public double GoodputPerSec { get; set; }           // req/s meeting both SLAs
+    public double? GoodputPerSec { get; set; }          // req/s meeting both SLAs; null = unavailable (no request had both TTFT+TPOT, or duration <= 0)
     public double SlaTtftMs { get; set; }
     public double SlaTpotMs { get; set; }
 
@@ -133,8 +142,11 @@ public sealed class BenchmarkReport
             SlaTpotMs = o.SlaTpotMs,
         };
 
-        report.TotalPromptTokens = ok.Sum(r => (long)r.PromptTokens);
-        report.TotalOutputTokens = ok.Sum(r => (long)r.OutputTokens);
+        // Token-count-derived metrics use ONLY requests with authoritative usage; results whose endpoint
+        // emitted no usage object (TokenMetricsUnavailable) are excluded rather than counted via chunk counts.
+        var tok = ok.Where(r => !r.TokenMetricsUnavailable).ToList();
+        report.TotalPromptTokens = tok.Sum(r => (long)r.PromptTokens);
+        report.TotalOutputTokens = tok.Sum(r => (long)r.OutputTokens);
 
         if (durationSec > 0)
         {
@@ -144,15 +156,17 @@ public sealed class BenchmarkReport
         }
 
         report.Ttft = Stat.From(ok.Where(r => r.TtftMs.HasValue).Select(r => r.TtftMs!.Value).ToList());
-        report.Tpot = Stat.From(ok.Where(r => r.TpotMs.HasValue).Select(r => r.TpotMs!.Value).ToList());
+        report.Tpot = Stat.From(tok.Where(r => r.TpotMs.HasValue).Select(r => r.TpotMs!.Value).ToList());
         report.Itl = Stat.From(ok.SelectMany(r => r.InterTokenLatencies()).ToList());
         report.E2E = Stat.From(ok.Select(r => r.E2EMs).ToList());
 
-        // Goodput: requests that met BOTH SLAs, normalized by wall-clock.
-        int good = ok.Count(r =>
-            (r.TtftMs ?? 0) <= o.SlaTtftMs &&
-            (r.TpotMs ?? 0) <= o.SlaTpotMs);
-        report.GoodputPerSec = durationSec > 0 ? good / durationSec : 0;
+        // Goodput: requests that met BOTH SLAs, normalized by wall-clock. Only requests that actually
+        // HAVE both measurements can be judged — a missing TTFT/TPOT is not a pass. If no request has
+        // both (e.g. a non-streaming backend), goodput is unavailable (null) rather than trivially "all met".
+        var judgeable = ok.Where(r => r.TtftMs.HasValue && r.TpotMs.HasValue).ToList();
+        report.GoodputPerSec = (judgeable.Count > 0 && durationSec > 0)
+            ? judgeable.Count(r => r.TtftMs!.Value <= o.SlaTtftMs && r.TpotMs!.Value <= o.SlaTpotMs) / durationSec
+            : (double?)null;
 
         return report;
     }
@@ -181,7 +195,7 @@ public sealed class BenchmarkReport
         sb.AppendLine($"  ITL  (per token)      {F(Itl.Mean),8} {F(Itl.P50),8} {F(Itl.P90),8} {F(Itl.P99),8}");
         sb.AppendLine($"  E2E                   {F(E2E.Mean),8} {F(E2E.P50),8} {F(E2E.P90),8} {F(E2E.P99),8}");
         sb.AppendLine("  --------------------------------------------------------------");
-        sb.AppendLine($"  goodput (TTFT<={SlaTtftMs}ms, TPOT<={SlaTpotMs}ms) : {GoodputPerSec.ToString("0.00", CultureInfo.InvariantCulture)} req/s");
+        sb.AppendLine($"  goodput (TTFT<={SlaTtftMs}ms, TPOT<={SlaTpotMs}ms) : {(GoodputPerSec.HasValue ? GoodputPerSec.Value.ToString("0.00", CultureInfo.InvariantCulture) + " req/s" : "n/a (insufficient data)")}");
         sb.Append("================================================================");
         return sb.ToString();
     }
@@ -189,4 +203,62 @@ public sealed class BenchmarkReport
     /// <summary>Serializes the report to indented JSON.</summary>
     public string ToJson() =>
         JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+
+    /// <summary>Loads a report previously written with <see cref="ToJson"/>.</summary>
+    public static BenchmarkReport FromJson(string json) =>
+        JsonSerializer.Deserialize<BenchmarkReport>(json) ?? throw new FormatException("empty report");
+
+    /// <summary>
+    /// Renders a side-by-side comparison table of several backends' reports (e.g. AiDotNet vs vLLM / TGI / SGLang
+    /// / TensorRT-LLM run against the SAME model + workload). The first report is the baseline; each metric shows
+    /// the value and, for the others, the ratio vs the baseline (higher-is-better for throughput/goodput, and the
+    /// baseline's advantage for latency where lower-is-better).
+    /// </summary>
+    public static string CompareConsole(IReadOnlyList<(string Label, BenchmarkReport Report)> entries)
+    {
+        if (entries.Count == 0) return "(no reports)";
+        var sb = new StringBuilder();
+        int w = 18;
+        string Col(string s) => s.Length >= w ? s.Substring(0, w) : s.PadLeft(w);
+
+        sb.AppendLine("====================== SERVING HEAD-TO-HEAD ======================");
+        sb.Append("  metric".PadRight(26));
+        foreach (var e in entries) sb.Append(Col(e.Label));
+        sb.AppendLine();
+        sb.AppendLine("  " + new string('-', 24 + w * entries.Count));
+
+        void Row(string name, Func<BenchmarkReport, double> sel, bool higherBetter)
+        {
+            sb.Append(("  " + name).PadRight(26));
+            double base0 = sel(entries[0].Report);
+            for (int i = 0; i < entries.Count; i++)
+            {
+                double v = sel(entries[i].Report);
+                string cell = double.IsNaN(v) ? "n/a" : v.ToString("0.0", CultureInfo.InvariantCulture);
+                if (i > 0 && !double.IsNaN(v) && !double.IsNaN(base0) && base0 != 0 && v != 0)
+                {
+                    double ratio = higherBetter ? base0 / v : v / base0; // >1 => baseline better
+                    cell += $" ({ratio.ToString("0.00", CultureInfo.InvariantCulture)}x)";
+                }
+                sb.Append(Col(cell));
+            }
+            sb.AppendLine();
+        }
+
+        Row("output tok/s", r => r.OutputThroughput, higherBetter: true);
+        Row("total tok/s", r => r.TotalTokenThroughput, higherBetter: true);
+        Row("req/s", r => r.RequestThroughput, higherBetter: true);
+        Row("goodput req/s", r => r.GoodputPerSec ?? double.NaN, higherBetter: true);
+        sb.AppendLine("  " + new string('-', 24 + w * entries.Count));
+        Row("TTFT p50 ms", r => r.Ttft.P50, higherBetter: false);
+        Row("TTFT p99 ms", r => r.Ttft.P99, higherBetter: false);
+        Row("ITL p50 ms", r => r.Itl.P50, higherBetter: false);
+        Row("TPOT mean ms", r => r.Tpot.Mean, higherBetter: false);
+        Row("E2E p50 ms", r => r.E2E.P50, higherBetter: false);
+        sb.AppendLine("  " + new string('-', 24 + w * entries.Count));
+        sb.AppendLine($"  baseline = {entries[0].Label}; ratios: throughput/goodput = baseline/other (>1 baseline faster),");
+        sb.AppendLine("  latency = other/baseline (>1 baseline lower). Run all backends with the SAME model+workload.");
+        sb.Append("==================================================================");
+        return sb.ToString();
+    }
 }

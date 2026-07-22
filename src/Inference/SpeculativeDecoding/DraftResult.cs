@@ -3,10 +3,16 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
 /// <summary>
-/// Result of draft token generation.
+/// Result of draft token generation returned by an <see cref="IDraftModel{T}"/>: the guessed tokens and the
+/// probability distributions the draft assigned to them (used by the target model to accept/reject drafts).
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> When a draft model guesses the next few tokens, it returns them here along with
+/// how confident it was about each. The main model uses that information to decide which guesses to keep.
+/// </para>
+/// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-internal class DraftResult<T>
+public class DraftResult<T>
 {
     /// <summary>
     /// Gets the generated draft tokens.

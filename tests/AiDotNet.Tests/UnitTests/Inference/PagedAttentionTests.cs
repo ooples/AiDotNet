@@ -522,6 +522,47 @@ public class PagedKVCacheTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task PagedKVCache_EvictBlocksBelow_FreesLeadingBlocks_KeepsWindowReadable_AndIsIdempotent()
+    {
+        await Task.Yield();
+        var config = new PagedKVCacheConfig
+        {
+            BlockSize = 4,
+            NumBlocks = 100,
+            NumLayers = 1,
+            NumHeads = 2,
+            HeadDimension = 2
+        };
+        var cache = new PagedKVCache<float>(config);
+        cache.AllocateSequence(1, 40); // 40 tokens / 4 per block => 10 blocks
+
+        int hd = config.NumHeads * config.HeadDimension; // 4 values per position
+        for (int pos = 0; pos < 40; pos++)
+        {
+            var key = new float[hd];
+            for (int i = 0; i < hd; i++) key[i] = pos * 100 + i; // distinct per position
+            cache.WriteKey(1, pos, 0, key);
+        }
+        int before = cache.BlockManager.AllocatedBlockCount;
+
+        // Keep positions >= 24: logical blocks 0..5 (positions 0..23) are entirely below the window => 6 freed.
+        int freed = cache.EvictBlocksBelow(1, 24);
+        Assert.Equal(6, freed);
+        Assert.Equal(before - 6, cache.BlockManager.AllocatedBlockCount);
+
+        // Idempotent: a second eviction at the same window frees nothing.
+        Assert.Equal(0, cache.EvictBlocksBelow(1, 24));
+
+        // Absolute-position indexing is preserved (no rebasing): a surviving position still reads its data.
+        var read = new float[hd];
+        cache.ReadKey(1, 30, 0, read);
+        for (int i = 0; i < hd; i++) Assert.Equal(30 * 100 + i, read[i]);
+
+        // Logical length is unchanged.
+        Assert.Equal(40, cache.GetSequenceLength(1));
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task PagedKVCache_FreeSequence_RemovesEntry()
     {
         // Arrange
@@ -626,6 +667,85 @@ public class PagedKVCacheTests
         {
             Assert.Equal(valueData[i], readValue[i], 4);
         }
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(false)] // ComputeAttention (non-tiled)
+    [InlineData(true)]  // ComputeTiledPagedAttention
+    public async Task PagedAttentionKernel_SlidingWindow_AttendsOnlyToRecentKeys(bool tiled)
+    {
+        await Task.Yield();
+        // 1 head, headDim 4, one layer, 10 cached tokens. All KEYS are identical so the softmax is uniform
+        // over whatever positions are attended; the output is therefore the MEAN of the attended VALUES.
+        var config = new PagedKVCacheConfig { BlockSize = 16, NumBlocks = 8, NumLayers = 1, NumHeads = 1, HeadDimension = 4 };
+        var cache = new PagedKVCache<float>(config);
+        const int seqLen = 10;
+        cache.AllocateSequence(1, seqLen);
+
+        var key = new float[] { 1f, 1f, 1f, 1f };
+        var lowValue = new float[] { 0f, 0f, 0f, 0f };   // positions 0..5
+        var highValue = new float[] { 1f, 1f, 1f, 1f };  // positions 6..9
+        for (int pos = 0; pos < seqLen; pos++)
+        {
+            cache.WriteKey(1, pos, 0, key);
+            cache.WriteValue(1, pos, 0, pos < 6 ? lowValue : highValue);
+        }
+
+        var query = new float[] { 1f, 1f, 1f, 1f };
+        const float scale = 0.5f; // 1/sqrt(4)
+
+        float[] Run(int windowSize)
+        {
+            var kernel = new PagedAttentionKernel<float>(cache, new PagedAttentionConfig
+            {
+                NumHeads = 1, HeadDimension = 4, BlockSize = 16, WindowSize = windowSize
+            });
+            var output = new float[4];
+            if (tiled)
+                kernel.ComputeTiledPagedAttention(query, 1, 0, output, scale);
+            else
+                kernel.ComputeAttention(query, 1, 0, output, scale);
+            return output;
+        }
+
+        // Full causal attention: mean over all 10 positions = 4 highs / 10 = 0.4.
+        var full = Run(0);
+        // Sliding window of 4: attends only positions 6..9 (all highValue) => mean = 1.0.
+        var windowed = Run(4);
+
+        for (int d = 0; d < 4; d++)
+        {
+            Assert.Equal(0.4f, full[d], 3);
+            Assert.Equal(1.0f, windowed[d], 3);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CompositePagedKVCache_FansAllocateExtendTruncateFree_ToAllRanks()
+    {
+        await Task.Yield();
+        // Two per-rank caches (tensor-parallel serving) behind one composite the scheduler drives.
+        static PagedKVCacheConfig Cfg() => new() { BlockSize = 16, NumBlocks = 100, NumLayers = 1, NumHeads = 2, HeadDimension = 4 };
+        var r0 = new PagedKVCache<float>(Cfg());
+        var r1 = new PagedKVCache<float>(Cfg());
+        var comp = new CompositePagedKVCache<float>(new[] { r0, r1 });
+
+        Assert.True(comp.AllocateSequence(1, 20));
+        Assert.Equal(20, r0.GetSequenceLength(1));
+        Assert.Equal(20, r1.GetSequenceLength(1));
+        Assert.Equal(20, comp.GetSequenceLength(1)); // answered from rank 0
+
+        Assert.True(comp.ExtendSequence(1, 5));
+        Assert.Equal(25, r0.GetSequenceLength(1));
+        Assert.Equal(25, r1.GetSequenceLength(1));
+
+        Assert.True(comp.TruncateSequence(1, 10));
+        Assert.Equal(10, r0.GetSequenceLength(1));
+        Assert.Equal(10, r1.GetSequenceLength(1));
+
+        comp.FreeSequence(1);
+        Assert.Equal(0, r0.ActiveSequenceCount);
+        Assert.Equal(0, r1.ActiveSequenceCount);
     }
 
     [Fact(Timeout = 60000)]

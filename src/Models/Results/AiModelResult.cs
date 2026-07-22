@@ -997,6 +997,14 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal AiDotNet.Configuration.InferenceOptimizationConfig? GetInferenceOptimizationConfigForServing()
         => InferenceOptimizationConfig;
 
+    // Live user-supplied speculative-decoding draft (builder ConfigureSpeculativeDecoding). Not serialized
+    // (live object); the serving wrapper threads it into the continuous-batching engine for in-process serving.
+    [JsonIgnore]
+    private AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? ServingDraftModel { get; set; }
+
+    internal AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? GetDraftModelForServing()
+        => ServingDraftModel;
+
     internal ISafetyFilter<T>? SafetyFilter { get; private set; }
 
     /// <summary>
@@ -1661,6 +1669,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         DeploymentConfiguration = options.DeploymentConfiguration;
         JitCompiledFunction = options.JitCompiledFunction;
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
+        ServingDraftModel = options.ServingDraftModel;
         JitCompilationConfig = options.JitCompilationConfig;
         AllowNondeterminism = options.AllowNondeterminism;
         QuantizationInfo = options.QuantizationInfo;
@@ -2975,7 +2984,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             EnableKVCache = false,
             EnablePagedKVCache = false,
             EnableBatching = false,
-            EnableSpeculativeDecoding = false
+            SpeculativeDecoding = new AiDotNet.Configuration.SpeculativeDecodingOptions { Enabled = false }
         };
     }
 
@@ -3233,12 +3242,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                             {
                                 modelForSequence = (NeuralNetworkBase<T>)model.Clone();
 
-                                int appliedCount = 0;
-                                foreach (var multi in modelForSequence.Layers.OfType<AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T>>())
-                                {
-                                    multi.SetCurrentTask(_multiLoRATask);
-                                    appliedCount++;
-                                }
+                                // Shared with the serving batcher (AiDotNet.LoRA.LoRAAdapterSelection) so the
+                                // "switch every adapter layer to this task" logic lives in exactly one place.
+                                int appliedCount = AiDotNet.LoRA.LoRAAdapterSelection.SelectTask(modelForSequence, _multiLoRATask);
 
                                 InferenceDiagnostics.RecordDecision(
                                     area: "InferenceSession",
@@ -3268,18 +3274,20 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                                 UseSlidingWindowKVCache = _config.UseSlidingWindowKVCache,
                                 KVCacheWindowSize = _config.KVCacheWindowSize,
                                 EnableBatching = _config.EnableBatching,
-                                EnableSpeculativeDecoding = _config.EnableSpeculativeDecoding,
-                                SpeculationPolicy = _config.SpeculationPolicy,
-                                SpeculativeMethod = _config.SpeculativeMethod,
-                                DraftModelType = _config.DraftModelType,
-                                SpeculationDepth = _config.SpeculationDepth,
-                                UseTreeSpeculation = _config.UseTreeSpeculation,
+                                SpeculativeDecoding = _config.SpeculativeDecoding.Clone(),
                                 EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization,
                                 AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal
                             }
                             : _config;
 
                         var optimizer = new InferenceOptimizer<T>(sessionConfig);
+                        // Flow the user's speculative-decoding draft (builder ConfigureSpeculativeDecoding) into the
+                        // in-session optimizer so its SpeculativeDecoder uses the chosen draft instead of the default
+                        // N-gram; when none was supplied the optimizer falls back to the N-gram draft itself.
+                        if (_result.ServingDraftModel is { } sessionDraft)
+                        {
+                            optimizer.SetCustomDraftModel(sessionDraft);
+                        }
                         var (optimizedModel, anyApplied) = optimizer.OptimizeForInference(modelForSequence, cloneModel: ReferenceEquals(modelForSequence, model));
 
                         _sequenceOptimizer = optimizer;

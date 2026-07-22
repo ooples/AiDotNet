@@ -250,14 +250,35 @@
          run against the fixed engine. 0.113.0 is PUBLISHED to NuGet and is a superset of 0.112.0 (also
          carries #765 compiled-ReduceMax axis fill), so all rationale above is retained.
 
-          Bumped 0.114.0 -> 0.118.0: brings AiDotNet.Tensors #824 — the native fused ANN kernel stack
-          (IAnnBackend + AnnPrimitives + AnnIndex: Flat/IVF/PQ/IVFPQ across all 7 backends). This is the
-          GATING dependency for the dependency-free NativeAnn vector index (AnnVectorIndex<T>) that
-          replaces the broken external FaissNet IVF/PQ path. Requires publishing Tensors 0.118.0. -->
-     <PackageVersion Include="AiDotNet.Tensors" Version="0.118.0" />
-     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.118.0" />
-     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.118.0" />
-     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.118.0" />
+         Bumped 0.116.0 -> 0.117.0: brings AiDotNet.Tensors #816 — the optional attention-logit
+         soft-cap on ScaledDotProductAttention (softcap*tanh(scaledScore/softcap) before softmax)
+         implemented across the CPU backend and all six GPU backend kernels. Activates the Gemma-2
+         attn_logit_softcapping path: GroupedQueryAttentionLayer now forwards its soft-cap into the
+         fused SDPA primitive, and Gemma2ModelBuilder wires config.attn_logit_softcapping into it.
+         Default 0 leaves every other SDPA caller byte-identical.
+
+         Bumped 0.117.0 -> 0.117.2: brings AiDotNet.Tensors #821 — the persistent GPU weight-buffer
+         version gate. RegisterPersistentTensor uploads a weight to a persistent GPU buffer at
+         construction (random init) keyed by the host backing array; SetParameters then loads the real
+         weights IN PLACE (same array, so same key) and bumps the tensor Version. The persistent-buffer
+         read is now version-gated (re-uploads on a stamp mismatch), so a model built while a
+         DirectGpuTensorEngine is Current no longer runs its forward against the stale construction-time
+         weights. Fixes real GGUF-decoder-under-GPU serving (greedy first token 7042 " Paris" was 32084);
+         pairs with this branch's LlamaModelBuilder.WriteGamma routing gamma through SetParameters so its
+         persistent buffer refreshes too.
+
+         Bumped 0.117.2 -> 0.118.0: brings AiDotNet.Tensors #824 — the native fused ANN kernel stack
+         (IAnnBackend + AnnPrimitives + AnnIndex: Flat/IVF/PQ/IVFPQ across all 7 backends). This is the
+         gating dependency for the dependency-free NativeAnn vector index (AnnVectorIndex<T>) that
+         replaces the broken external FaissNet IVF/PQ path.
+
+         Bumped 0.118.0 -> 0.119.0: replaces the unpublished 0.118.10-q8 development pin with the
+         released package containing the serving branch's required Tensors APIs. Managed and native
+         packages are coreleased in lockstep. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.119.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.119.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />

@@ -92,6 +92,13 @@ public class SequenceState<T>
     public bool PrefillComplete { get; set; } = false;
 
     /// <summary>
+    /// Number of prompt tokens whose KV has been prefilled so far. Advances across steps for CHUNKED
+    /// prefill (a long prompt is prefilled in <c>MaxPrefillChunkTokens</c>-sized pieces so it does not
+    /// block ongoing decode in one huge forward). Reaches <see cref="PromptLength"/> when prefill is done.
+    /// </summary>
+    public int PrefillCursor { get; set; } = 0;
+
+    /// <summary>
     /// Stop reason if generation is complete.
     /// </summary>
     public StopReason? FinishReason { get; set; }
@@ -100,6 +107,12 @@ public class SequenceState<T>
     /// Cumulative log probability of generated tokens.
     /// </summary>
     public double CumulativeLogProb { get; set; } = 0.0;
+
+    /// <summary>
+    /// Per-generated-token log-probability records, populated only when the request set
+    /// <see cref="GenerationRequest{T}.IncludeLogProbs"/>. One entry per emitted token, in order.
+    /// </summary>
+    public List<PositionLogProbs>? LogProbs { get; set; }
 
     /// <summary>
     /// Priority for scheduling (higher = more important).
@@ -201,6 +214,11 @@ public class SequenceState<T>
     }
 
     /// <summary>
+    /// An optional human-readable error message, set when the sequence failed (see <see cref="Fail"/>).
+    /// </summary>
+    public string? ErrorMessage { get; private set; }
+
+    /// <summary>
     /// Marks the sequence as cancelled.
     /// </summary>
     public void Cancel()
@@ -217,6 +235,7 @@ public class SequenceState<T>
     {
         Status = SequenceStatus.Failed;
         FinishReason = StopReason.Error;
+        ErrorMessage = errorMessage;
         CompletedAt = DateTime.UtcNow;
     }
 }
@@ -301,9 +320,80 @@ public class GenerationRequest<T>
     public int TopK { get; set; } = 0;
 
     /// <summary>
+    /// Min-p sampling threshold: drop tokens below this fraction of the top token's probability (0 = disabled).
+    /// </summary>
+    public float MinP { get; set; } = 0.0f;
+
+    /// <summary>
+    /// Optional RNG seed for reproducible sampling. Null = non-deterministic (cryptographically secure).
+    /// </summary>
+    public int? Seed { get; set; }
+
+    /// <summary>
+    /// Optional end-of-sequence token id for this request. Null falls back to the batcher's configured
+    /// default. Per-request so one shared batcher can serve requests with different stop tokens.
+    /// </summary>
+    public int? EosTokenId { get; set; }
+
+    /// <summary>
+    /// Optional per-request speculative-decoding draft depth. Null falls back to the batcher's configured
+    /// depth; 0 disables speculation for this request; &gt;0 drafts that many tokens per step. Per-request
+    /// so one shared batcher can serve speculative and non-speculative requests.
+    /// </summary>
+    public int? SpeculationDepth { get; set; }
+
+    /// <summary>
+    /// Optional structured-output constraint (JSON, regex, grammar, or choice) that restricts which tokens
+    /// may be emitted so the output conforms to a required format. Null = unconstrained free-form decoding.
+    /// The constraint is stateful and belongs to this single request/sequence — never share one instance
+    /// across concurrent requests. When set, speculative decoding is disabled for the request so every
+    /// emitted token passes through the constraint mask.
+    /// </summary>
+    public AiDotNet.Serving.StructuredOutput.ITokenConstraint? Constraint { get; set; }
+
+    /// <summary>
+    /// Optional per-token additive logit bias (OpenAI <c>logit_bias</c>): token id -&gt; bias added to the
+    /// token's logit before sampling. Positive values make a token more likely, large negative values
+    /// (e.g. -100) effectively ban it. Null = no biasing. Applied before any structured-output constraint.
+    /// </summary>
+    public IReadOnlyDictionary<int, float>? LogitBias { get; set; }
+
+    /// <summary>
     /// Repetition penalty (1.0 = no penalty).
     /// </summary>
     public float RepetitionPenalty { get; set; } = 1.0f;
+
+    /// <summary>
+    /// OpenAI <c>frequency_penalty</c> (default 0): each token's logit is reduced by this value times the
+    /// number of times it has already appeared in the text so far, discouraging verbatim repetition.
+    /// </summary>
+    public float FrequencyPenalty { get; set; } = 0.0f;
+
+    /// <summary>
+    /// OpenAI <c>presence_penalty</c> (default 0): a token's logit is reduced by this value once if it has
+    /// appeared at all in the text so far, encouraging the model to introduce new tokens/topics.
+    /// </summary>
+    public float PresencePenalty { get; set; } = 0.0f;
+
+    /// <summary>
+    /// Optional multi-LoRA adapter name to activate for this request (S-LoRA-style serving). Null runs the
+    /// model as-is. When set, the batcher switches the shared base model's multi-LoRA layers to this task
+    /// before the request's forwards. Requests using different adapters are decoded per-sequence rather than
+    /// co-batched, so each sees its own adapter.
+    /// </summary>
+    public string? AdapterId { get; set; }
+
+    /// <summary>
+    /// Whether to record per-token log-probabilities during generation (OpenAI <c>logprobs</c>).
+    /// </summary>
+    public bool IncludeLogProbs { get; set; } = false;
+
+    /// <summary>
+    /// How many of the most likely alternative tokens to record per position (OpenAI <c>top_logprobs</c>,
+    /// 0-20). 0 records only the chosen token's log-probability. Ignored when <see cref="IncludeLogProbs"/>
+    /// is false.
+    /// </summary>
+    public int TopLogProbs { get; set; } = 0;
 
     /// <summary>
     /// Whether to use beam search.
