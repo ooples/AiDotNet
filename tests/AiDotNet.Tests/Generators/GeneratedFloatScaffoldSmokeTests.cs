@@ -71,8 +71,9 @@ public class GeneratedFloatScaffoldSmokeTests
         // #1680 review: a bare count check still passes if the float path regresses to a single accidental
         // model. Pin the roster by name — a known auto-generated opt-in must resolve to <float>, and a stable
         // auto-generated opt-out must resolve to <double>. WhisperLargeV3 is a Fp32TestClassNames opt-in with
-        // no manual scaffold (so it IS auto-generated); ABINet is a stable auto-generated double model not in
-        // any float roster. If the float rewrite silently stops floating the Whisper/ASR family, this fails.
+        // no manual scaffold (so it IS auto-generated). LayoutGraph is a stable auto-generated J-M model,
+        // outside the resource-bound A-I/N-Z shard ranges and not in any explicit float roster, so it remains
+        // the double control. If either precision route silently regresses, this test fails.
         Assert.Contains(floatScaffolds, t => t.Name == "WhisperLargeV3Tests");
         Assert.Contains(floatScaffolds, t => t.Name == "CIFEncoderTests");
         Assert.Contains(floatScaffolds, t => t.Name == "BasicVSRTests");
@@ -96,7 +97,7 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.Contains(floatScaffolds, t => t.Name == "PyramidNERTests");
         Assert.Contains(floatScaffolds, t => t.Name == "PerVFITests");
         Assert.Contains(floatScaffolds, t => t.Name == "PIDNetTests");
-        Assert.Contains(doubleScaffolds, t => t.Name == "ABINetTests");
+        Assert.Contains(doubleScaffolds, t => t.Name == "LayoutGraphTests");
     }
 
     [Fact]
