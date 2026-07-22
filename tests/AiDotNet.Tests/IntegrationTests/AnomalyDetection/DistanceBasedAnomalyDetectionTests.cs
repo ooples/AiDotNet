@@ -141,7 +141,7 @@ public class DistanceBasedAnomalyDetectionTests
     }
 
     [Fact(Timeout = 120000)]
-    public void COF_ScoresRectangularQueryAgainstTrainingDistanceMatrix()
+    public Task COF_ScoresRectangularQueryAgainstTrainingDistanceMatrix()
     {
         var detector = new COFDetector<double>(k: 5);
         detector.Fit(CreateTestData());
@@ -158,6 +158,8 @@ public class DistanceBasedAnomalyDetectionTests
         for (int i = 0; i < scores.Length; i++)
             Assert.True(!double.IsNaN(scores[i]) && !double.IsInfinity(scores[i]),
                 $"COF score {i} was {scores[i]}.");
+
+        return Task.CompletedTask;
     }
 
     #endregion

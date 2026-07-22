@@ -92,6 +92,26 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
         // ApplyObservedForwardUpdates consumes the completed delta at the next step.
     }
 
+    /// <summary>
+    /// Returns immutable copies of the forward/feedback pairs used by the sequential KP rule.
+    /// Internal diagnostics keep the public credit-rule API small while allowing tests to verify
+    /// the defining same-update and shared-decay invariant directly.
+    /// </summary>
+    internal IReadOnlyList<(Matrix<T> Forward, Matrix<T> Feedback)> GetAlignmentSnapshot()
+    {
+        var snapshot = new List<(Matrix<T> Forward, Matrix<T> Feedback)>();
+        if (_previousForwardWeights is null)
+            return snapshot;
+
+        for (int j = 1; j < _previousForwardWeights.Length; j++)
+        {
+            if (_previousForwardWeights[j] is Matrix<T> forward && Feedback[j] is Matrix<T> feedback)
+                snapshot.Add((forward.Clone(), feedback.Clone()));
+        }
+
+        return snapshot;
+    }
+
     private void ApplyObservedForwardUpdates(
         IReadOnlyList<ICreditLayer<T>> layers,
         IReadOnlyList<Matrix<T>?> feedback,

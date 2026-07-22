@@ -813,6 +813,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // only. Production defaults and all public architecture options remain unchanged. The workflow's
         // per-test marker will identify any remaining offender before a fixture-size override is considered.
         "YuE", "UniAudio", "Voicebox", "Zonos", "WhisperSpeech", "VideoGigaGAN", "XDecoder",
+        // PR #1789 run 29945592590: BiomedParse and DKM exceeded the 120-second MoreData gate;
+        // EVACLIP exceeded the 120-second Training gate and then exhausted runner memory; VoxtLM
+        // exceeded both 180/120-second training gates and exhausted runner memory. KaniTTS timed out
+        // in post-training comparison and exhausted runner memory. SeedTTSClone was
+        // the active generated model when Q-S fell from gigabytes available to ~116 MB and was killed.
+        // Apply FP32 to every affected generated fixture. That alone fixed BiomedParse, DKM and VoxtLM.
+        // EVACLIP and KaniTTS remained over budget in exact local measurements, while SeedTTSClone uses
+        // the same measured-insufficient codec stack as Kani; their generated factories therefore use
+        // public-options smoke scale below. Production paper defaults and customization remain unchanged.
+        "BiomedParse", "DKM", "EVACLIP", "KaniTTS", "KaniTTS2", "SeedTTSClone", "VoxtLM",
+        // The completed N-P shard added two resource-heavy failures. OWLv2's paper-scale ViT-L
+        // memorization probe showed a first-step warm-up rise while repeatedly driving available
+        // memory below 1 GB. NemotronSpeech's first 24-layer encoder + 32-layer LLM forward consumed
+        // essentially the entire 16 GB runner and triggered shutdown. Apply the required precision
+        // mitigation first; production defaults/options remain unchanged.
+        "OWLv2", "NemotronSpeech",
     };
 
     // Heavy paper-scale models whose per-step forward+backward is expensive enough that the default
@@ -2668,7 +2684,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName == "CLAPModel" && model.TypeParameterCount == 1
+            if (model.ClassName == "EVACLIP" && model.TypeParameterCount == 1)
+            {
+                // EVA-CLIP-E defaults to a 24-layer, 1024-wide vision transformer plus a 12-layer,
+                // 768-wide text transformer. FP32 was applied first, but the generated test's minimum
+                // three training steps still exceeded 120 seconds in isolation. Keep the production
+                // paper defaults untouched and verify EVA's complete patch-embed -> vision transformer
+                // -> projection path at smoke scale through the same public options users customize.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Encoders.EVACLIPOptions { ImageSize = 32, " +
+                    "VisionEmbeddingDim = 32, TextEmbeddingDim = 32, ProjectionDim = 4, " +
+                    "NumVisionLayers = 1, NumTextLayers = 1, NumVisionHeads = 4, NumTextHeads = 4, " +
+                    "VocabSize = 64, MaxSequenceLength = 8, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "CLAPModel" && model.TypeParameterCount == 1
                 && typeName.StartsWith(
                     "AiDotNet.Audio.Fingerprinting.", System.StringComparison.Ordinal))
             {
@@ -3003,6 +3035,46 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.TextToSpeech.CodecBased.FishSpeechOptions { LLMDim = 32, " +
                     "NumLLMLayers = 1, NumCodebooks = 2, CodebookSize = 16, NumGroups = 1 })";
+            }
+            else if ((model.ClassName == "KaniTTS" || model.ClassName == "KaniTTS2")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.Latest.", System.StringComparison.Ordinal))
+            {
+                // Both Kani releases use the same paper-scale codec LM (256-wide text encoder,
+                // 1024-wide 12-layer decoder, 8x1024 codec head). KaniTTS<float> was measured first
+                // with the audio iteration caps and still exceeded 120 seconds in the exact
+                // post-training comparison. Exercise the identical embedding -> text transformer ->
+                // codec transformer -> logits architecture at test scale through its public options.
+                // KaniTTS2 shares that implementation and defaults, so keeping both fixtures aligned
+                // prevents the same resource failure from simply moving to the next class in J-M.
+                pinInitSeed = true;
+                string kaniOptionsType = model.ClassName == "KaniTTS2" ? "KaniTTS2Options" : "KaniTTSOptions";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    $"new AiDotNet.TextToSpeech.Latest.{kaniOptionsType} {{ TextEncoderDim = 32, " +
+                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
+                    "NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    "DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "SeedTTSClone" && model.TypeParameterCount == 1)
+            {
+                // Seed-TTS uses the same 1024-wide, 12-layer, 8x1024-output codec-LM helper as
+                // KaniTTS. The Q-S runner exhausted 12 GB while this class was active, and the
+                // structurally identical KaniTTS<float> path proved FP32 + iteration caps alone
+                // insufficient. Use the public options surface for the generated fixture only;
+                // production retains the paper-scale defaults and full user customization.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.VoiceCloning.SeedTTSCloneOptions { TextEncoderDim = 32, " +
+                    "LLMDim = 32, SpeakerEmbeddingDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, " +
+                    "NumHeads = 2, NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, " +
+                    "MaxCodecFrames = 8, DropoutRate = 0.0 })";
             }
             else if ((model.ClassName == "Amphion" || model.ClassName == "Dia")
                      && model.TypeParameterCount == 1
@@ -5524,7 +5596,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 16 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 32 };");
             }
-            else if (IsVoiceCloningTTS(model.ClassName))
+            else if (IsVoiceCloningTTS(model.ClassName) && model.ClassName != "SeedTTSClone")
             {
                 // MetaVoice-1B (CreateDefaultMetaVoice1BLayers) is a multi-stage transformer voice cloner:
                 // RMSNorm+RoPE+SwiGLU causal first-stage GPT → non-causal second stage → conv-transpose
@@ -8767,6 +8839,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className is "GPTSoVITS" or "CSM" or "IndexTTS" or "OuteTTS"
+            or "KaniTTS" or "KaniTTS2" or "SeedTTSClone"
             or "Amphion" or "Dia"
             || IsValleCodecLMModel(className);
     }
@@ -8787,6 +8860,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "VALLEXClone" => 16,
             "IndexTTS" => 16,
             "OuteTTS" => 16,
+            "KaniTTS" => 16,
+            "KaniTTS2" => 16,
+            "SeedTTSClone" => 16,
             "Amphion" => 32,
             "Dia" => 32,
             "GPTSoVITS" => 1024,
@@ -8798,7 +8874,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return IsValleCodecLMModel(className) || className is "IndexTTS" or "OuteTTS" ? 64 : 256;
+        return IsValleCodecLMModel(className)
+            || className is "IndexTTS" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "SeedTTSClone" ? 64 : 256;
     }
 
     private static bool IsValleCodecLMModel(string className)

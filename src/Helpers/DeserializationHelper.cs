@@ -667,10 +667,6 @@ public static class DeserializationHelper
         {
             instance = CreateCrossAttentionLayer<T>(type, inputShape, additionalParams);
         }
-        else if (genericDef == typeof(PreLNTransformerBlock<>))
-        {
-            instance = CreatePreLNTransformerBlock<T>(type, inputShape, additionalParams);
-        }
         else if (genericDef == typeof(STCConnectorLayer<>))
         {
             instance = CreateSTCConnectorLayer<T>(additionalParams);
@@ -3059,107 +3055,6 @@ public static class DeserializationHelper
             padding,
             stageDepth,
             mlpDepth);
-    }
-
-    /// <summary>
-    /// Reconstructs a <see cref="PreLNTransformerBlock{T}"/> from the metadata persisted by
-    /// <c>PreLNTransformerBlock.GetMetadata</c>. The block wraps a caller-supplied attention
-    /// sublayer, so the standard reflection matcher cannot rebuild it — we recreate the injected
-    /// <see cref="MultiHeadAttentionLayer{T}"/> (head count, causal masking, RoPE frequency/length),
-    /// the FFN activation, and the SwiGLU/plain FFN variant, then warm the block with a single
-    /// dummy forward so every lazy sublayer allocates its weights before the caller reattaches the
-    /// saved parameter vector via SetParameters.
-    /// </summary>
-    private static object CreatePreLNTransformerBlock<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
-    {
-        int hiddenSize = TryGetInt(additionalParams, "HiddenSize")
-            ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
-        if (hiddenSize <= 0)
-        {
-            throw new InvalidOperationException(
-                "PreLNTransformerBlock deserialization requires a positive HiddenSize (from metadata or input shape).");
-        }
-
-        int ffnDim = TryGetInt(additionalParams, "FfnDim") ?? (hiddenSize * 4);
-        bool useGatedSwiGLU = TryGetBool(additionalParams, "Gated")
-            ?? TryGetBool(additionalParams, "UseGatedSwiGLU")
-            ?? false;
-
-        // Rebuild the injected attention variant used by the model factory. VideoLLaMA2/Mistral
-        // uses GQA; the earlier implementation only accepted MHA and therefore made Clone fail.
-        string? attentionType = TryGetString(additionalParams, "AttentionType");
-        int headCount = TryGetInt(additionalParams, "AttHeadCount") ?? ResolveDefaultHeadCount(hiddenSize);
-        if (headCount <= 0 || hiddenSize % headCount != 0)
-        {
-            throw new InvalidOperationException(
-                $"PreLNTransformerBlock deserialization: HiddenSize {hiddenSize} is not divisible by AttHeadCount {headCount}.");
-        }
-        int headDim = hiddenSize / headCount;
-        string? peName = TryGetString(additionalParams, "AttPositionalEncoding");
-        PositionalEncodingType pe = PositionalEncodingType.None;
-        if (peName is not null)
-            Enum.TryParse(peName, out pe);
-        double ropeTheta = TryGetDouble(additionalParams, "AttRopeTheta") ?? 10000.0;
-        int ropeMaxLen = TryGetInt(additionalParams, "AttRopeMaxSeqLen") ?? 2048;
-
-        LayerBase<T> attn;
-        if (attentionType is not null &&
-            attentionType.StartsWith("GroupedQueryAttentionLayer", StringComparison.Ordinal))
-        {
-            int kvHeadCount = TryGetInt(additionalParams, "AttNumKeyValueHeads")
-                ?? throw new InvalidOperationException(
-                    "PreLNTransformerBlock GQA deserialization requires AttNumKeyValueHeads metadata.");
-            if (kvHeadCount <= 0 || headCount % kvHeadCount != 0)
-            {
-                throw new InvalidOperationException(
-                    $"PreLNTransformerBlock GQA deserialization: AttHeadCount {headCount} must be divisible by " +
-                    $"AttNumKeyValueHeads {kvHeadCount}.");
-            }
-
-            var gqa = new GroupedQueryAttentionLayer<T>(
-                ropeMaxLen,
-                hiddenSize,
-                headCount,
-                kvHeadCount,
-                new IdentityActivation<T>(),
-                deferAllocation: true);
-            if (pe != PositionalEncodingType.None)
-                gqa.ConfigurePositionalEncoding(pe, ropeTheta, ropeMaxLen);
-            attn = gqa;
-        }
-        else if (attentionType is null ||
-                 attentionType.StartsWith("MultiHeadAttentionLayer", StringComparison.Ordinal))
-        {
-            var mha = new MultiHeadAttentionLayer<T>(headCount, headDim);
-            mha.UseCausalMask = TryGetBool(additionalParams, "AttUseCausalMask") ?? false;
-            if (pe != PositionalEncodingType.None)
-                mha.ConfigurePositionalEncoding(pe, ropeTheta, ropeMaxLen);
-            attn = mha;
-        }
-        else
-        {
-            throw new NotSupportedException(
-                $"PreLNTransformerBlock deserialization does not support attention sublayer '{attentionType}'.");
-        }
-
-        // FFN activation (ignored internally when useGatedSwiGLU is true — SwiGLU uses its own SiLU
-        // gate — but restored anyway for the plain-FFN variant). Null falls through to the block's
-        // GELU default, matching its constructor.
-        var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ffnActivation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType)
-            as IActivationFunction<T>;
-
-        var block = new PreLNTransformerBlock<T>(hiddenSize, ffnDim, attn, ffnActivation, useGatedSwiGLU);
-
-        // Warm-up forward: materializes every lazy sublayer (MHA Q/K/V/O, RMSNorm gains, FFN
-        // matrices) so ParameterCount is correct and SetParameters can reattach the saved weights.
-        // A [1, hiddenSize] all-zero input is enough — projection weight shapes are independent of
-        // sequence length and batch — and the random init it consumes is immediately overwritten by
-        // the deserialized parameters.
-        var warmup = new Tensor<T>(new[] { 1, hiddenSize });
-        block.Forward(warmup);
-
-        return block;
     }
 
     private static object CreateCrossAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)

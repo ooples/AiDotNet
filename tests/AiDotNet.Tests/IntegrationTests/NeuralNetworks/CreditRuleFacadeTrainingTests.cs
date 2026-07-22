@@ -377,113 +377,67 @@ public class CreditRuleFacadeTrainingTests
         }
     }
 
-    // Concentric-rings task: nonlinear (the class is the radius band), backprop-solvable, and depth-sensitive —
-    // fixed random feedback (DFA) loses credit quality with depth, while Kolen-Pollack's learned feedback holds.
-    private const int RingDim = 2, RingClasses = 4;
-
-    private static (Tensor<double> x, Tensor<double> y, int[] labels) MakeRings(int samples, int seed)
-    {
-        var rng = new Random(seed);
-        var x = new Tensor<double>(new[] { samples, RingDim });
-        var y = new Tensor<double>(new[] { samples, RingClasses });
-        var labels = new int[samples];
-        double band = 1.5 / RingClasses;
-        for (int n = 0; n < samples; n++)
-        {
-            int lab = rng.Next(RingClasses);
-            double rMin = lab * band + 0.02, rMax = (lab + 1) * band - 0.02;
-            double r = rMin + rng.NextDouble() * (rMax - rMin);
-            double th = rng.NextDouble() * 2 * Math.PI;
-            x[n, 0] = r * Math.Cos(th);
-            x[n, 1] = r * Math.Sin(th);
-            labels[n] = lab;
-            for (int k = 0; k < RingClasses; k++) y[n, k] = k == lab ? 1.0 : 0.0;
-        }
-        return (x, y, labels);
-    }
-
-    private static NeuralNetwork<double> BuildDeepRingsNet(int hiddenLayers, int width = 32)
-    {
-        var layers = new List<ILayer<double>> { new FullyConnectedLayer<double>(RingDim, width, new ReLUActivation<double>()) };
-        for (int i = 0; i < hiddenLayers - 1; i++)
-            layers.Add(new FullyConnectedLayer<double>(width, width, new ReLUActivation<double>()));
-        layers.Add(new FullyConnectedLayer<double>(width, RingClasses, new SoftmaxActivation<double>()));
-        var architecture = new NeuralNetworkArchitecture<double>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.MultiClassClassification,
-            complexity: NetworkComplexity.Medium,
-            inputSize: RingDim,
-            outputSize: RingClasses,
-            layers: layers);
-        return new NeuralNetwork<double>(architecture);
-    }
-
-    private async Task<Func<Tensor<double>, Tensor<double>>> TrainRings(CreditRule rule, int hiddenLayers, int seed, Tensor<double> trX, Tensor<double> trY)
-    {
-        var net = BuildDeepRingsNet(hiddenLayers);
-        var adam = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(
-            null,
-            new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
-            {
-                InitialLearningRate = 0.01,
-                MaxIterations = 150,
-                BatchSize = 32,
-            });
-        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
-            .ConfigureModel(net)
-            .ConfigureOptimizer(adam)
-            .ConfigureLossFunction(new CategoricalCrossEntropyLoss<double>())
-            .ConfigureDataLoader(new InMemoryDataLoader<double, Tensor<double>, Tensor<double>>(trX, trY));
-        if (rule != CreditRule.Backprop) builder = builder.ConfigureCreditRule(rule, seed: seed);
-        var result = await builder.BuildAsync();
-        return result.Predict;
-    }
-
     /// <summary>
-    /// Depth-sensitive credit-assignment test: on a 4-hidden-layer net solving the nonlinear rings task,
-    /// Kolen-Pollack's LEARNED feedback must (a) clearly beat vanilla Direct Feedback Alignment's fixed random
-    /// feedback and (b) approach back-propagation. This is KP's defining advantage and only emerges with depth.
-    /// Both rules are averaged over several feedback-init seeds so the comparison is robust to that randomness.
+    /// Verifies Kolen-Pollack's defining update rule directly: feedback receives the same completed
+    /// forward-weight increment, and applying identical decay to both paths contracts B-W by 1-decay.
+    /// End-to-end learning remains covered by <see cref="AllCreditRules_LearnMlp_HeldOutAccuracyTable"/>.
     /// </summary>
-    [Fact(Timeout = 600000)]
-    public async Task KolenPollack_BeatsVanillaDFA_OnDepthSensitiveRings()
+    [Fact]
+    public void KolenPollack_AppliesSameForwardIncrement_AndContractsAlignmentError()
     {
-        const int hidden = 4;
-        var (trX, trY, _) = MakeRings(1500, seed: 1);
-        var (teX, _, teLab) = MakeRings(500, seed: 999);
-        double chance = 1.0 / RingClasses;
+        const double increment = 0.125;
+        const double decay = 0.25;
+        const double tolerance = 1e-10;
 
-        async Task<double> Run(CreditRule rule, int seed)
+        var (x, y, _) = MakeBlobs(32, seed: 7);
+        var mlp = BuildMlp();
+        var rule = new KolenPollackCreditRule<double>(
+            seed: 42,
+            feedbackLearningRate: 1.0,
+            weightDecay: decay);
+        mlp.SetCreditRule(rule);
+
+        _ = mlp.ComputeGradients(x, y);
+        var before = rule.GetAlignmentSnapshot();
+        Assert.NotEmpty(before);
+
+        var parameters = mlp.GetParameters();
+        for (int i = 0; i < parameters.Length; i++)
+            parameters[i] += increment;
+        mlp.SetParameters(parameters);
+
+        _ = mlp.ComputeGradients(x, y);
+        var after = rule.GetAlignmentSnapshot();
+        Assert.Equal(before.Count, after.Count);
+
+        for (int layer = 0; layer < before.Count; layer++)
         {
-            var predict = await TrainRings(rule, hidden, seed, trX, trY);
-            return Accuracy<double>(predict, teX, teLab, RingClasses);
+            var (forwardBefore, feedbackBefore) = before[layer];
+            var (forwardAfter, feedbackAfter) = after[layer];
+            Assert.Equal(forwardBefore.Rows, forwardAfter.Rows);
+            Assert.Equal(forwardBefore.Columns, forwardAfter.Columns);
+
+            for (int row = 0; row < forwardBefore.Rows; row++)
+            {
+                for (int column = 0; column < forwardBefore.Columns; column++)
+                {
+                    double actualForwardIncrement = forwardAfter[row, column] - forwardBefore[row, column];
+                    Assert.InRange(actualForwardIncrement, increment - tolerance, increment + tolerance);
+
+                    double expectedFeedback = feedbackBefore[row, column]
+                        + actualForwardIncrement
+                        - decay * (feedbackBefore[row, column] - forwardBefore[row, column]);
+                    Assert.InRange(feedbackAfter[row, column],
+                        expectedFeedback - tolerance, expectedFeedback + tolerance);
+
+                    double expectedAlignmentError = (1.0 - decay)
+                        * (feedbackBefore[row, column] - forwardBefore[row, column]);
+                    double actualAlignmentError = feedbackAfter[row, column] - forwardAfter[row, column];
+                    Assert.InRange(actualAlignmentError,
+                        expectedAlignmentError - tolerance, expectedAlignmentError + tolerance);
+                }
+            }
         }
-
-        double backprop = await Run(CreditRule.Backprop, 0);
-
-        var seeds = new[] { 1, 2, 3 };
-        double dfaSum = 0, kpSum = 0;
-        int perSeedKpWins = 0;
-        _output.WriteLine($"rings {hidden} hidden layers, chance={chance:F3}, backprop={backprop:F3}");
-        _output.WriteLine("  seed   DFA     KP");
-        foreach (int s in seeds)
-        {
-            double dfaS = await Run(CreditRule.DirectFeedbackAlignment, s);
-            double kpS = await Run(CreditRule.KolenPollack, s);
-            dfaSum += dfaS; kpSum += kpS;
-            if (kpS > dfaS) perSeedKpWins++;
-            _output.WriteLine($"  {s,-4} {dfaS,7:F3} {kpS,7:F3}");
-        }
-        double dfa = dfaSum / seeds.Length;
-        double kp = kpSum / seeds.Length;
-        _output.WriteLine($"  mean DFA={dfa:F3}  KP={kp:F3}  (KP wins {perSeedKpWins}/{seeds.Length} seeds)");
-
-        Assert.True(dfa > 0.60, $"DFA baseline should still learn (mean {dfa:F3}) for a fair comparison.");
-        Assert.True(kp >= 0.90, $"Kolen-Pollack should approach backprop ({backprop:F3}); got mean {kp:F3}.");
-        Assert.True(kp > dfa,
-            $"Kolen-Pollack's learned feedback (mean {kp:F3}) must beat vanilla DFA's fixed feedback (mean {dfa:F3}) at depth {hidden}.");
-        Assert.True(perSeedKpWins >= 2,
-            $"Kolen-Pollack should beat DFA on a majority of seeds; won {perSeedKpWins}/{seeds.Length}.");
     }
 
     // ===========================================================================================
