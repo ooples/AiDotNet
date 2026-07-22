@@ -42,7 +42,11 @@ public class PANNsOptions : ModelOptions
     /// <param name="other">Configuration to copy.</param>
     public PANNsOptions(PANNsOptions other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null)
+        {
+            throw new ArgumentNullException(nameof(other));
+        }
+
         SampleRate = other.SampleRate;
         FftSize = other.FftSize;
         HopLength = other.HopLength;

@@ -31,7 +31,10 @@ public class WavLMSEROptions : ModelOptions
     /// <param name="other">The options to copy.</param>
     public WavLMSEROptions(WavLMSEROptions other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null)
+        {
+            throw new ArgumentNullException(nameof(other));
+        }
 
         SampleRate = other.SampleRate;
         NumMels = other.NumMels;

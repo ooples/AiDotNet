@@ -367,7 +367,10 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
     private static int[]? TryFindCausalOrder(double[,] B, int d)
     {
         var remaining = new bool[d];
-        Array.Fill(remaining, true);
+        for (int i = 0; i < remaining.Length; i++)
+        {
+            remaining[i] = true;
+        }
         var order = new int[d];
 
         for (int position = 0; position < d; position++)
