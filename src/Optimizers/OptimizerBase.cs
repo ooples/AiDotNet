@@ -636,8 +636,17 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 totalFeatures, Options.MinimumFeatures, Options.MaximumFeatures);
         }
 
-        // Step 2: Apply feature selection to the model BEFORE we check the cache
-        ApplyFeatureSelection(solution, selectedFeaturesIndices);
+        // Step 2: Apply feature selection to the model BEFORE we check the cache.
+        // Rank-3+ tensor inputs were already classified as non-flat above, but
+        // ApplyFeatureSelection can only inspect the first layer's declared
+        // shape. Dense-first sequence forecasters therefore slipped through and
+        // received flat per-sample indices (0..sequenceLength-1) as though they
+        // were tabular columns. Keep the actual-input-rank decision consistent
+        // for both model masking and data slicing.
+        if (!hasNonFlatInput)
+        {
+            ApplyFeatureSelection(solution, selectedFeaturesIndices);
+        }
 
         // Step 3: Generate cache key based on the selected features and check cache
         string cacheKey = GenerateCacheKey(solution, inputData);

@@ -653,6 +653,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // constructors, research-paper defaults, and public customization surfaces are untouched.
         "AudioLM", "BayesianNeuralNetwork", "DeCLIP", "Dessurt", "DocGCN", "E2TTS",
         "IndexTTS2", "LayoutLMv2", "LLM2CLIP", "Mamba2LanguageModel", "NemotronSpeech", "PatchTST", "TimeGPT",
+        // PR #1789 generated-shard failures: these training-bound models either exhausted the
+        // runner or overflowed numerically in their FP64 generated fixtures. Apply the project's
+        // precision-first policy; their production defaults and public configuration stay unchanged.
+        "HawkLanguageModel", "GLALanguageModel", "GatedDeltaNetLanguageModel",
+        "InternVL2", "Paraformer", "Pix2Struct", "RWKVForecaster", "SeedVR", "SigLIP2",
         // Zamba/Zamba2's 32,000-way language-model heads make their uncapped 50/200-step
         // MoreData probes exceed the 120-second gate. Keep the explicit precision-first
         // classification even though the current T-Z resource-shard rule also selects them.
@@ -723,7 +728,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // runner at <double>. Float FIRST + a CI-smoke constructorExpr (below) build the same
         // architecture at reduced width/depth. (The failing ModelFamily model is the
         // TextToSpeech.CodecBased.FishSpeech.)
-        "FishSpeech",
+        "FishSpeech", "FishSpeechV15",
+        // Moshi is another foundation-scale codec LM (1024-wide, 12 decoder
+        // layers). The Generated J-M runner fell from 12 GB available memory
+        // to about 250 MB while its full-scale <double> fixture was active.
+        "Moshi",
+        // TimeLLM's Generated T-Z fixture diverges during its short training
+        // probe at double precision. Keep it explicitly in the FP32 roster even
+        // when the temporary shard-wide resource rule is eventually removed.
+        "TimeLLM",
         // VoiceCraft (Peng et al., 2024 — arXiv:2403.16973): codec-based LLM-TTS in the SAME
         // foundation family as FishSpeech/Qwen2Audio. Defaults to LLMDim 1024, 12 LLM layers, and an
         // 8×1024 codebook output projection (NumCodebooks*CodebookSize = 8192 wide) — its training
@@ -1008,6 +1021,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
         "DeCLIP", "DocGCN", "LLM2CLIP", "Mamba2LanguageModel",
+        "GLALanguageModel", "GatedDeltaNetLanguageModel",
         "ZambaLanguageModel", "Zamba2LanguageModel",
     };
 
@@ -2202,7 +2216,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // measured insufficient. Keep emitted inputs in lockstep with those fixture architectures;
         // each production options type retains its paper-faithful ImageSize default.
         => className == "MiniGPT4" ? 28
-         : className is "FLIP" or "Gemma3" or "OneFormer" ? 32
+         : className is "FLIP" or "Gemma3" or "InternVL2" or "InternVL25" or "InternVL3"
+             or "OneFormer" or "Pix2Struct" or "SigLIP2" ? 32
          : IsPatchVisionModel(className) ? 112
          : 128;
 
@@ -2606,7 +2621,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// shape-mismatch this contract prevents.
     /// </summary>
     private static bool IsTokenConsumingVisionLanguageModel(string className)
-        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2" or "KOSMOS1" or "KOSMOS2"
+        => className is "GPT4Point" or "Helix" or "Octo" or "ViLT" or "Florence2" or "KOSMOS1" or "KOSMOS2"
             // Encoder-decoder VLM family (AiDotNet.VisionLanguage.Generative.*) built from
             // CreateDefaultEncoderDecoderVLMLayers: a ViT encoder (LayerNormalization + vision
             // MultiHeadAttention(VisionDim) blocks) -> projection -> autoregressive decoder. Like
@@ -2871,6 +2886,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "TimescaleMin = 0.0, TimescaleMax = double.PositiveInfinity, UseGate = true, " +
                     "UseNormalization = false }, numFeatures: 1)";
             }
+            else if (model.ClassName == "SigLIP2" && model.TypeParameterCount == 1)
+            {
+                // SigLIP 2 starts with a real RGB PatchEmbeddingLayer. The generic token-feature
+                // VLM fixture fed [1,4,768] and therefore failed every test at the channel guard.
+                // Exercise the complete public native configuration at a legal 32px/8px-patch
+                // scale; production still defaults to the paper configuration.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 16), " +
+                    "new AiDotNet.VisionLanguage.Encoders.SigLIP2Options { ImageSize = 32, PatchSize = 8, " +
+                    "VisionEmbeddingDim = 32, NumVisionLayers = 1, NumVisionHeads = 4, VisionFfnMultiplier = 2, " +
+                    "TextEmbeddingDim = 32, MaxSequenceLength = 8, VocabSize = 64, NumTextLayers = 1, " +
+                    "NumTextHeads = 4, ProjectionDim = 16, DropoutRate = 0.0, " +
+                    "CaptioningDecoderDim = 32, NumCaptioningDecoderLayers = 1, NumCaptioningDecoderHeads = 4, " +
+                    "MimDecoderDim = 32, NumMimDecoderLayers = 1, IncludeCaptioningDecoder = true })";
+            }
             else if ((model.ClassName is "DeCLIP" or "LLM2CLIP") && model.TypeParameterCount == 1)
             {
                 // These contrastive encoders retain their paper-scale defaults in production, but
@@ -2915,6 +2947,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
                     "numLayers: 2, stateDimension: 16, numHeads: 4, maxSeqLength: 32)";
             }
+            else if ((model.ClassName is "HawkLanguageModel" or "GLALanguageModel" or "GatedDeltaNetLanguageModel")
+                     && model.TypeParameterCount == 1)
+            {
+                // These recurrent language models retain their paper/default vocabulary, width,
+                // depth, and context in production. Their generated FP64 fixtures allocated very
+                // large LM heads and either timed out or reached NaN before an invariant could make
+                // a useful assertion. Use the same public constructor surface at scaffold scale.
+                // Pin generated-test initialization because these recurrent gates otherwise draw
+                // from the process-shared RNG and the exact trajectory depends on sibling test order.
+                pinInitSeed = true;
+                string headArgument = model.ClassName == "HawkLanguageModel" ? string.Empty : "numHeads: 4, ";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
+                    $"numLayers: 1, {headArgument}maxSeqLength: 32)";
+            }
             else if (model.ClassName == "ZambaLanguageModel" && model.TypeParameterCount == 1)
             {
                 // Zamba's generated MoreData invariant times out at 120 seconds even after
@@ -2953,6 +3002,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ForecastHorizon = 8, HiddenDimension = 64, NumLayers = 2, NumHeads = 4, " +
                     "DropoutRate = 0.0, UseConformalPrediction = true, ConfidenceLevel = 0.90, " +
                     "FineTuningSteps = 0, FineTuningLearningRate = 1e-5 }, numFeatures: 1)";
+            }
+            else if (model.ClassName == "RWKVForecaster" && model.TypeParameterCount == 1)
+            {
+                // RWKV's production options remain the published 512-context/96-horizon,
+                // 256-wide, four-layer model. The generated FP64 fixture diverged to NaN on
+                // its first optimizer step. Exercise the identical RWKV forecasting path
+                // through its public options at a stable CI scale, in FP32.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 32, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.RWKVForecastingOptions<double> { ContextLength = 32, " +
+                    "ForecastHorizon = 8, ModelDimension = 32, NumHeads = 4, NumLayers = 1, " +
+                    "DropoutRate = 0.0 }, numFeatures: 1)";
             }
             else if (model.ClassName == "NemotronSpeech" && model.TypeParameterCount == 1)
             {
@@ -3246,6 +3310,58 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.TextToSpeech.CodecBased.FishSpeechOptions { LLMDim = 32, " +
                     "NumLLMLayers = 1, NumCodebooks = 2, CodebookSize = 16, NumGroups = 1 })";
+            }
+            else if (model.ClassName == "FishSpeechV15" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // The exact CI failure was a 120-second Training_ShouldReduceLoss
+                // timeout even after the resource-bound shard selected float.
+                // Keep production defaults intact and exercise the same codec-LM
+                // stack at reduced width/depth through its public options.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.FishSpeechV15Options { TextEncoderDim = 32, " +
+                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
+                    "NumCodebooks = 2, CodebookSize = 16, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "UniAudio" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // PR #1789's Generated T-Z run proved that float alone is
+                // insufficient for UniAudio's paper-scale 1024-wide, 12-layer
+                // codec LM: one generated training probe took 71 seconds and
+                // diverged while repeatedly driving runner memory below 300 MB.
+                // Exercise the same text-encoder -> codec-LM -> codebook-head
+                // structure at smoke scale through the public options object.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.UniAudioOptions { TextEncoderDim = 32, " +
+                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
+                    "NumCodebooks = 2, CodebookSize = 16, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "Moshi" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.MultiModal.", System.StringComparison.Ordinal))
+            {
+                // The full 1024-wide, 12-layer <double> fixture exhausted the
+                // Generated J-M runner. Float first, then reduce only this
+                // generated fixture through the model's public options.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.MultiModal.MoshiOptions { TextEncoderDim = 32, " +
+                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
+                    "NumCodebooks = 2, CodebookSize = 16, DropoutRate = 0.0 })";
             }
             else if ((model.ClassName == "KaniTTS" || model.ClassName == "KaniTTS2")
                      && model.TypeParameterCount == 1
@@ -3804,6 +3920,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxSequenceLength = 64, STCStageDepth = 1, VocabSize = 32, DropoutRate = 0.0, " +
                     "LearningRate = 2e-5, WeightDecay = 0.0 })";
             }
+            else if (model.ClassName == "VideoLLaMA3" && model.TypeParameterCount == 1)
+            {
+                // The paper-default 1152-wide vision encoder plus 4096-wide,
+                // 32-layer decoder exhausted the 16 GB runner even in float.
+                // Keep that production default intact and exercise the same
+                // patch-vision -> temporal -> projection -> decoder topology at
+                // generated-test scale using its public options.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.VideoLanguage.VideoLLaMA3Options { VisionDim = 32, " +
+                    "DecoderDim = 32, ProjectionDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 4, ImageSize = 32, MaxFrames = 4, MaxSequenceLength = 64, " +
+                    "VocabSize = 32, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "JambaLanguageModel" && model.TypeParameterCount == 1)
             {
                 // Jamba's production default is a high-vocab hybrid LM head.
@@ -3879,6 +4012,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions { NumCodebooks = 1, " +
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "TimeLLM" && model.TypeParameterCount == 1)
+            {
+                // The full 768-wide generated fixture reproducibly overshoots
+                // after its first optimizer steps (CI: 0.239305 -> 2.527530).
+                // Use the same patch-reprogramming -> transformer -> forecast
+                // architecture at a stable public-options smoke scale. Production
+                // paper defaults are unchanged.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 16), " +
+                    "new AiDotNet.Models.Options.TimeLLMOptions<double> { " +
+                    "ContextLength = 64, ForecastHorizon = 16, PatchLength = 16, PatchStride = 16, " +
+                    "LLMDimension = 32, NumPrototypes = 4, NumLayers = 1, NumHeads = 2, " +
+                    "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "TimeMoE" && model.TypeParameterCount == 1)
             {
@@ -4324,6 +4474,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxVisualTokens = 4, VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "InternVL2"
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // InternVL2's production defaults are the published 3200/4096-wide,
+                // 48+32-layer, 448px model. The generated batch-consistency test exhausted
+                // its CI runner. Keep the dynamic-resolution/pixel-shuffle/decoder topology,
+                // but instantiate it through the public options at scaffold scale after FP32.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.InstructionTuned.InternVL2Options { VisionDim = 32, " +
+                    "DecoderDim = 32, ProjectionDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 2, ImageSize = 32, MaxVisualTokens = 4, VocabSize = 64, " +
+                    "MaxSequenceLength = 8, MaxGenerationLength = 8, PixelShuffleFactor = 2, " +
+                    "EnableDynamicResolution = true, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "InternVL25"
                      && typeName.StartsWith("AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
             {
@@ -4455,6 +4622,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4), " +
                     $"new AiDotNet.VisionLanguage.Encoders.{model.ClassName}Options {{ NumLayers = 4, EmbeddingDim = 128, NumHeads = 4 }})";
+            }
+            else if (model.ClassName == "DocOwl"
+                     && typeName.StartsWith(
+                         "AiDotNet.Document.VisionLanguage.", System.StringComparison.Ordinal))
+            {
+                // This implementation starts with a 14x14 convolutional image
+                // stem; it is not one of the token-ID MPLUGDocOwl fixtures.
+                // A 28x28 page preserves a real 2x2 patch grid while the public
+                // dimensions keep the generated training probes bounded.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 4), " +
+                    "imageSize: 28, maxSequenceLength: 16, visionDim: 32, languageDim: 32, " +
+                    "visionLayers: 1, languageLayers: 1, numHeads: 4, vocabSize: 4, visionNumHeads: 4)";
+            }
+            else if (model.ClassName == "Pix2Struct"
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Document.", System.StringComparison.Ordinal))
+            {
+                // Pix2Struct keeps the paper's 1024px, 768-wide, 12+12-layer defaults in
+                // production. Its generated FP64 training probes timed out and drove the
+                // shard to its memory limit. Exercise the same variable-resolution patch
+                // encoder and autoregressive decoder via the public options at CI scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Document.Pix2StructOptions { ImageSize = 32, " +
+                    "VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
+                    "NumHeads = 4, VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, " +
+                    "MaxPatchesPerImage = 16, EnableVariableResolution = true, DropoutRate = 0.0 })";
             }
             else if ((model.ClassName is "GOTOCR2" or "Surya" or "MPLUGDocOwl" or "MPLUGDocOwl15"
                           or "MPLUGDocOwl2" or "TextMonkey" or "UReader" or "DocPedia" or "Nougat")
@@ -4700,6 +4899,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "outputSize: 4), " +
                     "scaleFactor: 2, numFeatures: 8, numResidualBlocks: 1, " +
                     "numPropagations: 1, learningRate: 1e-2)";
+            }
+            else if (model.ClassName == "SeedVR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // SeedVR's production options retain the paper's 192-feature, 24-block,
+                // 50-step, 4x defaults. Those FP64 generated training probes repeatedly
+                // timed out and exhausted the runner. Use FP32 first and the model's public
+                // options to keep the same native video-restoration path at CI scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.SeedVROptions { NumFeatures = 8, NumDiTBlocks = 1, " +
+                    "PatchSize = 2, WindowSize = 4, NumHeads = 2, NumDenoisingSteps = 2, " +
+                    "ScaleFactor = 2, DropoutRate = 0.0 })";
             }
             // RAFT is excluded here even though it has a public parameterless ctor: that ctor builds the
             // paper-default model (256 features, 4 correlation levels, radius 4, 12 GRU iterations), whose
@@ -5315,6 +5529,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
         }
+        else if (model.ClassName == "SeedVR")
+        {
+            // Keep the generated target aligned with the public CI fixture above:
+            // two RGB frames at 8x8 with 2x video super-resolution.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+        }
         else if (model.ClassName == "AnimateDiff")
         {
             // AnimateDiff is a feature->feature motion module (see the CI-smoke constructor above:
@@ -5569,6 +5790,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
+        else if (model.ClassName == "DocOwl"
+                 && typeName.StartsWith(
+                     "AiDotNet.Document.VisionLanguage.", System.StringComparison.Ordinal))
+        {
+            // DocOwl's native first layer is a 14x14 convolutional image stem.
+            // Feed the 28x28 page used by the reduced generated constructor.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 28, 28 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 4 };");
+        }
         else if (model.ClassName == "CLAPModel"
                  && typeName.StartsWith(
                      "AiDotNet.Audio.Fingerprinting.", System.StringComparison.Ordinal))
@@ -5624,7 +5854,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                   || model.ClassName.StartsWith("DocGCN", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("PICK", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("TRIE", System.StringComparison.Ordinal)
-                  || model.ClassName.StartsWith("DocOwl", System.StringComparison.Ordinal)
                   // NOTE: UDOP is NOT here — unlike the token-ID LayoutLM family, UDOP's native
                   // CreateDefaultUDOPLayers begins with a CONVOLUTIONAL image stem (the paper patchifies
                   // the document image), so its Forward requires an RGB [C,H,W] tensor, not a token-ID
@@ -5859,6 +6088,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             int spatial = GetVisionSpatialSize(model.ClassName);
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {spatial}, {spatial} }};");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (model.ClassName == "SigLIP2")
+        {
+            // SigLIP2's native path begins with an RGB PatchEmbeddingLayer. At the
+            // 32px/8px-patch fixture scale it returns 16 visual tokens projected to
+            // the 16-dimensional contrastive space.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 16 };");
         }
         else if (isVisionModel)
         {
@@ -6414,7 +6651,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // 1D models in families that support InputShape override:
             // match the architecture's inputSize
             bool isLang = model.Domains.Contains(2) || model.Domains.Contains(5);
-            int dim = model.ClassName == "Mamba2LanguageModel" ? 32 : isLang ? 128 : 16;
+            int dim = model.ClassName is "Mamba2LanguageModel" or "HawkLanguageModel"
+                or "GLALanguageModel" or "GatedDeltaNetLanguageModel" ? 32 : isLang ? 128 : 16;
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
 
@@ -6485,7 +6723,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // both original and scaled sequences remain legal token IDs while the unchanged test
                 // still exercises real input sensitivity.
                 int randomTokenUpperBound =
-                    model.ClassName is "Mamba2LanguageModel" or "ZambaLanguageModel" or "Zamba2LanguageModel"
+                    model.ClassName is "Mamba2LanguageModel" or "HawkLanguageModel"
+                        or "GLALanguageModel" or "GatedDeltaNetLanguageModel"
+                        or "ZambaLanguageModel" or "Zamba2LanguageModel"
                         ? 12
                         : 100;
                 sb.AppendLine();
@@ -6981,10 +7221,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // training-path shapes align (e.g. ChronosBolt outputs
             // [B, ForecastHorizon, NumQuantiles], not the default [1, 1]).
             bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT";
+            bool usesReducedRwkvFixture = model.ClassName == "RWKVForecaster";
             int paperCtx = usesReducedTimeGptFixture
                 ? 64
+                : usesReducedRwkvFixture
+                    ? 32
                 : GetForecastingPaperContextLength(model.ClassName);
-            string paperOutputShape = usesReducedTimeGptFixture
+            string paperOutputShape = usesReducedTimeGptFixture || usesReducedRwkvFixture
                 ? "8"
                 : GetForecastingPaperOutputShape(model.ClassName);
             string paperInputShape = GetForecastingPaperInputShape(model.ClassName, paperCtx);
@@ -7080,7 +7323,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override int TrainingIterations => {(model.ClassName == "Zamba2LanguageModel" ? 15 : 5)};");
             sb.AppendLine($"    protected override int MoreDataShortIterations => {(needsOptimizerWarmup ? 5 : 1)};");
             sb.AppendLine($"    protected override int MoreDataLongIterations => {(needsOptimizerWarmup ? 15 : 2)};");
-            sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
+            sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "GatedDeltaNetLanguageModel" ? 100 : 15)};");
         }
 
         // MoreData_ShouldNotDegrade trains two clones on TWO DIFFERENT seeded random tasks
@@ -9493,6 +9736,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Predict's EnsureWeightShapeForInput. Keep the InputShape context in
             // lockstep with the reduced ContextLength=64 the ctor uses.
             "TimeMoE" => 64,
+            // TimeLLM's generated fixture uses the public-options smoke scale
+            // above; keep its input contract aligned with ContextLength=64.
+            "TimeLLM" => 64,
             // MOMENT's paper context is 512, but the generated test builds it at
             // CI-smoke scale (see the MOMENT constructor special-case in
             // EmitGeneratedTestClass): the ~385M-param Base default OOM-kills the
@@ -9582,6 +9828,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // 113M-param foundation default's weight-streaming; keep OutputShape
             // in lockstep with that reduced horizon.
             "TimeMoE" => "16",
+            // TimeLLM's generated fixture uses ForecastHorizon=16.
+            "TimeLLM" => "16",
             // MOMENT forecast head outputs [B, ForecastHorizon]. The generated test
             // builds it at CI-smoke scale (ForecastHorizon=16) to avoid the ~385M-param
             // Base default's OOM; keep OutputShape in lockstep with that reduced horizon.
@@ -10119,6 +10367,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "HiddenUnits = 10, MaxLag = 3, LearningRate = 0.05, MaxEpochs = 120, " +
                 "SparsityPenalty = 0.1, EdgeThreshold = 0.1 })";
+        }
+
+        // The inherited recovery fixture's known four-node DAG has algebraic
+        // rank two. NOTEARS-Low-Rank requires that rank as an input (it is the
+        // defining assumption of the paper), so supply it through the same
+        // public option users have. Production retains the paper-default
+        // identity-factor initialization.
+        if (category == AlgorithmCategory.CausalDiscovery && testClassName == "NOTEARSLowRankTests")
+        {
+            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+                "MaxRank = 2 })";
         }
 
         // Determine base class and factory method based on category

@@ -2277,49 +2277,42 @@ public static class LayerHelper<T>
     /// protein interactions, or analyzing traffic patterns.
     /// </para>
     /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultGNNLayers(NeuralNetworkArchitecture<T> architecture)
+    public static IEnumerable<ILayer<T>> CreateDefaultGNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenSize = 16,
+        int numLayers = 2,
+        double dropoutRate = 0.5)
     {
         // Check if we have the minimum required network dimensions
         if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
         {
             throw new InvalidOperationException("The network must have valid input and output dimensions.");
         }
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "Hidden size must be positive.");
+        if (numLayers < 2)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "A GCN requires at least two graph-convolutional layers.");
+        if (dropoutRate < 0.0 || dropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "Dropout rate must be in [0, 1).");
 
-        // Define network structure with sensible defaults
         int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize;
 
-        // Define default GNN architecture - typically 2-3 graph convolutional layers
-        // with decreasing sizes is a good starting point for many graph problems
-        int firstHiddenSize = 64;
-        int secondHiddenSize = 32;
+        // Kipf & Welling apply dropout to each graph-convolution input.
+        for (int layerIndex = 0; layerIndex < numLayers - 1; layerIndex++)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+            yield return new GraphConvolutionalLayer<T>(
+                inputFeatures: layerIndex == 0 ? inputSize : hiddenSize,
+                outputFeatures: hiddenSize,
+                activationFunction: new ReLUActivation<T>());
+        }
 
-        // Create the input layer - first graph convolution
+        yield return new DropoutLayer<T>(dropoutRate);
         yield return new GraphConvolutionalLayer<T>(
-            inputFeatures: inputSize,
-            outputFeatures: firstHiddenSize,
-            activationFunction: new ReLUActivation<T>()
-        );
-
-        // Add dropout for regularization (common in GNNs)
-        yield return new DropoutLayer<T>(0.2);
-
-        // Create second graph convolution layer
-        yield return new GraphConvolutionalLayer<T>(
-            inputFeatures: firstHiddenSize,
-            outputFeatures: secondHiddenSize,
-            activationFunction: new ReLUActivation<T>()
-        );
-
-        // Add dropout for regularization
-        yield return new DropoutLayer<T>(0.2);
-
-        // Create the output layer
-        yield return new GraphConvolutionalLayer<T>(
-            inputFeatures: secondHiddenSize,
+            inputFeatures: hiddenSize,
             outputFeatures: outputSize,
-            activationFunction: new IdentityActivation<T>()
-        );
+            activationFunction: new IdentityActivation<T>());
 
         // Add final activation based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
@@ -11114,48 +11107,82 @@ public static class LayerHelper<T>
     /// <param name="textDim">Text encoder dimension (default: 4096).</param>
     /// <param name="visionLayers">Number of vision layers (default: 24).</param>
     /// <param name="textLayers">Number of text layers (default: 32).</param>
-    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="numHeads">Number of language-model attention heads (default: 32).</param>
     /// <param name="vocabSize">Vocabulary size (default: 32000).</param>
+    /// <param name="visionNumHeads">Number of ViT attention heads (default: 16 for ViT-L/14).</param>
+    /// <param name="maxSequenceLength">Maximum language-model sequence length (default: 2048).</param>
     /// <returns>A collection of layers forming a DocOwl model.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultDocOwlLayers(
         int visionDim = 1024,
         int textDim = 4096,
         int visionLayers = 24,
         int textLayers = 32,
-        int numHeads = 12,
-        int vocabSize = 32000)
+        int numHeads = 32,
+        int vocabSize = 32000,
+        int visionNumHeads = 16,
+        int maxSequenceLength = 2048)
     {
-        IActivationFunction<T> siluActivation = new SiLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Vision encoder (ViT-L style)
-        yield return new ConvolutionalLayer<T>(visionDim, 14, 14, 0);
-        yield return new LayerNormalizationLayer<T>();
+        if (visionDim % visionNumHeads != 0)
+            throw new ArgumentException(
+                $"visionDim ({visionDim}) must be divisible by visionNumHeads ({visionNumHeads}).",
+                nameof(visionNumHeads));
+        if (textDim % numHeads != 0)
+            throw new ArgumentException(
+                $"textDim ({textDim}) must be divisible by numHeads ({numHeads}).",
+                nameof(numHeads));
 
-        for (int i = 0; i < Math.Min(visionLayers, 6); i++)
+        // ViT-L/14 image encoder. PatchEmbeddingLayer performs the required
+        // [B,C,H,W] -> [B,numPatches,visionDim] conversion; the former raw
+        // convolution left [C,H,W] in channels-first form and fed width/height
+        // into LayerNorm and attention as though they were embedding features.
+        yield return new PatchEmbeddingLayer<T>(
+            patchSize: 14,
+            embeddingDim: visionDim,
+            expectedInputChannels: 3);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, visionDim);
+
+        for (int i = 0; i < visionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionDim * 4, siluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: visionDim,
+                numHeads: visionNumHeads,
+                ffnDim: visionDim * 4,
+                dropoutRate: 0.0,
+                ffnActivation: new GELUActivation<T>());
         }
 
-        // Visual abstractor projection
+        // Visual abstractor projection into the LLaMA hidden width. These
+        // projected visual tokens are the multimodal prefix consumed by the
+        // decoder; they are already embeddings and must not be passed through
+        // an EmbeddingLayer (which interprets each value as a token ID).
         yield return new DenseLayer<T>(textDim, identityActivation);
 
-        // LLM decoder layers
-        yield return new EmbeddingLayer<T>(vocabSize, textDim);
-
-        for (int i = 0; i < Math.Min(textLayers, 6); i++)
+        // LLaMA-7B-style decoder: pre-RMSNorm, causal RoPE attention and a
+        // gated SwiGLU FFN. Honor the requested layer counts rather than
+        // silently truncating both paper-default stacks to six blocks.
+        int textFfnDim = SwiGLUHiddenDim(textDim, 256);
+        for (int i = 0; i < textLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (textDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(textDim * 4, siluActivation);
-            yield return new DenseLayer<T>(textDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            var attention = new MultiHeadAttentionLayer<T>(
+                headCount: numHeads,
+                headDimension: textDim / numHeads);
+            attention.ConfigurePositionalEncoding(
+                PositionalEncodingType.Rotary,
+                ropeTheta: 10000.0,
+                maxSequenceLength: maxSequenceLength);
+            attention.UseCausalMask = true;
+
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: textDim,
+                ffnDim: textFfnDim,
+                attention: attention,
+                ffnActivation: new SiLUActivation<T>(),
+                gated: true);
         }
 
+        yield return new RMSNormalizationLayer<T>(textDim);
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 

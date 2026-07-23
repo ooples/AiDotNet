@@ -74,6 +74,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
     private readonly int _visionLayers;
     private readonly int _languageLayers;
     private readonly int _numHeads;
+    private readonly int _visionNumHeads;
     private readonly int _vocabSize;
 
     // Native mode layers
@@ -107,6 +108,11 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
     /// Gets the language model dimension.
     /// </summary>
     public int LanguageDim => _languageDim;
+
+    /// <summary>
+    /// Gets the number of ViT attention heads.
+    /// </summary>
+    public int VisionNumHeads => _visionNumHeads;
 
     /// <inheritdoc/>
     public IReadOnlyList<LayoutElementType> SupportedElementTypes { get; } =
@@ -142,7 +148,8 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         int vocabSize = 32000,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        DocOwlOptions? options = null)
+        DocOwlOptions? options = null,
+        int? visionNumHeads = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DocOwlOptions();
@@ -159,6 +166,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         _visionLayers = visionLayers;
         _languageLayers = languageLayers;
         _numHeads = numHeads;
+        _visionNumHeads = visionNumHeads ?? 16;
         _vocabSize = vocabSize;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -195,7 +203,8 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         int vocabSize = 32000,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        DocOwlOptions? options = null)
+        DocOwlOptions? options = null,
+        int? visionNumHeads = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DocOwlOptions();
@@ -207,6 +216,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         _visionLayers = visionLayers;
         _languageLayers = languageLayers;
         _numHeads = numHeads;
+        _visionNumHeads = visionNumHeads ?? 16;
         _vocabSize = vocabSize;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -242,7 +252,9 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
             visionLayers: _visionLayers,
             textLayers: _languageLayers,
             numHeads: _numHeads,
-            vocabSize: _vocabSize));
+            vocabSize: _vocabSize,
+            visionNumHeads: _visionNumHeads,
+            maxSequenceLength: MaxSequenceLength));
     }
 
     private void InitializeEmbeddings()
@@ -448,6 +460,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         sb.AppendLine($"Vision Layers: {_visionLayers}");
         sb.AppendLine($"Language Layers: {_languageLayers}");
         sb.AppendLine($"Attention Heads: {_numHeads}");
+        sb.AppendLine($"Vision Attention Heads: {_visionNumHeads}");
         sb.AppendLine($"Image Size: {ImageSize}x{ImageSize}");
         sb.AppendLine($"Max Sequence Length: {MaxSequenceLength}");
         sb.AppendLine($"Vocabulary Size: {_vocabSize}");
@@ -523,6 +536,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
                 { "vision_layers", _visionLayers },
                 { "language_layers", _languageLayers },
                 { "num_heads", _numHeads },
+                { "vision_num_heads", _visionNumHeads },
                 { "vocab_size", _vocabSize },
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
@@ -566,7 +580,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new DocOwl<T>(Architecture, ImageSize, MaxSequenceLength, _visionDim, _languageDim,
-            _visionLayers, _languageLayers, _numHeads, _vocabSize);
+            _visionLayers, _languageLayers, _numHeads, _vocabSize, visionNumHeads: _visionNumHeads);
     }
 
     #endregion

@@ -285,4 +285,14 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     {
         _alphaPredictor.ResetState();
     }
+
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["EncoderDim"] = _encoderDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Threshold"] = NumOps.ToDouble(_threshold).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["TailThreshold"] = NumOps.ToDouble(_tailThreshold).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
 }

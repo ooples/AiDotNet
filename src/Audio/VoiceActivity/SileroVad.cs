@@ -637,7 +637,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         // detach the tape and leave the convs/LSTM untrained).
         if (output.Rank == 3)
         {
-            output = Engine.TensorPermute(output, [0, 2, 1]);
+            output = Engine.TensorPermute(output, [0, 2, 1]).Contiguous();
         }
 
         // Pass through LSTM layers
@@ -730,7 +730,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 
         if (current.Rank == 3)
         {
-            current = Engine.TensorPermute(current, [0, 2, 1]);
+            current = Engine.TensorPermute(current, [0, 2, 1]).Contiguous();
         }
 
         foreach (var layer in _lstmLayers)

@@ -486,6 +486,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         PositionalEncoding = encodingType;
         _ropeTheta = ropeTheta;
         _positionalMaxSequenceLength = maxSequenceLength;
+
+        // Keep the recursive layer graph synchronized when positional encoding
+        // is configured more than once or after generated sub-layer discovery.
+        if (_ropeLayer is not null) UnregisterSubLayer(_ropeLayer);
+        if (_alibiLayer is not null) UnregisterSubLayer(_alibiLayer);
         _ropeLayer = null;
         _alibiLayer = null;
 
@@ -494,9 +499,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             case PositionalEncodingType.Rotary:
                 _ropeLayer = new RotaryPositionalEncodingLayer<T>(
                     maxSequenceLength, _headDimension, ropeTheta);
+                RegisterSubLayer(_ropeLayer);
                 break;
             case PositionalEncodingType.ALiBi:
                 _alibiLayer = new ALiBiPositionalBiasLayer<T>(_headCount, maxSequenceLength);
+                RegisterSubLayer(_alibiLayer);
                 break;
             case PositionalEncodingType.None:
                 break;
@@ -746,6 +753,10 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // "embeddingDimension 1 is not divisible by headCount N".
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
         metadata["PositionalEncoding"] = PositionalEncoding.ToString();
+        metadata["UseCausalMask"] = UseCausalMask.ToString();
+        metadata["RopeTheta"] = _ropeTheta.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["PositionalMaxSequenceLength"] =
+            _positionalMaxSequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
     }
 

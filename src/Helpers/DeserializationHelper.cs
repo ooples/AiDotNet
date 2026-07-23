@@ -233,6 +233,20 @@ public static class DeserializationHelper
 
             instance = ctor.Invoke(new object[0]);
         }
+        else if (genericDef == typeof(CifAlignmentLayer<>))
+        {
+            int encoderDim = TryGetInt(additionalParams, "EncoderDim")
+                ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (encoderDim <= 0)
+            {
+                throw new InvalidOperationException(
+                    "CifAlignmentLayer requires a positive EncoderDim in metadata or input shape.");
+            }
+
+            double threshold = TryGetDouble(additionalParams, "Threshold") ?? 1.0;
+            double tailThreshold = TryGetDouble(additionalParams, "TailThreshold") ?? 0.5;
+            instance = new CifAlignmentLayer<T>(encoderDim, threshold, tailThreshold);
+        }
         else if (genericDef == typeof(TabNetEncoderLayer<>))
         {
             // TabNetEncoderLayer(numFeatures, decisionDim, attentionDim, numSteps,
@@ -3017,7 +3031,24 @@ public static class DeserializationHelper
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { headCount, headDimension, activation, null });
+        var attention = (MultiHeadAttentionLayer<T>)ctor.Invoke(
+            new object?[] { headCount, headDimension, activation, null });
+        attention.UseCausalMask = TryGetBool(additionalParams, "UseCausalMask") ?? false;
+
+        string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
+        if (!string.IsNullOrWhiteSpace(positionalEncoding)
+            && Enum.TryParse<Enums.PositionalEncodingType>(
+                positionalEncoding, ignoreCase: true, out var positionalType)
+            && positionalType != Enums.PositionalEncodingType.None)
+        {
+            double ropeTheta = TryGetDouble(additionalParams, "RopeTheta") ?? 10000.0;
+            int maxSequenceLength =
+                TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
+            attention.ConfigurePositionalEncoding(
+                positionalType, ropeTheta, maxSequenceLength);
+        }
+
+        return attention;
     }
 
     /// <summary>

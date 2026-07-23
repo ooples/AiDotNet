@@ -53,12 +53,6 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Semi-Supervised Classification with Graph Convolutional Networks", "https://arxiv.org/abs/1609.02907", Year = 2017, Authors = "Thomas N. Kipf, Max Welling")]
 public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
-    /// <summary>
-    /// Default Adam learning rate for GNN training. Lower than standard (0.001) because
-    /// graph convolution aggregates neighbor features, amplifying gradient magnitudes.
-    /// </summary>
-    private const double DefaultTrainLearningRate = 0.0001;
-
     private readonly GraphNeuralNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
@@ -284,12 +278,28 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public GraphNeuralNetwork()
-        : this(new NeuralNetworkArchitecture<T>(
+        : this((GraphNeuralNetworkOptions?)null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance from fully customizable GCN options.
+    /// </summary>
+    public GraphNeuralNetwork(GraphNeuralNetworkOptions? options)
+        : this(CreateDefaultArchitecture(options),
+            graphConvolutionalVectorActivation: (IVectorActivationFunction<T>?)null,
+            options: options)
+    {
+    }
+
+    private static NeuralNetworkArchitecture<T> CreateDefaultArchitecture(GraphNeuralNetworkOptions? options)
+    {
+        var resolvedOptions = options ?? new GraphNeuralNetworkOptions();
+        return new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
-            inputSize: 128,
-            outputSize: 7), graphConvolutionalVectorActivation: (IVectorActivationFunction<T>?)null)
-    {
+            inputSize: resolvedOptions.NodeFeatureSize,
+            outputSize: resolvedOptions.NumClasses);
     }
 
     public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
@@ -301,10 +311,11 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         GraphNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? CreateDefaultOptimizer(this);
         _options = options ?? new GraphNeuralNetworkOptions();
+        _optimizer = optimizer ?? CreateDefaultOptimizer(this, _options);
         Options = _options;
-        AuxiliaryLossWeight = NumOps.FromDouble(0.05);
+        UseAuxiliaryLoss = _options.UseAuxiliaryLoss;
+        AuxiliaryLossWeight = NumOps.FromDouble(_options.AuxiliaryLossWeight);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
         _graphConvolutionalVectorActivation = graphConvolutionalVectorActivation;
@@ -348,10 +359,11 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         GraphNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? CreateDefaultOptimizer(this);
         _options = options ?? new GraphNeuralNetworkOptions();
+        _optimizer = optimizer ?? CreateDefaultOptimizer(this, _options);
         Options = _options;
-        AuxiliaryLossWeight = NumOps.FromDouble(0.05);
+        UseAuxiliaryLoss = _options.UseAuxiliaryLoss;
+        AuxiliaryLossWeight = NumOps.FromDouble(_options.AuxiliaryLossWeight);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
         _graphConvolutionalScalarActivation = graphConvolutionalActivation;
@@ -362,14 +374,96 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         InitializeLayers();
     }
 
-    private static AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(GraphNeuralNetwork<T> model)
+    private static AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        GraphNeuralNetwork<T> model,
+        GraphNeuralNetworkOptions options)
     {
         return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             model,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = DefaultTrainLearningRate
+                InitialLearningRate = options.LearningRate,
+                // Kipf & Welling regularize only the first graph-convolution
+                // weight matrix, not later weights or any biases.
+                Regularization = new FirstLayerWeightsL2Regularization(
+                    options.L2Regularization,
+                    model.Architecture.CalculatedInputSize * options.HiddenSize)
             });
+    }
+
+    private sealed class FirstLayerWeightsL2Regularization
+        : AiDotNet.Regularization.RegularizationBase<T, Tensor<T>, Tensor<T>>
+    {
+        private readonly int _weightCount;
+
+        public FirstLayerWeightsL2Regularization(double strength, int weightCount)
+            : base(new RegularizationOptions
+            {
+                Type = RegularizationType.L2,
+                Strength = strength
+            })
+        {
+            if (weightCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(weightCount));
+
+            _weightCount = weightCount;
+        }
+
+        public override Vector<T> Regularize(Vector<T> gradient, Vector<T> coefficients)
+        {
+            if (gradient.Length != coefficients.Length)
+                throw new ArgumentException("Gradient and coefficient vectors must have the same length.");
+
+            var result = new Vector<T>(gradient.Length);
+            var strength = NumOps.FromDouble(Options.Strength);
+            int regularizedCount = Math.Min(_weightCount, gradient.Length);
+
+            for (int i = 0; i < gradient.Length; i++)
+            {
+                result[i] = i < regularizedCount
+                    ? NumOps.Add(gradient[i], NumOps.Multiply(strength, coefficients[i]))
+                    : gradient[i];
+            }
+
+            return result;
+        }
+
+        public override Tensor<T> Regularize(Tensor<T> gradient, Tensor<T> coefficients)
+        {
+            var result = Regularize(gradient.ToVector(), coefficients.ToVector());
+            return Tensor<T>.FromVector(result).Reshape(gradient.Shape.ToArray());
+        }
+
+        public override Vector<T> Regularize(Vector<T> data)
+        {
+            var result = new Vector<T>(data.Length);
+            var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
+            int regularizedCount = Math.Min(_weightCount, data.Length);
+
+            for (int i = 0; i < data.Length; i++)
+                result[i] = i < regularizedCount ? NumOps.Multiply(data[i], shrinkage) : data[i];
+
+            return result;
+        }
+
+        public override Matrix<T> Regularize(Matrix<T> data)
+        {
+            var result = new Matrix<T>(data.Rows, data.Columns);
+            var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
+            int flatIndex = 0;
+
+            for (int row = 0; row < data.Rows; row++)
+            {
+                for (int column = 0; column < data.Columns; column++, flatIndex++)
+                {
+                    result[row, column] = flatIndex < _weightCount
+                        ? NumOps.Multiply(data[row, column], shrinkage)
+                        : data[row, column];
+                }
+            }
+
+            return result;
+        }
     }
 
     /// <summary>
@@ -400,7 +494,11 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         {
             // Per Kipf & Welling 2017, GCN uses softmax output + cross-entropy loss.
             // The default layers include softmax which is needed for the loss to work correctly.
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(
+                Architecture,
+                _options.HiddenSize,
+                _options.NumLayers,
+                _options.DropoutRate));
         }
     }
 

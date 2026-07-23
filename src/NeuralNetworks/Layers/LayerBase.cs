@@ -3529,6 +3529,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     {
         if (subLayer is null)
             throw new ArgumentNullException(nameof(subLayer));
+        // Registration is identity-based and idempotent. Composite layers may
+        // register children explicitly in their constructor while the source
+        // generator's EnsureSubLayersRegistered() discovers the same fields
+        // during lazy shape resolution. Appending both copies makes recursive
+        // parameter/training walks visit every child twice after deserialization.
+        for (int i = 0; i < _registeredSubLayers.Count; i++)
+        {
+            if (ReferenceEquals(_registeredSubLayers[i], subLayer))
+                return;
+        }
         _registeredSubLayers.Add(subLayer);
         // Sub-layer's ParameterCount contributes to ours; invalidate the
         // cache so the next query picks up the addition.

@@ -515,6 +515,27 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     }
 
     /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input;
+
+        // SigLIP2 stores the vision tower, text tower, caption decoder, and MIM
+        // decoder in one layer collection, but Predict/ForwardForTraining intentionally
+        // execute only the vision tower for an image tensor. Mirror that public forward
+        // contract here; chaining the image embedding into the text tower feeds the
+        // projection width into attention weights sized for TextEmbeddingDim.
+        for (int i = 0; i < _visionEncoderEnd && i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// Predict returns the VISION-ENCODER output (the first <c>_visionEncoderEnd</c>
     /// layers), not a sequential pass over the whole Layers list (which also
