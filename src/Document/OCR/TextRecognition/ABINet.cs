@@ -359,6 +359,15 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> PreprocessTextImage(Tensor<T> image)
     {
         var processed = EnsureBatchDimension(image);
+        if (processed.Shape[2] != _imageHeight || processed.Shape[3] != ImageSize)
+        {
+            processed = Engine.Interpolate(
+                processed,
+                [_imageHeight, ImageSize],
+                InterpolateMode.Bilinear,
+                alignCorners: false);
+        }
+
         var normalized = new Tensor<T>(processed._shape);
 
         for (int i = 0; i < processed.Data.Length; i++)
@@ -498,11 +507,35 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     #region NeuralNetworkBase Implementation
 
+    /// <summary>
+    /// Runs ABINet's explicit sequential graph without the document base
+    /// class's inference-only CNN-to-sequence auto-reshape. The default ABINet
+    /// graph contains its own tape-compatible ReshapeLayer so inference and
+    /// training follow the same shape transitions.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        Tensor<T> output = input;
+        foreach (var layer in Layers)
+            output = layer.Forward(output);
+
+        return output;
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessTextImage(input);
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["ABINetOutput"] = PredictCore(input)
+        };
     }
 
     /// <inheritdoc/>
@@ -512,10 +545,17 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(
+                PreprocessTextImage(input),
+                expectedOutput,
+                _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

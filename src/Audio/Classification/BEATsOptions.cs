@@ -61,6 +61,44 @@ namespace AiDotNet.Audio.Classification;
 /// </remarks>
 public class BEATsOptions : ModelOptions
 {
+    /// <summary>Initializes BEATs options with the paper defaults.</summary>
+    public BEATsOptions()
+    {
+    }
+
+    /// <summary>Initializes an independent copy of an existing configuration.</summary>
+    public BEATsOptions(BEATsOptions other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        SampleRate = other.SampleRate;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        NumMels = other.NumMels;
+        FMin = other.FMin;
+        FMax = other.FMax;
+        PatchSize = other.PatchSize;
+        PatchStride = other.PatchStride;
+        EmbeddingDim = other.EmbeddingDim;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardDim = other.FeedForwardDim;
+        DropoutRate = other.DropoutRate;
+        AttentionDropoutRate = other.AttentionDropoutRate;
+        MaskProbability = other.MaskProbability;
+        MinMaskSpanLength = other.MinMaskSpanLength;
+        TokenizerIterations = other.TokenizerIterations;
+        CodebookSize = other.CodebookSize;
+        Threshold = other.Threshold;
+        WindowSize = other.WindowSize;
+        WindowOverlap = other.WindowOverlap;
+        CustomLabels = other.CustomLabels?.ToArray();
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        WarmUpSteps = other.WarmUpSteps;
+        LabelSmoothing = other.LabelSmoothing;
+    }
+
     #region Audio Preprocessing
 
     /// <summary>

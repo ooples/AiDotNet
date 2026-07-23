@@ -51,6 +51,45 @@ namespace AiDotNet.Audio.Classification;
 /// </remarks>
 public class ASTOptions : ModelOptions
 {
+    /// <summary>Initializes AST options with the paper defaults.</summary>
+    public ASTOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes an independent copy of an existing AST configuration.
+    /// </summary>
+    /// <param name="other">The configuration to copy.</param>
+    public ASTOptions(ASTOptions other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+
+        SampleRate = other.SampleRate;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        NumMels = other.NumMels;
+        FMin = other.FMin;
+        FMax = other.FMax;
+        PatchSize = other.PatchSize;
+        PatchStride = other.PatchStride;
+        EmbeddingDim = other.EmbeddingDim;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardDim = other.FeedForwardDim;
+        DropoutRate = other.DropoutRate;
+        AttentionDropoutRate = other.AttentionDropoutRate;
+        Threshold = other.Threshold;
+        WindowSize = other.WindowSize;
+        WindowOverlap = other.WindowOverlap;
+        CustomLabels = other.CustomLabels?.ToArray();
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        WarmUpEpochs = other.WarmUpEpochs;
+        LabelSmoothing = other.LabelSmoothing;
+        UseImageNetPretrain = other.UseImageNetPretrain;
+    }
+
     #region Audio Preprocessing
 
     /// <summary>

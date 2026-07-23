@@ -452,6 +452,51 @@ public class Cutie<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+        {
+            return new Dictionary<string, Tensor<T>>
+            {
+                ["ONNXOutput"] = PredictOnnx(input)
+            };
+        }
+
+        EnsureLayerRandomSeedsWired();
+
+        bool hasBatch = input.Rank == 4;
+        var frame = hasBatch ? input : AddBatchDimension(input);
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        // Cutie is a grouped graph rather than a sequential stack. In particular,
+        // the object encoder consumes image features concatenated with a mask, so
+        // the base sequential activation walker feeds it 32 channels instead of
+        // the required 33. Follow the same grouped path as training and expose one
+        // meaningful activation per stage.
+        var imageFeatures = EncodeImage(frame);
+        activations["ImageEncoder"] = imageFeatures;
+
+        var provisionalMask = Engine.ReduceMean(imageFeatures, new[] { 1 }, keepDims: true);
+        var objectFeatures = EncodeObject(imageFeatures, provisionalMask);
+        activations["ObjectEncoder"] = objectFeatures;
+
+        _memoryBank.Add((objectFeatures, objectFeatures));
+        Tensor<T> attended;
+        try
+        {
+            attended = AttendToMemory(imageFeatures);
+        }
+        finally
+        {
+            _memoryBank.RemoveAt(_memoryBank.Count - 1);
+        }
+
+        activations["MemoryAttention"] = attended;
+        activations["MaskDecoder"] = DecodeMask(attended);
+        return activations;
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)

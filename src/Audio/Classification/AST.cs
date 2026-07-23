@@ -510,7 +510,7 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -661,9 +661,10 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new ASTOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AST<T>(Architecture, mp, _options);
-        return new AST<T>(Architecture, _options);
+            return new AST<T>(Architecture, mp, options);
+        return new AST<T>(Architecture, options);
     }
 
     #endregion

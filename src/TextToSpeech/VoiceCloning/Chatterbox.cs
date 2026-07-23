@@ -202,11 +202,11 @@ public class Chatterbox<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+
+        // Chatterbox's native codec LM is the sequential Layers graph. Route
+        // through the canonical executor for deterministic evaluation,
+        // streaming materialize/release, and inference scratch recycling.
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -214,8 +214,16 @@ public class Chatterbox<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            // Use the optimizer selected by the public constructor instead of
+            // silently falling back to NeuralNetworkBase's generic default.
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -293,9 +301,10 @@ public class Chatterbox<T> : TtsModelBase<T>, ICodecTts<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptions = new ChatterboxOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Chatterbox<T>(Architecture, mp, _options);
-        return new Chatterbox<T>(Architecture, _options);
+            return new Chatterbox<T>(Architecture, mp, cloneOptions);
+        return new Chatterbox<T>(Architecture, cloneOptions);
     }
 
     private void ThrowIfDisposed()

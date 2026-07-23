@@ -3789,11 +3789,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                 var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
-                try {
-                    int _miss = 0; foreach (var pp in trainableParams) if (!allGrads.ContainsKey(pp)) _miss++;
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-                        $"[CHUNKED] engine={Engine.GetType().Name} nParams={trainableParams.Count} nGrads={allGrads.Count} missed={_miss}\n");
-                } catch { }
                 // Walk both the layer-collected params AND any network-
                 // level trainable tensors so the latter actually receive
                 // accumulated gradient updates.
@@ -6945,9 +6940,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var lossTensor = loss.ComputeTapeLoss(output, expected);
         LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-            $"[STREAMING-PATH-TAKEN] engine={Engine.GetType().Name}\n"); } catch { }
-
         // Sources = layer-owned trainable params + network-level extras
         // (cls/pos tokens, etc.), exactly the set the eager path optimizes.
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
@@ -6986,12 +6978,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // full weight set has to fit in RAM, which is what makes a model whose
             // gradients exceed memory trainable at all. The 8-bit StreamingAdam
             // epilogue runs inside the callback at each gradient's release point.
-            int _covOk = 0, _covMiss = 0;
             tape.ComputeGradientsStreaming(lossTensor, sources,
                 (source, grad) =>
                 {
-                    if (grad is null || grad.Length == 0) { _covMiss++; return; }
-                    _covOk++;
+                    if (grad is null || grad.Length == 0) return;
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -7000,8 +6990,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // next forward re-uploads current weights (parity with the eager/fused fixes).
                     if (Engine is DirectGpuTensorEngine _sg) _sg.InvalidateResidentWeightBuffer(source);
                 });
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-                $"[STREAMING clip=false] engine={Engine.GetType().Name} nSources={sources.Count} gradOk={_covOk} gradMiss={_covMiss}\n"); } catch { }
         }
         else if (twoPass)
         {
@@ -7174,8 +7162,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (_mixedPrecisionContext is null
             && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer, useStreamingDefaults))
         {
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-                $"[FUSED-PATH-TAKEN] engine={Engine.GetType().Name}\n"); } catch { }
             return;
         }
 
@@ -7602,11 +7588,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Passing sources directly can miss parameters when the tape backward
             // can't match view tensor references through the GradFn chain.
             var allGrads = tape.ComputeGradients(lossForBackward, sources: null);
-            try {
-                int _miss = 0; foreach (var pp in trainableParams) if (!allGrads.ContainsKey(pp)) _miss++;
-                System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gpu_gradcov.log"),
-                    $"[EAGER] engine={Engine.GetType().Name} nParams={trainableParams.Count} nGrads={allGrads.Count} missed={_miss}\n");
-            } catch { }
             var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var param in trainableParams)
@@ -10579,6 +10560,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // original (same guard the eager large/serialize paths use). Must run before any SetTrainingMode.
         copyBase.DisableAutoStreaming();
 
+        // Materialize the destination's lazy composite structure before taking
+        // the reflection snapshots. TransformerDecoderLayer creates its
+        // attention/FFN children on first shape resolution; without this pass
+        // the source walk contains those children while the fresh-clone walk
+        // contains only the empty parent. That mismatch rejected COW and sent
+        // AudioGen through the decoder's giant flat GetParameters concatenation.
+        int topLevelCount = Math.Min(_layers.Count, copyBase._layers.Count);
+        for (int i = 0; i < topLevelCount; i++)
+        {
+            if (_layers[i] is not LayerBase<T> srcTop
+                || copyBase._layers[i] is not LayerBase<T> dstTop
+                || dstTop is not TransformerDecoderLayer<T>
+                || dstTop.IsShapeResolved
+                || srcTop.ParameterCount <= 0)
+                continue;
+
+            int[] sourceInputShape = srcTop.GetInputShape();
+            if (sourceInputShape is not { Length: > 0 }
+                || !Array.TrueForAll(sourceInputShape, d => d > 0))
+                continue;
+
+            try { dstTop.ResolveStructureShapesOnly(sourceInputShape); }
+            catch (ArgumentException)
+            {
+                // The structural guards below retain the conservative eager
+                // fallback for layers that cannot accept the source shape.
+            }
+        }
+
         // Full-fidelity reflection walk: captures every trainable layer reachable from the model — both
         // those in the base _layers list AND those held in dedicated fields (e.g. a tabular transformer's
         // feature tokenizer / encoder stack / final layer-norm), which a _layers-only walk would miss,
@@ -10661,7 +10671,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Share trainable tensors copy-on-write (privatizes on the first in-place write to either side).
             var sp = src.GetTrainableParameters();
             var dp = dst.GetTrainableParameters();
-            if (sp.Count != dp.Count)
+            bool shapeOnlyDestination = dp.Count == 0
+                && dst is LayerBase<T> dstShapeOnly
+                && dstShapeOnly.IsShapeResolved;
+            if (sp.Count != dp.Count && !shapeOnlyDestination)
             {
                 (copy as IDisposable)?.Dispose();
                 return false;
@@ -10671,7 +10684,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 var shared = new Tensor<T>[sp.Count];
                 for (int p = 0; p < sp.Count; p++)
                     shared[p] = (Tensor<T>)sp[p].CloneShared();
-                dst.SetTrainableParameters(shared);
+                try { dst.SetTrainableParameters(shared); }
+                catch (ArgumentException)
+                {
+                    (copy as IDisposable)?.Dispose();
+                    return false;
+                }
             }
 
             // Copy serialization EXTRAS (non-trainable trained state NOT in GetTrainableParameters —

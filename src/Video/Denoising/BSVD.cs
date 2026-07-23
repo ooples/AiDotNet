@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -89,7 +90,14 @@ public class BSVD<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new BSVDOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
         IsBlindDenoising = true;
         InitializeLayers();
     }
@@ -155,7 +163,14 @@ public class BSVD<T> : VideoDenoisingBase<T>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         var preprocessed = PreprocessFrames(input);
-        return base.ForwardForTraining(preprocessed);
+        var modelOutput = base.ForwardForTraining(preprocessed);
+
+        // Keep the public output contract during tape-based training as well
+        // as inference. Engine.Interpolate participates in the active
+        // computation tape, unlike a manually populated output tensor, so
+        // gradients still flow through the decoder when its native output is
+        // a few pixels short of the requested frame size.
+        return RestoreSpatialResolution(modelOutput);
     }
 
     /// <inheritdoc/>
@@ -183,7 +198,35 @@ public class BSVD<T> : VideoDenoisingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        var denormalized = DenormalizeFrames(modelOutput);
+        return RestoreSpatialResolution(denormalized);
+    }
+
+    private Tensor<T> RestoreSpatialResolution(Tensor<T> output)
+    {
+        int targetHeight = Architecture.InputHeight;
+        int targetWidth = Architecture.InputWidth;
+
+        // The shared native video-denoising decoder can be a few pixels short
+        // after its stride-2 convolution/deconvolution path (for example,
+        // 32x32 becomes 29x29). BSVD's public contract returns a denoised
+        // frame at the source resolution, so restore that resolution here.
+        if (output.Shape.Length != 4
+            || targetHeight <= 0
+            || targetWidth <= 0
+            || (output.Shape[2] == targetHeight && output.Shape[3] == targetWidth))
+        {
+            return output;
+        }
+
+        return Engine.Interpolate(
+            output,
+            [targetHeight, targetWidth],
+            InterpolateMode.Bilinear,
+            alignCorners: false);
+    }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -192,7 +235,12 @@ public class BSVD<T> : VideoDenoisingBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // ForwardForTraining operates in the normalized model domain,
+            // while Predict/Denoise returns denormalized public-space pixels.
+            // Normalize the supervision target as well so the tape optimizes
+            // the same objective that callers measure after postprocessing.
+            var normalizedExpected = NormalizeFrames(expected);
+            TrainWithTape(input, normalizedExpected, _optimizer);
         }
         finally
         {

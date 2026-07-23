@@ -202,11 +202,11 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+
+        // Native CosyVoice is the ordinary sequential Layers graph. Use the
+        // canonical executor so inference gets deterministic eval mode,
+        // streaming materialize/release, and per-layer scratch recycling.
+        return base.PredictCore(input);
     }
 
     /// <inheritdoc />
@@ -217,7 +217,10 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Honor the optimizer selected by the public constructor. The
+            // optimizer-less overload falls back to NeuralNetworkBase's
+            // generic default and silently discards CosyVoice's AdamW choice.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -305,9 +308,10 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptions = new CosyVoiceOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CosyVoice<T>(Architecture, mp, _options);
-        return new CosyVoice<T>(Architecture, _options);
+            return new CosyVoice<T>(Architecture, mp, cloneOptions);
+        return new CosyVoice<T>(Architecture, cloneOptions);
     }
 
     private void ThrowIfDisposed()
