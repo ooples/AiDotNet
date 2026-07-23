@@ -15,5 +15,15 @@ public class IndexTTS2Options : CodecTtsOptions
         NumLLMLayers = 12;
         NumHeads = 8;
         DropoutRate = 0.1;
+        LearningRate = 2e-4;
+    }
+
+    /// <summary>Initializes a new instance by copying all user-customizable options.</summary>
+    /// <param name="other">The options instance to copy.</param>
+    public IndexTTS2Options(IndexTTS2Options other)
+        : base(other)
+    {
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
     }
 }

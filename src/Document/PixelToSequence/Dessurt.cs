@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -144,7 +145,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         _decoderLayers = decoderLayers;
         _numHeads = numHeads;
         _vocabSize = vocabSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -192,7 +193,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         _decoderLayers = decoderLayers;
         _numHeads = numHeads;
         _vocabSize = vocabSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -206,6 +207,24 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     }
 
     #endregion
+
+    /// <summary>
+    /// Creates the optimizer used by the original Dessurt training recipe.
+    /// </summary>
+    /// <remarks>
+    /// Davis et al. use AdamW with a learning rate of 1e-4 and weight decay of
+    /// 0.01 (section 4.6). A caller-supplied optimizer still takes precedence in
+    /// both constructors, so every optimizer and hyperparameter remains fully
+    /// customizable.
+    /// </remarks>
+    private IOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                WeightDecay = 0.01
+            });
 
     #region Initialization
 
@@ -589,10 +608,27 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         EnsureNativeInitialized();
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape already performs the optimizer step. The previous
+            // implementation followed it with UpdateParameters(CollectGradients),
+            // applying a second, fixed-rate update and causing longer training
+            // runs to drift upward. Use the caller-supplied optimizer as the
+            // single source of truth and fail loudly if it cannot drive tape
+            // gradients instead of silently substituting the base optimizer.
+            var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+                ?? throw new InvalidOperationException(
+                    "Dessurt training requires an optimizer implementing " +
+                    "IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
+            // PredictCore evaluates the ImageNet-normalized document. Train on that same
+            // representation so the optimizer descends the objective users observe from
+            // Predict instead of fitting raw pixels and being evaluated on normalized ones.
+            TrainWithTape(PreprocessDocument(input), expectedOutput, gradientOptimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

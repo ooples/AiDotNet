@@ -644,6 +644,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // architecture/options customization remain unchanged. ContextNet also receives the audio
         // family's existing smoke-iteration caps, while CUPS is measured at float before any cap.
         "CUPS", "ContextNet",
+        // #1789 run 29966681393: pin every generated model implicated by the currently failing
+        // resource-bound shards to FP32. The shard-wide rule below already floats supported A-I/N-Z
+        // families, but the audio/TTS smoke-iteration overrides intentionally key off this explicit
+        // roster. Listing the models here therefore ensures AudioLM, E2TTS, and IndexTTS2 receive
+        // both halves of the established mitigation (float values plus bounded training probes), and
+        // keeps all other implicated fixtures in float if shard boundaries change. Production
+        // constructors, research-paper defaults, and public customization surfaces are untouched.
+        "AudioLM", "BayesianNeuralNetwork", "DeCLIP", "Dessurt", "DocGCN", "E2TTS",
+        "IndexTTS2", "LayoutLMv2", "LLM2CLIP", "Mamba2LanguageModel", "NemotronSpeech", "PatchTST", "TimeGPT",
+        // Zamba/Zamba2's 32,000-way language-model heads make their uncapped 50/200-step
+        // MoreData probes exceed the 120-second gate. Keep the explicit precision-first
+        // classification even though the current T-Z resource-shard rule also selects them.
+        "ZambaLanguageModel", "Zamba2LanguageModel",
         // AST (Gong et al. 2021): a 12-layer ViT-style residual transformer (CreateDefaultASTLayers,
         // AudioClassifier family — AudioClassifierTestBase<T> is generic). Restoring the paper's residual
         // TransformerEncoderLayer blocks (commit 297f65351) fixed its flat-loss training failures, but the
@@ -986,6 +999,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // FP32 is applied above first; retain the full paper architecture and trim only repeated
         // generated training iterations that exceeded the per-test CI budget.
         "RealESRGANVideo", "SlowFast",
+    };
+
+    // These #1789 fixtures already use FP32 and public scaffold-scale model options, but the
+    // base class's 50/200-step and 100-step convergence probes still exceed the CI timeout.
+    // Bound repetition only; retain the original numerical tolerances and decrease thresholds.
+    private static readonly System.Collections.Generic.HashSet<string> BoundedGeneratedTrainingClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        "DeCLIP", "DocGCN", "LLM2CLIP", "Mamba2LanguageModel",
+        "ZambaLanguageModel", "Zamba2LanguageModel",
     };
 
     // Attribute metadata names
@@ -2741,6 +2764,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "TextHiddenDim = 32, TextEncoderLayers = 1, TextEncoderHeads = 2, " +
                     "VocabSize = 64, MaxTextLength = 8, ProjectionDim = 4, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "Dessurt" && model.TypeParameterCount == 1)
+            {
+                // Dessurt's paper defaults remain the 1024-wide, 24+12-layer vision/text model.
+                // The generic invariant harness supplies one synthetic image and one dense target,
+                // so exercise Dessurt's documented custom-architecture path with a small trainable
+                // image projection. This avoids feeding channel-first convolution output directly
+                // into a channels-last attention block, while testing that user-supplied layers and
+                // all public scale parameters are honored. No production default is changed.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4, " +
+                    "layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { " +
+                    "new AiDotNet.NeuralNetworks.Layers.FlattenLayer<double>(), " +
+                    "new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(4, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<double>()) }), " +
+                    "imageSize: 32, maxSequenceLength: 8, encoderDim: 32, decoderDim: 32, " +
+                    "encoderLayers: 1, decoderLayers: 1, numHeads: 4, vocabSize: 64)";
+            }
             else if (model.ClassName == "MATCHA" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
@@ -2830,6 +2871,104 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "TimescaleMin = 0.0, TimescaleMax = double.PositiveInfinity, UseGate = true, " +
                     "UseNormalization = false }, numFeatures: 1)";
             }
+            else if ((model.ClassName is "DeCLIP" or "LLM2CLIP") && model.TypeParameterCount == 1)
+            {
+                // These contrastive encoders retain their paper-scale defaults in production, but
+                // their generated FP32 fixtures still exceeded the 120/180-second training gates.
+                // Exercise the same public image/text transformer, projection, and contrastive-loss
+                // customization surface at scaffold scale. No convergence tolerance is weakened.
+                string optionsType = model.ClassName == "DeCLIP" ? "DeCLIPOptions" : "LLM2CLIPOptions";
+                string modelSpecificOptions = model.ClassName == "DeCLIP"
+                    ? "ImageSelfSupervisedWeight = 1.0, TextMLMWeight = 1.0, NearestNeighborWeight = 1.0, NumNearestNeighbors = 2, TextMaskingRatio = 0.15"
+                    : "LLMHiddenDim = 32, UseLoRA = true, LoRARank = 4, FreezeVisionEncoder = false";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 16), " +
+                    $"new AiDotNet.VisionLanguage.Encoders.{optionsType} {{ ImageSize = 32, PatchSize = 8, " +
+                    "VisionEmbeddingDim = 32, NumVisionLayers = 2, NumVisionHeads = 4, VisionFfnMultiplier = 2, " +
+                    "TextEmbeddingDim = 32, MaxSequenceLength = 8, VocabSize = 64, NumTextLayers = 2, " +
+                    $"NumTextHeads = 4, ProjectionDim = 16, DropoutRate = 0.0, {modelSpecificOptions} }})";
+            }
+            else if (model.ClassName == "DocGCN" && model.TypeParameterCount == 1)
+            {
+                // DocGCN's production defaults remain the paper-scale 256-dimensional, three-layer
+                // document graph. Its generated FP32 MoreData probe spent roughly twenty minutes on
+                // 250 optimizer steps. Use the public dimensions to retain the complete node/edge
+                // graph-convolution and classifier path at scaffold scale with the original assertions.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 16, outputSize: 4), nodeDim: 16, edgeDim: 8, " +
+                    "gcnLayers: 1, numClasses: 4, maxNodes: 16)";
+            }
+            else if (model.ClassName == "Mamba2LanguageModel" && model.TypeParameterCount == 1)
+            {
+                // The production constructor retains its published/default language-model scale and
+                // exposes every dimension as a public argument. The generated invariant fixture uses
+                // that same public customization path with a small vocabulary and SSD stack: the
+                // default 50,277-way head made one synthetic target contain 6.4M values and exhausted
+                // the runner before the recurrence itself could be meaningfully checked.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
+                    "numLayers: 2, stateDimension: 16, numHeads: 4, maxSeqLength: 32)";
+            }
+            else if (model.ClassName == "ZambaLanguageModel" && model.TypeParameterCount == 1)
+            {
+                // Zamba's generated MoreData invariant times out at 120 seconds even after
+                // applying FP32. Use the model's public constructor to retain the embedding ->
+                // Mamba/shared-attention hybrid -> RMSNorm -> LM-head topology at scaffold scale.
+                // The production defaults and every constructor customization point are untouched.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 128, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
+                    "numLayers: 2, stateDimension: 16, attentionInterval: 2, maxSeqLength: 128)";
+            }
+            else if (model.ClassName == "Zamba2LanguageModel" && model.TypeParameterCount == 1)
+            {
+                // Zamba2 has the same 32,000-way/12-layer generated-test cost profile as
+                // Zamba, with multi-head SSD blocks. Keep that distinct topology and reduce
+                // only its public width/depth/vocabulary/context arguments for the FP32 fixture.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 128, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
+                    "numLayers: 2, stateDimension: 16, numHeads: 4, attentionInterval: 2, maxSeqLength: 128)";
+            }
+            else if (model.ClassName == "TimeGPT" && model.TypeParameterCount == 1)
+            {
+                // TimeGPT-1 keeps its paper-scale 512-context, 96-horizon, 1024-wide,
+                // 24-layer defaults in production. Even at FP32 that foundation configuration
+                // exhausted the 16 GB runner during the generated training invariants. Exercise
+                // the same transformer architecture through its public options surface at CI-smoke
+                // scale; the matching forecasting shapes are emitted below.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.TimeGPTOptions<double> { ContextLength = 64, " +
+                    "ForecastHorizon = 8, HiddenDimension = 64, NumLayers = 2, NumHeads = 4, " +
+                    "DropoutRate = 0.0, UseConformalPrediction = true, ConfidenceLevel = 0.90, " +
+                    "FineTuningSteps = 0, FineTuningLearningRate = 1e-5 }, numFeatures: 1)";
+            }
+            else if (model.ClassName == "NemotronSpeech" && model.TypeParameterCount == 1)
+            {
+                // Nemotron-Speech keeps NVIDIA's paper-scale 1024/2048-wide, 24+32-layer,
+                // 65,536-token defaults in production. The generated invariant fixture exercises
+                // the same Fast-Conformer -> adapter -> Nemotron decoder architecture through the
+                // public options object at a scale that remains resident on a 16 GB CPU runner.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "new AiDotNet.SpeechRecognition.NeMo.NemotronSpeechOptions { " +
+                    "SampleRate = 16000, MaxAudioLengthSeconds = 1, EncoderDim = 64, DecoderDim = 64, " +
+                    "NumEncoderLayers = 2, NumDecoderLayers = 2, NumAttentionHeads = 4, " +
+                    "NumMels = 32, VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+            }
             else if (model.ClassName == "TimeSformer" && model.TypeParameterCount == 1)
             {
                 // TimeSformer has a paper-scale parameterless constructor
@@ -2858,6 +2997,56 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 64, outputSize: 256))";
+            }
+            else if (model.ClassName == "E2TTS" && model.TypeParameterCount == 1)
+            {
+                // E2 TTS retains the paper's 335M-parameter configuration by default
+                // (24 layers, 16 heads, 1024-wide, 399 characters, 100 mel bins).
+                // Its FP32 fixture still takes several seconds per step and a two-step
+                // randomly initialized paper-scale run overshoots. Exercise the same
+                // character embedding -> Transformer -> mel projection through the
+                // public options surface at CI scale. No production default is changed.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 80), " +
+                    "new AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions { TextEncoderDim = 32, LLMDim = 32, " +
+                    "NumEncoderLayers = 0, NumLLMLayers = 2, NumHeads = 4, VocabSize = 64, " +
+                    "MelChannels = 80, NumCodebooks = 1, CodebookSize = 80, MaxTextLength = 8, " +
+                    "MaxMelLength = 8, DropoutRate = 0.0, LearningRate = 7.5e-5 })";
+            }
+            else if (model.ClassName == "IndexTTS2" && model.TypeParameterCount == 1)
+            {
+                // IndexTTS2's production defaults retain its paper-scale autoregressive
+                // text-to-semantic stack and paper AdamW learning rate. The generated
+                // invariant uses the same embedding -> Transformer -> acoustic-token
+                // projection through public options at CI scale so strict convergence
+                // can be tested without a 12-layer, 8192-way CPU update.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 80), " +
+                    "new AiDotNet.TextToSpeech.Latest.IndexTTS2Options { TextEncoderDim = 32, LLMDim = 32, " +
+                    "NumEncoderLayers = 1, NumLLMLayers = 2, NumHeads = 4, VocabSize = 64, " +
+                    "NumCodebooks = 1, CodebookSize = 80, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    "DropoutRate = 0.0, LearningRate = 2e-4 })";
+            }
+            else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // AudioLM keeps the paper's three-stage scale in production: each
+                // decoder-only Transformer is 1024-wide with 12 layers, 16 heads,
+                // and a 12x1024 SoundStream vocabulary. The generated invariant
+                // exercises that codec-LM topology through public options at CPU scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 80), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.AudioLMOptions { TextEncoderDim = 32, LLMDim = 32, " +
+                    "NumEncoderLayers = 0, NumLLMLayers = 2, NumHeads = 4, VocabSize = 64, " +
+                    "NumCodebooks = 1, CodebookSize = 80, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    "DropoutRate = 0.0, LearningRate = 1e-4 })";
             }
             else if (model.ClassName == "StepAudio" && model.TypeParameterCount == 1)
             {
@@ -3888,6 +4077,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.SpeechRecognition.CTCVariants.CIFDecoderOptions { EncoderDim = 32, " +
                     "NumEncoderLayers = 2, VocabSize = 64, NumMels = 32 })";
             }
+            else if (model.ClassName == "SelfConditionedCTC" && model.TypeParameterCount == 1)
+            {
+                // Self-Conditioned CTC keeps the paper's 512-wide, 18-layer Conformer and 5,000-way
+                // CTC head as its production default. Float is the first mitigation, but the resulting
+                // generated fixture still allocates more than 13 GB before its first test can complete
+                // on the 16 GB runner. Exercise the identical Conformer -> self-conditioned CTC topology
+                // through the public options at scaffold scale; production defaults and every public
+                // customization point remain untouched.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTCOptions { EncoderDim = 32, " +
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 4, " +
+                    "MaxTextLength = 16, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "USM" && model.TypeParameterCount == 1)
+            {
+                // Google USM retains its paper-scale 1,536-wide, 32-layer BEST-RQ encoder and
+                // 32,000-way multilingual CTC head in production. The generated class is already
+                // FP32 with bounded training iterations, but still did not finish in five minutes.
+                // Exercise the same foundation-ASR topology through the public options at CI scale;
+                // production defaults and all user customization points remain unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.USMOptions { EncoderDim = 64, " +
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 4, " +
+                    "MaxTextLength = 16, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "OLMoASR" && model.TypeParameterCount == 1)
             {
                 // OLMoASR (LLM-integrated ASR). Defaults (EncoderDim=512, 12 layers, VocabSize=32000) make
@@ -3915,6 +4135,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.SpeechRecognition.LLMIntegrated.SambaASROptions { EncoderDim = 32, " +
                     "NumEncoderLayers = 2, StateDimension = 8, ExpandFactor = 2, VocabSize = 64, " +
                     "NumMels = 32, MaxSequenceLength = 64 })";
+            }
+            else if (model.ClassName == "RealBasicVSRSharp" && model.TypeParameterCount == 1)
+            {
+                // RealBasicVSR-Sharp retains the paper's 64-channel, 30-block, 4x production
+                // architecture. Its generated fixture is already FP32, but the first invariant
+                // still takes about 21 seconds and several per-test model instances grow the host
+                // past 3 GB. Exercise the same residual SR/pixel-shuffle topology through the
+                // public options at CI scale; production defaults and user customization remain
+                // unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.RealBasicVSRSharpOptions { NumFeatures = 16, " +
+                    "NumResBlocks = 2, CleaningModuleBlocks = 2, ScaleFactor = 2, NumFrames = 4, " +
+                    "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Cutie" && model.TypeParameterCount == 1)
             {
@@ -5354,6 +5590,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        return tensor;");
             sb.AppendLine("    }");
         }
+        else if (model.ClassName == "Dessurt")
+        {
+            // Match the custom trainable image projection emitted above. The leading axis is an
+            // explicit batch so FlattenLayer produces [1, 3072] and the classifier returns [1, 4].
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
+        }
         else if (model.ClassName == "MATCHA"
                  && typeName.StartsWith(
                      "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
@@ -5904,6 +6147,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("            $\"Text-to-mel TTS model produced identical output for distinct legal token IDs: L2 distance = {l2:E3}. \" +");
                 sb.AppendLine("            \"Embedding lookup or downstream acoustic conditioning may be broken.\");");
                 sb.AppendLine("    }");
+                if (Fp32TestClassNames.Contains(model.ClassName))
+                {
+                    // Paper-scale text-to-mel models such as E2TTS already run in FP32, but their
+                    // default repeated training probes still exceed the per-test CI budget.
+                    sb.AppendLine("    protected override int TrainingIterations => 2;");
+                    sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                    sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "E2TTS" ? 15 : 2)};");
+                }
             }
             else
             {
@@ -5913,8 +6165,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // flow+decoder stack's loss oscillates over the default 50->200-iter window,
                 // so compare MoreData in the early stable regime (the long<=short assertion
                 // is unchanged; same documented use of the iteration virtuals as elsewhere).
-                sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
+                bool useFp32TtsSmokeIterations = Fp32TestClassNames.Contains(model.ClassName);
+                sb.AppendLine(useFp32TtsSmokeIterations
+                    ? "    protected override int MoreDataShortIterations => 1;"
+                    : "    protected override int MoreDataShortIterations => 3;");
+                sb.AppendLine(useFp32TtsSmokeIterations
+                    ? "    protected override int MoreDataLongIterations => 2;"
+                    : "    protected override int MoreDataLongIterations => 10;");
+                if (useFp32TtsSmokeIterations)
+                {
+                    // Paper-scale TTS models such as AudioLM and IndexTTS2 still exceed the
+                    // per-test CPU budget in FP32 when the other repeated training probes use
+                    // their generic iteration counts. Keep the production architecture and
+                    // defaults intact while bounding only the generated invariant scaffold.
+                    sb.AppendLine("    protected override int TrainingIterations => 2;");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" ? 15 : 2)};");
+                }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling
                 // TTS classes ran first on the same worker) makes training diverge over
@@ -5925,7 +6191,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isAudioModel)
         {
-            if (model.ClassName is "DistilWhisper" or "FasterWhisper" or "KotobaWhisper"
+            if (model.ClassName == "NemotronSpeech")
+            {
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 64 };");
+                sb.AppendLine("    protected override int TrainingIterations => 2;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+            }
+            else if (model.ClassName is "DistilWhisper" or "FasterWhisper" or "KotobaWhisper"
                 or "WhisperLargeV3" or "WhisperLargeV3Turbo" or "WhisperLive" or "WhisperX"
                 or "Moonshine" or "WhisperCPP" or "CanaryFlash" or "NeMoMultitask")
             {
@@ -6139,7 +6414,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // 1D models in families that support InputShape override:
             // match the architecture's inputSize
             bool isLang = model.Domains.Contains(2) || model.Domains.Contains(5);
-            int dim = isLang ? 128 : 16;
+            int dim = model.ClassName == "Mamba2LanguageModel" ? 32 : isLang ? 128 : 16;
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
 
@@ -6204,6 +6479,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // INPUT shape only — targets (a different shape, via CreateRandomTargetTensor) stay
                 // continuous as their loss expects. The model is UNCHANGED (still paper-faithful token
                 // embeddings); this only feeds it the discrete token input a lookup model actually consumes.
+                // The reduced Mamba2/Zamba/Zamba2 generated fixtures intentionally use vocabSize=128
+                // through their public constructors. The inherited ScaledInput test multiplies every
+                // generated token by 10, so constrain these fixtures' source tokens to [0, 12):
+                // both original and scaled sequences remain legal token IDs while the unchanged test
+                // still exercises real input sensitivity.
+                int randomTokenUpperBound =
+                    model.ClassName is "Mamba2LanguageModel" or "ZambaLanguageModel" or "Zamba2LanguageModel"
+                        ? 12
+                        : 100;
                 sb.AppendLine();
                 sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
                 sb.AppendLine("    {");
@@ -6214,7 +6498,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        if (isInputShape)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("                tensor[i] = rng.Next(0, 100);");
+                sb.AppendLine($"                tensor[i] = rng.Next(0, {randomTokenUpperBound});");
                 sb.AppendLine("            return tensor;");
                 sb.AppendLine("        }");
                 sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
@@ -6696,8 +6980,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // OutputShape must match the architecture so forward- and
             // training-path shapes align (e.g. ChronosBolt outputs
             // [B, ForecastHorizon, NumQuantiles], not the default [1, 1]).
-            int paperCtx = GetForecastingPaperContextLength(model.ClassName);
-            string paperOutputShape = GetForecastingPaperOutputShape(model.ClassName);
+            bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT";
+            int paperCtx = usesReducedTimeGptFixture
+                ? 64
+                : GetForecastingPaperContextLength(model.ClassName);
+            string paperOutputShape = usesReducedTimeGptFixture
+                ? "8"
+                : GetForecastingPaperOutputShape(model.ClassName);
             string paperInputShape = GetForecastingPaperInputShape(model.ClassName, paperCtx);
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {paperInputShape} }};");
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ {paperOutputShape} }};");
@@ -6782,6 +7071,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 : "    protected override int MemorizationTaskIterations => 15;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
             sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.5;");
+        }
+
+        if (BoundedGeneratedTrainingClassNames.Contains(model.ClassName))
+        {
+            bool needsOptimizerWarmup =
+                model.ClassName is "Mamba2LanguageModel" or "Zamba2LanguageModel";
+            sb.AppendLine($"    protected override int TrainingIterations => {(model.ClassName == "Zamba2LanguageModel" ? 15 : 5)};");
+            sb.AppendLine($"    protected override int MoreDataShortIterations => {(needsOptimizerWarmup ? 5 : 1)};");
+            sb.AppendLine($"    protected override int MoreDataLongIterations => {(needsOptimizerWarmup ? 15 : 2)};");
+            sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
         }
 
         // MoreData_ShouldNotDegrade trains two clones on TWO DIFFERENT seeded random tasks

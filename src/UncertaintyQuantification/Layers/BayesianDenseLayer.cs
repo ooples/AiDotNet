@@ -1,4 +1,6 @@
 ﻿using AiDotNet.Extensions;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
@@ -34,24 +36,22 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     private readonly int _outputSize;
     private readonly T _priorSigma;
 
-    // Weight parameters (mean and log variance)
-    private Matrix<T> _weightMean = new Matrix<T>(0, 0);
-    private Matrix<T> _weightLogVar = new Matrix<T>(0, 0);
-    private Vector<T> _biasMean = new Vector<T>(0);
-    private Vector<T> _biasLogVar = new Vector<T>(0);
+    // Posterior parameters are tensors, not detached Matrix/Vector copies. The
+    // tape keys gradients by tensor reference identity, so Forward must use the
+    // same instances exposed by GetTrainableParameters. Fields are mutable
+    // because the contiguous ParameterBuffer rebinds them to buffer-backed
+    // views through SetTrainableParameters.
+    private Tensor<T> _weightMean = Tensor<T>.Empty();
+    private Tensor<T> _weightLogVar = Tensor<T>.Empty();
+    private Tensor<T> _biasMean = Tensor<T>.Empty();
+    private Tensor<T> _biasLogVar = Tensor<T>.Empty();
 
-    // Sampled weights for current forward pass
-    private Matrix<T>? _sampledWeights;
-    private Vector<T>? _sampledBias;
-
-    // Gradients
-    private Matrix<T> _weightMeanGradient = new Matrix<T>(0, 0);
-    private Matrix<T> _weightLogVarGradient = new Matrix<T>(0, 0);
-    private Vector<T> _biasMeanGradient = new Vector<T>(0);
-    private Vector<T> _biasLogVarGradient = new Vector<T>(0);
-
-    private Tensor<T>? _lastInput;
-    private Tensor<T>? _lastPreActivation;
+    // SampleWeights stores epsilon, rather than a detached sampled parameter.
+    // Forward applies the reparameterization with Engine operations so both μ
+    // and log σ² remain connected to the active gradient tape.
+    private Tensor<T>? _sampledWeightEpsilon;
+    private Tensor<T>? _sampledBiasEpsilon;
+    private bool _samplePending;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
@@ -89,8 +89,13 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     /// </para>
     /// </remarks>
     public BayesianDenseLayer(int inputSize, int outputSize, IActivationFunction<T>? scalarActivation, double priorSigma = 1.0, int? randomSeed = null)
-        : base([inputSize], [outputSize], scalarActivation ?? new ReLUActivation<T>())
+        : base([inputSize], [outputSize], scalarActivation ?? new IdentityActivation<T>())
     {
+        if (inputSize <= 0) throw new ArgumentOutOfRangeException(nameof(inputSize));
+        if (outputSize <= 0) throw new ArgumentOutOfRangeException(nameof(outputSize));
+        if (double.IsNaN(priorSigma) || double.IsInfinity(priorSigma) || priorSigma <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(priorSigma), "priorSigma must be finite and positive.");
+
         _inputSize = inputSize;
         _outputSize = outputSize;
         _priorSigma = NumOps.FromDouble(priorSigma);
@@ -103,12 +108,12 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     }
 
     /// <inheritdoc/>
-    public override long ParameterCount => _outputSize * _inputSize * 2 + _outputSize * 2;
+    public override long ParameterCount => 2L * _outputSize * _inputSize + 2L * _outputSize;
 
     private void InitializeParameters()
     {
         // Initialize weight means with Xavier initialization
-        _weightMean = new Matrix<T>(_outputSize, _inputSize);
+        _weightMean = new Tensor<T>([_outputSize, _inputSize]);
         var scale = Math.Sqrt(2.0 / (_inputSize + _outputSize));
         for (int i = 0; i < _outputSize; i++)
         {
@@ -119,7 +124,7 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         }
 
         // Initialize weight log variances to small values (start relatively confident)
-        _weightLogVar = new Matrix<T>(_outputSize, _inputSize);
+        _weightLogVar = new Tensor<T>([_outputSize, _inputSize]);
         for (int i = 0; i < _outputSize; i++)
         {
             for (int j = 0; j < _inputSize; j++)
@@ -129,19 +134,52 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         }
 
         // Initialize bias parameters
-        _biasMean = new Vector<T>(_outputSize);
-        _biasLogVar = new Vector<T>(_outputSize);
+        _biasMean = new Tensor<T>([_outputSize]);
+        _biasLogVar = new Tensor<T>([_outputSize]);
         for (int i = 0; i < _outputSize; i++)
         {
             _biasMean[i] = NumOps.Zero;
             _biasLogVar[i] = NumOps.FromDouble(-5.0);
         }
+    }
 
-        // Initialize gradients
-        _weightMeanGradient = new Matrix<T>(_outputSize, _inputSize);
-        _weightLogVarGradient = new Matrix<T>(_outputSize, _inputSize);
-        _biasMeanGradient = new Vector<T>(_outputSize);
-        _biasLogVarGradient = new Vector<T>(_outputSize);
+    /// <inheritdoc/>
+    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() =>
+        new[] { _weightMean, _weightLogVar, _biasMean, _biasLogVar };
+
+    /// <inheritdoc/>
+    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (parameters.Count != 4)
+            throw new ArgumentException(
+                "Expected exactly 4 posterior tensors (weight mean, weight log variance, bias mean, bias log variance).",
+                nameof(parameters));
+
+        ValidateShapeMatch(parameters[0], _weightMean, nameof(_weightMean));
+        ValidateShapeMatch(parameters[1], _weightLogVar, nameof(_weightLogVar));
+        ValidateShapeMatch(parameters[2], _biasMean, nameof(_biasMean));
+        ValidateShapeMatch(parameters[3], _biasLogVar, nameof(_biasLogVar));
+
+        _weightMean = parameters[0];
+        _weightLogVar = parameters[1];
+        _biasMean = parameters[2];
+        _biasLogVar = parameters[3];
+    }
+
+    private static void ValidateShapeMatch(Tensor<T> incoming, Tensor<T> existing, string parameterName)
+    {
+        if (incoming.Rank != existing.Rank || incoming.Length != existing.Length)
+            throw new ArgumentException(
+                $"Shape mismatch for {parameterName}: incoming [{string.Join(",", incoming.Shape)}], " +
+                $"expected [{string.Join(",", existing.Shape)}].");
+
+        for (int dimension = 0; dimension < incoming.Rank; dimension++)
+        {
+            if (incoming.Shape[dimension] != existing.Shape[dimension])
+                throw new ArgumentException(
+                    $"Shape mismatch for {parameterName}: incoming [{string.Join(",", incoming.Shape)}], " +
+                    $"expected [{string.Join(",", existing.Shape)}].");
+        }
     }
 
     /// <summary>
@@ -149,24 +187,42 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     /// </summary>
     public void SampleWeights()
     {
-        _sampledWeights = new Matrix<T>(_outputSize, _inputSize);
+        FillSampleEpsilon();
+        _samplePending = true;
+    }
+
+    private void FillSampleEpsilon()
+    {
+        _sampledWeightEpsilon ??= new Tensor<T>([_outputSize, _inputSize]);
         for (int i = 0; i < _outputSize; i++)
         {
             for (int j = 0; j < _inputSize; j++)
             {
-                var mean = _weightMean[i, j];
-                var std = NumOps.Sqrt(NumOps.Exp(_weightLogVar[i, j]));
-                var epsilon = NumOps.FromDouble(NextGaussian());
-                _sampledWeights[i, j] = NumOps.Add(mean, NumOps.Multiply(std, epsilon));
+                _sampledWeightEpsilon[i, j] = NumOps.FromDouble(NextGaussian());
             }
         }
 
-        // Vectorized reparameterization trick: bias = mean + sqrt(exp(logvar)) * epsilon
-        var biasStd = (Vector<T>)Engine.Sqrt(Engine.Exp(_biasLogVar));
-        var biasEpsilon = new Vector<T>(_outputSize);
+        _sampledBiasEpsilon ??= new Tensor<T>([_outputSize]);
         for (int i = 0; i < _outputSize; i++)
-            biasEpsilon[i] = NumOps.FromDouble(NextGaussian());
-        _sampledBias = (Vector<T>)Engine.Add(_biasMean, Engine.Multiply(biasStd, biasEpsilon));
+            _sampledBiasEpsilon[i] = NumOps.FromDouble(NextGaussian());
+
+        // A compiled tape retains these epsilon tensors by reference. Notify
+        // persistent-device backends after in-place refresh so replay observes
+        // the new posterior sample without rebuilding the fused optimizer plan.
+        Engine.InvalidatePersistentTensor(_sampledWeightEpsilon);
+        Engine.InvalidatePersistentTensor(_sampledBiasEpsilon);
+    }
+
+    /// <summary>
+    /// Refreshes the posterior sample captured by a compiled training tape.
+    /// </summary>
+    internal void RefreshCompiledTrainingSample()
+    {
+        if (!IsTrainingMode)
+            return;
+
+        FillSampleEpsilon();
+        _samplePending = false;
     }
 
     /// <summary>
@@ -237,61 +293,82 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        _lastPreActivation = null;
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank == 0)
+            throw new ArgumentException("BayesianDenseLayer expects an input with at least one dimension.", nameof(input));
 
-        // Always resample weights during training for proper Bayesian inference.
-        // During inference, reuse previously sampled weights for consistency.
-        if (_sampledWeights == null || _sampledBias == null || IsTrainingMode)
+        int featureSize = input.Rank == 1 ? input.Length : input.Shape[input.Rank - 1];
+        if (featureSize != _inputSize)
+            throw new ArgumentException(
+                $"BayesianDenseLayer expects last-dimension feature size {_inputSize}, got {featureSize} " +
+                $"for input shape [{string.Join(",", input.Shape)}].",
+                nameof(input));
+
+        // Ordinary inference uses posterior means. Explicit SampleWeights calls
+        // (PredictWithUncertainty) are consumed once. Training draws a fresh
+        // reparameterized sample for every eager forward; compiled replay
+        // refreshes the same captured tensor references between steps.
+        bool useSample = IsTrainingMode || _samplePending;
+        if (IsTrainingMode && !_samplePending)
+            FillSampleEpsilon();
+        if (useSample && (_sampledWeightEpsilon is null || _sampledBiasEpsilon is null))
+            throw new InvalidOperationException("Bayesian posterior sample was not initialized.");
+
+        Tensor<T> effectiveWeights = _weightMean;
+        Tensor<T> effectiveBias = _biasMean;
+        if (useSample)
         {
-            SampleWeights();
+            var weightStd = Engine.TensorSqrt(Engine.TensorExp(_weightLogVar));
+            effectiveWeights = Engine.TensorAdd(
+                _weightMean,
+                Engine.TensorMultiply(weightStd, _sampledWeightEpsilon!));
+
+            var biasStd = Engine.TensorSqrt(Engine.TensorExp(_biasLogVar));
+            effectiveBias = Engine.TensorAdd(
+                _biasMean,
+                Engine.TensorMultiply(biasStd, _sampledBiasEpsilon!));
         }
 
-        int batch;
+        _samplePending = false;
+
+        int batchSize;
+        Tensor<T> flatInput;
         if (input.Rank == 1)
         {
-            batch = 1;
+            batchSize = 1;
+            flatInput = Engine.Reshape(input, [1, _inputSize]);
+        }
+        else if (input.Rank == 2)
+        {
+            batchSize = input.Shape[0];
+            flatInput = input;
         }
         else
         {
-            batch = input.Shape[0];
-            if (batch <= 0)
-            {
-                throw new ArgumentException("Expected input tensor to have a positive batch dimension (Shape[0]).", nameof(input));
-            }
+            batchSize = 1;
+            for (int dimension = 0; dimension < input.Rank - 1; dimension++)
+                batchSize *= input.Shape[dimension];
+            flatInput = Engine.Reshape(input, [batchSize, _inputSize]);
         }
 
-        var expectedLength = batch * _inputSize;
-        if (input.Length != expectedLength)
-        {
-            throw new ArgumentException($"Expected input tensor length {expectedLength} for batch {batch} and inputSize {_inputSize}, but got {input.Length}.", nameof(input));
-        }
+        // Retain the historical [output,input] parameter layout used by
+        // GetParameters/SetParameters, transposing through the Engine so the
+        // operation remains connected to the tape.
+        var weightTranspose = Engine.TensorTranspose(effectiveWeights);
+        var preActivation = Engine.TensorMatMul(flatInput, weightTranspose);
+        preActivation = Engine.TensorAdd(
+            preActivation,
+            Engine.Reshape(effectiveBias, [1, _outputSize]));
+        var activated = ApplyActivation(preActivation);
 
-        var inputFlat = input.ToVector();
-        var outputVector = new Vector<T>(batch * _outputSize);
+        if (input.Rank == 1) return Engine.Reshape(activated, [_outputSize]);
+        if (input.Rank == 2) return activated;
 
-        for (int b = 0; b < batch; b++)
-        {
-            var inputOffset = b * _inputSize;
-            var outputOffset = b * _outputSize;
-
-            // Engine-accelerated forward: output = bias + weights · input
-            var inputSlice = new Vector<T>(_inputSize);
-            for (int j = 0; j < _inputSize; j++) inputSlice[j] = inputFlat[inputOffset + j];
-            for (int i = 0; i < _outputSize; i++)
-            {
-                var wRow = new Vector<T>(_inputSize);
-                if (_sampledWeights != null)
-                    for (int j = 0; j < _inputSize; j++) wRow[j] = _sampledWeights[i, j];
-                outputVector[outputOffset + i] = NumOps.Add(_sampledBias != null ? _sampledBias[i] : NumOps.Zero, Engine.DotProduct(wRow, inputSlice));
-            }
-        }
-
-        var outputShape = input.Rank == 1 ? new[] { _outputSize } : new[] { batch, _outputSize };
-        var preActivation = new Tensor<T>(outputShape, outputVector);
-        _lastPreActivation = preActivation;
-
-        return ApplyActivation(preActivation);
+        var outputShape = new int[input.Rank];
+        for (int dimension = 0; dimension < input.Rank - 1; dimension++)
+            outputShape[dimension] = input.Shape[dimension];
+        outputShape[^1] = _outputSize;
+        return Engine.Reshape(activated, outputShape);
     }
 
     /// <inheritdoc/>
@@ -299,25 +376,51 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     {
         var priorVar = NumOps.Multiply(_priorSigma, _priorSigma);
         var half = NumOps.FromDouble(0.5);
+        var gradients = GetParameterGradients();
+        int gradientIndex = 0;
 
         for (int i = 0; i < _outputSize; i++)
         {
             for (int j = 0; j < _inputSize; j++)
             {
                 var meanGrad = NumOps.Divide(_weightMean[i, j], priorVar);
-                _weightMeanGradient[i, j] = NumOps.Add(_weightMeanGradient[i, j], NumOps.Multiply(klScale, meanGrad));
-
-                var variance = NumOps.Exp(_weightLogVar[i, j]);
-                var logVarGrad = NumOps.Multiply(half, NumOps.Subtract(NumOps.Divide(variance, priorVar), NumOps.One));
-                _weightLogVarGradient[i, j] = NumOps.Add(_weightLogVarGradient[i, j], NumOps.Multiply(klScale, logVarGrad));
+                gradients[gradientIndex] = NumOps.Add(
+                    gradients[gradientIndex], NumOps.Multiply(klScale, meanGrad));
+                gradientIndex++;
             }
+        }
 
-            var biasMeanGrad = NumOps.Divide(_biasMean[i], priorVar);
-            _biasMeanGradient[i] = NumOps.Add(_biasMeanGradient[i], NumOps.Multiply(klScale, biasMeanGrad));
+        for (int i = 0; i < _outputSize; i++)
+        {
+            for (int j = 0; j < _inputSize; j++)
+            {
+                var variance = NumOps.Exp(_weightLogVar[i, j]);
+                var logVarGrad = NumOps.Multiply(
+                    half,
+                    NumOps.Subtract(NumOps.Divide(variance, priorVar), NumOps.One));
+                gradients[gradientIndex] = NumOps.Add(
+                    gradients[gradientIndex], NumOps.Multiply(klScale, logVarGrad));
+                gradientIndex++;
+            }
+        }
 
-            var biasVar = NumOps.Exp(_biasLogVar[i]);
-            var biasLogVarGrad = NumOps.Multiply(half, NumOps.Subtract(NumOps.Divide(biasVar, priorVar), NumOps.One));
-            _biasLogVarGradient[i] = NumOps.Add(_biasLogVarGradient[i], NumOps.Multiply(klScale, biasLogVarGrad));
+        for (int i = 0; i < _outputSize; i++)
+        {
+            var meanGradient = NumOps.Divide(_biasMean[i], priorVar);
+            gradients[gradientIndex] = NumOps.Add(
+                gradients[gradientIndex], NumOps.Multiply(klScale, meanGradient));
+            gradientIndex++;
+        }
+
+        for (int i = 0; i < _outputSize; i++)
+        {
+            var variance = NumOps.Exp(_biasLogVar[i]);
+            var logVarGradient = NumOps.Multiply(
+                half,
+                NumOps.Subtract(NumOps.Divide(variance, priorVar), NumOps.One));
+            gradients[gradientIndex] = NumOps.Add(
+                gradients[gradientIndex], NumOps.Multiply(klScale, logVarGradient));
+            gradientIndex++;
         }
     }
 
@@ -326,36 +429,31 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     /// </summary>
     public override void UpdateParameters(T learningRate)
     {
-        // Update weight means
-        for (int i = 0; i < _outputSize; i++)
+        if (ParameterGradients is null) return;
+        if (ParameterGradients.Length != ParameterCount)
+            throw new InvalidOperationException(
+                $"BayesianDenseLayer gradient buffer length {ParameterGradients.Length} " +
+                $"does not match ParameterCount {ParameterCount}.");
+
+        int gradientIndex = 0;
+        foreach (var parameter in GetTrainableParameters())
         {
-            for (int j = 0; j < _inputSize; j++)
+            for (int i = 0; i < parameter.Length; i++)
             {
-                _weightMean[i, j] = NumOps.Subtract(
-                    _weightMean[i, j],
-                    NumOps.Multiply(learningRate, _weightMeanGradient[i, j])
-                );
-                _weightLogVar[i, j] = NumOps.Subtract(
-                    _weightLogVar[i, j],
-                    NumOps.Multiply(learningRate, _weightLogVarGradient[i, j])
-                );
+                parameter[i] = NumOps.Subtract(
+                    parameter[i],
+                    NumOps.Multiply(learningRate, ParameterGradients[gradientIndex++]));
             }
         }
-
-        // Update biases (vectorized SGD)
-        _biasMean = (Vector<T>)Engine.Subtract(_biasMean, Engine.Multiply(_biasMeanGradient, learningRate));
-        _biasLogVar = (Vector<T>)Engine.Subtract(_biasLogVar, Engine.Multiply(_biasLogVarGradient, learningRate));
-
-        // Clear gradients after update
-        ClearGradients();
     }
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         SetParameters(parameters);
-        _sampledWeights = null;
-        _sampledBias = null;
+        _sampledWeightEpsilon = null;
+        _sampledBiasEpsilon = null;
+        _samplePending = false;
     }
 
     /// <summary>
@@ -416,6 +514,10 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         // Unpack bias log variances
         for (int i = 0; i < _outputSize; i++)
             _biasLogVar[i] = parameters[idx++];
+
+        _sampledWeightEpsilon = null;
+        _sampledBiasEpsilon = null;
+        _samplePending = false;
     }
 
     /// <summary>
@@ -423,10 +525,9 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastPreActivation = null;
-        _sampledWeights = null;
-        _sampledBias = null;
+        _sampledWeightEpsilon = null;
+        _sampledBiasEpsilon = null;
+        _samplePending = false;
         ClearGradients();
     }
 
@@ -442,17 +543,16 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+    }
 
-        for (int i = 0; i < _outputSize; i++)
-        {
-            for (int j = 0; j < _inputSize; j++)
-            {
-                _weightMeanGradient[i, j] = NumOps.Zero;
-                _weightLogVarGradient[i, j] = NumOps.Zero;
-            }
-        }
-
-        _biasMeanGradient.Fill(NumOps.Zero);
-        _biasLogVarGradient.Fill(NumOps.Zero);
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["InputSize"] = _inputSize.ToString(invariant);
+        metadata["OutputSize"] = _outputSize.ToString(invariant);
+        metadata["PriorSigma"] = NumOps.ToDouble(_priorSigma).ToString("R", invariant);
+        return metadata;
     }
 }

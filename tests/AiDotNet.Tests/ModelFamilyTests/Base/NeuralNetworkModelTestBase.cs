@@ -375,6 +375,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         try
         {
+            string? traceDirectory = Path.GetDirectoryName(tracePath);
+            if (!string.IsNullOrEmpty(traceDirectory))
+                Directory.CreateDirectory(traceDirectory);
+
             File.AppendAllText(
                 tracePath,
                 $"{DateTimeOffset.UtcNow:O} [{phase}] {GetType().FullName} precision={typeof(T).FullName}{Environment.NewLine}");
@@ -901,8 +905,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         Assert.Equal(out1.Length, out2.Length);
         for (int i = 0; i < out1.Length; i++)
-            Assert.True(Math.Abs(ConvertToDouble(out1[i]) - ConvertToDouble(out2[i])) < 1e-12,
-                $"Output[{i}] differs between runs: {out1[i]} vs {out2[i]}. Network may be non-deterministic.");
+        {
+            double delta = Math.Abs(ConvertToDouble(out1[i]) - ConvertToDouble(out2[i]));
+            if (delta >= 1e-12)
+            {
+                // Failure-only third replay distinguishes a one-time eager/compiled boundary drift
+                // (out2 == out3) from persistent state mutation (all three differ). Keep the strict
+                // invariant unchanged; this only makes a CI-only failure actionable.
+                var out3 = network.Predict(input);
+                Assert.Fail(
+                    $"Output[{i}] differs between runs: first={out1[i]}, second={out2[i]}, " +
+                    $"third={out3[i]}, first-second delta={delta:R}, " +
+                    $"second-third delta={Math.Abs(ConvertToDouble(out2[i]) - ConvertToDouble(out3[i])):R}. " +
+                    "Network may be non-deterministic or eager/compiled inference may disagree.");
+            }
+        }
     }
 
     [Fact(Timeout = 120000)]
@@ -1019,7 +1036,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         for (int k = 0; k < 3; k++)
         {
             var clonedOutput = cloned.Predict(probeInputs[k]);
-            Assert.Equal(trainedOutputs[k].Length, clonedOutput.Length);
+            Assert.True(
+                trainedOutputs[k].Length == clonedOutput.Length,
+                $"Clone output shape changed after training at probe {k}: " +
+                $"trained=[{string.Join(", ", trainedOutputs[k].Shape)}] " +
+                $"({trainedOutputs[k].Length} values), cloned=[{string.Join(", ", clonedOutput.Shape)}] " +
+                $"({clonedOutput.Length} values).");
             double sumSq = 0, magSq = 0;
             for (int i = 0; i < trainedOutputs[k].Length; i++)
             {
@@ -1701,8 +1723,16 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Assert.Equal(singleOutput.Length, batchOutput.Length);
         for (int i = 0; i < singleOutput.Length; i++)
         {
-            Assert.True(Math.Abs(ConvertToDouble(singleOutput[i]) - ConvertToDouble(batchOutput[i])) < 1e-12,
-                $"Output[{i}] differs: single={singleOutput[i]}, batch={batchOutput[i]}");
+            double delta = Math.Abs(ConvertToDouble(singleOutput[i]) - ConvertToDouble(batchOutput[i]));
+            if (delta >= 1e-12)
+            {
+                var replayOutput = network.Predict(input);
+                Assert.Fail(
+                    $"Output[{i}] differs: first={singleOutput[i]}, second={batchOutput[i]}, " +
+                    $"third={replayOutput[i]}, first-second delta={delta:R}, " +
+                    $"second-third delta={Math.Abs(ConvertToDouble(batchOutput[i]) - ConvertToDouble(replayOutput[i])):R}. " +
+                    "A zero second-third delta points to eager/compiled inference parity; a non-zero delta points to mutable inference state.");
+            }
         }
     }
 

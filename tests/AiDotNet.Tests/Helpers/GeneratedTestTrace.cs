@@ -14,6 +14,10 @@ public static class GeneratedTestTrace
 
         try
         {
+            string? traceDirectory = Path.GetDirectoryName(tracePath);
+            if (!string.IsNullOrEmpty(traceDirectory))
+                Directory.CreateDirectory(traceDirectory);
+
             File.AppendAllText(
                 tracePath,
                 $"{DateTime.UtcNow:O} [test-start] {testType.FullName}{Environment.NewLine}");

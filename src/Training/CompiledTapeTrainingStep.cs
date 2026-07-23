@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Compilation;
@@ -775,6 +776,7 @@ public static class CompiledTapeTrainingStep<T>
             // returns false — reconfiguring would reset m/v.
             var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
 
+            bool isFirstStepForConfiguredPlan = _configuredPlan is null;
             if (_configuredPlan is null)
             {
                 // #1745: request bf16 moment storage BEFORE ConfigureOptimizer so the
@@ -847,8 +849,25 @@ public static class CompiledTapeTrainingStep<T>
                 return false;
             }
 
+            // The trace captured stochastic layer tensors by reference. A static replay
+            // would otherwise reuse the first dropout mask or Bayesian posterior sample
+            // forever and optimize a different objective than eager training. Keep the
+            // first traced draw for step one, then refresh captured tensors in place before
+            // later replays. The fused plan and optimizer moments remain intact.
+            if (!isFirstStepForConfiguredPlan)
+                RefreshCompiledStochasticState(layers);
+
             // Execute forward + backward + fused parameter update in one replay.
             var lossOutput = plan.Step();
+            if (s_fusedDebug)
+            {
+                string reportedLoss = lossOutput.Length > 0
+                    ? MathHelper.GetNumericOperations<T>().ToDouble(lossOutput[0]).ToString("G17")
+                    : "<empty>";
+                System.Console.Error.WriteLine(
+                    $"[FUSED-STEP] model-parameters={parameters.Length} loss-length={lossOutput.Length} " +
+                    $"loss={reportedLoss} optimizer={optimizerType}");
+            }
             lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
             // Signal successful fused engagement so tests/diagnostics can
             // assert the compiled path actually ran — distinguishing it from
@@ -892,6 +911,30 @@ public static class CompiledTapeTrainingStep<T>
             _configuredOptimizerConfig = null;
             return false;
         }
+    }
+
+    private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)
+    {
+        var visited = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
+        for (int i = 0; i < layers.Count; i++)
+            RefreshCompiledStochasticStateRecursive(layers[i], visited);
+    }
+
+    private static void RefreshCompiledStochasticStateRecursive(
+        ILayer<T> layer,
+        HashSet<ILayer<T>> visited)
+    {
+        if (!visited.Add(layer))
+            return;
+
+        if (layer is NeuralNetworks.Layers.DropoutLayer<T> dropout)
+            dropout.RefreshCompiledTrainingMask();
+        if (layer is UncertaintyQuantification.Layers.BayesianDenseLayer<T> bayesianDense)
+            bayesianDense.RefreshCompiledTrainingSample();
+
+        var subLayers = layer.GetSubLayers();
+        for (int i = 0; i < subLayers.Count; i++)
+            RefreshCompiledStochasticStateRecursive(subLayers[i], visited);
     }
 
 
