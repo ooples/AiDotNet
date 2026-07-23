@@ -54,7 +54,6 @@ namespace AiDotNet.NeuralNetworks;
 public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly GraphNeuralNetworkOptions _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -312,7 +311,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new GraphNeuralNetworkOptions();
-        _optimizer = optimizer ?? CreateDefaultOptimizer(this, _options);
+        SetBaseTrainOptimizer(optimizer ?? CreateDefaultOptimizer(this, _options));
         Options = _options;
         UseAuxiliaryLoss = _options.UseAuxiliaryLoss;
         AuxiliaryLossWeight = NumOps.FromDouble(_options.AuxiliaryLossWeight);
@@ -360,7 +359,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new GraphNeuralNetworkOptions();
-        _optimizer = optimizer ?? CreateDefaultOptimizer(this, _options);
+        SetBaseTrainOptimizer(optimizer ?? CreateDefaultOptimizer(this, _options));
         Options = _options;
         UseAuxiliaryLoss = _options.UseAuxiliaryLoss;
         AuxiliaryLossWeight = NumOps.FromDouble(_options.AuxiliaryLossWeight);
@@ -927,29 +926,12 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!IsTrainingMode)
-        {
-            SetTrainingMode(true);
-        }
-
-        // Ensure 2D input [numNodes, features]
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-
-        int numNodes = input.Shape[0];
-        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
-
-        // Set adjacency for graph layers before training
-        foreach (var layer in Layers)
-        {
-            layer.SetTrainingMode(true);
-            if (layer is IGraphConvolutionLayer<T> graphLayer)
-                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
-        }
-
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        SetTrainingMode(false);
+        // Use the shared training entry point so GCN receives the same first-step
+        // conditioning, batch handling, optimizer persistence, OOM recovery, and
+        // fused/compiled execution contracts as every other NeuralNetworkBase model.
+        // ForwardForTraining below remains responsible for installing the graph
+        // adjacency before the graph-convolution layers execute.
+        base.Train(input, expectedOutput);
     }
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
