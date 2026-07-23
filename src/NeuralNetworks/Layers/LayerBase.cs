@@ -966,6 +966,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Resolves shapes and constructs a composite layer's child-layer graph
+    /// without allocating trainable tensors. Used by copy-on-write cloning so
+    /// a lazy destination exposes the same child structure as its materialized
+    /// source before shared tensors are installed.
+    /// </summary>
+    internal void ResolveStructureShapesOnly(int[] inputShape)
+    {
+        ResolveShapesOnly(inputShape);
+        IsResolvingShapesOnly = true;
+        try
+        {
+            EnsureInitialized();
+        }
+        finally
+        {
+            IsResolvingShapesOnly = false;
+        }
+    }
+
+    /// <summary>
     /// True only while <see cref="ResolveShapesOnly"/> is on the stack. Lazy
     /// layers that would normally allocate weights from <c>OnFirstForward</c>
     /// (e.g. <c>MultiHeadAttentionLayer</c>'s Q/K/V/O) can read this flag to
@@ -3540,6 +3560,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
                 return;
         }
         _registeredSubLayers.Add(subLayer);
+
+        // Lazy composite layers can create children during their first
+        // Forward, after the parent has already been switched to evaluation
+        // mode. A newly constructed child otherwise keeps its default training
+        // mode until the next model-level SetTrainingMode call, making the
+        // first prediction use a different execution path from later calls.
+        // Inherit the parent's current mode at registration so the entire
+        // composite has one consistent state immediately.
+        subLayer.SetTrainingMode(IsTrainingMode);
+
         // Sub-layer's ParameterCount contributes to ours; invalidate the
         // cache so the next query picks up the addition.
         _cachedParameterCount = -1;

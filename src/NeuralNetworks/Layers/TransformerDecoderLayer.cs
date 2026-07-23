@@ -671,13 +671,26 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // sub-layer ResolveFromShape pattern (which already gets this
             // right).
             int[] subInputShape = new[] { _embeddingSize };
-            _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-            _norm1.ResolveFromShape(subInputShape);
-            _crossAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-            _norm2.ResolveFromShape(subInputShape);
-            _feedForward.ResolveFromShape(subInputShape);
-            _feedForwardProjection.ResolveFromShape(new[] { _feedForwardDim });
-            _norm3.ResolveFromShape(subInputShape);
+            if (IsResolvingShapesOnly)
+            {
+                _selfAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
+                _norm1.ResolveShapesOnly(subInputShape);
+                _crossAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
+                _norm2.ResolveShapesOnly(subInputShape);
+                _feedForward.ResolveShapesOnly(subInputShape);
+                _feedForwardProjection.ResolveShapesOnly(new[] { _feedForwardDim });
+                _norm3.ResolveShapesOnly(subInputShape);
+            }
+            else
+            {
+                _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+                _norm1.ResolveFromShape(subInputShape);
+                _crossAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+                _norm2.ResolveFromShape(subInputShape);
+                _feedForward.ResolveFromShape(subInputShape);
+                _feedForwardProjection.ResolveFromShape(new[] { _feedForwardDim });
+                _norm3.ResolveFromShape(subInputShape);
+            }
 
             _isInitialized = true;
         }

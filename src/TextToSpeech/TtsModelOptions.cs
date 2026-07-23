@@ -35,7 +35,7 @@ public class TtsModelOptions : ModelOptions
         MaxMelLength = other.MaxMelLength;
         DropoutRate = other.DropoutRate;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
     }

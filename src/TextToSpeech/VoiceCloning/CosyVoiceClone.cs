@@ -259,11 +259,7 @@ public class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -271,8 +267,14 @@ public class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -351,9 +353,10 @@ public class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new CosyVoiceCloneOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CosyVoiceClone<T>(Architecture, mp, _options);
-        return new CosyVoiceClone<T>(Architecture, _options);
+            return new CosyVoiceClone<T>(Architecture, mp, options);
+        return new CosyVoiceClone<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

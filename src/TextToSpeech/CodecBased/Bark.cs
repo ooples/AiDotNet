@@ -77,6 +77,11 @@ public class Bark<T> : TtsModelBase<T>, ICodecTts<T>
         _options = options ?? new BarkOptions();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Bark's paper defaults build an approximately 100M-parameter transformer,
+        // whose classic tape peak can exceed a 16 GB host. Let the framework's
+        // footprint estimator select streaming training at that scale while keeping
+        // reduced/custom Bark configurations on the faster classic/fused path.
+        StreamingTraining = StreamingTrainingMode.Auto;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -167,7 +172,7 @@ public class Bark<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

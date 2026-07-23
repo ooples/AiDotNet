@@ -15,4 +15,10 @@ public class CosyVoiceOptions : CodecTtsOptions
         LLMDim = 1024;
         NumLLMLayers = 14;
     }
+
+    /// <summary>Initializes a new instance by copying all CosyVoice settings.</summary>
+    public CosyVoiceOptions(CosyVoiceOptions other)
+        : base(other)
+    {
+    }
 }

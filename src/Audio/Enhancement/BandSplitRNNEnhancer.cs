@@ -199,10 +199,10 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var current = input;
-        foreach (var layer in Layers)
-            current = layer.Forward(current);
-        return current;
+        // The native enhancer is the sequential Layers graph. Use the
+        // canonical executor for deterministic evaluation, streaming weight
+        // lifetimes, and per-layer inference scratch recycling.
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -211,7 +211,10 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Use the AdamW optimizer selected by the constructor. The
+            // optimizer-less overload falls back to the base Adam8Bit path,
+            // whose full-vector state clone caused the generated-test OOM.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -285,9 +288,10 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptions = new BandSplitRNNEnhancerOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BandSplitRNNEnhancer<T>(Architecture, mp, _options);
-        return new BandSplitRNNEnhancer<T>(Architecture, _options);
+            return new BandSplitRNNEnhancer<T>(Architecture, mp, cloneOptions);
+        return new BandSplitRNNEnhancer<T>(Architecture, cloneOptions);
     }
 
     #endregion

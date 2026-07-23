@@ -117,9 +117,15 @@ public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [96, 192, 384, 768];
-        _depths = [2, 2, 6, 2];
-        _decoderDim = 256;
+        if (_options.ChannelDimensions.Length != 4 || _options.StageDepths.Length != 4)
+            throw new ArgumentException("CUPS requires exactly four encoder stage widths and depths.", nameof(options));
+        if (_options.ChannelDimensions.Any(d => d <= 0)
+            || _options.StageDepths.Any(d => d <= 0)
+            || _options.DecoderDimension <= 0)
+            throw new ArgumentException("CUPS encoder widths, depths, and decoder dimension must be positive.", nameof(options));
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
 
@@ -174,6 +180,10 @@ public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </para>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     /// <summary>
     /// Performs one training step.
@@ -320,9 +330,14 @@ public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new CUPS<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new CUPS<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var cloneOptions = new CUPSOptions(_options);
+        return _useNativeMode
+            ? new CUPS<T>(Architecture, optimizer: null, lossFunction: LossFunction,
+                numClasses: _numClasses, dropRate: _dropRate, options: cloneOptions)
+            : new CUPS<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, cloneOptions);
+    }
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

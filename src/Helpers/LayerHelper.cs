@@ -8544,8 +8544,16 @@ public static class LayerHelper<T>
         h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
 
         // Object encoder (processes mask with image features)
-        // Note: This takes numFeatures + 1 channels (features + mask)
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        // This branch consumes the image features concatenated with a single-channel object mask,
+        // rather than the preceding image-encoder output directly. Resolve that non-sequential
+        // input contract explicitly: NeuralNetworkBase's generic lazy-shape walk otherwise assumes
+        // every top-level layer is a linear chain and resolves this convolution at numFeatures
+        // channels. Its real first forward then receives numFeatures + 1 and correctly rejects the
+        // already-resolved kernel as incompatible.
+        var objectEncoderInput = new ConvolutionalLayer<T>(
+            numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        objectEncoderInput.ResolveShapesOnly(new[] { numFeatures + 1, h, w });
+        yield return objectEncoderInput;
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Query/Key/Value projections for memory attention
@@ -10771,15 +10779,20 @@ public static class LayerHelper<T>
         int currentWidth = imageWidth;
 
         // CNN feature extractor (VGG-style)
-        int[] channels = [64, 128, 256, 256, 512, 512, 512];
-        int inputChannels = inputDepth;
+        // Preserve the paper-default VGG widths when cnnChannels=512 while
+        // honoring the constructor's public scale control for smaller/larger
+        // CRNN variants. Previously cnnChannels was only used in an unused
+        // featureDim local, so every requested variant still built the full
+        // 64/128/256/256/512/512/512 stack.
+        int c1 = Math.Max(8, cnnChannels / 8);
+        int c2 = Math.Max(8, cnnChannels / 4);
+        int c3 = Math.Max(8, cnnChannels / 2);
+        int[] channels = [c1, c2, c3, c3, cnnChannels, cnnChannels, cnnChannels];
 
         for (int i = 0; i < channels.Length; i++)
         {
             yield return new ConvolutionalLayer<T>(channels[i], 3, 1, 1);
             yield return new BatchNormalizationLayer<T>();
-
-            inputChannels = channels[i];
 
             // Pool with (2,2) for first 3 layers, (2,1) for rest
             if (i < 3)
@@ -10796,9 +10809,6 @@ public static class LayerHelper<T>
         }
 
         // Map-to-Sequence: reshape CNN output for RNN
-        int seqLen = currentWidth;
-        int featureDim = cnnChannels * currentHeight;
-
         // BiLSTM layers (simulated with dense layers)
         yield return new DenseLayer<T>(rnnHiddenSize * 2, reluActivation);
 
@@ -11440,7 +11450,7 @@ public static class LayerHelper<T>
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        int seqLen = imageWidth / 4;
+        int sequenceLength = (imageHeight / 4) * (imageWidth / 4);
 
         // Vision encoder (ResNet-style)
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
@@ -11451,12 +11461,23 @@ public static class LayerHelper<T>
         yield return new MaxPoolingLayer<T>(2, 2);
         yield return new ConvolutionalLayer<T>(visionDim, 3, 1, 1);
 
+        // Convert each convolutional feature map into a token sequence before
+        // attention. ReshapeLayer preserves the batch axis, so both a single
+        // image and a batch become [B, H*W, C] without TransposeLayer's
+        // rank-4-only contract.
+        yield return new ReshapeLayer<T>(new[] { sequenceLength, visionDim });
+
         // Transformer for vision
         yield return new MultiHeadAttentionLayer<T>(8, (visionDim) / (8), identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // Language model
-        yield return new EmbeddingLayer<T>(charsetSize, languageDim);
+        // Language refinement consumes the visual token embeddings produced
+        // above. An EmbeddingLayer here was structurally invalid in a
+        // sequential graph: it interpreted continuous visual features as
+        // discrete character IDs. Project only when the language width differs,
+        // then run bidirectional attention over the continuous token sequence.
+        if (visionDim != languageDim)
+            yield return new DenseLayer<T>(languageDim, identityActivation);
         yield return new MultiHeadAttentionLayer<T>(8, (languageDim) / (8), identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
@@ -23536,7 +23557,14 @@ public static class LayerHelper<T>
         // === Vision Encoder (Dense approximation of EfficientNet-B7 MBConv blocks) ===
         // Note: Real EfficientNet uses depthwise separable convolutions + squeeze-and-excitation.
         // This approximation uses Dense expand-project blocks for the forward/backward pipeline.
-        yield return new LayerNormalizationLayer<T>();
+        yield return new ConvolutionalLayer<T>(
+            outputDepth: visionEmbeddingDim,
+            kernelSize: 3,
+            stride: 2,
+            padding: 1,
+            activationFunction: geluActivation);
+        yield return AdaptiveAveragePoolingLayer<T>.GlobalPool();
+        yield return new FlattenLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
@@ -23976,7 +24004,8 @@ public static class LayerHelper<T>
         int numTextLayers = 12,
         int numBridgeLayers = 6,
         int numHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int patchSize = 16)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -23985,6 +24014,11 @@ public static class LayerHelper<T>
         int fusionFfnDim = fusionDim * 4;
 
         // === Vision Encoder with Bridge Points ===
+        // Convert channel-first pixels [C,H,W] / [B,C,H,W] into a token
+        // sequence [..., numPatches, visionDim] before LayerNorm/MHA. The
+        // previous stack began directly with attention, so an image width
+        // (e.g. 128) was mistaken for the embedding dimension (768).
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         // Determine at which vision layers bridges connect (evenly spaced)

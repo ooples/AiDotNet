@@ -85,6 +85,7 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.Contains(floatScaffolds, t => t.Name == "MATCHATests");
         Assert.Contains(floatScaffolds, t => t.Name == "CUPSTests");
         Assert.Contains(floatScaffolds, t => t.Name == "ContextNetTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "CodeSwitchingASRTests");
         Assert.Contains(floatScaffolds, t => t.Name == "Chirp2Tests");
         Assert.Contains(floatScaffolds, t => t.Name == "FlowDiffuserTests");
         Assert.Contains(floatScaffolds, t => t.Name == "FLIPTests");

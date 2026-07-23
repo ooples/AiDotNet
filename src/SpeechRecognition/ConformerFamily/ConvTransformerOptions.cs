@@ -32,7 +32,7 @@ public class ConvTransformerOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
-        Vocabulary = other.Vocabulary;
+        Vocabulary = other.Vocabulary.ToArray();
     }
 
     public int SampleRate { get; set; } = 16000;
