@@ -54,6 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly GraphNeuralNetworkOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -311,7 +312,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new GraphNeuralNetworkOptions();
-        SetBaseTrainOptimizer(optimizer ?? CreateDefaultOptimizer(this, _options));
+        _optimizer = optimizer ?? CreateDefaultOptimizer(this, _options);
         Options = _options;
         UseAuxiliaryLoss = _options.UseAuxiliaryLoss;
         AuxiliaryLossWeight = NumOps.FromDouble(_options.AuxiliaryLossWeight);
@@ -359,7 +360,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new GraphNeuralNetworkOptions();
-        SetBaseTrainOptimizer(optimizer ?? CreateDefaultOptimizer(this, _options));
+        _optimizer = optimizer ?? CreateDefaultOptimizer(this, _options);
         Options = _options;
         UseAuxiliaryLoss = _options.UseAuxiliaryLoss;
         AuxiliaryLossWeight = NumOps.FromDouble(_options.AuxiliaryLossWeight);
@@ -497,7 +498,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 Architecture,
                 _options.HiddenSize,
                 _options.NumLayers,
-                _options.DropoutRate));
+                _options.DropoutRate,
+                _options.UseBias));
         }
     }
 
@@ -926,12 +928,32 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Use the shared training entry point so GCN receives the same first-step
-        // conditioning, batch handling, optimizer persistence, OOM recovery, and
-        // fused/compiled execution contracts as every other NeuralNetworkBase model.
-        // ForwardForTraining below remains responsible for installing the graph
-        // adjacency before the graph-convolution layers execute.
-        base.Train(input, expectedOutput);
+        if (!IsTrainingMode)
+        {
+            SetTrainingMode(true);
+        }
+
+        // Ensure 2D input [numNodes, features]
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        int numNodes = input.Shape[0];
+        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+
+        // Set adjacency for graph layers before training.
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(true);
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+        }
+
+        // Keep the paper's persistent Adam optimizer and train directly through
+        // the tape. NeuralNetworkBase.Train performs LSUV conditioning, which is
+        // not part of Kipf and Welling's reference GCN training procedure.
+        TrainWithTape(input, expectedOutput, _optimizer);
+
+        SetTrainingMode(false);
     }
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
@@ -1138,6 +1160,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = CopyOptions();
+
         // Create a new instance with the same architecture and activation functions
         // Determine which constructor to use based on which activation functions are set
         bool hasVectorActivations = _graphConvolutionalVectorActivation != null ||
@@ -1166,7 +1190,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 graphConvolutionalVectorActivation: _graphConvolutionalVectorActivation,
                 activationLayerVectorActivation: _activationLayerVectorActivation,
                 finalDenseLayerVectorActivation: _finalDenseLayerVectorActivation,
-                finalActivationLayerVectorActivation: _finalActivationLayerVectorActivation);
+                finalActivationLayerVectorActivation: _finalActivationLayerVectorActivation,
+                options: options);
         }
         else
         {
@@ -1176,7 +1201,27 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 graphConvolutionalActivation: _graphConvolutionalScalarActivation,
                 activationLayerActivation: _activationLayerScalarActivation,
                 finalDenseLayerActivation: _finalDenseLayerScalarActivation,
-                finalActivationLayerActivation: _finalActivationLayerScalarActivation);
+                finalActivationLayerActivation: _finalActivationLayerScalarActivation,
+                options: options);
         }
+    }
+
+    private GraphNeuralNetworkOptions CopyOptions()
+    {
+        return new GraphNeuralNetworkOptions
+        {
+            Seed = _options.Seed,
+            EncoderLayerCount = _options.EncoderLayerCount,
+            NodeFeatureSize = _options.NodeFeatureSize,
+            NumClasses = _options.NumClasses,
+            HiddenSize = _options.HiddenSize,
+            NumLayers = _options.NumLayers,
+            DropoutRate = _options.DropoutRate,
+            LearningRate = _options.LearningRate,
+            L2Regularization = _options.L2Regularization,
+            UseBias = _options.UseBias,
+            UseAuxiliaryLoss = _options.UseAuxiliaryLoss,
+            AuxiliaryLossWeight = _options.AuxiliaryLossWeight
+        };
     }
 }

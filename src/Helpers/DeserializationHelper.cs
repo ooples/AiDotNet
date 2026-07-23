@@ -873,11 +873,14 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(GraphConvolutionalLayer<>))
         {
-            // GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction, bool implicitIdentityWhenUnset)
-            int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
+            // Graph tensors may include leading batch/node axes, so the feature
+            // width is always the final axis.
+            int inputFeatures = inputShape[inputShape.Length - 1];
+            int outputFeatures = outputShape[outputShape.Length - 1];
+            bool useBias = TryGetBool(additionalParams, "UseBias") ?? true;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
 
             // Reconstruct with implicitIdentityWhenUnset: true so a deserialized /
@@ -888,19 +891,46 @@ public static class DeserializationHelper
             // simply overwrites the fallback. Direct construction via the 3-arg
             // ctor keeps the strict "a GCN requires a graph" contract (Kipf &
             // Welling 2017) that the layer's unit tests assert.
-            var ctor4 = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType, typeof(bool) });
-            if (ctor4 is not null)
+            // Prefer the full constructor so the serialized bias policy is
+            // restored exactly. The four/three-argument fallbacks retain
+            // compatibility with older layer assemblies.
+            var ctor6 = type.GetConstructor(new Type[]
             {
-                instance = ctor4.Invoke(new object?[] { inputFeatures, outputFeatures, activation, true });
+                typeof(int), typeof(int), activationFuncType, typeof(bool),
+                typeof(bool), initStrategyType
+            });
+            if (ctor6 is not null)
+            {
+                instance = ctor6.Invoke(new object?[]
+                {
+                    inputFeatures, outputFeatures, activation, true, useBias, null
+                });
             }
             else
             {
-                var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
-                if (ctor is null)
+                var ctor4 = type.GetConstructor(new Type[]
                 {
-                    throw new MissingLayerCtorException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
+                    typeof(int), typeof(int), activationFuncType, typeof(bool)
+                });
+                if (ctor4 is not null)
+                {
+                    instance = ctor4.Invoke(new object?[]
+                    {
+                        inputFeatures, outputFeatures, activation, true
+                    });
                 }
-                instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
+                else
+                {
+                    var ctor = type.GetConstructor(new Type[]
+                    {
+                        typeof(int), typeof(int), activationFuncType
+                    });
+                    if (ctor is null)
+                    {
+                        throw new MissingLayerCtorException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
+                    }
+                    instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
+                }
             }
         }
         else if (genericDef == typeof(GraphSAGELayer<>))

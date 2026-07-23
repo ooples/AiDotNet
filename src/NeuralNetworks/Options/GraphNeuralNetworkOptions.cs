@@ -35,6 +35,13 @@ public class GraphNeuralNetworkOptions : NeuralNetworkOptions
     /// <remarks>The paper uses 5e-4 weight decay.</remarks>
     public double L2Regularization { get; set; } = 5e-4;
 
+    /// <summary>Gets or sets whether graph-convolutional layers include trainable biases.</summary>
+    /// <remarks>
+    /// Disabled by default because the original GCN reference implementation constructs both
+    /// graph-convolutional layers with <c>bias=False</c>. Enable this for bias-augmented variants.
+    /// </remarks>
+    public bool UseBias { get; set; }
+
     /// <summary>Gets or sets whether the optional graph-smoothness loss is enabled.</summary>
     /// <remarks>Disabled by default because it is not part of the original GCN objective.</remarks>
     public bool UseAuxiliaryLoss { get; set; }

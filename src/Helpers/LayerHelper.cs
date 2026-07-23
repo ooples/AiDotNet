@@ -2281,7 +2281,8 @@ public static class LayerHelper<T>
         NeuralNetworkArchitecture<T> architecture,
         int hiddenSize = 16,
         int numLayers = 2,
-        double dropoutRate = 0.5)
+        double dropoutRate = 0.5,
+        bool useBias = false)
     {
         // Check if we have the minimum required network dimensions
         if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
@@ -2305,14 +2306,18 @@ public static class LayerHelper<T>
             yield return new GraphConvolutionalLayer<T>(
                 inputFeatures: layerIndex == 0 ? inputSize : hiddenSize,
                 outputFeatures: hiddenSize,
-                activationFunction: new ReLUActivation<T>());
+                activationFunction: new ReLUActivation<T>(),
+                implicitIdentityWhenUnset: false,
+                useBias: useBias);
         }
 
         yield return new DropoutLayer<T>(dropoutRate);
         yield return new GraphConvolutionalLayer<T>(
             inputFeatures: hiddenSize,
             outputFeatures: outputSize,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>(),
+            implicitIdentityWhenUnset: false,
+            useBias: useBias);
 
         // Add final activation based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
